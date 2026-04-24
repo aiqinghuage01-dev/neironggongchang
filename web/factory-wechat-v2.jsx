@@ -35,44 +35,63 @@ function PageWechat({ onNav }) {
   const [skillInfo, setSkillInfo] = React.useState(null);
   React.useEffect(() => { api.get("/api/wechat/skill-info").then(setSkillInfo).catch(() => {}); }, []);
 
-  async function call(path, body, cb) {
+  // 统一模式: 立即跳 step + 清空目标数据 + loading=true, API 失败时 step 回退
+  async function runStep({ nextStep, rollbackStep, clearSetter, apiCall }) {
+    if (clearSetter) clearSetter(null);
+    setStep(nextStep);
     setLoading(true); setErr("");
     try {
-      const r = await api.post(path, body);
-      cb?.(r);
-      return r;
-    } catch (e) { setErr(e.message); throw e; }
-    finally { setLoading(false); }
+      await apiCall();
+    } catch (e) {
+      setErr(e.message);
+      if (rollbackStep) setStep(rollbackStep);
+    } finally {
+      setLoading(false);
+    }
   }
 
-  // Step 1 → 2
-  async function genTitles() {
+  function genTitles() {
     if (!topic.trim()) return;
-    await call("/api/wechat/titles", { topic: topic.trim(), n: 3 }, (r) => {
-      setTitles(r.titles || []); setStep("titles");
+    return runStep({
+      nextStep: "titles", rollbackStep: "topic", clearSetter: () => setTitles([]),
+      apiCall: async () => {
+        const r = await api.post("/api/wechat/titles", { topic: topic.trim(), n: 3 });
+        setTitles(r.titles || []);
+      },
     });
   }
-  // Step 2 → 3
-  async function genOutline(title) {
+
+  function genOutline(title) {
     setPickedTitle(title);
-    await call("/api/wechat/outline", { topic: topic.trim(), title }, (r) => {
-      setOutline(r); setStep("outline");
+    return runStep({
+      nextStep: "outline", rollbackStep: "titles", clearSetter: setOutline,
+      apiCall: async () => {
+        const r = await api.post("/api/wechat/outline", { topic: topic.trim(), title });
+        setOutline(r);
+      },
     });
   }
-  // Step 3 → 4
-  async function writeArticle() {
-    setStep("write");
-    await call("/api/wechat/write", { topic: topic.trim(), title: pickedTitle, outline }, (r) => {
-      setArticle(r);
+
+  function writeArticle() {
+    return runStep({
+      nextStep: "write", rollbackStep: "outline", clearSetter: setArticle,
+      apiCall: async () => {
+        const r = await api.post("/api/wechat/write", { topic: topic.trim(), title: pickedTitle, outline });
+        setArticle(r);
+      },
     });
   }
-  // Step 4 → 5
-  async function planImages() {
-    setStep("images");
-    await call("/api/wechat/plan-images", { content: article.content, title: pickedTitle, n: 4 }, (r) => {
-      setImagePlans((r.plans || []).map(p => ({ ...p, status: "pending", mmbiz_url: null })));
+
+  function planImages() {
+    return runStep({
+      nextStep: "images", rollbackStep: "write", clearSetter: () => setImagePlans([]),
+      apiCall: async () => {
+        const r = await api.post("/api/wechat/plan-images", { content: article.content, title: pickedTitle, n: 4 });
+        setImagePlans((r.plans || []).map(p => ({ ...p, status: "pending", mmbiz_url: null })));
+      },
     });
   }
+
   async function generateOneImage(idx) {
     const plan = imagePlans[idx];
     setImagePlans(prev => prev.map((p, i) => i === idx ? { ...p, status: "running" } : p));
@@ -83,33 +102,48 @@ function PageWechat({ onNav }) {
       setImagePlans(prev => prev.map((p, i) => i === idx ? { ...p, status: "failed", error: e.message } : p));
     }
   }
-  // Step 5 → 6
-  async function assembleHtml() {
-    setStep("html");
+
+  function assembleHtml() {
     const section_images = imagePlans.filter(p => p.mmbiz_url).map(p => ({ mmbiz_url: p.mmbiz_url }));
-    await call("/api/wechat/html", {
-      title: pickedTitle,
-      content_md: article.content,
-      section_images,
-      hero_highlight: pickedTitle.slice(0, 6),
-    }, setHtmlResult);
+    return runStep({
+      nextStep: "html", rollbackStep: "images", clearSetter: setHtmlResult,
+      apiCall: async () => {
+        const r = await api.post("/api/wechat/html", {
+          title: pickedTitle,
+          content_md: article.content,
+          section_images,
+          hero_highlight: pickedTitle.slice(0, 6),
+        });
+        setHtmlResult(r);
+      },
+    });
   }
-  // Step 6 → 7
-  async function genCover() {
-    setStep("cover");
-    await call("/api/wechat/cover", { title: pickedTitle, label: "清华哥说" }, setCoverResult);
+
+  function genCover() {
+    return runStep({
+      nextStep: "cover", rollbackStep: "html", clearSetter: setCoverResult,
+      apiCall: async () => {
+        const r = await api.post("/api/wechat/cover", { title: pickedTitle, label: "清华哥说" });
+        setCoverResult(r);
+      },
+    });
   }
-  // Step 7 → 8
-  async function push() {
-    if (!htmlResult || !coverResult) return setErr("HTML 或封面缺失");
-    setStep("push");
-    await call("/api/wechat/push", {
-      title: pickedTitle,
-      digest: htmlResult.digest || "",
-      html_path: htmlResult.wechat_html_path,
-      cover_path: coverResult.local_path_served || coverResult.local_path,
-      author: "清华哥",
-    }, setPushResult);
+
+  function push() {
+    if (!htmlResult || !coverResult) { setErr("HTML 或封面缺失"); return; }
+    return runStep({
+      nextStep: "push", rollbackStep: "cover", clearSetter: setPushResult,
+      apiCall: async () => {
+        const r = await api.post("/api/wechat/push", {
+          title: pickedTitle,
+          digest: htmlResult.digest || "",
+          html_path: htmlResult.wechat_html_path,
+          cover_path: coverResult.local_path_served || coverResult.local_path,
+          author: "清华哥",
+        });
+        setPushResult(r);
+      },
+    });
   }
 
   function reset() {
@@ -229,7 +263,8 @@ function WxStepTopic({ topic, setTopic, onGo, loading, skillInfo }) {
 
 // ─── Step 2 · 挑标题 ─────────────────────────────────────────
 function WxStepTitles({ titles, loading, onPick, onPrev, onRegen }) {
-  if (loading && titles.length === 0) return <Spinning icon="🎯" text="小华正在出 3 个标题" sub="15-25 字 · 情绪触发词 + 身份锚点" />;
+  const [hoverIdx, setHoverIdx] = React.useState(-1);
+  if (loading || titles.length === 0) return <TitlesSkeleton />;
   return (
     <div style={{ padding: "32px 40px 120px", maxWidth: 820, margin: "0 auto" }}>
       <div style={{ marginBottom: 16 }}>
@@ -237,23 +272,31 @@ function WxStepTitles({ titles, loading, onPick, onPrev, onRegen }) {
         <div style={{ fontSize: 13, color: T.muted }}>公众号 80% 打开率靠标题。点一个进入下一步,小华就按这个写。</div>
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-        {titles.map((t, i) => (
-          <div key={i} onClick={() => onPick(t.title)} style={{
-            padding: 18, background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 12, cursor: "pointer",
-            transition: "all 0.15s",
-          }}
-          onMouseEnter={e => { e.currentTarget.style.borderColor = T.brand; e.currentTarget.style.boxShadow = `0 0 0 4px ${T.brandSoft}`; }}
-          onMouseLeave={e => { e.currentTarget.style.borderColor = T.borderSoft; e.currentTarget.style.boxShadow = "none"; }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-              <Tag size="xs" color={["pink","blue","purple","amber","green"][i % 5]}>{t.template}</Tag>
-              <span style={{ fontSize: 11, color: T.muted2 }}>· {(t.title || "").length} 字</span>
+        {titles.map((t, i) => {
+          const hover = hoverIdx === i;
+          return (
+            <div key={i}
+              onClick={() => onPick(t.title)}
+              onMouseEnter={() => setHoverIdx(i)}
+              onMouseLeave={() => setHoverIdx(-1)}
+              style={{
+                padding: 18, background: "#fff",
+                border: `1px solid ${hover ? T.brand : T.borderSoft}`,
+                boxShadow: hover ? `0 0 0 4px ${T.brandSoft}` : "none",
+                borderRadius: 12, cursor: "pointer",
+                transition: "border-color 0.15s, box-shadow 0.15s",
+              }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                <Tag size="xs" color={["pink","blue","purple","amber","green"][i % 5]}>{t.template}</Tag>
+                <span style={{ fontSize: 11, color: T.muted2 }}>· {(t.title || "").length} 字</span>
+              </div>
+              <div style={{ fontSize: 18, fontWeight: 600, color: T.text, lineHeight: 1.5, marginBottom: 10 }}>{t.title}</div>
+              <div style={{ fontSize: 12, color: T.muted, background: T.bg2, padding: "6px 10px", borderRadius: 6, lineHeight: 1.6 }}>
+                💡 <b>为什么这标题</b> — {t.why}
+              </div>
             </div>
-            <div style={{ fontSize: 18, fontWeight: 600, color: T.text, lineHeight: 1.5, marginBottom: 10 }}>{t.title}</div>
-            <div style={{ fontSize: 12, color: T.muted, background: T.bg2, padding: "6px 10px", borderRadius: 6, lineHeight: 1.6 }}>
-              💡 <b>为什么这标题</b> — {t.why}
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
       <div style={{ display: "flex", gap: 10, marginTop: 18, alignItems: "center" }}>
         <Btn variant="outline" onClick={onPrev}>← 改选题</Btn>
@@ -265,7 +308,13 @@ function WxStepTitles({ titles, loading, onPick, onPrev, onRegen }) {
 
 // ─── Step 3 · 大纲 ───────────────────────────────────────────
 function WxStepOutline({ outline, setOutline, title, topic, loading, onPrev, onNext, onRegen }) {
-  if (loading && !outline) return <Spinning icon="📐" text="小华正在出大纲" sub="5-7 行 · 开场 + 3 个核心论点 + 业务桥接 + 结尾" />;
+  if (loading || !outline) return <Spinning icon="📐" phases={[
+    { text: "小华正在读写作方法论", sub: "references/writing-methodology.md · 7 步骨架" },
+    { text: "按你的标题定开场角度", sub: `标题: 「${title}」` },
+    { text: "切出 3 个中段核心论点", sub: "每段 300-500 字推进点" },
+    { text: "设计业务桥接位置", sub: "6 步序列 · 占比 < 20%" },
+    { text: "收尾 · 金句方向", sub: "等下你可以每行改" },
+  ]} />;
   if (!outline) return null;
 
   function update(k, v) { setOutline({ ...outline, [k]: v }); }
@@ -322,7 +371,16 @@ function OutlineField({ label, value, onChange, multi }) {
 
 // ─── Step 4 · 长文 + 三层自检 ───────────────────────────────
 function WxStepWrite({ article, loading, onPrev, onNext, onRewrite }) {
-  if (loading && !article) return <Spinning icon="✍️" text="小华正在写 2000+ 字长文" sub="30-60s · 完整 7 步骨架 + 三层自检" />;
+  if (loading || !article) return <Spinning icon="✍️" phases={[
+    { text: "读完整人设 + 方法论 + 风格圣经", sub: "who-is-qinghuage + writing-methodology + style-bible · ~7200 token" },
+    { text: "铺开场判断", sub: "原则① 先定性再解释 · 避免「不此地无银」" },
+    { text: "展开中段 3 条核心论点", sub: "每段 300-500 字 · 带真实细节建画面" },
+    { text: "前 40% 完成人设预埋链", sub: "资历 → 阵营 → 双边理解 → 反自夸" },
+    { text: "桥接业务 · 6 步序列", sub: "干货在前 → 工具框架化 → 低压 CTA" },
+    { text: "金句收尾 · 埋分享钩子", sub: "1-2 处「截图可发朋友圈」的句子" },
+    { text: "跑三层自检", sub: "六原则逐段扫 + 六维评分 ≥105 + 一票否决" },
+    { text: "长文 2000-3000 字,慢一点,质量优先", sub: "Opus 本地 proxy · 通常 30-60s" },
+  ]} />;
   if (!article) return null;
   const sc = article.self_check || {};
   const dims = sc.six_dimensions || {};
@@ -374,7 +432,12 @@ function WxStepWrite({ article, loading, onPrev, onNext, onRewrite }) {
 
 // ─── Step 5 · 段间配图 ───────────────────────────────────────
 function WxStepImages({ plans, onGen, loading, onPrev, onNext, onRegen }) {
-  if (loading && plans.length === 0) return <Spinning icon="🎨" text="小华在为你规划 4 张段间配图" sub="AI 产 prompt · 你确认后逐张生图" />;
+  if (loading || plans.length === 0) return <Spinning icon="🎨" phases={[
+    { text: "把文章切成 4 个大段", sub: "按 H2 / 语义转折定界" },
+    { text: "为每段设计具象画面 prompt", sub: "真实感照片 · 暖色调 · 避免人脸特写" },
+    { text: "控长度 ≤ 60 字", sub: "具体场景 > 抽象概念" },
+    { text: "规划好了,下一页你可以逐张生图", sub: "每张约 30-60s · apimart gpt-image-2" },
+  ]} />;
   const doneCount = plans.filter(p => p.status === "done").length;
   return (
     <div style={{ padding: "32px 40px 120px", maxWidth: 1040, margin: "0 auto" }}>
@@ -425,16 +488,22 @@ function WxStepImages({ plans, onGen, loading, onPrev, onNext, onRegen }) {
 
 // ─── Step 6 · HTML ─────────────────────────────────────────
 function WxStepHtml({ result, loading, onPrev, onNext }) {
-  if (loading && !result) return <Spinning icon="🧩" text="拼 V3 Clean HTML + 转微信 markup" sub="premailer 内联 CSS · section/span-leaf" />;
+  if (loading || !result) return <Spinning icon="🧩" phases={[
+    { text: "读 V3 Clean 模板", sub: "assets/template-v3-clean.html" },
+    { text: "简易 MD → HTML", sub: "H2 转 section-title · 段间按比例插图" },
+    { text: "注入 hero + 正文 + footer-fixed", sub: "保留头像 mmbiz URL 和 CTA 区" },
+    { text: "premailer 内联所有 CSS", sub: "class 删除 · style 属性合入" },
+    { text: "转微信 markup", sub: "div → section · 文本包 span leaf · 末尾 mp-style-type" },
+  ]} />;
   if (!result) return null;
   return (
     <div style={{ padding: "32px 40px 120px", maxWidth: 1080, margin: "0 auto" }}>
       <div style={{ marginBottom: 16 }}>
         <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 6 }}>HTML 拼好了 🧩</div>
-        <div style={{ fontSize: 13, color: T.muted }}>已转成微信 markup 格式(section/span-leaf/mp-style-type)。下面预览原样 HTML,推送时用转换后版本。</div>
+        <div style={{ fontSize: 13, color: T.muted }}>下面是带完整样式的浏览器预览(接近微信渲染效果)。推送时会自动用转换后的微信 markup 格式。</div>
       </div>
-      <div style={{ background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 12, padding: 2, marginBottom: 14, height: 560, overflow: "hidden" }}>
-        <iframe srcDoc={result.wechat_html} style={{ width: "100%", height: "100%", border: "none", borderRadius: 10 }} title="wechat preview" />
+      <div style={{ background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 12, padding: 2, marginBottom: 14, height: 640, overflow: "hidden" }}>
+        <iframe srcDoc={result.raw_html || result.wechat_html} style={{ width: "100%", height: "100%", border: "none", borderRadius: 10, background: "#fff" }} title="wechat preview" />
       </div>
       <div style={{ padding: 12, background: T.bg2, borderRadius: 8, fontSize: 12, color: T.muted, lineHeight: 1.7 }}>
         <div>原 HTML: <code style={{ fontSize: 11 }}>{result.raw_html_path}</code></div>
@@ -452,7 +521,12 @@ function WxStepHtml({ result, loading, onPrev, onNext }) {
 
 // ─── Step 7 · 封面 ───────────────────────────────────────────
 function WxStepCover({ cover, title, loading, onPrev, onNext, onRegen }) {
-  if (loading && !cover) return <Spinning icon="🖼️" text="Chrome headless 截图 900×383" sub="约 5-10s" />;
+  if (loading || !cover) return <Spinning icon="🖼️" phases={[
+    { text: "从标题抽 2-6 字主体", sub: `标题: 「${title}」` },
+    { text: "生成 cover.html · V2 亮色简洁版", sub: "米白→浅橙渐变底 · 红棕装饰线" },
+    { text: "启动本地截图服务器", sub: "临时 WEBrick 127.0.0.1 随机端口" },
+    { text: "Chrome headless 截图 900×383", sub: "公众号 2.35:1 官方比例" },
+  ]} />;
   if (!cover) return null;
   return (
     <div style={{ padding: "32px 40px 120px", maxWidth: 820, margin: "0 auto" }}>
@@ -478,20 +552,46 @@ function WxStepCover({ cover, title, loading, onPrev, onNext, onRegen }) {
 
 // ─── Step 8 · 推送 ───────────────────────────────────────────
 function WxStepPush({ result, loading, onPrev, onReset, onNav }) {
-  if (loading && !result) return <Spinning icon="🚀" text="推送到微信公众号草稿箱" sub="获取 token → 上传封面 → 创建草稿" />;
-  if (!result) return null;
+  if (loading || !result) return <Spinning icon="🚀" phases={[
+    { text: "读 ~/.wechat-article-config", sub: "wechat_appid + wechat_appsecret" },
+    { text: "刷新 access_token", sub: "mp.weixin.qq.com API" },
+    { text: "上传封面到素材库", sub: "cdb_add_material · 获取 media_id" },
+    { text: "创建草稿 · 去重检查", sub: "同标题+同摘要+同正文会复用已有草稿" },
+    { text: "落地到公众号后台", sub: "去草稿箱点「发布」就能推" },
+  ]} />;
+  const draftsUrl = "https://mp.weixin.qq.com/cgi-bin/appmsg?t=media/appmsg_edit&action=edit&type=77";
   return (
     <div style={{ padding: "32px 40px 120px", maxWidth: 720, margin: "0 auto" }}>
       <div style={{ marginBottom: 16 }}>
         <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 6 }}>✅ 已推到草稿箱</div>
-        <div style={{ fontSize: 13, color: T.muted }}>去 mp.weixin.qq.com → 草稿箱 → 点"发布"即可。耗时 {result.elapsed_sec}s。</div>
+        <div style={{ fontSize: 13, color: T.muted }}>耗时 {result.elapsed_sec}s · 去草稿箱点"发布"即可</div>
       </div>
-      <div style={{ padding: 14, background: "#fff", border: `1px solid ${T.brand}44`, borderRadius: 12, marginBottom: 14 }}>
-        <div style={{ fontSize: 11.5, color: T.muted2, fontWeight: 600, letterSpacing: "0.08em", marginBottom: 8 }}>推送脚本输出(末尾 20 行)</div>
-        <pre style={{ fontSize: 11, lineHeight: 1.6, color: T.muted, margin: 0, whiteSpace: "pre-wrap", fontFamily: "SF Mono, Menlo, monospace" }}>
+
+      <a href="https://mp.weixin.qq.com/" target="_blank" rel="noreferrer"
+        style={{ display: "block", textDecoration: "none", marginBottom: 14 }}>
+        <div style={{
+          padding: "18px 20px", background: T.brand, borderRadius: 12,
+          display: "flex", alignItems: "center", gap: 14, cursor: "pointer",
+          boxShadow: `0 4px 16px ${T.brand}33`,
+        }}>
+          <div style={{ fontSize: 26 }}>🚀</div>
+          <div style={{ flex: 1, color: "#fff" }}>
+            <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 2 }}>去微信公众号草稿箱</div>
+            <div style={{ fontSize: 12, opacity: 0.8 }}>mp.weixin.qq.com · 点"发布"或继续排版</div>
+          </div>
+          <div style={{ fontSize: 18, color: "#fff" }}>→</div>
+        </div>
+      </a>
+
+      <details style={{ padding: 14, background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 12, marginBottom: 14 }}>
+        <summary style={{ fontSize: 11.5, color: T.muted2, fontWeight: 600, letterSpacing: "0.08em", cursor: "pointer", userSelect: "none" }}>
+          推送脚本输出(展开看详情)
+        </summary>
+        <pre style={{ fontSize: 11, lineHeight: 1.6, color: T.muted, margin: "10px 0 0", whiteSpace: "pre-wrap", fontFamily: "SF Mono, Menlo, monospace" }}>
           {(result.stdout_tail || []).join("\n")}
         </pre>
-      </div>
+      </details>
+
       <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
         <Btn variant="outline" onClick={onPrev}>← 回封面</Btn>
         <div style={{ flex: 1 }} />
@@ -502,17 +602,85 @@ function WxStepPush({ result, loading, onPrev, onReset, onNav }) {
   );
 }
 
-// ─── 通用 Loading ──────────────────────────────────────────
-function Spinning({ icon, text, sub }) {
+// ─── 通用 Loading(阶段文案轮播) ─────────────────────────
+// phases: [{text, sub}, ...]  每 2s 切下一条,切到最后一条停住
+// backwards compat: 也接 {text, sub} 或 {icon, text, sub}
+function Spinning({ icon, phases, text, sub }) {
+  const arr = React.useMemo(() => {
+    if (phases && phases.length) return phases;
+    return [{ text: text || "处理中", sub: sub || "" }];
+  }, [phases, text, sub]);
+  const [idx, setIdx] = React.useState(0);
+  React.useEffect(() => {
+    setIdx(0);
+    if (arr.length <= 1) return;
+    const t = setInterval(() => {
+      setIdx(i => (i + 1 < arr.length ? i + 1 : i));  // 到最后停住
+    }, 2000);
+    return () => clearInterval(t);
+  }, [arr]);
+  const current = arr[idx] || {};
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "80px 40px", gap: 18, minHeight: "70%" }}>
       <div style={{ width: 96, height: 96, borderRadius: "50%", background: T.brandSoft, position: "relative", display: "flex", alignItems: "center", justifyContent: "center" }}>
         <div style={{ width: 96, height: 96, borderRadius: "50%", border: `4px solid ${T.brandSoft}`, borderTopColor: T.brand, animation: "qlspin 1.2s linear infinite", position: "absolute", top: 0, left: 0 }} />
-        <div style={{ fontSize: 28 }}>{icon}</div>
+        <div style={{ fontSize: 28 }}>{icon || "⏳"}</div>
       </div>
-      <div style={{ textAlign: "center" }}>
-        <div style={{ fontSize: 20, fontWeight: 700 }}>{text}</div>
-        {sub && <div style={{ fontSize: 13, color: T.muted, marginTop: 6 }}>{sub}</div>}
+      <div style={{ textAlign: "center", maxWidth: 520 }}>
+        <div key={"t" + idx} style={{ fontSize: 20, fontWeight: 700, animation: "qlfadein 0.35s ease-out" }}>{current.text}</div>
+        {current.sub && <div key={"s" + idx} style={{ fontSize: 13, color: T.muted, marginTop: 8, animation: "qlfadein 0.35s ease-out 0.05s backwards", lineHeight: 1.7 }}>{current.sub}</div>}
+      </div>
+      {arr.length > 1 && (
+        <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
+          {arr.map((_, i) => (
+            <span key={i} style={{
+              width: i === idx ? 20 : 6, height: 6, borderRadius: 100,
+              background: i <= idx ? T.brand : T.bg3,
+              transition: "all 0.3s",
+            }} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Step 2 加载骨架(3 张 pulse 卡片) ────────────────────
+function TitlesSkeleton() {
+  const phases = [
+    "读人设档案 who-is-qinghuage.md...",
+    "读风格圣经 · Section 2 标题工程...",
+    "按 6 种模板出候选(结论前置/反常识/数字/故事/热点/对比)...",
+    "过滤禁忌词(震惊体/空泛大词/产品名)...",
+  ];
+  const [phaseIdx, setPhaseIdx] = React.useState(0);
+  React.useEffect(() => {
+    const t = setInterval(() => setPhaseIdx(i => (i + 1 < phases.length ? i + 1 : i)), 2000);
+    return () => clearInterval(t);
+  }, []);
+  return (
+    <div style={{ padding: "32px 40px 120px", maxWidth: 820, margin: "0 auto" }}>
+      <div style={{ marginBottom: 16 }}>
+        <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 6 }}>小华正在出 3 个标题 🎯</div>
+        <div style={{ fontSize: 13, color: T.muted, minHeight: 20, animation: "qlfadein 0.35s" }}
+          key={phaseIdx}>
+          {phases[phaseIdx]}
+        </div>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        {[0, 1, 2].map(i => (
+          <div key={i} style={{
+            padding: 18, background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 12,
+            animation: `qlskeleton 1.6s ease-in-out ${i * 0.2}s infinite`,
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+              <div style={{ height: 18, width: 64, background: T.bg3, borderRadius: 100 }} />
+              <div style={{ height: 11, width: 40, background: T.bg2, borderRadius: 4 }} />
+            </div>
+            <div style={{ height: 22, width: "78%", background: T.bg3, borderRadius: 5, marginBottom: 12 }} />
+            <div style={{ height: 40, background: T.bg2, borderRadius: 6 }} />
+          </div>
+        ))}
       </div>
     </div>
   );

@@ -213,6 +213,7 @@ def assemble_html(
         "raw_html_path": str(raw_path),
         "wechat_html_path": str(wechat_path),
         "meta_path": str(meta_path),
+        "raw_html": raw_path.read_text(encoding="utf-8"),
         "wechat_html": wechat_path.read_text(encoding="utf-8"),
         "title": title,
         "digest": digest,
