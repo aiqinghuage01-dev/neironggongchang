@@ -202,7 +202,19 @@ Obsidian 知识库 / 00 AI清华哥 /
       - `CHANGELOG.md` · Keep-a-Changelog 格式 · 按 D 号分组 · v0.3.0 → v0.4.0
       - `docs/NEW-SKILL-PLAYBOOK.md` · D-010 接入范式手册(5 步 + 红线 + 故障排查)
       - `CLAUDE.md` 补「接入新 skill」+「AI 引擎智能路由」两节 + 事实源表补 2 行
-- [ ] **[P10] 前端 UI 组件库提取**
+- [x] **[P10] 前端 UI 组件库提取** factory-ui.jsx 独立文件
+      提取: Spinning / TitlesSkeleton / SkeletonCard / SkillBadge / StepDots / StepHeader
+      factory-wechat-v2.jsx 瘦身 49k → 45k 字符
+      index.html 加载顺序: tokens → api → deep → persist → **ui** → shell → ...pages
+      未来新 skill(add_skill.py 生成 或手动写)可直接用 StepHeader 省 50 行顶栏代码
+      现有 4 个 skill 的 Header 暂不动(迁移有回归风险,后续可渐进重构)
+
+---
+
+## 🎉 autonomous loop 清单全部完成 (2026-04-25)
+
+P0-P10 所有任务落地, 14 个 commit 从 `09faf92` 到今日末 commit。
+完整变更见 CHANGELOG.md · 接入新 skill 参见 docs/NEW-SKILL-PLAYBOOK.md
 
 ---
 
