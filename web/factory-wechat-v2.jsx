@@ -31,6 +31,11 @@ function PageWechat({ onNav }) {
   const [coverResult, setCoverResult] = React.useState(null);
   const [pushResult, setPushResult] = React.useState(null);
 
+  // 全自动模式(P0): 挑完标题后串行跑完剩余 6 步到封面,最后一步推送仍要用户手点
+  const [autoMode, setAutoMode] = React.useState(false);
+  const [skipImages, setSkipImages] = React.useState(false);
+  const [autoSteps, setAutoSteps] = React.useState([]);  // [{key, label, status, err, elapsed_sec}]
+
   // skill meta (顶栏显示 "正在用技能:公众号文章")
   const [skillInfo, setSkillInfo] = React.useState(null);
   React.useEffect(() => { api.get("/api/wechat/skill-info").then(setSkillInfo).catch(() => {}); }, []);
@@ -63,6 +68,10 @@ function PageWechat({ onNav }) {
 
   function genOutline(title) {
     setPickedTitle(title);
+    if (autoMode) {
+      // 全自动模式:挑完标题直接进入 auto pipeline
+      return runAutoPipeline(title);
+    }
     return runStep({
       nextStep: "outline", rollbackStep: "titles", clearSetter: setOutline,
       apiCall: async () => {
@@ -70,6 +79,109 @@ function PageWechat({ onNav }) {
         setOutline(r);
       },
     });
+  }
+
+  // ─── 全自动 pipeline (P0) ─────────────────────────────────
+  // 串行跑: outline → write → plan-images → 4×section-image → html → cover
+  // 结果用局部变量传递,避开 React state 闭包问题
+  // 末态停在 Step 7 cover,推送仍需用户手点
+  async function runAutoPipeline(title) {
+    const plan = makeAutoPlan(skipImages);
+    setAutoSteps(plan);
+    setStep("auto");
+    setErr("");
+
+    const update = (key, patch) => setAutoSteps(prev => prev.map(s => s.key === key ? { ...s, ...patch } : s));
+
+    const runStep_ = async (key, fn) => {
+      const t0 = Date.now();
+      update(key, { status: "running", _startedAt: t0 });
+      try {
+        const r = await fn();
+        update(key, { status: "done", elapsed_sec: Math.round((Date.now() - t0) / 1000) });
+        return r;
+      } catch (e) {
+        update(key, { status: "failed", err: e.message, elapsed_sec: Math.round((Date.now() - t0) / 1000) });
+        throw e;
+      }
+    };
+
+    try {
+      const outlineR = await runStep_("outline", async () => {
+        const r = await api.post("/api/wechat/outline", { topic: topic.trim(), title });
+        setOutline(r); return r;
+      });
+      const writeR = await runStep_("write", async () => {
+        const r = await api.post("/api/wechat/write", { topic: topic.trim(), title, outline: outlineR });
+        setArticle(r); return r;
+      });
+
+      let finalPlans = [];
+      if (!skipImages) {
+        const planR = await runStep_("plan", async () => {
+          const r = await api.post("/api/wechat/plan-images", { content: writeR.content, title, n: 4 });
+          const p = (r.plans || []).map(x => ({ ...x, status: "pending", mmbiz_url: null }));
+          setImagePlans(p); return p;
+        });
+        finalPlans = [...planR];
+        for (let i = 0; i < finalPlans.length; i++) {
+          const key = `img${i + 1}`;
+          try {
+            const imgR = await runStep_(key, async () => {
+              return await api.post("/api/wechat/section-image", { prompt: finalPlans[i].image_prompt, size: "16:9" });
+            });
+            finalPlans[i] = { ...finalPlans[i], status: "done", mmbiz_url: imgR.mmbiz_url, elapsed_sec: imgR.elapsed_sec };
+            setImagePlans([...finalPlans]);
+          } catch (_) {
+            // 单张失败不中断整个流程,继续下一张
+            finalPlans[i] = { ...finalPlans[i], status: "failed" };
+            setImagePlans([...finalPlans]);
+          }
+        }
+      }
+
+      const section_images = finalPlans.filter(p => p.mmbiz_url).map(p => ({ mmbiz_url: p.mmbiz_url }));
+      await runStep_("html", async () => {
+        const r = await api.post("/api/wechat/html", {
+          title, content_md: writeR.content, section_images, hero_highlight: title.slice(0, 6),
+        });
+        setHtmlResult(r); return r;
+      });
+      await runStep_("cover", async () => {
+        const r = await api.post("/api/wechat/cover", { title, label: "清华哥说" });
+        setCoverResult(r); return r;
+      });
+
+      // 全部成功 → 退出 auto,停在 Step 7 封面
+      setAutoMode(false);
+      setStep("cover");
+    } catch (e) {
+      setErr(e.message);
+      // 不退出 autoMode,用户能看到 WxAutoProgress 里挂在哪一步
+    }
+  }
+
+  function makeAutoPlan(skipImg) {
+    const base = [
+      { key: "outline", label: "出大纲", sub: "读方法论 7 步骨架", eta: 5 },
+      { key: "write",   label: "写长文 + 三层自检", sub: "2000-3000 字 · Opus 30-60s,慢但质量优", eta: 60 },
+    ];
+    if (!skipImg) {
+      base.push({ key: "plan", label: "规划 4 张段间配图 prompt", sub: "具象画面 · 16:9", eta: 5 });
+      for (let i = 1; i <= 4; i++) {
+        base.push({ key: `img${i}`, label: `生图 #${i}`, sub: "apimart gpt-image-2 + 上传微信图床 · 约 30-60s", eta: 40 });
+      }
+    }
+    base.push({ key: "html", label: "拼 V3 Clean HTML + 转微信 markup", sub: "premailer 内联 + section/span-leaf", eta: 2 });
+    base.push({ key: "cover", label: "生封面 900×383", sub: "Chrome headless 截图", eta: 6 });
+    return base.map(s => ({ ...s, status: "pending" }));
+  }
+
+  function abortAuto() {
+    // 回退到 Step 2 让用户手动走,已生成的 outline/article 保留
+    setAutoMode(false);
+    setAutoSteps([]);
+    setStep(article ? "write" : outline ? "outline" : "titles");
   }
 
   function writeArticle() {
@@ -152,19 +264,27 @@ function PageWechat({ onNav }) {
     setOutline(null); setArticle(null);
     setImagePlans([]); setHtmlResult(null);
     setCoverResult(null); setPushResult(null);
+    setAutoMode(false); setAutoSteps([]);
+  }
+
+  function startAuto() {
+    if (!topic.trim()) return;
+    setAutoMode(true);
+    return genTitles();  // 走常规出标题 → Step 2 让用户挑 → onPick 检测 autoMode 后进 runAutoPipeline
   }
 
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", background: T.bg, position: "relative", overflow: "hidden" }}>
-      <WxHeader current={step} onBack={() => onNav("home")} skillInfo={skillInfo} />
+      <WxHeader current={step} onBack={() => onNav("home")} skillInfo={skillInfo} autoMode={autoMode} />
       <div style={{ flex: 1, overflow: "auto" }}>
         {err && (
           <div style={{ maxWidth: 820, margin: "16px auto 0", padding: 12, background: T.redSoft, color: T.red, borderRadius: 10, fontSize: 13 }}>
             ⚠️ {err}
           </div>
         )}
-        {step === "topic"   && <WxStepTopic topic={topic} setTopic={setTopic} onGo={genTitles} loading={loading} skillInfo={skillInfo} />}
-        {step === "titles"  && <WxStepTitles titles={titles} loading={loading} onPick={genOutline} onPrev={() => setStep("topic")} onRegen={genTitles} />}
+        {step === "auto"    && <WxAutoProgress steps={autoSteps} title={pickedTitle} err={err} onAbort={abortAuto} skipImages={skipImages} />}
+        {step === "topic"   && <WxStepTopic topic={topic} setTopic={setTopic} onGo={genTitles} onAuto={startAuto} loading={loading} skillInfo={skillInfo} skipImages={skipImages} setSkipImages={setSkipImages} />}
+        {step === "titles"  && <WxStepTitles titles={titles} loading={loading} onPick={genOutline} onPrev={() => setStep("topic")} onRegen={genTitles} autoMode={autoMode} />}
         {step === "outline" && <WxStepOutline outline={outline} setOutline={setOutline} title={pickedTitle} topic={topic} loading={loading} onPrev={() => setStep("titles")} onNext={writeArticle} onRegen={() => genOutline(pickedTitle)} />}
         {step === "write"   && <WxStepWrite article={article} loading={loading} onPrev={() => setStep("outline")} onNext={planImages} onRewrite={writeArticle} />}
         {step === "images"  && <WxStepImages plans={imagePlans} onGen={generateOneImage} loading={loading} onPrev={() => setStep("write")} onNext={assembleHtml} onRegen={planImages} />}
@@ -177,12 +297,17 @@ function PageWechat({ onNav }) {
 }
 
 // ─── 顶栏 ────────────────────────────────────────────────────
-function WxHeader({ current, onBack, skillInfo }) {
+function WxHeader({ current, onBack, skillInfo, autoMode }) {
   return (
     <div style={{ padding: "12px 24px", background: "#fff", borderBottom: `1px solid ${T.border}`, display: "flex", alignItems: "center", gap: 14, flexShrink: 0 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
         <div style={{ width: 26, height: 26, borderRadius: 7, background: T.text, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13 }}>📄</div>
         <div style={{ fontSize: 13.5, fontWeight: 600 }}>公众号 · 8 步全链路</div>
+        {autoMode && (
+          <span style={{ fontSize: 10.5, color: "#fff", background: T.brand, padding: "2px 8px", borderRadius: 100, marginLeft: 2, fontWeight: 600 }}>
+            🚀 全自动中
+          </span>
+        )}
         {skillInfo && (
           <span title={`~/Desktop/skills/${skillInfo.slug}/ · 精简版 + ${Object.keys(skillInfo.references||{}).length} refs`}
             style={{ fontSize: 10.5, color: T.brand, background: T.brandSoft, padding: "2px 8px", borderRadius: 100, marginLeft: 6 }}>
@@ -222,7 +347,8 @@ function WxHeader({ current, onBack, skillInfo }) {
 }
 
 // ─── Step 1 · 选题 ───────────────────────────────────────────
-function WxStepTopic({ topic, setTopic, onGo, loading, skillInfo }) {
+function WxStepTopic({ topic, setTopic, onGo, onAuto, loading, skillInfo, skipImages, setSkipImages }) {
+  const ready = !!topic.trim() && !loading;
   return (
     <div style={{ padding: "40px 40px 60px", maxWidth: 720, margin: "0 auto" }}>
       <div style={{ textAlign: "center", marginBottom: 24 }}>
@@ -230,7 +356,7 @@ function WxStepTopic({ topic, setTopic, onGo, loading, skillInfo }) {
         <div style={{ fontSize: 14, color: T.muted }}>用公众号 skill 的完整 5 Phase · 一路到微信草稿箱</div>
       </div>
 
-      <div style={{ background: "#fff", border: `1.5px solid ${T.brand}`, boxShadow: `0 0 0 5px ${T.brandSoft}`, borderRadius: 16, padding: 18, marginBottom: 18 }}>
+      <div style={{ background: "#fff", border: `1.5px solid ${T.brand}`, boxShadow: `0 0 0 5px ${T.brandSoft}`, borderRadius: 16, padding: 18, marginBottom: 14 }}>
         <textarea rows={5} value={topic} onChange={e => setTopic(e.target.value)}
           placeholder="例:AI 时代实体老板的真正护城河 · 或贴一段灵感..."
           style={{ width: "100%", border: "none", outline: "none", background: "transparent", fontSize: 14.5, fontFamily: "inherit", resize: "none", lineHeight: 1.7, color: T.text }}
@@ -238,14 +364,40 @@ function WxStepTopic({ topic, setTopic, onGo, loading, skillInfo }) {
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10, paddingTop: 12, borderTop: `1px solid ${T.borderSoft}` }}>
           <div style={{ fontSize: 11.5, color: T.muted2 }}>✍️ skill 自带完整人设 + 风格圣经 + 方法论</div>
           <div style={{ flex: 1 }} />
-          <button onClick={onGo} disabled={!topic.trim() || loading} style={{
-            padding: "8px 20px", fontSize: 13, fontWeight: 600,
-            background: (!topic.trim() || loading) ? T.muted3 : T.brand,
-            color: "#fff", border: "none", borderRadius: 100,
-            cursor: (!topic.trim() || loading) ? "not-allowed" : "pointer", fontFamily: "inherit",
-          }}>{loading ? "出标题中..." : "先出 3 个标题 →"}</button>
+          <button onClick={onGo} disabled={!ready} style={{
+            padding: "8px 16px", fontSize: 12.5, fontWeight: 500,
+            background: "transparent", color: ready ? T.muted : T.muted3,
+            border: `1px solid ${ready ? T.border : T.borderSoft}`, borderRadius: 100,
+            cursor: ready ? "pointer" : "not-allowed", fontFamily: "inherit",
+          }}>分步 · 先出标题</button>
         </div>
       </div>
+
+      {/* 🚀 全自动入口(P0) - 主推 */}
+      <button onClick={onAuto} disabled={!ready} style={{
+        width: "100%", padding: "14px 20px", marginBottom: 14,
+        background: ready ? `linear-gradient(135deg, ${T.brand}, #1f5638)` : T.muted3,
+        color: "#fff", border: "none", borderRadius: 14,
+        cursor: ready ? "pointer" : "not-allowed", fontFamily: "inherit",
+        fontSize: 15, fontWeight: 600,
+        display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
+        boxShadow: ready ? `0 4px 16px ${T.brand}44` : "none",
+        transition: "all 0.15s",
+      }}>
+        <span style={{ fontSize: 20 }}>🚀</span>
+        <span>全自动到封面 — 一路跑到最后一步让你确认推送</span>
+      </button>
+
+      <label style={{
+        display: "flex", alignItems: "center", gap: 8, padding: "10px 14px",
+        background: skipImages ? T.amberSoft : T.bg2,
+        border: `1px solid ${skipImages ? T.amber + "55" : T.borderSoft}`,
+        borderRadius: 10, fontSize: 12.5, color: T.muted, cursor: "pointer", marginBottom: 18,
+      }}>
+        <input type="checkbox" checked={skipImages} onChange={e => setSkipImages(e.target.checked)}
+          style={{ margin: 0, accentColor: T.brand, cursor: "pointer" }} />
+        <span>跳过段间配图(省 3 分钟 · 但文章无中段插图,推给老板视觉会平)</span>
+      </label>
 
       {skillInfo && (
         <div style={{ padding: 14, background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 10, fontSize: 12, color: T.muted, lineHeight: 1.8 }}>
@@ -597,6 +749,113 @@ function WxStepPush({ result, loading, onPrev, onReset, onNav }) {
         <div style={{ flex: 1 }} />
         <Btn onClick={onReset}>再写一篇</Btn>
         <Btn variant="primary" onClick={() => onNav?.("home")}>回首页</Btn>
+      </div>
+    </div>
+  );
+}
+
+// ─── 🚀 全自动进度页 (P0) ───────────────────────────────
+// 显示整条 pipeline 的每步进度,用户不用再点"下一步",挂了可中断接管
+function WxAutoProgress({ steps, title, err, onAbort, skipImages }) {
+  const [now, setNow] = React.useState(Date.now());
+  React.useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  const done = steps.filter(s => s.status === "done").length;
+  const running = steps.find(s => s.status === "running");
+  const failed = steps.some(s => s.status === "failed");
+  const allDone = steps.length > 0 && steps.every(s => s.status === "done");
+  const progress = steps.length === 0 ? 0 : Math.round((done / steps.length) * 100);
+
+  return (
+    <div style={{ padding: "32px 40px 120px", maxWidth: 820, margin: "0 auto" }}>
+      <div style={{ marginBottom: 18 }}>
+        <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 6, display: "flex", alignItems: "center", gap: 10 }}>
+          🚀 全自动跑 pipeline 中
+          {allDone && <span style={{ fontSize: 12, color: T.brand, background: T.brandSoft, padding: "3px 10px", borderRadius: 100 }}>✓ 已到封面</span>}
+          {failed && <span style={{ fontSize: 12, color: T.red, background: T.redSoft, padding: "3px 10px", borderRadius: 100 }}>有步骤挂了</span>}
+        </div>
+        <div style={{ fontSize: 13, color: T.muted, marginBottom: 10 }}>
+          标题: <b style={{ color: T.text }}>{title}</b>
+          {skipImages && <span style={{ marginLeft: 10, fontSize: 11, color: T.amber, background: T.amberSoft, padding: "2px 8px", borderRadius: 100 }}>已跳过段间配图</span>}
+        </div>
+        <div style={{ height: 8, background: T.bg3, borderRadius: 100, overflow: "hidden", marginBottom: 4 }}>
+          <div style={{
+            height: "100%", width: `${progress}%`,
+            background: `linear-gradient(90deg, ${T.brand}, #1f5638)`,
+            transition: "width 0.3s ease",
+            borderRadius: 100,
+          }} />
+        </div>
+        <div style={{ fontSize: 11, color: T.muted2, textAlign: "right" }}>{done}/{steps.length} · {progress}%</div>
+      </div>
+
+      <div style={{ background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 12, padding: 12, marginBottom: 14 }}>
+        {steps.map((s, i) => {
+          const cur = s.status === "running";
+          const elapsed = cur && s.status === "running" ? Math.floor((now - (s._startedAt || now)) / 1000) : s.elapsed_sec;
+          return (
+            <div key={s.key} style={{
+              display: "flex", alignItems: "flex-start", gap: 12,
+              padding: "10px 4px",
+              borderBottom: i === steps.length - 1 ? "none" : `1px solid ${T.bg3}`,
+              opacity: s.status === "pending" ? 0.5 : 1,
+              background: cur ? T.brandSoft : "transparent",
+              borderRadius: cur ? 8 : 0,
+              marginBottom: cur ? 4 : 0,
+            }}>
+              <div style={{
+                width: 26, height: 26, borderRadius: "50%", flexShrink: 0,
+                background: s.status === "done" ? T.brand : s.status === "failed" ? T.red : cur ? "#fff" : T.bg3,
+                color: s.status === "done" || s.status === "failed" ? "#fff" : cur ? T.brand : T.muted2,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontSize: 13, fontWeight: 700,
+                border: cur ? `2px solid ${T.brand}` : "none",
+                animation: cur ? "qlspin 1.5s linear infinite" : "none",
+              }}>
+                {s.status === "done" ? "✓" : s.status === "failed" ? "✗" : cur ? "◐" : i + 1}
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 14, fontWeight: cur ? 600 : 500, color: s.status === "pending" ? T.muted : T.text }}>
+                  {s.label}
+                  {s.elapsed_sec != null && s.status === "done" && (
+                    <span style={{ marginLeft: 8, fontSize: 11, color: T.muted2, fontFamily: "SF Mono, monospace", fontWeight: 400 }}>{s.elapsed_sec}s</span>
+                  )}
+                  {cur && (
+                    <span style={{ marginLeft: 8, fontSize: 11, color: T.brand, fontFamily: "SF Mono, monospace", fontWeight: 600 }}>
+                      {elapsed || 0}s / ~{s.eta}s
+                    </span>
+                  )}
+                </div>
+                {(cur || s.err) && (
+                  <div style={{ fontSize: 12, color: s.err ? T.red : T.muted, marginTop: 3, lineHeight: 1.6 }}>
+                    {s.err || s.sub}
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {err && (
+        <div style={{ padding: 12, background: T.redSoft, color: T.red, borderRadius: 10, fontSize: 13, marginBottom: 14 }}>
+          ⚠️ {err}
+        </div>
+      )}
+
+      <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+        <Btn variant="outline" onClick={onAbort}>
+          {failed || allDone ? "手动接管 · 回到分步模式" : "中断 · 回到分步"}
+        </Btn>
+        <div style={{ flex: 1 }} />
+        {running && (
+          <div style={{ fontSize: 12, color: T.muted }}>
+            ⏱️ 当前: {running.label} · 预计 {running.eta}s
+          </div>
+        )}
       </div>
     </div>
   );

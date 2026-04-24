@@ -141,6 +141,25 @@ Obsidian 知识库 / 00 AI清华哥 /
 
 ---
 
+## 进行中(autonomous loop 自驱 · 2026-04-25 凌晨)
+
+**优先级清单**(cron `*/30` 自驱,每轮做一项):
+- [ ] **[P0] 🚀 全自动到封面按钮**(跨 skill 复用设计)
+- [ ] **[修 bug] Step 5 配图卡片歧义**
+- [ ] **[基建] AI 引擎智能路由**(轻任务 DeepSeek / 重任务 Opus · per-endpoint)
+- [ ] **[P1] 热点文案改写V2 skill**
+- [ ] **[P2] 录音文案改写 skill**
+- [ ] **[P3] touliu-agent 替换 /api/ad**
+- [ ] **[P4] Token/成本监控 + 首页 widget**
+- [ ] **[P5] 工作流 localStorage 持久化**
+- [ ] **[P6] skill 骨架生成器 scripts/add_skill.py**
+- [ ] **[P7] 测试扩展**
+- [ ] **[P8] 首页技能中心卡片**
+- [ ] **[P9] CHANGELOG + 文档**
+- [ ] **[P10] 前端 UI 组件库提取**
+
+---
+
 ## D-010 已完成 · 公众号 skill 全链路 GUI
 
 **版本**：v0.3.3 -- 公众号 skill 接入
