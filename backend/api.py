@@ -475,12 +475,17 @@ def settings_reset_ep():
 
 @app.get("/api/stats/home")
 def stats_home():
-    """4 方块 + 1 热点条的统计数据."""
+    """4 方块 + 1 热点条的统计数据 (D-024 接入 ai_calls 真实数据)。"""
     import time as _t
+    import sqlite3
+    from contextlib import closing
+    from shortvideo.config import DB_PATH
+    from backend.services import ai_usage
+
     now = int(_t.time())
     day = 86400
     week_start = now - day * 7
-    yday_start = now - day * 1
+    yday_start = now - day * 2  # 昨天 = -2 天到 -1 天
     today_start = now - day
 
     all_works = list_works(limit=500)
@@ -493,19 +498,68 @@ def stats_home():
             "match_persona": bool(h.match_persona), "match_reason": h.match_reason,
         }
 
-    # 做视频:进行中(generating/ready/pending,排除 published/failed)
+    # 做视频(works 表): 进行中 / 今日 / 本周已发
     in_progress = sum(1 for w in all_works if w.status in ("generating", "ready", "pending"))
     today_works = sum(1 for w in all_works if w.created_at >= today_start)
-
-    # 已发(published)本周
     published_week = sum(1 for w in all_works if w.status == "published" and w.created_at >= week_start)
 
+    # 各 skill 调用次数(ai_calls 表): 按 route_key 聚合
+    ai_usage._ensure_schema()
+    counts: dict[str, dict[str, int]] = {"today": {}, "yesterday": {}, "week": {}}
+    try:
+        with closing(sqlite3.connect(DB_PATH)) as con:
+            for label, since, until in [
+                ("today",     today_start,  now),
+                ("yesterday", yday_start,   today_start),
+                ("week",      week_start,   now),
+            ]:
+                rows = con.execute(
+                    "SELECT route_key, COUNT(*) FROM ai_calls "
+                    "WHERE ts >= ? AND ts < ? AND ok = 1 "
+                    "GROUP BY route_key", (since, until),
+                ).fetchall()
+                counts[label] = {rk: c for rk, c in rows}
+    except Exception:
+        pass
+
+    def _sum(period: str, prefixes: list[str]) -> int:
+        d = counts.get(period, {})
+        return sum(c for rk, c in d.items() if any(rk.startswith(p) for p in prefixes))
+
+    # ad 卡: touliu.* + ad.* 合计(批量投流文案)
+    ad_today = _sum("today", ["touliu.", "ad."])
+    ad_yday  = _sum("yesterday", ["touliu.", "ad."])
+    # wechat 卡: wechat.write(出长文 = 1 篇)
+    wechat_today = counts["today"].get("wechat.write", 0)
+    wechat_week  = sum(c for rk, c in counts["week"].items() if rk == "wechat.write")
+    # moments 卡: moments.derive
+    moments_today = counts["today"].get("moments.derive", 0)
+    moments_yday  = counts["yesterday"].get("moments.derive", 0)
+
     return {
-        "make":    {"in_progress": in_progress, "today": today_works,  "hint": f"最近 {in_progress} 条进行中" if in_progress else "还没有进行中的视频,点开始做"},
-        "ad":      {"yesterday": 0,  "hint": "Phase 2 已通 · 记一条投流出了 5 版(数据库后续接)"},
-        "wechat":  {"week": 0,       "hint": "本周还没发过" if True else ""},
-        "moments": {"yesterday": 0,  "hint": "昨天发的朋友圈(后续 Phase 3 自动统计)"},
-        "hot":     top_hot,
+        "make": {
+            "in_progress": in_progress, "today": today_works,
+            "hint": f"最近 {in_progress} 条进行中" if in_progress else (
+                f"今日已开 {today_works} 条" if today_works else "还没有进行中的视频,点开始做"
+            ),
+        },
+        "ad": {
+            "today": ad_today, "yesterday": ad_yday,
+            "hint": (f"今日 {ad_today} 批 · 昨日 {ad_yday}" if ad_today
+                     else (f"昨日 {ad_yday} 批" if ad_yday else "今日还没出过投流")),
+        },
+        "wechat": {
+            "today": wechat_today, "week": wechat_week,
+            "hint": (f"今日 {wechat_today} 篇 · 本周共 {wechat_week}" if wechat_today
+                     else (f"本周写过 {wechat_week} 篇" if wechat_week else "本周还没写过公众号")),
+        },
+        "moments": {
+            "today": moments_today, "yesterday": moments_yday,
+            "hint": (f"今日 {moments_today} 组 · 昨日 {moments_yday}" if moments_today
+                     else (f"昨天 {moments_yday} 组" if moments_yday else "今日还没发朋友圈")),
+        },
+        "hot": top_hot,
+        "_published_week": published_week,  # 调试字段,前端不一定用
     }
 
 

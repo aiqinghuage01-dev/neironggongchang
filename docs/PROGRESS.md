@@ -103,7 +103,10 @@
       格式: `- HH:MM · 🔥 hotrewrite.write(opus) · 输入摘要 → 产出摘要 · 2500 tok`
       endpoint: GET /api/work-log/{status,recent} + POST /api/work-log/toggle
       tests/test_work_log.py 9 个单元测试全过(用 tmp_log fixture 隔离)
-- [ ] 首页 4 方块真实统计数据
+- [x] **首页 4 方块真实统计数据**(D-024) `/api/stats/home` 接 ai_calls 表
+      ad: touliu.* + ad.* 合计今日/昨日批数 · wechat: wechat.write 今日/本周
+      moments: moments.derive 今日/昨日 · make: 仍走 works 表(原本就对)
+      hint 文案动态: "今日 N 批" / "昨日 N 批" / "今日还没出过投流" 自适应
 - [ ] 选题批量生成优化
 
 ### Phase 2 -- 小华对话 + 记忆闭环
