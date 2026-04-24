@@ -106,3 +106,34 @@
 **代价**：每个 API 多一个参数。但未来新技能只要走 `get_ai_client()`，自动继承两档能力。
 
 **关键原则**：persona-prompt.md 放在 Obsidian 知识库里（`00 AI清华哥/`），清华哥随时能在 Obsidian 里打开编辑，工厂只读。
+
+**实现落地**（v0.3.2，2026-04-24 晚第二次 session）：
+
+1. `backend/services/persona.py::load_persona(deep)` — 按档加载 + 10 分钟 mtime 缓存
+2. `shortvideo/ai.py::PersonaInjectedAI` — 关卡层包装器。`get_ai_client()` 返回这个包装器，拦截 `chat / rewrite_script`，把人设拼到 system prompt 最前面（`"persona\n\n---\n\n# 本次任务\n\n{原 system}"`）。底层 Opus / DeepSeek 客户端不改。
+3. `rewrite_script` 不再写死 "你是资深编辑"，身份交给人设定义，这里只给任务规则。
+4. 6 个 Req 模型（Rewrite/AdGen/MomentsDerive/ArticleOutline/ArticleExpand/TopicGen）加 `deep: bool = True`；3 个 service（ad/moments/article）签名加 `deep`。
+5. 前端 `web/factory-deep.jsx` — `useDeepMode()` + `<DeepToggle />` + `getDeep()`。全站一个 localStorage 字段 `factory_deep_mode`，默认 true。
+6. 5 个页面（factory-flow/ad/moments/article/materials）放 `<DeepToggle />` + api.post 传 `deep: getDeep()`。
+
+**实测体积**（不是之前估的 7500 token，实际更少）：
+- 精简版：830 字（~300 token）
+- 详细版合计：10093 字（~3500 token）
+- 勾选时 system prompt 约 11000 字（~3800 token），一次改写总 prompt ≈ 6900 token
+- 不勾选：system 约 830 字（~300 token），一次改写总 prompt ≈ 680 token
+
+**实测效果**（同一句 "最近很多老板问我 AI 怎么落地..."）：
+- deep=False 输出：24 字，通用编辑风
+- deep=True 输出：87 字，带具体数字（"一个人一年工资加社保少说七八万"）+ 钩子结尾（"这笔账不用我帮你算吧？"），命中 persona 铁律
+
+---
+
+## D-009 - 关于 /api/rewrite 的 KB 注入（2026-04-24）
+
+**背景**：原计划在服务端给 `/api/rewrite` 自动拼 `kb.match` 结果（Phase 1 第 3 项）。
+
+**结论**：**不做服务端自动注入**。原因：`factory-flow.jsx` 已有 `KbInjectBar`，让清华哥在界面上手选要参考的 KB chunks，前端把选中的 chunks 拼到 `text` 里发出去。服务端再拼一次会双重注入。
+
+**批量生成类**（投流/朋友圈/公众号/选题）是服务端自动 `kb.match`，因为这些场景用户不需要细粒度挑选。
+
+**原则**：改写是创作场景，让用户控制参考素材；批量生成是执行场景，AI 自动匹配。

@@ -4,9 +4,28 @@
 
 ---
 
-## 当前状态（2026-04-24 晚）
+## 当前状态（2026-04-24 晚 · 第二次 session）
 
-**版本**：v0.3.1 -- 项目管理骨架 + 人设/记忆系统设计
+**版本**：v0.3.2 -- D-008 人设注入两档开关上线
+
+**本次 session 完成**(3 个 commit):
+
+1. **关卡层**(`f0246d6`) -- `backend/services/persona.py` + `shortvideo/ai.py::PersonaInjectedAI`
+   - `get_ai_client()` 返回包装器,自动把人设拼到每次调用的 system prompt
+   - 两档:deep=True 精简版+4详细(~11000字),deep=False 只精简版(~830字)
+   - 10 分钟 mtime 缓存,清华哥在 Obsidian 改完自动同步
+   - `tests/test_persona.py` 6/6 通过
+2. **API 透传**(`2525ac1`) -- 6 个 Req 模型加 deep,3 个 service 透传
+3. **前端开关**(`91ca016`) -- `factory-deep.jsx` 全站共享开关 +
+   5 页 `<DeepToggle />` + api.post 全部带 deep
+
+**端到端验证**(DeepSeek 引擎,相同原文):
+- deep=False: 680 token, 24 字, 通用编辑风
+- deep=True: 6918 token(10x), 87 字, 带具体数字 + 钩子结尾,清华哥味道全对
+
+**上一次 session 基线**(保留供追溯):
+
+版本:v0.3.1 -- 项目管理骨架 + 人设/记忆系统设计
 
 **本次 session 完成**：
 
@@ -70,11 +89,13 @@
 
 ## Roadmap（按 Phase 推进）
 
-### Phase 1 -- 人设注入 + 核心链路加固（下一步重点）
-- [ ] **ai.py 关卡层改造**：所有 AI 调用自动加载 persona-prompt.md（300 token）
-- [ ] **两档开关**：前端 checkbox「深度理解业务」，deep=true 时加载完整人设+知识库+记忆
-- [ ] **改写 prompt 注入知识库**：kb.match 已就绪，拼进 prompt
-- [ ] **行为记忆写入**：每次改写/生成后自动追加到小华工作日志.md
+### Phase 1 -- 人设注入 + 核心链路加固
+- [x] **ai.py 关卡层改造**：所有 AI 调用自动加载 persona（v0.3.2 D-008）
+- [x] **两档开关**：前端 `<DeepToggle />` 全站共享 localStorage（v0.3.2 D-008）
+- [x] **改写 prompt 注入知识库**：前端 `factory-flow.jsx` 的 KbInjectBar
+      让清华哥手选 KB chunks 拼进 text；批量生成类（投流/朋友圈/公众号/选题）
+      服务端已自动 kb.match
+- [ ] **行为记忆写入**：每次改写/生成后自动追加到小华工作日志.md（Phase 2 做）
 - [ ] 首页 4 方块真实统计数据
 - [ ] 选题批量生成优化
 
@@ -122,7 +143,9 @@ Obsidian 知识库 / 00 AI清华哥 /
 
 ## 下一步要做（优先级排序）
 
-1. **ai.py 关卡层 + persona-prompt.md 注入** -- 改一个文件让所有 AI 调用带上清华哥味道
-2. **两档开关前端实现** -- 每个内容生产页加 checkbox
-3. **行为记忆写入** -- 改写/生成后自动追加到小华工作日志.md
-4. **改写 prompt 注入知识库** -- kb.match 结果拼进 prompt
+1. **行为记忆写入** -- 改写/生成后自动追加到小华工作日志.md（Phase 2 的核心）
+2. **底部 dock 自由对话** -- 多轮聊天,AI 学到的偏好自动回写记忆文件
+3. **首页 4 方块真实统计数据** -- 后端已有 `/api/stats/home`,前端对接
+4. **Opus 503 排查** -- 测试时发现 OpenClaw proxy 持续 503,切 DeepSeek 才能跑。
+   可能是 Anthropic 上游限流或 OpenClaw 自身问题,需在 Claude Desktop 中复查
+   (本次实现的 deep 功能在两个引擎上都验证过可用)
