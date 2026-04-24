@@ -69,7 +69,7 @@ def gen_titles(topic: str, n: int = 3) -> list[dict[str, str]]:
   {{"title": "标题正文", "template": "结论前置型", "why": "为什么这标题能抓中年老板"}},
   ...
 ]"""
-    ai = get_ai_client()
+    ai = get_ai_client(route_key="wechat.titles")
     # skill 自带完整人设,关闭关卡层的 Obsidian persona 以免双注入
     r = ai.chat(prompt, system=system, deep=False, temperature=0.9, max_tokens=1500)
     arr = _extract_json(r.text, "array") or []
@@ -114,7 +114,7 @@ def gen_outline(topic: str, title: str) -> dict[str, Any]:
   "closing": "结尾落点(金句方向)",
   "estimated_words": 2500
 }}"""
-    ai = get_ai_client()
+    ai = get_ai_client(route_key="wechat.outline")
     r = ai.chat(prompt, system=system, deep=False, temperature=0.7, max_tokens=1200)
     obj = _extract_json(r.text, "object") or {}
     return {
@@ -173,7 +173,7 @@ def write_article(topic: str, title: str, outline: dict[str, Any]) -> dict[str, 
 
 直接输出 Markdown 长文(以 `# {title}` 开头,2000-3000 字)。不要任何前言、解释、说明。"""
 
-    ai = get_ai_client()
+    ai = get_ai_client(route_key="wechat.write")
     write_r = ai.chat(write_prompt, system=system, deep=False, temperature=0.85, max_tokens=6000)
     content = (write_r.text or "").strip()
 
@@ -218,7 +218,8 @@ def write_article(topic: str, title: str, outline: dict[str, Any]) -> dict[str, 
 ---
 {content}
 ---"""
-    check_r = ai.chat(check_prompt, system=check_system, deep=False, temperature=0.2, max_tokens=2000)
+    check_ai = get_ai_client(route_key="wechat.self-check")
+    check_r = check_ai.chat(check_prompt, system=check_system, deep=False, temperature=0.2, max_tokens=2000)
     self_check = _extract_json(check_r.text, "object") or {
         "pass": False,
         "summary": "自检解析失败,请人工审阅",

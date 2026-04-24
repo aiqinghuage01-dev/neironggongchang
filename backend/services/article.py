@@ -40,7 +40,7 @@ def gen_outline(
   ...
 ]
 """
-    ai = get_ai_client()
+    ai = get_ai_client(route_key="article.outline")
     r = ai.chat(prompt, max_tokens=2000, temperature=0.8, deep=deep)
     text = (r.text or "").strip()
     m = re.search(r"\[[\s\S]*\]", text)
@@ -87,7 +87,7 @@ def expand_article(
 
 直接输出 Markdown(包括 # H1 标题),不要加任何前言或解释:
 """
-    ai = get_ai_client()
+    ai = get_ai_client(route_key="article.expand")
     r = ai.chat(prompt, max_tokens=4000, temperature=0.85, deep=deep)
     content = (r.text or "").strip()
     # 抽标题

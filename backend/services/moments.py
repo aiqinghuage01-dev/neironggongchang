@@ -40,7 +40,7 @@ def derive_moments(
   ...
 ]
 """
-    ai = get_ai_client()
+    ai = get_ai_client(route_key="moments.derive")
     r = ai.chat(prompt, max_tokens=1500, temperature=0.95, deep=deep)
     text = (r.text or "").strip()
     m = re.search(r"\[[\s\S]*\]", text)

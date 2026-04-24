@@ -92,13 +92,56 @@ class PersonaInjectedAI:
         )
 
 
-def _build_raw_client():
+
+# ─── 引擎智能路由(2026-04-25) ───────────────────────────
+# 默认路由表:轻任务走 DeepSeek(快 10-20 倍),重任务走 Opus(质量)
+# 用户可在 settings.json 的 engine_routes 覆盖,或显式传 route_key
+# route_key = None 时回退到 settings.ai_engine(全局引擎)
+DEFAULT_ENGINE_ROUTES = {
+    # 公众号 skill (D-010)
+    "wechat.titles":      "deepseek",   # 3 个标题候选,3.6s vs Opus 68s
+    "wechat.outline":     "deepseek",   # 5 字段大纲,4.9s vs Opus 25s
+    "wechat.write":       "opus",       # 2000-3000 字长文,质量差异明显
+    "wechat.self-check":  "deepseek",   # JSON 结构化检查,deepseek 够用
+    "wechat.plan-images": "deepseek",   # 配图 prompt 规划,短文本
+    # 短视频 / 改写
+    "rewrite":            "opus",       # 短视频口播文案,风格决定
+    # 批量生成类
+    "ad.generate":        "opus",       # 投流文案,长文风险
+    "moments.derive":     "deepseek",   # 朋友圈短文,快就行
+    "article.outline":    "deepseek",
+    "article.expand":     "opus",       # 长文
+    "topics.generate":    "deepseek",   # 选题列表,短 JSON
+}
+
+
+def _resolve_engine(route_key: str | None) -> str:
+    """根据 route_key 决定用哪个引擎。优先级:
+    1. settings.engine_routes[route_key] — 用户自定义覆盖
+    2. DEFAULT_ENGINE_ROUTES[route_key] — 代码里内置的默认
+    3. settings.ai_engine — 全局引擎
+    4. "opus" — 最终默认
+    """
     try:
         from backend.services import settings as settings_service
         s = settings_service.get_all()
     except Exception:
         s = {}
-    engine = (s.get("ai_engine") or "opus").lower()
+    user_routes = s.get("engine_routes") or {}
+    if route_key:
+        if route_key in user_routes and user_routes[route_key]:
+            return str(user_routes[route_key]).lower()
+        if route_key in DEFAULT_ENGINE_ROUTES:
+            return DEFAULT_ENGINE_ROUTES[route_key]
+    return (s.get("ai_engine") or "opus").lower()
+
+
+def _build_raw_client(engine: str):
+    try:
+        from backend.services import settings as settings_service
+        s = settings_service.get_all()
+    except Exception:
+        s = {}
     if engine == "deepseek":
         return DeepSeekClient()
     return ClaudeOpusClient(
@@ -108,9 +151,35 @@ def _build_raw_client():
     )
 
 
-def get_ai_client() -> PersonaInjectedAI:
-    """获取带人设注入关卡层的 AI 客户端。所有内容生产应该走这里。"""
-    return PersonaInjectedAI(_build_raw_client())
+def get_ai_client(route_key: str | None = None) -> PersonaInjectedAI:
+    """获取带人设注入关卡层的 AI 客户端。
+
+    route_key: 用于智能路由,如 "wechat.titles" / "rewrite" / "ad.generate"。
+      不传则用 settings.ai_engine 全局引擎。
+    """
+    engine = _resolve_engine(route_key)
+    return PersonaInjectedAI(_build_raw_client(engine))
+
+
+def routes_info() -> dict:
+    """供前端设置页显示当前的路由表。"""
+    try:
+        from backend.services import settings as settings_service
+        s = settings_service.get_all()
+    except Exception:
+        s = {}
+    user_routes = s.get("engine_routes") or {}
+    resolved = {}
+    for k in DEFAULT_ENGINE_ROUTES:
+        resolved[k] = {
+            "default": DEFAULT_ENGINE_ROUTES[k],
+            "override": user_routes.get(k),
+            "effective": _resolve_engine(k),
+        }
+    return {
+        "global_engine": (s.get("ai_engine") or "opus").lower(),
+        "routes": resolved,
+    }
 
 
 def get_ai_info() -> dict:

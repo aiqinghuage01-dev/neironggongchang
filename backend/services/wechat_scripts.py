@@ -116,7 +116,7 @@ def plan_section_images(content: str, title: str, n: int = 4) -> list[dict[str, 
   {{"section_hint": "这张图插在哪一段之后的提示(20字内)", "image_prompt": "具象画面描述 ≤60字"}},
   ...
 ]"""
-    ai = get_ai_client()
+    ai = get_ai_client(route_key="wechat.plan-images")
     from backend.services import wechat_pipeline as wp
     r = ai.chat(prompt, system=system, deep=False, temperature=0.7, max_tokens=1500)
     arr = wp._extract_json(r.text, "array") or []

@@ -50,7 +50,7 @@ def generate_ad_batch(
   ...
 ]
 """
-    ai = get_ai_client()
+    ai = get_ai_client(route_key="ad.generate")
     r = ai.chat(prompt, max_tokens=2000, temperature=0.9, deep=deep)
     text = (r.text or "").strip()
     # 抠出 JSON 数组

@@ -53,7 +53,7 @@ from pydantic import BaseModel, Field
 from shortvideo.config import settings, ROOT, DATA_DIR, AUDIO_DIR, VIDEO_DIR
 from shortvideo.shiliu import ShiliuClient, ShiliuError
 from shortvideo.deepseek import DeepSeekClient
-from shortvideo.ai import get_ai_client, get_ai_info, list_opus_models
+from shortvideo.ai import get_ai_client, get_ai_info, list_opus_models, routes_info
 from shortvideo.qingdou import QingdouClient, QingdouError
 from shortvideo.apimart import ApimartClient, ApimartError, cover_prompt
 from shortvideo.cosyvoice import CosyVoiceLocal, CosyVoiceNotReady
@@ -227,7 +227,7 @@ def rewrite(req: RewriteReq):
         "story": "故事叙事,从一个小场景切入,带情绪",
     }
     hint = style_map.get(req.style, style_map["casual"])
-    ai = get_ai_client()
+    ai = get_ai_client(route_key="rewrite")
     r = ai.rewrite_script(req.text, style_hint=hint, deep=req.deep)
     return {"text": r.text, "tokens": r.total_tokens, "deep": req.deep}
 
@@ -392,6 +392,12 @@ def ai_health():
 @app.get("/api/ai/models")
 def ai_models():
     return {"models": list_opus_models()}
+
+
+@app.get("/api/ai/routes")
+def ai_routes():
+    """返回当前的引擎路由表(默认 + 用户 override + 实际生效)。"""
+    return routes_info()
 
 
 # ---- 设置 ----
@@ -717,7 +723,7 @@ def topics_generate(req: TopicGenReq):
 
 严格 JSON 数组: ["选题1", "选题2", ...]
 """
-    ai = get_ai_client()
+    ai = get_ai_client(route_key="topics.generate")
     r = ai.chat(prompt, max_tokens=800, temperature=0.9, deep=req.deep)
     import json as _json, re as _re
     m = _re.search(r"\[[\s\S]*\]", r.text or "")

@@ -146,7 +146,9 @@ Obsidian 知识库 / 00 AI清华哥 /
 **优先级清单**(cron `*/30` 自驱,每轮做一项):
 - [x] **[P0] 🚀 全自动到封面按钮**(09faf92) 挑完标题自动跑到 Step 7
 - [x] **[修 bug] Step 5 配图卡片歧义** 卡片 flex 列布局,按钮始终可见 + "✨ 一键生成"按钮
-- [ ] **[基建] AI 引擎智能路由**(轻任务 DeepSeek / 重任务 Opus · per-endpoint)
+- [x] **[基建] AI 引擎智能路由** `get_ai_client(route_key=...)` 11 条默认路由
+      (wechat.titles → deepseek, wechat.write → opus, etc.)
+      /api/ai/routes 暴露路由表给前端。settings.engine_routes 可覆盖。
 - [ ] **[P1] 热点文案改写V2 skill**
 - [ ] **[P2] 录音文案改写 skill**
 - [ ] **[P3] touliu-agent 替换 /api/ad**
