@@ -135,7 +135,13 @@
 ### Phase 3 -- 发布 + 数据闭环
 - [ ] 多平台真发布（需各家 OpenAPI 授权）
 - [ ] 数据自动采集
-- [ ] 效果分析 -> 反哺选题
+- [x] **效果分析 → 反哺选题**(D-032) backend/services/insights.py
+      - top_performers(limit=10) · 按 views 跨平台聚合 metrics 表
+      - winning_patterns() · AI 抽 top 共性(开头/角度/标题模式/标志词/DNA),1h 缓存
+      - topics_generate prompt 自动注入 "你过往跑量好的作品共性"
+      - `/api/insights/{top-performers, winning-patterns}` endpoints
+      - metrics 空时自动跳过(向后兼容,跟没这功能一样)
+      - 7 个单元测试 · tmp_db + reload 隔离 prod DB
 
 ---
 

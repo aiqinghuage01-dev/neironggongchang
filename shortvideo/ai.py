@@ -180,6 +180,8 @@ DEFAULT_ENGINE_ROUTES = {
     "chat.dock":             "deepseek",   # 对话短而频,DeepSeek 够 + 便宜
     # 偏好学习 (D-030)
     "preference.learn":      "deepseek",   # 二筛精炼,JSON 短输出
+    # 效果分析(D-032)
+    "insights.winning":      "deepseek",   # 抽 top works 共性,1 小时一次,DS 够
     "compliance.analyze":    "deepseek",  # 兼容 add_skill 骨架路径
     "compliance.write":      "opus",      # 同上
 }

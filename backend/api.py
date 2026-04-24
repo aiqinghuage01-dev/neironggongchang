@@ -597,6 +597,21 @@ def memory_inject_status():
     return memory_inject.stats()
 
 
+# ─── 效果分析 → 反哺选题 (D-032) ─────────────────────────
+
+@app.get("/api/insights/top-performers")
+def insights_top_performers(limit: int = 10):
+    from backend.services import insights
+    return {"items": insights.top_performers(limit=limit)}
+
+
+@app.get("/api/insights/winning-patterns")
+def insights_winning_patterns(refresh: bool = False):
+    """跑量好的作品共性 · 1h 缓存,topics_generate 自动注入此结果。"""
+    from backend.services import insights
+    return insights.winning_patterns(refresh=refresh)
+
+
 class MemInjectToggleReq(BaseModel):
     enabled: bool
 
@@ -1027,6 +1042,16 @@ def topics_generate(req: TopicGenReq):
             f"- {t.title}" for t in recent[:20]
         )
 
+    # D-032: 注入效果反哺 patterns(若 metrics 表有数据)
+    insights_block = ""
+    try:
+        from backend.services import insights
+        wp = insights.winning_patterns()
+        if wp.get("patterns"):
+            insights_block = "\n\n【你过往跑量好的作品共性 · 参考但不照抄】\n" + wp["patterns"]
+    except Exception:
+        pass
+
     prompt = f"""基于下面主题和清华哥人设,出 {req.n} 个犀利的选题(短视频或公众号都能用)。
 
 要求:
@@ -1035,7 +1060,7 @@ def topics_generate(req: TopicGenReq):
 - 不要和「最近已入库选题」重复相同方向
 - 为每个选题配一句"为什么这选题能打中清华哥粉丝"
 - 标 2-3 个简短 tags(如"AI获客""实体老板""私域"等)
-{kb_block}{recent_block}
+{kb_block}{recent_block}{insights_block}
 
 【本次主题】{req.seed}
 
