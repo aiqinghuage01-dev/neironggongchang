@@ -155,7 +155,15 @@ Obsidian 知识库 / 00 AI清华哥 /
 - [x] **[P2] 录音文案改写 skill** voicerewrite_pipeline + 3 步 UI
       `/api/voicerewrite/{analyze,write,skill-info}`, sidebar 🎙️ 录音改写
       端到端 /analyze 7.7s(DeepSeek), 提骨架 + 2 角度,语气锚点精准捕捉。
-- [ ] **[P3] touliu-agent 替换 /api/ad**
+- [x] **[P3] touliu-agent 替换 /api/ad** touliu_pipeline + 2 步 UI
+      `/api/touliu/{generate,lint,skill-info}`, 注入 SKILL.md(18K) +
+      style_rules/winning_patterns/industry_templates/golden_samples
+      结构分配自动按 n 分配(痛对步话创),每条带编导 6 维终检。
+      subprocess 调 lint_copy_batch.py 做本地质检。
+      覆盖旧 PageAd,旧 /api/ad/generate 保留作 fallback。
+      测试: skill-info ok, 结构分配 3/5/8/10/15 都正确。
+      端到端 /generate 10 条 Opus 吃 6K token system,首跑 2-3 分钟,
+      留用户早上真跑验证。
 - [ ] **[P4] Token/成本监控 + 首页 widget**
 - [ ] **[P5] 工作流 localStorage 持久化**
 - [ ] **[P6] skill 骨架生成器 scripts/add_skill.py**

@@ -74,6 +74,7 @@ from backend.services import wechat_pipeline
 from backend.services import wechat_scripts
 from backend.services import hotrewrite_pipeline
 from backend.services import voicerewrite_pipeline
+from backend.services import touliu_pipeline
 
 UPLOAD_DIR = AUDIO_DIR / "uploads"
 COVER_DIR = DATA_DIR / "covers"
@@ -1080,6 +1081,60 @@ class VoicerewriteWriteReq(BaseModel):
 @app.post("/api/voicerewrite/write")
 def voicerewrite_write(req: VoicerewriteWriteReq):
     return voicerewrite_pipeline.write_script(req.transcript, req.skeleton, req.angle)
+
+
+# ═══════════════════════════════════════════════════════════════════
+# touliu-agent skill 接入 (D-014) — 替换旧 /api/ad/generate
+# Skill 源: ~/Desktop/skills/touliu-agent/
+# 一次生成 n 条投流文案(按结构分配) + lint 本地质检
+# 旧 /api/ad/generate 保留不动作为 fallback
+# ═══════════════════════════════════════════════════════════════════
+
+TOULIU_SKILL_SLUG = "touliu-agent"
+
+
+@app.get("/api/touliu/skill-info")
+def touliu_skill_info():
+    try:
+        return skill_loader.skill_info(TOULIU_SKILL_SLUG)
+    except skill_loader.SkillNotFound as e:
+        raise HTTPException(404, str(e))
+
+
+class TouliuGenerateReq(BaseModel):
+    pitch: str
+    industry: str = "通用老板"
+    target_action: str = "点头像进直播间"
+    n: int = 10
+    channel: str = "直播间"
+    run_lint: bool = True
+
+
+@app.post("/api/touliu/generate")
+def touliu_generate(req: TouliuGenerateReq):
+    result = touliu_pipeline.generate_batch(
+        pitch=req.pitch,
+        industry=req.industry,
+        target_action=req.target_action,
+        n=max(3, min(req.n, 15)),
+        channel=req.channel,
+    )
+    # 顺手 lint 一下,失败不阻塞返回
+    if req.run_lint and result.get("batch"):
+        target_map = {"点头像进直播间": "live", "留资": "reserve", "加私域": "private", "到店": "visit"}
+        ta = target_map.get(req.target_action, "live")
+        result["lint"] = touliu_pipeline.lint_batch(result["batch"], target_action=ta)
+    return result
+
+
+class TouliuLintReq(BaseModel):
+    batch: list[dict[str, Any]] = Field(default_factory=list)
+    target_action: str = "live"
+
+
+@app.post("/api/touliu/lint")
+def touliu_lint(req: TouliuLintReq):
+    return touliu_pipeline.lint_batch(req.batch, target_action=req.target_action)
 
 
 if __name__ == "__main__":
