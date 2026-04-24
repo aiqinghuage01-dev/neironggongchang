@@ -10,6 +10,7 @@ OpenClaw proxy 提供 OpenAI 兼容接口:
 """
 from __future__ import annotations
 
+import httpx
 from openai import OpenAI
 
 from .deepseek import LLMResult
@@ -30,7 +31,15 @@ class ClaudeOpusClient:
         # 空字符串 / None 都用默认哨兵值(OpenAI SDK 要求非空)
         self.api_key = api_key if api_key else DEFAULT_API_KEY
         self.model = model or DEFAULT_MODEL
-        self._client = OpenAI(api_key=self.api_key, base_url=self.base_url)
+        # trust_env=False: 不读 macOS 系统代理(Clash/Surge/VPN 等)。
+        # OpenClaw proxy 是 localhost,绝对不该走 system proxy,
+        # 否则 httpx 把请求发给系统代理,代理看是 localhost 就返回 503。
+        self._http_client = httpx.Client(trust_env=False, timeout=120)
+        self._client = OpenAI(
+            api_key=self.api_key,
+            base_url=self.base_url,
+            http_client=self._http_client,
+        )
 
     def chat(
         self,
