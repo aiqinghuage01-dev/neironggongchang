@@ -141,19 +141,38 @@ Obsidian 知识库 / 00 AI清华哥 /
 
 ---
 
-## 进行中（D-010 · 公众号 skill 全量 GUI 化）
+## D-010 已完成 · 公众号 skill 全链路 GUI
 
-**目标**：把 `~/Desktop/skills/公众号文章/` 这个 skill 的完整 5 Phase 流程
-接入本项目，从一句选题 → 公众号草稿箱已推送，全程不打开 Claude Desktop。
+**版本**：v0.3.3 -- 公众号 skill 接入
 
-**架构原则**：skill 目录是事实源,系统只读;skill 里有的 reference / 脚本 /
-模板,系统不重写,直接读/调。
+**目标达成**：从一句选题 → 公众号草稿箱已推送,全程在本项目前端完成,
+skill 里的 references/scripts/assets 全部当事实源读取/调用,系统不重写。
 
-**分 4 步 commit**：
-- [ ] 1. `skill_loader.py` + `/api/wechat/topic|titles|outline|write` (Phase 1-2 + 三层自检)
-- [ ] 2. `/api/wechat/section-image|html|cover` (Phase 2.5/3/4)
-- [ ] 3. `/api/wechat/push` (Phase 5)
-- [ ] 4. 前端 `factory-wechat-v2.jsx` 替换旧 PageWechat 全链路 UI
+**完成**(4 个 commit):
+- [x] `2ea58e7` skill_loader.py + Phase 1-2(titles/outline/write + 三层自检)
+- [x] `9a70853` wechat_scripts.py + Phase 2.5/3/4(plan-images/section-image/html/cover)
+- [x] `1c940e2` 前端 factory-wechat-v2.jsx 8 步全链路 UI
+- [x] `D-010 第4步` 文档收口 + 28 个单元/集成测试全绿
+
+**端到端验证**:
+- /titles(DeepSeek,3.6s): 3 个候选标题,带 template + why
+- /outline(DeepSeek,4.9s): 5 字段大纲,开场用学员故事
+- /write(DeepSeek,22s): 1835 字长文,自检 PASS 六维 108/120
+- /plan-images(DeepSeek,4s): 4 条具象 16:9 prompt
+- /html(400ms): 14.5KB 微信 markup,section/span-leaf/mp-style-type 齐
+- /cover(Chrome headless,4.6s): 11KB jpg
+- /section-image: apimart 慢,本地脚本确认可用,留用户端跑
+- /push: endpoint 就绪,真推留用户前端按钮触发(避免测试稿污染草稿箱)
+
+**skill 资源字数**(读取事实源):
+- SKILL.md 13994 字
+- references 总 35350 字(who-is-qinghuage / style-bible / writing-methodology /
+  visual-design-v2 / wechat-api-reference)
+
+**架构决策** D-011 见 TECHNICAL-DECISIONS.md: skill 目录作为事实源
+(vs Obsidian persona),当功能有对应 skill 时 skill 覆盖 Obsidian。
+
+## 下一步要做（优先级排序）
 
 ## 下一步要做（优先级排序）
 

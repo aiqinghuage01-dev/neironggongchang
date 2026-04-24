@@ -128,6 +128,64 @@
 
 ---
 
+## D-011 - Skill 目录作为事实源,功能级覆盖 Obsidian persona（2026-04-24）
+
+**背景**：上次 session 用 Obsidian `00 AI清华哥/` 作为全站人设事实源(D-005)。
+这次接入 `~/Desktop/skills/公众号文章/` skill,skill 里自带 `who-is-qinghuage.md`
+(更深的人设) + `style-bible.md` + `writing-methodology.md`。两边内容有重叠。
+
+**结论**：**功能级覆盖**。
+- **默认**(改写/投流/朋友圈/选题等): 走 Obsidian persona(D-005 关卡层)
+- **有对应 skill 的功能**(目前仅 /api/wechat/*): skill references 完全覆盖,
+  关卡层的 `deep` 关掉(`deep=False`),避免双注入
+
+**为什么这么做**:
+1. skill 是产品单元,清华哥在设计 skill 时已经考虑了人设 + 方法论 + 场景,
+   读到一半塞个 Obsidian persona 会污染 skill 的叙事
+2. 每个 skill 是自给自足的,新 skill 接入时不用担心 Obsidian 的版本兼容
+3. Obsidian 是"通用小华"的底座,skill 是"专业小华"的加强
+
+**事实源路径**:
+- skill: `~/Desktop/skills/<slug>/` (SKILL.md + references/ + scripts/ + assets/)
+- 本项目: `backend/services/skill_loader.py` 只读访问,10 分钟缓存
+- 不搬家、不同步、不复制
+
+---
+
+## D-010 - 公众号 skill 接入架构（2026-04-24）
+
+**背景**：把 `~/Desktop/skills/公众号文章/` 这个完整 5 Phase 的 skill 接入本项目,
+让清华哥从一句选题到推进草稿箱全程在前端完成。
+
+**架构**：4 层清晰分工
+1. **事实源层** = skill 目录(SKILL.md + references + scripts + assets)-- 只读
+2. **编排层** = `backend/services/wechat_pipeline.py` + `wechat_scripts.py`
+   - pipeline: AI 调用(Phase 1-2 + plan-images 的 AI 产 prompt 那步)
+   - scripts: subprocess 调 skill 下的 scripts/(gen_section_image / cover /
+     convert_to_wechat_markup / push_to_wechat)
+3. **API 层** = `backend/api.py` 的 `/api/wechat/*` 8 个 endpoint
+4. **UI 层** = `web/factory-wechat-v2.jsx` 覆盖旧 PageWechat
+
+**不这么做**:
+- ❌ 把 skill 的 references 复制到本项目仓库(两份会分叉)
+- ❌ 重写 skill 的 scripts 到 Python(失去 skill 作为独立产品的特质)
+- ❌ 让 AI 自己走完整 5 Phase(Claude Desktop 的 agentic 模式)-- 这里是 FastAPI,
+  需要确定的一步一确认 UI,不能让 AI 黑盒跑完
+
+**skill 脚本依赖 Python 版本**：gen_section_image.sh / push_to_wechat.sh / 
+convert_to_wechat_markup.py 用的是系统 python3 (`/usr/bin/env python3`,
+macOS 默认 /Library/Frameworks/Python.framework/Versions/3.14/)。所需 premailer /
+bs4 / openai 已在系统 python3 装好,本项目 .venv 不重复装。
+
+**新技能接入范式**(未来任意 skill 都走这个 5 步):
+1. `skill_loader.load_skill(slug)` 确认能读到
+2. 在 `backend/services/<skill>_pipeline.py` 写 AI 调用编排
+3. 在 `backend/services/<skill>_scripts.py` 写 subprocess 封装
+4. 在 `api.py` 加 `/api/<skill>/*` endpoint
+5. 在 `web/factory-<skill>-v2.jsx` 写 UI,覆盖旧入口
+
+---
+
 ## D-009 - 关于 /api/rewrite 的 KB 注入（2026-04-24）
 
 **背景**：原计划在服务端给 `/api/rewrite` 自动拼 `kb.match` 结果（Phase 1 第 3 项）。
