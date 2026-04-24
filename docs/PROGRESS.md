@@ -4,9 +4,24 @@
 
 ---
 
-## 当前状态（2026-04-24）
+## 当前状态（2026-04-24 晚）
 
-**版本**：v0.3.0 -- 设计稿 C2 全量实施
+**版本**：v0.3.1 -- 项目管理骨架 + 人设/记忆系统设计
+
+**本次 session 完成**：
+
+1. **Git 初始化** -- 全量代码入库（84 文件，commit `3bfb10a`）
+2. **项目管理体系**（对标 poju-site）：
+   - `CLAUDE.md` -- AI 入口路标
+   - `docs/PROGRESS.md` -- 进度看板（本文）
+   - `docs/TECHNICAL-DECISIONS.md` -- 技术决策档案（D-001 ~ D-008）
+3. **人设/记忆系统设计**（研究了 OpenClaw + Hermes，选择 OpenClaw 的 Markdown 方案）：
+   - 在 Obsidian 知识库创建 `persona-prompt.md`（~300 token 精简版人设）
+   - 在 Obsidian 知识库创建 `小华工作日志.md`（行为记忆模板）
+   - 设计三层记忆架构（D-005）
+   - 设计两档开关：深度理解 vs 轻快模式（D-008）
+   - 设计关卡层：所有 AI 调用通过 `ai.py` 统一注入人设（不需要每个技能单独改）
+4. **分析了当前 6 个 AI 调用点的问题**：全部用通用 prompt，没注入人设
 
 **已完成的能力**：
 - 做视频 6 步流（扒文案 -> 改写 -> 声音 -> 形象 -> 剪辑 -> 发布）
@@ -24,62 +39,78 @@
 - 设置持久化（data/settings.json）
 
 **未实现但 PRD 里有**：
-- 首页统计方块的真实数据（目前部分 hardcode）
 - 知识库注入到改写 prompt（kb.match 已有，但 rewrite_script 没用上）
 - 小华对话（底部 dock 的自由聊天）
-- 小华记忆持久化（Phase 3）
+- 小华记忆持久化
 - 多平台真发布（抖音/快手 OpenAPI）
-- 定时发布
-- BGM 混音
-- 数据自动采集
+- 定时发布 / BGM 混音 / 数据自动采集
 
 ---
 
 ## 版本演进
 
 ### v0.1.0（2026-04-23）-- Streamlit 单文件 MVP
-- 一页六卡 Streamlit UI
-- 石榴 + DeepSeek + CosyVoice（桩）+ yt-dlp
-- SQLite 作品库
-- pytest 10/10 通过
-- 端到端视频生成验证
+- 一页六卡 Streamlit UI + 石榴 + DeepSeek + CosyVoice（桩）
+- pytest 10/10 + 端到端视频生成验证
 - 详见 `DELIVERY-v0.1.md`
 
 ### v0.2.0（2026-04-24 上午）-- 新 API 接入
-- 轻抖（链接->文案）
-- apimart GPT-Image-2（AI 封面）
-- 两个配套 pytest + smoke
+- 轻抖（链接->文案）+ apimart GPT-Image-2（AI 封面）
 
 ### v0.3.0（2026-04-24 下午）-- 设计稿 C2 全量实施
-- FastAPI 后端取代 Streamlit 内嵌逻辑
-- React 前端 8 页落地
-- 知识库对接（目录树 / 搜索 / chunk 级匹配）
-- 投流 / 朋友圈 / 公众号三条生产链路
-- 素材库 / 热点库 / 选题库
-- AI 引擎双轨（Opus / DeepSeek）
-- 设置页持久化
+- FastAPI + React 前端 8 页 + 知识库 + 投流/朋友圈/公众号 + AI 双轨
 - 详见 `DELIVERY.md`
+
+### v0.3.1（2026-04-24 晚）-- 项目管理 + 记忆系统设计
+- Git init + CLAUDE.md + PROGRESS.md + TECHNICAL-DECISIONS.md
+- persona-prompt.md + 小华工作日志.md（Obsidian 知识库）
+- 8 条技术决策记录
 
 ---
 
-## Roadmap（按 PRD Phase 推进）
+## Roadmap（按 Phase 推进）
 
-### Phase 1 -- 核心链路加固（当前重点）
-- [ ] 改写 prompt 注入清华哥人设（`00 AI清华哥/*.md`）
-- [ ] 改写 prompt 注入知识库匹配结果（kb.match 已就绪）
+### Phase 1 -- 人设注入 + 核心链路加固（下一步重点）
+- [ ] **ai.py 关卡层改造**：所有 AI 调用自动加载 persona-prompt.md（300 token）
+- [ ] **两档开关**：前端 checkbox「深度理解业务」，deep=true 时加载完整人设+知识库+记忆
+- [ ] **改写 prompt 注入知识库**：kb.match 已就绪，拼进 prompt
+- [ ] **行为记忆写入**：每次改写/生成后自动追加到小华工作日志.md
 - [ ] 首页 4 方块真实统计数据
-- [ ] 选题批量生成优化（接知识库）
+- [ ] 选题批量生成优化
 
-### Phase 2 -- 小华对话 + 记忆
+### Phase 2 -- 小华对话 + 记忆闭环
 - [ ] 底部 dock 自由对话（多轮）
-- [ ] 人设底座加载（启动时读 `00 AI清华哥/`，缓存注入 system prompt）
-- [ ] 行为记忆层（data/memory.jsonl，记录用户选择和手动修改）
-- [ ] 偏好学习（最近 N 条记忆注入 prompt）
+- [ ] 对话中学到的偏好自动写入小华工作日志.md
+- [ ] 行为记忆读取：最近 20 条注入 prompt
 
 ### Phase 3 -- 发布 + 数据闭环
 - [ ] 多平台真发布（需各家 OpenAPI 授权）
 - [ ] 数据自动采集
 - [ ] 效果分析 -> 反哺选题
+
+---
+
+## 人设/记忆系统架构（速览）
+
+```
+Obsidian 知识库 / 00 AI清华哥 /
+├── persona-prompt.md        ← 精简版（300 token），每次 AI 调用必带
+├── 小华工作日志.md           ← 行为记忆，AI 自动追加，清华哥可手动编辑
+├── 业务画像.md              ← 详细版，deep=true 时加载
+├── 写作风格规范.md           ← 详细版，deep=true 时加载
+├── 人设定位与表达边界.md      ← 详细版，deep=true 时加载
+├── AI协作偏好.md            ← 详细版，deep=true 时加载
+└── index.md                 ← 知识库导航索引
+
+代码层：
+  ai.py → get_ai_client() → chat(prompt, deep=True)
+    → 自动读 persona-prompt.md（必带）
+    → deep=True 时额外读完整人设 + kb.match + 最近记忆
+    → 所有技能（改写/投流/朋友圈/公众号/选题/标题）自动继承
+    → 未来新技能只要调 get_ai_client()，零额外配置
+```
+
+关键决策见 `docs/TECHNICAL-DECISIONS.md`（D-005 三层记忆、D-008 两档开关）。
 
 ---
 
@@ -91,7 +122,7 @@
 
 ## 下一步要做（优先级排序）
 
-1. **改写 prompt 注入人设** -- 最高优先。当前 `rewrite_script` 用通用 prompt，完全没清华哥味道
-2. **改写 prompt 注入知识库** -- kb.match 已就绪，只差拼进 prompt
-3. **首页统计真实数据** -- 部分 hardcode 要换成真查询
-4. **项目管理骨架** -- CLAUDE.md + PROGRESS.md + git init（本次 session 在做）
+1. **ai.py 关卡层 + persona-prompt.md 注入** -- 改一个文件让所有 AI 调用带上清华哥味道
+2. **两档开关前端实现** -- 每个内容生产页加 checkbox
+3. **行为记忆写入** -- 改写/生成后自动追加到小华工作日志.md
+4. **改写 prompt 注入知识库** -- kb.match 结果拼进 prompt

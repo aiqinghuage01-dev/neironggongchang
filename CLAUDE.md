@@ -141,11 +141,14 @@ neironggongchang/
 设置页 -> AI 引擎 -> opus（默认）/ deepseek
 代码层：`shortvideo/ai.py` 的 `get_ai_client()` 读 `data/settings.json` 的 `ai_engine` 字段
 
-### 知识库
+### 知识库 + 人设系统
 - 根目录：`~/Desktop/清华哥知识库/`
-- 人设文件：`00 AI清华哥/`（业务画像.md / 写作风格规范.md / 人设定位与表达边界.md）
+- **人设精简版**：`00 AI清华哥/persona-prompt.md`（~300 token，每次 AI 调用必带）
+- **行为记忆**：`00 AI清华哥/小华工作日志.md`（AI 自动追加，清华哥可手动编辑）
+- 人设详细版：`00 AI清华哥/`（业务画像.md / 写作风格规范.md / 人设定位.md / AI协作偏好.md）
 - 核心知识：`07 知识Wiki/`（方法论 / 行业洞察 / 直播体系等）
 - 匹配接口：`POST /api/kb/match`（jieba 分词 + TF-IDF + 分区权重）
+- **关键架构**：所有 AI 调用通过 `ai.py` 关卡层统一注入人设，新技能��动继承（见 D-005/D-008）
 
 ---
 
