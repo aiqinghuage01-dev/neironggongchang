@@ -1024,6 +1024,7 @@ def article_expand(req: ArticleExpandReq):
 
 
 from backend.services import planner_pipeline
+from backend.services import compliance_pipeline
 # ═══════════════════════════════════════════════════════════════════
 # 公众号文章 skill 接入(D-010)
 # Skill 源: ~/Desktop/skills/公众号文章/
@@ -1350,6 +1351,56 @@ class PlannerWriteReq(BaseModel):
 @app.post("/api/planner/write")
 def planner_write(req: PlannerWriteReq):
     return planner_pipeline.write_plan(req.brief, req.detected, req.level)
+
+
+
+
+# ═══════════════════════════════════════════════════════════════════
+# 违禁违规审查-学员版 skill 接入 (D-017 骨架,根据实际调整)
+# Skill 源: ~/Desktop/skills/违禁违规审查-学员版/
+# ═══════════════════════════════════════════════════════════════════
+
+COMPLIANCE_SKILL_SLUG = "违禁违规审查-学员版"
+
+
+@app.get("/api/compliance/skill-info")
+def compliance_skill_info():
+    try:
+        return skill_loader.skill_info(COMPLIANCE_SKILL_SLUG)
+    except skill_loader.SkillNotFound as e:
+        raise HTTPException(404, str(e))
+
+
+class ComplianceCheckReq(BaseModel):
+    text: str
+    industry: str = "通用"   # 大健康/美业/教育/金融/医美/通用
+
+
+@app.post("/api/compliance/check")
+def compliance_check(req: ComplianceCheckReq):
+    """单 step 审查: 报告 + 必出 2 版改写(保守/营销)。"""
+    return compliance_pipeline.check_compliance(req.text, req.industry)
+
+
+# 保留 analyze/write 骨架路径以兼容 add_skill 统一约定
+class ComplianceAnalyzeReq(BaseModel):
+    input: str
+
+
+@app.post("/api/compliance/analyze")
+def compliance_analyze(req: ComplianceAnalyzeReq):
+    return compliance_pipeline.analyze_input(req.input)
+
+
+class ComplianceWriteReq(BaseModel):
+    input: str
+    analysis: dict[str, Any] = Field(default_factory=dict)
+    angle: dict[str, Any] = Field(default_factory=dict)
+
+
+@app.post("/api/compliance/write")
+def compliance_write(req: ComplianceWriteReq):
+    return compliance_pipeline.write_output(req.input, req.analysis, req.angle)
 
 
 if __name__ == "__main__":

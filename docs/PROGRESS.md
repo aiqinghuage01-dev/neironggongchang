@@ -232,6 +232,11 @@ P0-P10 所有任务落地, 14 个 commit 从 `09faf92` 到今日末 commit。
 
 ## Bonus 任务(P10 之后,cron 继续干活时做的)
 
+- [x] **违禁违规审查 skill 接入 (D-026)** — 第 6 个接入的 skill (用户主动插单,学员版 OK)
+      单 step 流程: 输入文案+行业 → 一次性出审核报告 + **必须** 2 版改写
+      6 类行业(通用/大健康/美业/教育/金融/医美) 决定是否加查敏感行业词库
+      违规分高/中/低危 · 保守版 100% 合规 · 营销版保留吸引力
+      `/api/compliance/{check,skill-info}` · sidebar 🛡️ 违规审查
 - [x] **content-planner skill 接入 (D-022)** — 第 5 个接入的 skill
       用 scripts/add_skill.py 一键生成骨架(测试 D-017 可用性) +
       改 pipeline 适配特殊输出(三档目标 + 6 模块策划) +

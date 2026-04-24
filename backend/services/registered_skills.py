@@ -67,6 +67,16 @@ REGISTERED_SKILLS: list[dict[str, Any]] = [
         "steps": 3,
         "has_scripts": False,
     },
+    {
+        "slug": "违禁违规审查-学员版",
+        "api_prefix": "compliance",
+        "page_id": "compliance",
+        "icon": "🛡️",
+        "label": "违规审查",
+        "subtitle": "通用+敏感行业双层审查 · 必出 2 版改写(保守+营销)",
+        "steps": 2,
+        "has_scripts": False,
+    },
 ]
 
 

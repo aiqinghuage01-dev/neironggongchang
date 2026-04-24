@@ -16,6 +16,7 @@ function FactoryApp() {
       case "knowledge":  return <PageKnowledge onNav={setPage} />;
       case "settings":   return <PageSettings onNav={setPage} />;
       case "planner": return <PagePlanner onNav={setPage} />;
+      case "compliance": return <PageCompliance onNav={setPage} />;
       default:           return <PageHome onNav={setPage} />;
     }
   };

@@ -165,6 +165,10 @@ DEFAULT_ENGINE_ROUTES = {
     # content-planner skill (D-017 骨架)
     "planner.analyze":    "deepseek",
     "planner.write":      "opus",
+    # 违禁违规审查-学员版 skill (D-026) · 单 step 审查+改写
+    "compliance.check":      "opus",      # 一次出 report + 2 版改写,质量重要
+    "compliance.analyze":    "deepseek",  # 兼容 add_skill 骨架路径
+    "compliance.write":      "opus",      # 同上
 }
 
 
