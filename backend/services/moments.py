@@ -11,7 +11,12 @@ from typing import Any
 from shortvideo.ai import get_ai_client
 
 
-def derive_moments(topic: str, n: int = 5, kb_chunks: list[dict] | None = None) -> list[dict[str, Any]]:
+def derive_moments(
+    topic: str,
+    n: int = 5,
+    kb_chunks: list[dict] | None = None,
+    deep: bool = True,
+) -> list[dict[str, Any]]:
     kb_block = ""
     if kb_chunks:
         kb_block = "\n\n【可参考的清华哥朋友圈金句/风格素材】\n" + "\n\n".join(
@@ -36,7 +41,7 @@ def derive_moments(topic: str, n: int = 5, kb_chunks: list[dict] | None = None) 
 ]
 """
     ai = get_ai_client()
-    r = ai.chat(prompt, max_tokens=1500, temperature=0.95)
+    r = ai.chat(prompt, max_tokens=1500, temperature=0.95, deep=deep)
     text = (r.text or "").strip()
     m = re.search(r"\[[\s\S]*\]", text)
     if not m:

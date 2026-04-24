@@ -20,8 +20,17 @@ PLATFORM_HINTS = {
 }
 
 
-def generate_ad_batch(pitch: str, platform: str = "douyin", n: int = 5, kb_chunks: list[dict] | None = None) -> list[dict[str, Any]]:
-    """一次出 n 版不同角度的投流文案 + 小华点评."""
+def generate_ad_batch(
+    pitch: str,
+    platform: str = "douyin",
+    n: int = 5,
+    kb_chunks: list[dict] | None = None,
+    deep: bool = True,
+) -> list[dict[str, Any]]:
+    """一次出 n 版不同角度的投流文案 + 小华点评.
+
+    deep: 深度理解业务(True=带完整人设,False=只带精简人设)。
+    """
     platform_hint = PLATFORM_HINTS.get(platform, PLATFORM_HINTS["douyin"])
     kb_block = ""
     if kb_chunks:
@@ -42,7 +51,7 @@ def generate_ad_batch(pitch: str, platform: str = "douyin", n: int = 5, kb_chunk
 ]
 """
     ai = get_ai_client()
-    r = ai.chat(prompt, max_tokens=2000, temperature=0.9)
+    r = ai.chat(prompt, max_tokens=2000, temperature=0.9, deep=deep)
     text = (r.text or "").strip()
     # 抠出 JSON 数组
     m = re.search(r"\[[\s\S]*\]", text)

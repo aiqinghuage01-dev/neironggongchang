@@ -92,6 +92,7 @@ init_db()
 class RewriteReq(BaseModel):
     text: str
     style: str = "casual"  # casual / pro / story
+    deep: bool = True      # 深度理解业务(False=轻快模式,只带精简人设)
 
 
 class TranscribeReq(BaseModel):
@@ -224,8 +225,8 @@ def rewrite(req: RewriteReq):
     }
     hint = style_map.get(req.style, style_map["casual"])
     ai = get_ai_client()
-    r = ai.rewrite_script(req.text, style_hint=hint)
-    return {"text": r.text, "tokens": r.total_tokens}
+    r = ai.rewrite_script(req.text, style_hint=hint, deep=req.deep)
+    return {"text": r.text, "tokens": r.total_tokens, "deep": req.deep}
 
 
 # ---- P3: 声音 ----
@@ -698,6 +699,7 @@ def topics_delete(topic_id: int):
 class TopicGenReq(BaseModel):
     seed: str
     n: int = 10
+    deep: bool = True
 
 
 @app.post("/api/topics/generate")
@@ -713,7 +715,7 @@ def topics_generate(req: TopicGenReq):
 严格 JSON 数组: ["选题1", "选题2", ...]
 """
     ai = get_ai_client()
-    r = ai.chat(prompt, max_tokens=800, temperature=0.9)
+    r = ai.chat(prompt, max_tokens=800, temperature=0.9, deep=req.deep)
     import json as _json, re as _re
     m = _re.search(r"\[[\s\S]*\]", r.text or "")
     titles = []
@@ -770,6 +772,7 @@ class AdGenerateReq(BaseModel):
     platform: str = "douyin"
     n: int = 5
     use_kb: bool = True
+    deep: bool = True
 
 
 @app.post("/api/ad/generate")
@@ -777,8 +780,10 @@ def ad_generate(req: AdGenerateReq):
     kb_chunks = None
     if req.use_kb and req.pitch:
         kb_chunks = kb_service.match(req.pitch, k=3)
-    items = ad_service.generate_ad_batch(req.pitch, platform=req.platform, n=req.n, kb_chunks=kb_chunks)
-    return {"items": items, "kb_used": [c["path"] for c in (kb_chunks or [])]}
+    items = ad_service.generate_ad_batch(
+        req.pitch, platform=req.platform, n=req.n, kb_chunks=kb_chunks, deep=req.deep,
+    )
+    return {"items": items, "kb_used": [c["path"] for c in (kb_chunks or [])], "deep": req.deep}
 
 
 # ---- 朋友圈:衍生 3-5 条 ----
@@ -786,6 +791,7 @@ class MomentsDeriveReq(BaseModel):
     topic: str
     n: int = 5
     use_kb: bool = True
+    deep: bool = True
 
 
 @app.post("/api/moments/derive")
@@ -793,14 +799,15 @@ def moments_derive(req: MomentsDeriveReq):
     kb_chunks = None
     if req.use_kb and req.topic:
         kb_chunks = kb_service.match(req.topic, k=4)
-    items = moments_service.derive_moments(req.topic, n=req.n, kb_chunks=kb_chunks)
-    return {"items": items, "kb_used": [c["path"] for c in (kb_chunks or [])]}
+    items = moments_service.derive_moments(req.topic, n=req.n, kb_chunks=kb_chunks, deep=req.deep)
+    return {"items": items, "kb_used": [c["path"] for c in (kb_chunks or [])], "deep": req.deep}
 
 
 # ---- 公众号:大纲 + 长文 ----
 class ArticleOutlineReq(BaseModel):
     topic: str
     use_kb: bool = True
+    deep: bool = True
 
 
 @app.post("/api/article/outline")
@@ -808,14 +815,15 @@ def article_outline(req: ArticleOutlineReq):
     kb_chunks = None
     if req.use_kb and req.topic:
         kb_chunks = kb_service.match(req.topic, k=3)
-    items = article_service.gen_outline(req.topic, kb_chunks=kb_chunks)
-    return {"outline": items, "kb_used": [c["path"] for c in (kb_chunks or [])]}
+    items = article_service.gen_outline(req.topic, kb_chunks=kb_chunks, deep=req.deep)
+    return {"outline": items, "kb_used": [c["path"] for c in (kb_chunks or [])], "deep": req.deep}
 
 
 class ArticleExpandReq(BaseModel):
     topic: str
     outline: list[dict] = Field(default_factory=list)
     use_kb: bool = True
+    deep: bool = True
 
 
 @app.post("/api/article/expand")
@@ -823,8 +831,8 @@ def article_expand(req: ArticleExpandReq):
     kb_chunks = None
     if req.use_kb and req.topic:
         kb_chunks = kb_service.match(req.topic, k=4)
-    result = article_service.expand_article(req.topic, req.outline, kb_chunks=kb_chunks)
-    return {**result, "kb_used": [c["path"] for c in (kb_chunks or [])]}
+    result = article_service.expand_article(req.topic, req.outline, kb_chunks=kb_chunks, deep=req.deep)
+    return {**result, "kb_used": [c["path"] for c in (kb_chunks or [])], "deep": req.deep}
 
 
 if __name__ == "__main__":

@@ -12,7 +12,11 @@ from typing import Any
 from shortvideo.ai import get_ai_client
 
 
-def gen_outline(topic: str, kb_chunks: list[dict] | None = None) -> list[dict[str, Any]]:
+def gen_outline(
+    topic: str,
+    kb_chunks: list[dict] | None = None,
+    deep: bool = True,
+) -> list[dict[str, Any]]:
     kb_block = ""
     if kb_chunks:
         kb_block = "\n\n【可参考的清华哥知识库素材】\n" + "\n\n".join(
@@ -37,7 +41,7 @@ def gen_outline(topic: str, kb_chunks: list[dict] | None = None) -> list[dict[st
 ]
 """
     ai = get_ai_client()
-    r = ai.chat(prompt, max_tokens=2000, temperature=0.8)
+    r = ai.chat(prompt, max_tokens=2000, temperature=0.8, deep=deep)
     text = (r.text or "").strip()
     m = re.search(r"\[[\s\S]*\]", text)
     if not m:
@@ -49,7 +53,12 @@ def gen_outline(topic: str, kb_chunks: list[dict] | None = None) -> list[dict[st
         return [{"h2": "raw", "points": [f"解析失败: {e}"]}]
 
 
-def expand_article(topic: str, outline: list[dict[str, Any]], kb_chunks: list[dict] | None = None) -> dict[str, Any]:
+def expand_article(
+    topic: str,
+    outline: list[dict[str, Any]],
+    kb_chunks: list[dict] | None = None,
+    deep: bool = True,
+) -> dict[str, Any]:
     kb_block = ""
     if kb_chunks:
         kb_block = "\n\n【可引用的清华哥知识库素材(请自然融入,不生硬引用)】\n" + "\n\n".join(
@@ -79,7 +88,7 @@ def expand_article(topic: str, outline: list[dict[str, Any]], kb_chunks: list[di
 直接输出 Markdown(包括 # H1 标题),不要加任何前言或解释:
 """
     ai = get_ai_client()
-    r = ai.chat(prompt, max_tokens=4000, temperature=0.85)
+    r = ai.chat(prompt, max_tokens=4000, temperature=0.85, deep=deep)
     content = (r.text or "").strip()
     # 抽标题
     title_match = re.search(r"^#\s+(.+?)$", content, flags=re.MULTILINE)
