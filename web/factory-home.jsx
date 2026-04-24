@@ -3,9 +3,11 @@
 function PageHome({ onNav }) {
   const [stats, setStats] = React.useState(null);
   const [usage, setUsage] = React.useState(null);
+  const [catalog, setCatalog] = React.useState(null);
   React.useEffect(() => {
     api.get("/api/stats/home").then(setStats).catch(() => {});
     api.get("/api/ai/usage?range=today").then(setUsage).catch(() => {});
+    api.get("/api/skills/catalog").then(r => setCatalog(r.skills || [])).catch(() => {});
     // 每 30 秒刷新 usage
     const t = setInterval(() => api.get("/api/ai/usage?range=today").then(setUsage).catch(() => {}), 30000);
     return () => clearInterval(t);
@@ -82,11 +84,109 @@ function PageHome({ onNav }) {
 
           {/* 今日 AI 消耗 widget (D-015) */}
           {usage && usage.overall?.calls > 0 && <AiUsageCard usage={usage} />}
+
+          {/* 技能中心 (D-019) */}
+          {catalog && catalog.length > 0 && <SkillCenter catalog={catalog} onNav={onNav} />}
         </div>
       </div>
       <LiDock context="首页" />
     </div>
   );
+}
+
+function SkillCenter({ catalog, onNav }) {
+  const installed = catalog.filter(s => s.installed);
+  const unregistered = catalog.filter(s => !s.installed);
+  const [showUnreg, setShowUnreg] = React.useState(false);
+
+  return (
+    <div style={{ marginTop: 28 }}>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 14 }}>
+        <div style={{ fontSize: 18, fontWeight: 700, color: T.text }}>🛠️ 我的技能</div>
+        <div style={{ fontSize: 12, color: T.muted }}>
+          已接入 {installed.length} · 桌面还有 {unregistered.length} 个可接入
+        </div>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 12 }}>
+        {installed.map(s => (
+          <SkillCard key={s.slug} skill={s} onNav={onNav} />
+        ))}
+      </div>
+
+      {unregistered.length > 0 && (
+        <div style={{ marginTop: 14 }}>
+          <button onClick={() => setShowUnreg(!showUnreg)} style={{
+            padding: "6px 12px", background: "transparent",
+            border: `1px dashed ${T.border}`, borderRadius: 8,
+            color: T.muted, fontSize: 12, cursor: "pointer", fontFamily: "inherit",
+          }}>
+            {showUnreg ? "↑ 收起" : "↓ 展开"} 桌面 ~/Desktop/skills/ 里还没接入的 {unregistered.length} 个 skill
+          </button>
+          {showUnreg && (
+            <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
+              {unregistered.map(s => (
+                <div key={s.slug} style={{
+                  padding: "10px 12px", background: T.bg2,
+                  border: `1px dashed ${T.borderSoft}`, borderRadius: 8,
+                  fontSize: 12, color: T.muted, opacity: 0.7,
+                }}>
+                  <div style={{ fontSize: 13, color: T.muted, marginBottom: 2 }}>
+                    {s.icon} {s.label}
+                  </div>
+                  <div style={{ fontSize: 10.5, color: T.muted2, fontFamily: "SF Mono, monospace" }}>
+                    python3 scripts/add_skill.py<br/>
+                    --slug "{s.slug}" --key &lt;py_id&gt;
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SkillCard({ skill, onNav }) {
+  const [hover, setHover] = React.useState(false);
+  const mtime = skill.skill_md_mtime;
+  const ago = mtime ? timeAgo(mtime) : "";
+  return (
+    <div
+      onClick={() => skill.page_id && onNav(skill.page_id)}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        padding: "14px 16px", background: "#fff",
+        border: `1px solid ${hover ? T.brand : T.borderSoft}`,
+        boxShadow: hover ? `0 0 0 3px ${T.brandSoft}` : "none",
+        borderRadius: 10, cursor: "pointer", transition: "all 0.15s",
+        display: "flex", gap: 12, alignItems: "flex-start",
+      }}>
+      <div style={{ fontSize: 24, lineHeight: 1, flexShrink: 0 }}>{skill.icon}</div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }}>
+          <div style={{ fontSize: 14.5, fontWeight: 600, color: T.text }}>{skill.label}</div>
+          <span style={{ fontSize: 10, color: T.muted2, fontFamily: "SF Mono, monospace" }}>{skill.steps} 步</span>
+          {skill.has_scripts && <Tag size="xs" color="green">含脚本</Tag>}
+        </div>
+        <div style={{ fontSize: 11.5, color: T.muted, lineHeight: 1.55, marginBottom: 4 }}>{skill.subtitle}</div>
+        <div style={{ fontSize: 10, color: T.muted2, fontFamily: "SF Mono, monospace" }}>
+          {skill.slug} · SKILL.md {ago}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function timeAgo(ts) {
+  const now = Date.now() / 1000;
+  const diff = now - ts;
+  if (diff < 3600) return `${Math.floor(diff / 60)} 分钟前`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)} 小时前`;
+  if (diff < 86400 * 30) return `${Math.floor(diff / 86400)} 天前`;
+  return new Date(ts * 1000).toLocaleDateString("zh-CN");
 }
 
 function AiUsageCard({ usage }) {

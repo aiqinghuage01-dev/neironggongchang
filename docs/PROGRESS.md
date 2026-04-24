@@ -192,7 +192,12 @@ Obsidian 知识库 / 00 AI清华哥 /
       - tests/test_skills_smoke.py (18) · 接入 skill 的目录/pipeline/endpoint/jsx/sidebar 完整性
       - 纯结构化测试,不打真 AI,不污染 prod DB(ai_usage 用 tmp_db fixture 隔离)
       全量 75/75 passed · 接入新 skill 只需在 REGISTERED_SKILLS 加一行自动跑完整性检查
-- [ ] **[P8] 首页技能中心卡片**
+- [x] **[P8] 首页技能中心卡片** backend/services/registered_skills.py 作为
+      single source of truth (api_prefix/page_id/icon/label/subtitle/steps),
+      /api/skills/catalog 扫桌面 + 注册表返回全量 · 首页新增 SkillCenter 组件:
+      上方 grid 2 列显示已接入(4 个),下方可展开"未接入"(桌面 13 个过滤学员版后)
+      含一键命令提示 `python3 scripts/add_skill.py --slug X --key Y`。
+      test_skills_smoke.py 改为消费 registered_skills,从此 DRY 了。
 - [ ] **[P9] CHANGELOG + 文档**
 - [ ] **[P10] 前端 UI 组件库提取**
 

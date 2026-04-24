@@ -75,6 +75,7 @@ from backend.services import wechat_scripts
 from backend.services import hotrewrite_pipeline
 from backend.services import voicerewrite_pipeline
 from backend.services import touliu_pipeline
+from backend.services import registered_skills
 
 UPLOAD_DIR = AUDIO_DIR / "uploads"
 COVER_DIR = DATA_DIR / "covers"
@@ -415,6 +416,12 @@ def ai_usage_recent(limit: int = 50):
     """最近 N 次 AI 调用明细(调试用)。"""
     from backend.services import ai_usage
     return {"calls": ai_usage.recent_calls(limit=limit)}
+
+
+@app.get("/api/skills/catalog")
+def skills_catalog():
+    """返回技能中心的完整目录:已接入 + 桌面 skills 里发现的未接入 skill。"""
+    return {"skills": registered_skills.list_catalog()}
 
 
 # ---- 设置 ----

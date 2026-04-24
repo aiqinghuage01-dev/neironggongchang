@@ -8,15 +8,12 @@ from __future__ import annotations
 from pathlib import Path
 import pytest
 from backend.services import skill_loader
+from backend.services.registered_skills import REGISTERED_SKILLS as _REG
 
-
-# 已接入的所有 skill (slug, api_prefix, has_scripts)
-REGISTERED_SKILLS = [
-    ("公众号文章",       "wechat",        True),
-    ("热点文案改写V2",   "hotrewrite",    False),
-    ("录音文案改写",     "voicerewrite",  False),
-    ("touliu-agent",     "touliu",        True),
-]
+# 单一事实源: backend/services/registered_skills.py
+# 接入新 skill 在那里加一行,此处自动覆盖
+REGISTERED_SKILLS = [(s["slug"], s["api_prefix"], s["has_scripts"]) for s in _REG]
+PAGE_IDS = {s["api_prefix"]: s["page_id"] for s in _REG}
 
 
 @pytest.mark.parametrize("slug,api_prefix,has_scripts", REGISTERED_SKILLS)
@@ -57,16 +54,10 @@ def test_skill_frontend_jsx_exists(slug, api_prefix, has_scripts):
 
 
 def test_skills_in_sidebar():
-    """新接入 skill 的 sidebar 入口已加(或沿用原有 id 如 touliu→ad)。"""
+    """新接入 skill 的 sidebar 入口已加(page_id 可能 != api_prefix,如 touliu→ad)。"""
     shell_jsx = (Path(__file__).parent.parent / "web" / "factory-shell.jsx").read_text(encoding="utf-8")
-    # 旧 sidebar id → 被 skill 覆盖
-    sidebar_aliases = {"touliu": "ad"}
     for slug, api_prefix, has_scripts in REGISTERED_SKILLS:
-        # wechat 是默认 sidebar 项
-        if api_prefix == "wechat":
-            assert 'id: "wechat"' in shell_jsx
-            continue
-        expected_id = sidebar_aliases.get(api_prefix, api_prefix)
+        expected_id = PAGE_IDS[api_prefix]
         assert f'id: "{expected_id}"' in shell_jsx, f"sidebar 缺少 {expected_id}(skill {slug})"
 
 
