@@ -119,7 +119,13 @@
       切页自动重置开场白 + 清空按钮 + DeepSeek 路由(便宜,1-2s 回复)
       多轮历史拼成单 prompt(最近 12 轮),system 注入 persona + 当前页 context
       端到端: "我现在写公众号没思路怎么办?" → 1.3s 回 "老板,咱先聊聊..."(引导到工作流)
-- [ ] 对话中学到的偏好自动写入小华工作日志.md
+- [x] **对话中学到的偏好自动写入**(D-030) backend/services/preference.py
+      LiDock 每条 user 消息后台异步触发 maybe_learn(BackgroundTasks)
+      关键词预筛(我喜欢/不要/记住/以后...)→ 命中才走 AI 二筛 → 是偏好才写
+      DeepSeek 路由 · 1 分钟节流 · 默认 disabled · settings.preference_learning_enabled
+      `~/Desktop/清华哥知识库/00 🤖 AI清华哥/小华学到的偏好.md` 单独文件
+      endpoint: /api/preferences/{status,toggle,recent}
+      tests/test_preference.py 8 个 fixture 隔离单测全过
 - [ ] 行为记忆读取：最近 20 条注入 prompt
 
 ### Phase 3 -- 发布 + 数据闭环

@@ -45,7 +45,7 @@ import uuid
 from pathlib import Path
 from typing import Any, Optional
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -523,8 +523,9 @@ def dreamina_list_tasks():
 
 
 @app.post("/api/chat")
-def chat_dock(req: ChatDockReq):
-    """小华浮动 dock 自由对话(多轮)。messages 是完整对话历史,context 是当前页。"""
+def chat_dock(req: ChatDockReq, background_tasks: "BackgroundTasks" = None):
+    """小华浮动 dock 自由对话(多轮)。messages 是完整对话历史,context 是当前页。
+    返回后台异步触发偏好学习(D-030),失败吃掉不影响主响应。"""
     # 把多轮历史拼成单 user prompt(PersonaInjectedAI 只接受单 prompt + system)
     history_lines = []
     for m in req.messages[-12:]:  # 最近 12 轮,避免太长
@@ -547,10 +548,45 @@ def chat_dock(req: ChatDockReq):
 
     ai = get_ai_client(route_key="chat.dock")
     r = ai.chat(prompt, system=system, deep=False, temperature=0.85, max_tokens=400)
+
+    # D-030: 异步学偏好(失败吃掉)
+    if background_tasks is not None:
+        try:
+            from backend.services import preference
+            msgs_dict = [{"role": m.role, "text": m.text} for m in req.messages]
+            background_tasks.add_task(preference.maybe_learn, msgs_dict, req.context)
+        except Exception:
+            pass
+
     return {
         "reply": (r.text or "").strip(),
         "tokens": r.total_tokens,
     }
+
+
+# ─── 偏好学习 endpoints (D-030) ──────────────────────────
+
+@app.get("/api/preferences/status")
+def preferences_status():
+    from backend.services import preference
+    return preference.status()
+
+
+class PrefToggleReq(BaseModel):
+    enabled: bool
+
+
+@app.post("/api/preferences/toggle")
+def preferences_toggle(req: PrefToggleReq):
+    settings_service.update({"preference_learning_enabled": bool(req.enabled)})
+    from backend.services import preference
+    return preference.status()
+
+
+@app.get("/api/preferences/recent")
+def preferences_recent(limit: int = 30):
+    from backend.services import preference
+    return {"preferences": preference.recent_preferences(limit=limit)}
 
 
 # ─── 小华工作日志(行为记忆 · D-023) ──────────────────────
