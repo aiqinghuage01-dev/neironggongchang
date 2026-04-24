@@ -175,7 +175,16 @@ Obsidian 知识库 / 00 AI清华哥 /
       4 个 skill 全覆盖: wechat / hotrewrite / voicerewrite / touliu
       刷新浏览器 / 重启不丢中间态, reset() 自动清 localStorage
       autoMode 子 step 挂起不恢复(pipeline 不能续跑,回落到 topic 重走)
-- [ ] **[P6] skill 骨架生成器 scripts/add_skill.py**
+- [x] **[P6] skill 骨架生成器 scripts/add_skill.py** 一键生成新 skill 骨架
+      用法: `python3 scripts/add_skill.py --slug <cn> --key <py_id> --icon 🌟 --label <cn>`
+      做 7 件事(幂等,已注册跳过):
+      1. 验证 ~/Desktop/skills/&lt;slug&gt;/SKILL.md 存在
+      2. 生成 backend/services/&lt;key&gt;_pipeline.py (analyze+write 2 步)
+      3. 生成 web/factory-&lt;key&gt;-v2.jsx (3 步 UI + WfRestoreBanner)
+      4. 注册 backend/api.py (import + 3 endpoint)
+      5. 注册 DEFAULT_ENGINE_ROUTES (2 条: analyze→deepseek, write→opus)
+      6. 注册 factory-shell.jsx sidebar + factory-app.jsx route + index.html
+      从 0 新增 skill 从 3h → 30min,只需调 pipeline 的 prompt 适配实际 SKILL.md
 - [ ] **[P7] 测试扩展**
 - [ ] **[P8] 首页技能中心卡片**
 - [ ] **[P9] CHANGELOG + 文档**
