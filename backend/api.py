@@ -38,6 +38,7 @@ Endpoints(对应设计稿 6 页):
 from __future__ import annotations
 
 import asyncio
+import re
 import time
 import json
 import uuid
@@ -817,33 +818,105 @@ class TopicGenReq(BaseModel):
     deep: bool = True
 
 
+def _dedup_topic_title(title: str, existing_prefixes: set[str]) -> bool:
+    """前 5 字重复算重 · True = 通过,False = 拒绝。"""
+    key = re.sub(r"\s+", "", title)[:5]
+    if not key or key in existing_prefixes:
+        return False
+    existing_prefixes.add(key)
+    return True
+
+
 @app.post("/api/topics/generate")
 def topics_generate(req: TopicGenReq):
+    """选题批量生成 (D-025 优化): 结构化输出 + 自动去重 + 字数过滤 + 避免和已有库重复。"""
     kb_chunks = kb_service.match(req.seed, k=3) if req.seed else []
+    recent = list_topics(limit=30)  # 最近 30 条让 AI 知道"别再出这些"
+
     kb_block = ""
     if kb_chunks:
-        kb_block = "\n\n【参考素材】\n" + "\n".join(f"- [{c['title']}] {c['preview']}" for c in kb_chunks)
-    prompt = f"""基于主题/人设,出 {req.n} 个适合清华哥做短视频/公众号的选题。每个选题 15 字以内,要犀利、不空泛。{kb_block}
+        kb_block = "\n\n【可参考的清华哥业务素材】\n" + "\n".join(
+            f"- [{c['title']}] {c['preview']}" for c in kb_chunks
+        )
+    recent_block = ""
+    if recent:
+        recent_block = "\n\n【最近已入库选题(不要重复这些方向)】\n" + "\n".join(
+            f"- {t.title}" for t in recent[:20]
+        )
 
-【主题】{req.seed}
+    prompt = f"""基于下面主题和清华哥人设,出 {req.n} 个犀利的选题(短视频或公众号都能用)。
 
-严格 JSON 数组: ["选题1", "选题2", ...]
-"""
+要求:
+- 每个选题 10-20 字,不空泛不标签化
+- 覆盖不同角度:痛点/反常识/故事/数据/对比/热点借势
+- 不要和「最近已入库选题」重复相同方向
+- 为每个选题配一句"为什么这选题能打中清华哥粉丝"
+- 标 2-3 个简短 tags(如"AI获客""实体老板""私域"等)
+{kb_block}{recent_block}
+
+【本次主题】{req.seed}
+
+严格 JSON 数组(不加前言):
+[
+  {{"title": "选题标题", "angle": "痛点/反常识/故事/数据/对比/热点借势 其中之一",
+    "why": "一句话说为什么能打中清华哥粉丝",
+    "tags": ["AI获客", "实体老板"],
+    "suggested_format": "短视频/公众号长文/投流 选一个"}},
+  ...
+]"""
     ai = get_ai_client(route_key="topics.generate")
-    r = ai.chat(prompt, max_tokens=800, temperature=0.9, deep=req.deep)
-    import json as _json, re as _re
-    m = _re.search(r"\[[\s\S]*\]", r.text or "")
-    titles = []
+    r = ai.chat(prompt, max_tokens=2500, temperature=0.9, deep=req.deep)
+
+    import json as _json
+    m = re.search(r"\[[\s\S]*\]", r.text or "")
+    items_raw: list[dict] = []
     if m:
         try:
-            titles = [t for t in _json.loads(m.group(0)) if isinstance(t, str)]
+            parsed = _json.loads(m.group(0))
+            items_raw = [x for x in parsed if isinstance(x, dict) and x.get("title")]
         except Exception:
-            titles = []
+            items_raw = []
+
+    # 去重 + 字数过滤
+    existing_prefixes = {re.sub(r"\s+", "", t.title)[:5] for t in recent if t.title}
+    items: list[dict] = []
+    dropped = {"too_long": 0, "too_short": 0, "duplicate": 0}
+    for it in items_raw:
+        title = (it.get("title") or "").strip()
+        if len(title) > 25:
+            dropped["too_long"] += 1; continue
+        if len(title) < 6:
+            dropped["too_short"] += 1; continue
+        if not _dedup_topic_title(title, existing_prefixes):
+            dropped["duplicate"] += 1; continue
+        items.append({
+            "title": title,
+            "angle": (it.get("angle") or "").strip(),
+            "why": (it.get("why") or "").strip(),
+            "tags": it.get("tags") or [],
+            "suggested_format": (it.get("suggested_format") or "").strip(),
+        })
+        if len(items) >= req.n:
+            break
+
+    # 入库:title + description(why) + tags(逗号拼)
     created_ids = []
-    for t in titles[:req.n]:
-        tid = insert_topic(title=t[:100], source="ai-batch")
+    for item in items:
+        tid = insert_topic(
+            title=item["title"][:100],
+            description=item["why"][:500] if item["why"] else None,
+            tags=",".join(item["tags"])[:200] if item["tags"] else None,
+            source="ai-batch",
+        )
         created_ids.append(tid)
-    return {"titles": titles, "ids": created_ids, "kb_used": [c["path"] for c in kb_chunks]}
+
+    # 兼容旧接口(前端可能还用 titles 字段)
+    titles = [it["title"] for it in items]
+    return {
+        "titles": titles, "items": items, "ids": created_ids,
+        "kb_used": [c["path"] for c in kb_chunks],
+        "stats": {"generated": len(items_raw), "kept": len(items), **dropped},
+    }
 
 
 # ---- 知识库(Obsidian vault 只读) ----

@@ -107,7 +107,11 @@
       ad: touliu.* + ad.* 合计今日/昨日批数 · wechat: wechat.write 今日/本周
       moments: moments.derive 今日/昨日 · make: 仍走 works 表(原本就对)
       hint 文案动态: "今日 N 批" / "昨日 N 批" / "今日还没出过投流" 自适应
-- [ ] 选题批量生成优化
+- [x] **选题批量生成优化**(D-025) 结构化输出 + 去重 + 字数过滤 + 避免已有库重复
+      原返回 `["选题1",...]` 纯字符串,现返回 `{title,angle,why,tags,suggested_format}`
+      入库带 description 和 tags · 字数 6-25 外过滤 · 前 5 字重复(含最近 30 条库内)过滤
+      返回带 stats: {generated, kept, too_long, too_short, duplicate}
+      兼容旧前端(titles 字段还在)
 
 ### Phase 2 -- 小华对话 + 记忆闭环
 - [ ] 底部 dock 自由对话（多轮）
