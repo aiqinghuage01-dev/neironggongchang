@@ -185,7 +185,13 @@ Obsidian 知识库 / 00 AI清华哥 /
       5. 注册 DEFAULT_ENGINE_ROUTES (2 条: analyze→deepseek, write→opus)
       6. 注册 factory-shell.jsx sidebar + factory-app.jsx route + index.html
       从 0 新增 skill 从 3h → 30min,只需调 pipeline 的 prompt 适配实际 SKILL.md
-- [ ] **[P7] 测试扩展**
+- [x] **[P7] 测试扩展** 单元测试从 18 → 75(+57 个,覆盖新功能)
+      - tests/test_ai_routing.py (7) · 引擎路由优先级 + routes_info
+      - tests/test_ai_usage.py (7) · 打点 + 聚合 + range + 成本计算 + no-op 过滤
+      - tests/test_pipelines.py (25) · 3 个 skill 的 _extract_json + alloc_for + 模块导出
+      - tests/test_skills_smoke.py (18) · 接入 skill 的目录/pipeline/endpoint/jsx/sidebar 完整性
+      - 纯结构化测试,不打真 AI,不污染 prod DB(ai_usage 用 tmp_db fixture 隔离)
+      全量 75/75 passed · 接入新 skill 只需在 REGISTERED_SKILLS 加一行自动跑完整性检查
 - [ ] **[P8] 首页技能中心卡片**
 - [ ] **[P9] CHANGELOG + 文档**
 - [ ] **[P10] 前端 UI 组件库提取**
