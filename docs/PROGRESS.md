@@ -114,7 +114,11 @@
       兼容旧前端(titles 字段还在)
 
 ### Phase 2 -- 小华对话 + 记忆闭环
-- [ ] 底部 dock 自由对话（多轮）
+- [x] **底部 dock 自由对话（多轮）**(D-027) `/api/chat` POST {messages, context}
+      LiDock 真接通: messages state + Enter 发送 + 滚到底 + ··· loading 三点动效
+      切页自动重置开场白 + 清空按钮 + DeepSeek 路由(便宜,1-2s 回复)
+      多轮历史拼成单 prompt(最近 12 轮),system 注入 persona + 当前页 context
+      端到端: "我现在写公众号没思路怎么办?" → 1.3s 回 "老板,咱先聊聊..."(引导到工作流)
 - [ ] 对话中学到的偏好自动写入小华工作日志.md
 - [ ] 行为记忆读取：最近 20 条注入 prompt
 

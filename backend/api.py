@@ -425,6 +425,49 @@ def skills_catalog():
     return {"skills": registered_skills.list_catalog()}
 
 
+# ─── 小华自由对话 dock (D-027) ────────────────────────────
+
+class ChatDockMsg(BaseModel):
+    role: str   # "user" | "assistant"
+    text: str
+
+
+class ChatDockReq(BaseModel):
+    messages: list[ChatDockMsg] = Field(default_factory=list)
+    context: str = ""  # 当前页面: 首页 / 公众号 / 投流 / etc
+
+
+@app.post("/api/chat")
+def chat_dock(req: ChatDockReq):
+    """小华浮动 dock 自由对话(多轮)。messages 是完整对话历史,context 是当前页。"""
+    # 把多轮历史拼成单 user prompt(PersonaInjectedAI 只接受单 prompt + system)
+    history_lines = []
+    for m in req.messages[-12:]:  # 最近 12 轮,避免太长
+        prefix = "老板" if m.role == "user" else "小华"
+        history_lines.append(f"{prefix}: {m.text.strip()}")
+    history = "\n".join(history_lines)
+
+    system = (
+        "你是小华,清华哥的内容生产副驾。当前老板在看「" + (req.context or "首页") + "」页面。\n"
+        "对话规则:\n"
+        "- 简短,口语,像跟兄弟聊天\n"
+        "- 老板提的工作问题(写文案/改写/查违规等),引导到对应 skill,不要自己写完整内容\n"
+        "- 老板没具体问题就轻松聊几句\n"
+        "- 一次回复不超过 80 字\n"
+        "- 直接回答,不要前言"
+    )
+    prompt = (
+        f"对话历史:\n{history}\n\n小华(回这条,用大白话,不超过 80 字):"
+    )
+
+    ai = get_ai_client(route_key="chat.dock")
+    r = ai.chat(prompt, system=system, deep=False, temperature=0.85, max_tokens=400)
+    return {
+        "reply": (r.text or "").strip(),
+        "tokens": r.total_tokens,
+    }
+
+
 # ─── 小华工作日志(行为记忆 · D-023) ──────────────────────
 
 @app.get("/api/work-log/status")

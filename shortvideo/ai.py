@@ -167,6 +167,8 @@ DEFAULT_ENGINE_ROUTES = {
     "planner.write":      "opus",
     # 违禁违规审查-学员版 skill (D-026) · 单 step 审查+改写
     "compliance.check":      "opus",      # 一次出 report + 2 版改写,质量重要
+    # 小华自由对话 (D-027)
+    "chat.dock":             "deepseek",   # 对话短而频,DeepSeek 够 + 便宜
     "compliance.analyze":    "deepseek",  # 兼容 add_skill 骨架路径
     "compliance.write":      "opus",      # 同上
 }
