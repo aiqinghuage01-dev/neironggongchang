@@ -126,7 +126,11 @@
       `~/Desktop/清华哥知识库/00 🤖 AI清华哥/小华学到的偏好.md` 单独文件
       endpoint: /api/preferences/{status,toggle,recent}
       tests/test_preference.py 8 个 fixture 隔离单测全过
-- [ ] 行为记忆读取：最近 20 条注入 prompt
+- [x] **行为记忆读取:最近 20 条注入 prompt**(D-031) memory_inject.py
+      D-005 三层记忆架构的 Layer 3 实现 · 把 D-023 work_log + D-030 prefs 拼成
+      prompt 片段,在 PersonaInjectedAI.chat 的 deep=True 路径附加注入
+      默认 disabled · settings.memory_injection_enabled 开关 · 偏好去重
+      `/api/memory-inject/{status,toggle}` · 8 个单元测试(含 PersonaInjectedAI 集成)
 
 ### Phase 3 -- 发布 + 数据闭环
 - [ ] 多平台真发布（需各家 OpenAPI 授权）

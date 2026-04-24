@@ -589,6 +589,25 @@ def preferences_recent(limit: int = 30):
     return {"preferences": preference.recent_preferences(limit=limit)}
 
 
+# ─── 行为记忆注入开关 (D-031) ────────────────────────────
+
+@app.get("/api/memory-inject/status")
+def memory_inject_status():
+    from backend.services import memory_inject
+    return memory_inject.stats()
+
+
+class MemInjectToggleReq(BaseModel):
+    enabled: bool
+
+
+@app.post("/api/memory-inject/toggle")
+def memory_inject_toggle(req: MemInjectToggleReq):
+    settings_service.update({"memory_injection_enabled": bool(req.enabled)})
+    from backend.services import memory_inject
+    return memory_inject.stats()
+
+
 # ─── 小华工作日志(行为记忆 · D-023) ──────────────────────
 
 @app.get("/api/work-log/status")
