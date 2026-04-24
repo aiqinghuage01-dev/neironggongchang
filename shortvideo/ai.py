@@ -104,6 +104,10 @@ DEFAULT_ENGINE_ROUTES = {
     "wechat.write":       "opus",       # 2000-3000 字长文,质量差异明显
     "wechat.self-check":  "deepseek",   # JSON 结构化检查,deepseek 够用
     "wechat.plan-images": "deepseek",   # 配图 prompt 规划,短文本
+    # 热点文案改写V2 skill (D-012)
+    "hotrewrite.analyze":    "deepseek",  # 拆解 + 3 角度,JSON 输出
+    "hotrewrite.write":      "opus",      # 1800-2600 字口播正文,质量优先
+    "hotrewrite.self-check": "deepseek",  # 六维自检
     # 短视频 / 改写
     "rewrite":            "opus",       # 短视频口播文案,风格决定
     # 批量生成类

@@ -149,7 +149,9 @@ Obsidian 知识库 / 00 AI清华哥 /
 - [x] **[基建] AI 引擎智能路由** `get_ai_client(route_key=...)` 11 条默认路由
       (wechat.titles → deepseek, wechat.write → opus, etc.)
       /api/ai/routes 暴露路由表给前端。settings.engine_routes 可覆盖。
-- [ ] **[P1] 热点文案改写V2 skill**
+- [x] **[P1] 热点文案改写V2 skill** hotrewrite_pipeline + 3 步 UI
+      `/api/hotrewrite/{analyze,write,skill-info}`, 路由 `wechat → 🔥 热点改写`
+      sidebar 新增入口。端到端 /analyze 7s 返回 3 个切入角度(DeepSeek)。
 - [ ] **[P2] 录音文案改写 skill**
 - [ ] **[P3] touliu-agent 替换 /api/ad**
 - [ ] **[P4] Token/成本监控 + 首页 widget**

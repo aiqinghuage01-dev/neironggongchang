@@ -72,6 +72,7 @@ from backend.services import settings as settings_service
 from backend.services import skill_loader
 from backend.services import wechat_pipeline
 from backend.services import wechat_scripts
+from backend.services import hotrewrite_pipeline
 
 UPLOAD_DIR = AUDIO_DIR / "uploads"
 COVER_DIR = DATA_DIR / "covers"
@@ -1004,6 +1005,43 @@ def wechat_push(req: WechatPushReq):
         )
     except wechat_scripts.WechatScriptError as e:
         raise HTTPException(500, str(e))
+
+
+# ═══════════════════════════════════════════════════════════════════
+# 热点文案改写V2 skill 接入 (D-012)
+# Skill 源: ~/Desktop/skills/热点文案改写V2/SKILL.md
+# 3 步: analyze(拆解+3角度) → write(1800-2600字+六维自检) → done
+# ═══════════════════════════════════════════════════════════════════
+
+HOTREWRITE_SKILL_SLUG = "热点文案改写V2"
+
+
+@app.get("/api/hotrewrite/skill-info")
+def hotrewrite_skill_info():
+    try:
+        return skill_loader.skill_info(HOTREWRITE_SKILL_SLUG)
+    except skill_loader.SkillNotFound as e:
+        raise HTTPException(404, str(e))
+
+
+class HotrewriteAnalyzeReq(BaseModel):
+    hotspot: str
+
+
+@app.post("/api/hotrewrite/analyze")
+def hotrewrite_analyze(req: HotrewriteAnalyzeReq):
+    return hotrewrite_pipeline.analyze_hotspot(req.hotspot)
+
+
+class HotrewriteWriteReq(BaseModel):
+    hotspot: str
+    breakdown: dict[str, Any] = Field(default_factory=dict)
+    angle: dict[str, Any] = Field(default_factory=dict)
+
+
+@app.post("/api/hotrewrite/write")
+def hotrewrite_write(req: HotrewriteWriteReq):
+    return hotrewrite_pipeline.write_script(req.hotspot, req.breakdown, req.angle)
 
 
 if __name__ == "__main__":
