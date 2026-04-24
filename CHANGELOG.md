@@ -6,6 +6,51 @@
 
 ---
 
+## [v0.4.1] — 2026-04-25 (P10 之后续做 · cron 缩短到 10min)
+
+P0-P10 主清单完成后, cron 继续按 PROGRESS 的 Phase 1/2/3 旧 TODO + 用户主动插单 推进。
+接入 skill 从 4 → 6 + 1 工具型(即梦)。cron 周期 30min → 10min(D-029),响应更快。
+
+### Added
+- **[D-022]** content-planner skill 接入 — 第 5 个 skill · 活动前内容产出策划
+  - 三档目标(保底/标准/最大化) + 6 模块完整方案
+  - 输出与其他 skill 不同(structured plan 非 content text)
+  - 验证 `scripts/add_skill.py`(D-017) 实用性: 骨架一键 + 只调 prompt 适配
+- **[D-023]** 行为记忆写入小华工作日志.md — Phase 2 旧 TODO
+  - `backend/services/work_log.py` · maybe_log() 在 PersonaInjectedAI.chat finally 钩子
+  - 默认 disabled · settings.work_log_enabled 开关 · 5 分钟节流
+  - 写到 `~/Desktop/清华哥知识库/00 🤖 AI清华哥/小华工作日志.md`
+  - 9 个单元测试,tmp_log fixture 隔离 prod LOG_PATH
+- **[D-024]** 首页 4 方块接入真实统计数据 — Phase 1 旧 TODO
+  - `/api/stats/home` 接 ai_calls 表 · 按 route_key 前缀聚合
+  - hint 文案三种状态: 今日 / 仅昨日 / 全 0
+- **[D-025]** 选题批量生成优化 — Phase 1 旧 TODO
+  - `/api/topics/generate` 结构化输出 + 去重 + 字数过滤
+  - 注入最近 30 条已入库,避免方向重复
+  - 入库带 description / tags / suggested_format
+- **[D-026]** 违禁违规审查 skill 接入 — 第 6 个 skill (用户主动插单 · 学员版 OK)
+  - 单 step 流程: 输入文案 + 行业 → 一次性出审核报告 + 必出 2 版改写
+  - 6 类行业敏感词库(通用/大健康/美业/教育/金融/医美)
+  - 高/中/低危分级 · 保守版 100% 合规 / 营销版保留吸引力
+- **[D-027]** 底部 dock 自由对话(多轮) — Phase 2 旧 TODO
+  - `/api/chat` POST {messages, context} → reply
+  - LiDock 真接通 · 多轮历史拼成单 prompt(最近 12 轮)
+  - DeepSeek 路由(快 + 便宜) · 1.3s 回 80 字以内
+  - 切页自动重置 · ··· loading 三点动效 · Enter 发送
+- **[D-028]** 即梦(Dreamina) AIGC CLI 接入 — 工具型技能(用户主动插单)
+  - subprocess wrap `~/.local/bin/dreamina` · 参考 poju-site 模式
+  - text2image / image2video / query_result / user_credit
+  - 不走 SKILL.md 范式(CLI 工具不需要 prompt 注入方法论)
+  - sidebar 🎨 即梦 AIGC · 2 步 UI(配置 → 提交+轮询+预览)
+
+### Changed
+- **[D-029]** cron 从 `*/30 * * * *` 改为 `*/10 * * * *`
+  - Job ID `aeca45b6` → `4db2d0ea`
+  - 用户反馈"不用一直等" · 10min 是 60min 之内最频繁清晰间隔
+- 测试从 85 → 102(自动 cover D-022 / D-026 通过 test_skills_smoke 参数化)
+
+---
+
 ## [v0.4.0] — 2026-04-25 (autonomous loop 一夜批量)
 
 这一轮由 cron 每 30 分钟自驱,一晚完成 P0-P8 九个任务 + Opus 修复。接入 skill 数从 0 → 4,测试从 0 → 85,集成深度显著提升。

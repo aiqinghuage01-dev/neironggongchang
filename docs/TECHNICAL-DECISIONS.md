@@ -195,3 +195,41 @@ bs4 / openai 已在系统 python3 装好,本项目 .venv 不重复装。
 **批量生成类**（投流/朋友圈/公众号/选题）是服务端自动 `kb.match`，因为这些场景用户不需要细粒度挑选。
 
 **原则**：改写是创作场景，让用户控制参考素材；批量生成是执行场景，AI 自动匹配。
+
+---
+
+## D-012 ~ D-029 索引(autonomous loop 一夜批量 · 2026-04-25)
+
+每条决策的完整背景和 tradeoff 详见对应 commit message(`git show <hash>`)和 CHANGELOG.md。
+PROGRESS.md 行内的 1 行说明 + 这里的 1 句"为什么这么做"是日常查阅入口。
+
+| D 号 | commit | 主题 | 关键决策 |
+|---|---|---|---|
+| D-012 | `e7a75f6` | 热点改写V2 skill 接入 | 3 步 UI · SKILL.md 自带方法论整篇注入 prompt |
+| D-013 | `c9c54f1` | 录音改写 skill 接入 | 同 3 步范式 · angles 上限 2(skill 硬规则)· 7 项自检清单 |
+| D-014 | `1f9db04` | touliu-agent skill 替换旧 /api/ad | 2 步 · 注入 SKILL.md+4 references · subprocess 调 lint_copy_batch.py |
+| D-015 | `31259a6` | AI token/成本监控 | SQLite ai_calls 表 · 价格常量(可 settings 覆盖) · 首页 widget |
+| D-016 | `7d89026` | 工作流 localStorage 持久化 | 通用 useWorkflowPersist hook · 4 skill 全覆盖 · 500ms 防抖 |
+| D-017 | `0ba444e` | scripts/add_skill.py 骨架生成器 | 7 处自动注册全幂等 · 新 skill 3h → 30min |
+| D-018 | `e3de933` | 测试扩展 18 → 75(后续到 102) | 4 个新测试文件 · tmp_db fixture 隔离 · 不打真 AI |
+| D-019 | `e039801` | 首页技能中心 + registered_skills 单一事实源 | api_prefix ≠ page_id 区分 · 自动扫桌面发现"未接入" |
+| D-020 | `7af9285` | CHANGELOG + NEW-SKILL-PLAYBOOK 文档 | Keep-a-Changelog 格式 · D-010 范式手册化 |
+| D-021 | `8ed1808` | factory-ui.jsx 跨 skill 组件库 | Spinning/SkeletonCard/StepHeader 提取 · 现有 skill Header 暂不迁移 |
+| D-022 | `bec198d` | content-planner skill 接入 | 输出与众不同(三档目标 + 6 模块策划) · 验证 add_skill.py 实用 |
+| D-023 | `f56ccbd` | 行为记忆写入小华工作日志.md | 默认 disabled · 5min 节流 · 失败吃掉不影响主调用 |
+| D-024 | `d7f3550` | 首页 4 方块真实数据 | 接 ai_calls 表按 route_key 前缀聚合 · hint 自适应三态 |
+| D-025 | `e4f5324` | 选题批量生成结构化 + 去重 | 注入最近 30 条避免重复 · 字数 6-25 过滤 · 前 5 字 dedup |
+| D-026 | `51193b9` | 违规审查 skill (学员版 OK) | 单 step 流程(非 3 步) · 2 版改写 Tab · 6 类行业 chip |
+| D-027 | `64f6037` | LiDock 真接通 /api/chat 多轮 | DeepSeek 路由(快+便宜) · 切页重置 · 不持久化 |
+| D-028 | `e321c6a` | 即梦 Dreamina CLI 接入 | subprocess wrap(同 poju-site) · 不走 SKILL.md 范式 · 异步 poll |
+| D-029 | `(本 commit)` | cron 周期 30min → 10min | 用户反馈"不用一直等" · 10min 是清晰的频次 |
+
+**已接入 skill 全集(共 6 个,1 个 CLI 工具)**:
+- 📄 公众号文章 (D-010, 8 步, 含 5 phase scripts)
+- 🔥 热点改写 (D-012, 3 步)
+- 🎙️ 录音改写 (D-013, 3 步)
+- 💰 投流文案 (D-014 替换旧 /api/ad, 2 步, 含 lint 脚本)
+- 🗓️ 内容策划 (D-022, 3 步, 输出三档目标 + 6 模块)
+- 🛡️ 违规审查 (D-026, 2 步, 学员版 OK)
+- 🎨 即梦 AIGC (D-028, CLI 工具型 · 非 SKILL.md 范式)
+
