@@ -236,6 +236,12 @@ P0-P10 所有任务落地, 14 个 commit 从 `09faf92` 到今日末 commit。
 
 ## Bonus 任务(P10 之后,cron 继续干活时做的)
 
+- [x] **即梦(Dreamina) AIGC 接入 (D-028)** — CLI 工具型技能(非 SKILL.md 范式)
+      用户提示: poju-site 接过,可参考。subprocess wrap ~/.local/bin/dreamina
+      backend/services/dreamina_service.py: text2image / image2video / query_result / user_credit
+      `/api/dreamina/{info,text2image,image2video,query,list-tasks}`
+      sidebar 🎨 即梦 AIGC · 2 步流程: 选模式+prompt+配置 → 提交+轮询+预览
+      下载到 data/dreamina/ 走 /media 暴露 · 端到端 /info 通(余额 8426 credits)
 - [x] **违禁违规审查 skill 接入 (D-026)** — 第 6 个接入的 skill (用户主动插单,学员版 OK)
       单 step 流程: 输入文案+行业 → 一次性出审核报告 + **必须** 2 版改写
       6 类行业(通用/大健康/美业/教育/金融/医美) 决定是否加查敏感行业词库

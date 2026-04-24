@@ -11,6 +11,7 @@ const NAV_MAIN = [
   { id: "voicerewrite", icon: "🎙️", label: "录音改写" },
   { id: "planner", icon: "🗓️", label: "内容策划" },
   { id: "compliance", icon: "🛡️", label: "违规审查" },
+  { id: "dreamina", icon: "🎨", label: "即梦 AIGC" },
 ];
 const NAV_ASSETS = [
   { id: "materials", icon: "📥", label: "素材库" },

@@ -77,6 +77,7 @@ from backend.services import hotrewrite_pipeline
 from backend.services import voicerewrite_pipeline
 from backend.services import touliu_pipeline
 from backend.services import registered_skills
+from backend.services import dreamina_service
 
 UPLOAD_DIR = AUDIO_DIR / "uploads"
 COVER_DIR = DATA_DIR / "covers"
@@ -435,6 +436,90 @@ class ChatDockMsg(BaseModel):
 class ChatDockReq(BaseModel):
     messages: list[ChatDockMsg] = Field(default_factory=list)
     context: str = ""  # 当前页面: 首页 / 公众号 / 投流 / etc
+
+
+# ─── 即梦(Dreamina) AIGC 接入 (D-028) ────────────────────
+
+@app.get("/api/dreamina/info")
+def dreamina_info():
+    """CLI 探活 + 版本 + 余额。"""
+    info = dreamina_service.cli_info()
+    credit = dreamina_service.user_credit() if info.get("ok") else {}
+    return {**info, "credit": credit}
+
+
+class DreaminaText2ImageReq(BaseModel):
+    prompt: str
+    ratio: str = "1:1"
+    resolution_type: Optional[str] = None  # 1k / 2k / 4k
+    model_version: Optional[str] = None    # 3.0 / 3.1 / 4.0 / 4.1 / 4.5 / 4.6 / 5.0 / lab
+    poll: int = 0  # 同步等秒数,0 = 异步立即返回 submit_id
+
+
+@app.post("/api/dreamina/text2image")
+def dreamina_text2image(req: DreaminaText2ImageReq):
+    try:
+        return dreamina_service.text2image(
+            req.prompt, ratio=req.ratio,
+            resolution_type=req.resolution_type,
+            model_version=req.model_version,
+            poll=max(0, min(req.poll, 120)),  # 最多 poll 120s
+        )
+    except dreamina_service.DreaminaError as e:
+        raise HTTPException(500, str(e))
+
+
+class DreaminaImage2VideoReq(BaseModel):
+    image: str   # 本地文件路径
+    prompt: str
+    duration: Optional[int] = None  # 秒数
+    video_resolution: Optional[str] = None  # 720p / 1080p
+    model_version: Optional[str] = None     # 3.0 / 3.0fast / 3.0pro / 3.5pro / seedance2.0 / seedance2.0fast
+    poll: int = 0
+
+
+@app.post("/api/dreamina/image2video")
+def dreamina_image2video(req: DreaminaImage2VideoReq):
+    try:
+        return dreamina_service.image2video(
+            req.image, req.prompt,
+            duration=req.duration,
+            video_resolution=req.video_resolution,
+            model_version=req.model_version,
+            poll=max(0, min(req.poll, 180)),
+        )
+    except dreamina_service.DreaminaError as e:
+        raise HTTPException(500, str(e))
+
+
+class DreaminaQueryReq(BaseModel):
+    submit_id: str
+    download: bool = True
+
+
+@app.post("/api/dreamina/query")
+def dreamina_query(req: DreaminaQueryReq):
+    try:
+        result = dreamina_service.query_result(req.submit_id, download=req.download)
+        # 转下载文件路径为 media URL
+        if result.get("downloaded"):
+            urls = []
+            for p in result["downloaded"]:
+                pp = Path(p)
+                if pp.exists():
+                    try:
+                        urls.append(media_url(pp))
+                    except Exception:
+                        urls.append(str(pp))
+            result["media_urls"] = urls
+        return result
+    except dreamina_service.DreaminaError as e:
+        raise HTTPException(500, str(e))
+
+
+@app.get("/api/dreamina/list-tasks")
+def dreamina_list_tasks():
+    return dreamina_service.list_tasks()
 
 
 @app.post("/api/chat")
