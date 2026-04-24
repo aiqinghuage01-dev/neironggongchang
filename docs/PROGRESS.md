@@ -198,7 +198,10 @@ Obsidian 知识库 / 00 AI清华哥 /
       上方 grid 2 列显示已接入(4 个),下方可展开"未接入"(桌面 13 个过滤学员版后)
       含一键命令提示 `python3 scripts/add_skill.py --slug X --key Y`。
       test_skills_smoke.py 改为消费 registered_skills,从此 DRY 了。
-- [ ] **[P9] CHANGELOG + 文档**
+- [x] **[P9] CHANGELOG + 文档** 三份新文档:
+      - `CHANGELOG.md` · Keep-a-Changelog 格式 · 按 D 号分组 · v0.3.0 → v0.4.0
+      - `docs/NEW-SKILL-PLAYBOOK.md` · D-010 接入范式手册(5 步 + 红线 + 故障排查)
+      - `CLAUDE.md` 补「接入新 skill」+「AI 引擎智能路由」两节 + 事实源表补 2 行
 - [ ] **[P10] 前端 UI 组件库提取**
 
 ---

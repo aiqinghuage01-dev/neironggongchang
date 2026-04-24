@@ -44,6 +44,8 @@ cat docs/PROGRESS.md
 | `PRD_v2.md` | **产品事实源**（9 页设计 + 数据模型 + API 清单） | 只增不改。大版本升级另起 PRD_v3.md |
 | `docs/PROGRESS.md` | 进度看板 + 版本演进 | **每次 session 结束必更** |
 | `docs/TECHNICAL-DECISIONS.md` | 技术决策档案（为什么这么做） | 踩到新坑/做新决策就补 |
+| `docs/NEW-SKILL-PLAYBOOK.md` | **新 skill 接入手册**（D-010 范式） | 接新 skill 时必读 |
+| `CHANGELOG.md` | 版本演进 + 按决策号分组 | 每发版补一节 |
 | `CLAUDE.md`（本文） | AI 入口路标 | 极少改，改了要简短 |
 | `README.md` | 项目总入口（给人看） | 偶尔维护 |
 
@@ -140,6 +142,35 @@ neironggongchang/
 ### AI 引擎切换
 设置页 -> AI 引擎 -> opus（默认）/ deepseek
 代码层：`shortvideo/ai.py` 的 `get_ai_client()` 读 `data/settings.json` 的 `ai_engine` 字段
+
+### 接入新 skill (D-010 范式)
+
+完整手册见 [`docs/NEW-SKILL-PLAYBOOK.md`](docs/NEW-SKILL-PLAYBOOK.md),极简版:
+
+```bash
+# 骨架自动生成 + 7 处注册
+python3 scripts/add_skill.py --slug "爆款改写" --key baokuan --icon 💥 --label 爆款改写
+
+# 登记到 backend/services/registered_skills.py (首页技能中心自动显示)
+
+# 调 backend/services/baokuan_pipeline.py 的 prompt 适配 SKILL.md
+```
+
+**已接入 skill** (在 `registered_skills.py` 里):
+- 📄 公众号文章 (wechat, 8 步) · 🔥 热点改写 (hotrewrite, 3 步)
+- 🎙️ 录音改写 (voicerewrite, 3 步) · 💰 投流 (touliu, 2 步)
+
+**事实源原则**:
+- skill 目录 `~/Desktop/skills/<slug>/` 只读,工厂不改也不搬
+- 功能级覆盖 persona (skill 有自带人设就不走 Obsidian 关卡层)
+- subprocess 调 skill 的 scripts,不重写
+
+### AI 引擎智能路由 (D-011)
+
+`get_ai_client(route_key=...)` 按 11 条默认路由分派:
+- 轻任务 → DeepSeek (快 10-20 倍)
+- 重任务 → Opus (质量)
+- `settings.engine_routes` 可覆盖 · `GET /api/ai/routes` 查表
 
 ### 知识库 + 人设系统
 - 根目录：`~/Desktop/清华哥知识库/`
