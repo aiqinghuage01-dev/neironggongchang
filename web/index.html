@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <title>内容工厂</title>
+  <meta name="viewport" content="width=1440" />
+  <style>
+    * { box-sizing: border-box; }
+    html, body, #root { margin: 0; padding: 0; height: 100%; }
+    body {
+      background: #f7f5f0;
+      font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+      color: #1a1a1a; -webkit-font-smoothing: antialiased; overflow: hidden;
+    }
+    button { font-family: inherit; }
+    textarea { font-family: inherit; }
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #ece8df; border-radius: 4px; }
+    @keyframes qlspin { to { transform: rotate(360deg) } }
+    @keyframes qldot { 0%, 60%, 100% { opacity: 0.3 } 30% { opacity: 1 } }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin></script>
+  <script type="text/babel" src="./factory-tokens.jsx"></script>
+  <script type="text/babel" src="./factory-api.jsx"></script>
+  <script type="text/babel" src="./factory-shell.jsx"></script>
+  <script type="text/babel" src="./factory-home.jsx"></script>
+  <script type="text/babel" src="./factory-pages-stub.jsx"></script>
+  <script type="text/babel" src="./factory-flow.jsx"></script>
+  <script type="text/babel" src="./factory-materials.jsx"></script>
+  <script type="text/babel" src="./factory-works.jsx"></script>
+  <script type="text/babel" src="./factory-knowledge.jsx"></script>
+  <script type="text/babel" src="./factory-entries.jsx"></script>
+  <script type="text/babel" src="./factory-ad.jsx"></script>
+  <script type="text/babel" src="./factory-moments.jsx"></script>
+  <script type="text/babel" src="./factory-article.jsx"></script>
+  <script type="text/babel" src="./factory-settings.jsx"></script>
+  <script type="text/babel" src="./factory-app.jsx"></script>
+</body>
+</html>
