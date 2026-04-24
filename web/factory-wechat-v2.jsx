@@ -591,37 +591,64 @@ function WxStepImages({ plans, onGen, loading, onPrev, onNext, onRegen }) {
     { text: "规划好了,下一页你可以逐张生图", sub: "每张约 30-60s · apimart gpt-image-2" },
   ]} />;
   const doneCount = plans.filter(p => p.status === "done").length;
+  const runningCount = plans.filter(p => p.status === "running").length;
+  const pending = plans.filter(p => p.status !== "done" && p.status !== "running");
+
+  async function genAll() {
+    for (let i = 0; i < plans.length; i++) {
+      if (plans[i].status !== "done" && plans[i].status !== "running") {
+        await onGen(i);
+      }
+    }
+  }
+
   return (
-    <div style={{ padding: "32px 40px 120px", maxWidth: 1040, margin: "0 auto" }}>
-      <div style={{ marginBottom: 16 }}>
-        <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 6 }}>段间配图 · {doneCount}/{plans.length} 🎨</div>
-        <div style={{ fontSize: 13, color: T.muted }}>每段结尾放一张 16:9 AI 图。prompt 可以改,点"生成"走 apimart → 微信图床。每张约 30-60s。</div>
+    <div style={{ padding: "32px 40px 120px", maxWidth: 1200, margin: "0 auto" }}>
+      <div style={{ marginBottom: 16, display: "flex", alignItems: "flex-start", gap: 16 }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 6 }}>段间配图 · {doneCount}/{plans.length} 🎨</div>
+          <div style={{ fontSize: 13, color: T.muted }}>每段 16:9 AI 图。prompt 可改,点「生成」走 apimart → 微信图床。每张 30-60s。</div>
+        </div>
+        {pending.length > 0 && (
+          <Btn variant="primary" onClick={genAll} disabled={runningCount > 0}>
+            ✨ 一键生成剩余 {pending.length} 张
+          </Btn>
+        )}
       </div>
+      {/* 固定 2 列,每张卡用 flex 列布局保证按钮始终可见 · 用户截图里曾出现"按钮看不到"歧义 */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 14 }}>
         {plans.map((p, i) => (
-          <div key={i} style={{ padding: 14, background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 12 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
+          <div key={i} style={{
+            padding: 14, background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 12,
+            display: "flex", flexDirection: "column", gap: 8,
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
               <Tag size="xs" color="blue">#{i + 1}</Tag>
-              <span style={{ fontSize: 12, color: T.muted }}>{p.section_hint}</span>
-              <div style={{ flex: 1 }} />
+              <span style={{ fontSize: 12, color: T.muted, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.section_hint}</span>
               {p.status === "done" && <span style={{ fontSize: 11, color: T.brand, fontWeight: 600 }}>✓ {p.elapsed_sec}s</span>}
-              {p.status === "running" && <span style={{ fontSize: 11, color: T.amber }}>生成中...</span>}
-              {p.status === "failed" && <span style={{ fontSize: 11, color: T.red }}>失败</span>}
+              {p.status === "running" && <span style={{ fontSize: 11, color: T.amber }}>⏳ 生成中</span>}
+              {p.status === "failed" && <span style={{ fontSize: 11, color: T.red }}>⚠️ 失败</span>}
             </div>
-            <textarea rows={3} value={p.image_prompt} readOnly
-              style={{ width: "100%", border: `1px solid ${T.borderSoft}`, borderRadius: 6, padding: 8, fontSize: 12, fontFamily: "inherit", outline: "none", resize: "vertical", color: T.muted, lineHeight: 1.7, background: T.bg2 }} />
+            <textarea rows={2} value={p.image_prompt} readOnly
+              style={{ width: "100%", border: `1px solid ${T.borderSoft}`, borderRadius: 6, padding: 8, fontSize: 12, fontFamily: "inherit", outline: "none", resize: "none", color: T.muted, lineHeight: 1.6, background: T.bg2 }} />
             {p.mmbiz_url ? (
-              <div style={{ marginTop: 8, aspectRatio: "16/9", borderRadius: 8, overflow: "hidden", background: `url(${p.mmbiz_url}) center/cover`, border: `1px solid ${T.borderSoft}` }} />
+              <div style={{ aspectRatio: "16/9", borderRadius: 8, overflow: "hidden", background: `url(${p.mmbiz_url}) center/cover`, border: `1px solid ${T.borderSoft}` }} />
             ) : (
-              <div style={{ marginTop: 8, aspectRatio: "16/9", borderRadius: 8, background: T.bg2, border: `1px dashed ${T.border}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, color: T.muted2 }}>
-                {p.status === "running" ? "生成中,耐心等 30-60s" : p.status === "failed" ? `⚠️ ${p.error || "失败"}` : "未生成"}
+              <div style={{
+                minHeight: 110, maxHeight: 140, borderRadius: 8,
+                background: T.bg2, border: `1px dashed ${T.border}`,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontSize: 11.5, color: T.muted2, textAlign: "center", padding: 10,
+              }}>
+                {p.status === "running" ? "⏳ 生成中 · 30-60s · 别关" :
+                 p.status === "failed" ? `⚠️ ${p.error || "失败,可点重生"}` :
+                 "未生成"}
               </div>
             )}
-            <div style={{ display: "flex", marginTop: 8 }}>
-              <div style={{ flex: 1 }} />
+            <div style={{ display: "flex", justifyContent: "flex-end" }}>
               <Btn size="sm" variant={p.status === "done" ? "outline" : "primary"}
                 onClick={() => onGen(i)} disabled={p.status === "running"}>
-                {p.status === "done" ? "重生" : p.status === "running" ? "生成中..." : "生成这张"}
+                {p.status === "done" ? "🔄 重生" : p.status === "running" ? "生成中..." : p.status === "failed" ? "重试" : "生成这张"}
               </Btn>
             </div>
           </div>
@@ -631,7 +658,7 @@ function WxStepImages({ plans, onGen, loading, onPrev, onNext, onRegen }) {
         <Btn variant="outline" onClick={onPrev}>← 回长文</Btn>
         <Btn onClick={onRegen}>🔄 重出 prompt</Btn>
         <div style={{ flex: 1 }} />
-        <div style={{ fontSize: 12, color: T.muted, marginRight: 10 }}>有图没图都能继续,没图的段就不配</div>
+        <div style={{ fontSize: 12, color: T.muted, marginRight: 10 }}>有图没图都能继续,没图的段不配</div>
         <Btn variant="primary" onClick={onNext}>拼 HTML →</Btn>
       </div>
     </div>
