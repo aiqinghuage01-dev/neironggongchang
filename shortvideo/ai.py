@@ -87,6 +87,19 @@ class PersonaInjectedAI:
                 )
             except Exception:
                 pass
+            # D-023: 行为记忆写入小华工作日志.md(默认 disabled,settings 开关)
+            try:
+                from backend.services import work_log
+                work_log.maybe_log(
+                    route_key=self._route_key,
+                    engine=self._engine_name,
+                    prompt_brief=prompt[:200] if isinstance(prompt, str) else "",
+                    response_brief=getattr(r, "text", "")[:300] if ok else "",
+                    tokens=getattr(r, "total_tokens", 0) if ok else 0,
+                    ok=ok,
+                )
+            except Exception:
+                pass
 
     def rewrite_script(
         self,

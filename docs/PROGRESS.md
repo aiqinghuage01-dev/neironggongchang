@@ -95,7 +95,14 @@
 - [x] **改写 prompt 注入知识库**：前端 `factory-flow.jsx` 的 KbInjectBar
       让清华哥手选 KB chunks 拼进 text；批量生成类（投流/朋友圈/公众号/选题）
       服务端已自动 kb.match
-- [ ] **行为记忆写入**：每次改写/生成后自动追加到小华工作日志.md（Phase 2 做）
+- [x] **行为记忆写入**：每次改写/生成后自动追加到小华工作日志.md（D-023）
+      backend/services/work_log.py · maybe_log() 在 PersonaInjectedAI.chat finally
+      钩子里调用,失败吃掉 · 默认 disabled,settings.work_log_enabled 开关
+      节流: 同 route_key 5 分钟内只记 1 条 · skip 失败 / skip < 50 tok pings
+      日志路径: ~/Desktop/清华哥知识库/00 🤖 AI清华哥/小华工作日志.md
+      格式: `- HH:MM · 🔥 hotrewrite.write(opus) · 输入摘要 → 产出摘要 · 2500 tok`
+      endpoint: GET /api/work-log/{status,recent} + POST /api/work-log/toggle
+      tests/test_work_log.py 9 个单元测试全过(用 tmp_log fixture 隔离)
 - [ ] 首页 4 方块真实统计数据
 - [ ] 选题批量生成优化
 

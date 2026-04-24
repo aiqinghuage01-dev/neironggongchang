@@ -424,6 +424,34 @@ def skills_catalog():
     return {"skills": registered_skills.list_catalog()}
 
 
+# ─── 小华工作日志(行为记忆 · D-023) ──────────────────────
+
+@app.get("/api/work-log/status")
+def work_log_status():
+    """看行为记忆开关 + 当前日志体积。"""
+    from backend.services import work_log
+    return work_log.status()
+
+
+class WorkLogToggleReq(BaseModel):
+    enabled: bool
+
+
+@app.post("/api/work-log/toggle")
+def work_log_toggle(req: WorkLogToggleReq):
+    """开关行为记忆写入。enabled=true 后,每次 AI 调用追加到 Obsidian 日志。"""
+    settings_service.update({"work_log_enabled": bool(req.enabled)})
+    from backend.services import work_log
+    return work_log.status()
+
+
+@app.get("/api/work-log/recent")
+def work_log_recent(limit: int = 20):
+    """最近 N 条行为记忆(给前端调试页或首页 widget 用)。"""
+    from backend.services import work_log
+    return {"entries": work_log.recent_entries(limit=limit)}
+
+
 # ---- 设置 ----
 @app.get("/api/settings")
 def settings_get():
