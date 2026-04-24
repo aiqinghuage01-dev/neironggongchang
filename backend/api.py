@@ -69,6 +69,8 @@ from backend.services import ad as ad_service
 from backend.services import moments as moments_service
 from backend.services import article as article_service
 from backend.services import settings as settings_service
+from backend.services import skill_loader
+from backend.services import wechat_pipeline
 
 UPLOAD_DIR = AUDIO_DIR / "uploads"
 COVER_DIR = DATA_DIR / "covers"
@@ -833,6 +835,59 @@ def article_expand(req: ArticleExpandReq):
         kb_chunks = kb_service.match(req.topic, k=4)
     result = article_service.expand_article(req.topic, req.outline, kb_chunks=kb_chunks, deep=req.deep)
     return {**result, "kb_used": [c["path"] for c in (kb_chunks or [])], "deep": req.deep}
+
+
+# ═══════════════════════════════════════════════════════════════════
+# 公众号文章 skill 接入(D-010)
+# Skill 源: ~/Desktop/skills/公众号文章/
+# Phase 1-2 (本 commit): 标题 / 大纲 / 长文+三层自检
+# Phase 2.5-5 在下一 commit 接入
+# ═══════════════════════════════════════════════════════════════════
+
+WECHAT_SKILL_SLUG = "公众号文章"
+
+
+@app.get("/api/wechat/skill-info")
+def wechat_skill_info():
+    """供前端展示"正在用技能:公众号文章 · XX 字"标识。"""
+    try:
+        return skill_loader.skill_info(WECHAT_SKILL_SLUG)
+    except skill_loader.SkillNotFound as e:
+        raise HTTPException(404, str(e))
+
+
+class WechatTitlesReq(BaseModel):
+    topic: str
+    n: int = 3
+
+
+@app.post("/api/wechat/titles")
+def wechat_titles(req: WechatTitlesReq):
+    titles = wechat_pipeline.gen_titles(req.topic, n=req.n)
+    return {"titles": titles}
+
+
+class WechatOutlineReq(BaseModel):
+    topic: str
+    title: str
+
+
+@app.post("/api/wechat/outline")
+def wechat_outline(req: WechatOutlineReq):
+    outline = wechat_pipeline.gen_outline(req.topic, req.title)
+    return outline
+
+
+class WechatWriteReq(BaseModel):
+    topic: str
+    title: str
+    outline: dict[str, Any] = Field(default_factory=dict)
+
+
+@app.post("/api/wechat/write")
+def wechat_write(req: WechatWriteReq):
+    result = wechat_pipeline.write_article(req.topic, req.title, req.outline)
+    return result
 
 
 if __name__ == "__main__":

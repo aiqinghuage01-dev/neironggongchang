@@ -141,6 +141,20 @@ Obsidian 知识库 / 00 AI清华哥 /
 
 ---
 
+## 进行中（D-010 · 公众号 skill 全量 GUI 化）
+
+**目标**：把 `~/Desktop/skills/公众号文章/` 这个 skill 的完整 5 Phase 流程
+接入本项目，从一句选题 → 公众号草稿箱已推送，全程不打开 Claude Desktop。
+
+**架构原则**：skill 目录是事实源,系统只读;skill 里有的 reference / 脚本 /
+模板,系统不重写,直接读/调。
+
+**分 4 步 commit**：
+- [ ] 1. `skill_loader.py` + `/api/wechat/topic|titles|outline|write` (Phase 1-2 + 三层自检)
+- [ ] 2. `/api/wechat/section-image|html|cover` (Phase 2.5/3/4)
+- [ ] 3. `/api/wechat/push` (Phase 5)
+- [ ] 4. 前端 `factory-wechat-v2.jsx` 替换旧 PageWechat 全链路 UI
+
 ## 下一步要做（优先级排序）
 
 1. **行为记忆写入** -- 改写/生成后自动追加到小华工作日志.md（Phase 2 的核心）
