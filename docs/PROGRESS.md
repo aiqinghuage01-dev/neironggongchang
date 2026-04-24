@@ -164,7 +164,12 @@ Obsidian 知识库 / 00 AI清华哥 /
       测试: skill-info ok, 结构分配 3/5/8/10/15 都正确。
       端到端 /generate 10 条 Opus 吃 6K token system,首跑 2-3 分钟,
       留用户早上真跑验证。
-- [ ] **[P4] Token/成本监控 + 首页 widget**
+- [x] **[P4] Token/成本监控 + 首页 widget** ai_usage.py + 打点钩子在
+      PersonaInjectedAI.chat 里,SQLite ai_calls 表,`/api/ai/usage?range=today|week|all`
+      + `/api/ai/usage/recent`. 首页新增 AiUsageCard widget:
+      "今日 5 次 · 8.2K tokens · ¥2.21 · opus 占 95%"
+      价格表: Opus $15/$75 per M · DeepSeek $0.14/$0.28 per M · 汇率 7.2
+      settings.engine_pricing / usd_to_cny 可覆盖
 - [ ] **[P5] 工作流 localStorage 持久化**
 - [ ] **[P6] skill 骨架生成器 scripts/add_skill.py**
 - [ ] **[P7] 测试扩展**

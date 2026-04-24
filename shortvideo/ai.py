@@ -26,8 +26,12 @@ class RawAIClient(Protocol):
 class PersonaInjectedAI:
     """关卡层:拦截 chat / rewrite_script,在 system prompt 前注入人设。"""
 
-    def __init__(self, inner):
+    def __init__(self, inner, route_key: str | None = None):
         self._inner = inner
+        self._route_key = route_key
+        # 探测 engine 名字,用于 usage 打点
+        cls = type(inner).__name__.lower()
+        self._engine_name = "opus" if "opus" in cls else ("deepseek" if "deepseek" in cls else "unknown")
 
     @property
     def raw(self):
@@ -44,6 +48,7 @@ class PersonaInjectedAI:
         max_tokens: int = 2048,
     ) -> LLMResult:
         from backend.services import persona as persona_service
+        import time as _t
 
         persona = persona_service.load_persona(deep=deep)
         if persona and system:
@@ -53,12 +58,35 @@ class PersonaInjectedAI:
         else:
             merged = system
 
-        return self._inner.chat(
-            prompt,
-            system=merged,
-            temperature=temperature,
-            max_tokens=max_tokens,
-        )
+        t0 = _t.time()
+        ok = True
+        err_msg = None
+        try:
+            r = self._inner.chat(
+                prompt,
+                system=merged,
+                temperature=temperature,
+                max_tokens=max_tokens,
+            )
+            return r
+        except Exception as e:
+            ok = False
+            err_msg = f"{type(e).__name__}: {e}"
+            raise
+        finally:
+            try:
+                from backend.services import ai_usage
+                ai_usage.record_call(
+                    engine=self._engine_name,
+                    route_key=self._route_key,
+                    prompt_tokens=getattr(r, "prompt_tokens", 0) if ok else 0,
+                    completion_tokens=getattr(r, "completion_tokens", 0) if ok else 0,
+                    duration_ms=int((_t.time() - t0) * 1000),
+                    ok=ok,
+                    error=err_msg,
+                )
+            except Exception:
+                pass
 
     def rewrite_script(
         self,
@@ -163,11 +191,11 @@ def _build_raw_client(engine: str):
 def get_ai_client(route_key: str | None = None) -> PersonaInjectedAI:
     """获取带人设注入关卡层的 AI 客户端。
 
-    route_key: 用于智能路由,如 "wechat.titles" / "rewrite" / "ad.generate"。
+    route_key: 用于智能路由 + usage 打点,如 "wechat.titles" / "rewrite"。
       不传则用 settings.ai_engine 全局引擎。
     """
     engine = _resolve_engine(route_key)
-    return PersonaInjectedAI(_build_raw_client(engine))
+    return PersonaInjectedAI(_build_raw_client(engine), route_key=route_key)
 
 
 def routes_info() -> dict:

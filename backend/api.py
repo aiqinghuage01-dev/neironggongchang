@@ -403,6 +403,20 @@ def ai_routes():
     return routes_info()
 
 
+@app.get("/api/ai/usage")
+def ai_usage_endpoint(range: str = "today"):
+    """AI 调用用量聚合统计 (D-015)。range: today|yesterday|week|month|all"""
+    from backend.services import ai_usage
+    return ai_usage.get_usage(range_=range)
+
+
+@app.get("/api/ai/usage/recent")
+def ai_usage_recent(limit: int = 50):
+    """最近 N 次 AI 调用明细(调试用)。"""
+    from backend.services import ai_usage
+    return {"calls": ai_usage.recent_calls(limit=limit)}
+
+
 # ---- 设置 ----
 @app.get("/api/settings")
 def settings_get():

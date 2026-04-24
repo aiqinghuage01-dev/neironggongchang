@@ -2,8 +2,13 @@
 
 function PageHome({ onNav }) {
   const [stats, setStats] = React.useState(null);
+  const [usage, setUsage] = React.useState(null);
   React.useEffect(() => {
     api.get("/api/stats/home").then(setStats).catch(() => {});
+    api.get("/api/ai/usage?range=today").then(setUsage).catch(() => {});
+    // 每 30 秒刷新 usage
+    const t = setInterval(() => api.get("/api/ai/usage?range=today").then(setUsage).catch(() => {}), 30000);
+    return () => clearInterval(t);
   }, []);
 
   const make = stats?.make || {};
@@ -74,9 +79,59 @@ function PageHome({ onNav }) {
               <span>今天还没维护热点 · 去 <span style={{ color: T.brand, cursor: "pointer", fontWeight: 600 }} onClick={() => onNav("materials")}>📥 素材库 · 热点 Tab</span> 粘一条当日最热的</span>
             </div>
           )}
+
+          {/* 今日 AI 消耗 widget (D-015) */}
+          {usage && usage.overall?.calls > 0 && <AiUsageCard usage={usage} />}
         </div>
       </div>
       <LiDock context="首页" />
+    </div>
+  );
+}
+
+function AiUsageCard({ usage }) {
+  const o = usage.overall || {};
+  const engines = usage.by_engine || [];
+  return (
+    <div style={{
+      marginTop: 16, padding: "14px 18px", background: "#fff",
+      borderRadius: 12, border: `1px solid ${T.borderSoft}`,
+      display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap",
+    }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <span style={{ fontSize: 16 }}>📊</span>
+        <div>
+          <div style={{ fontSize: 11.5, color: T.muted2, fontWeight: 600, letterSpacing: "0.08em" }}>今日 AI 消耗</div>
+          <div style={{ fontSize: 15, fontWeight: 600, color: T.text }}>
+            {o.calls} 次 · {(o.total_tokens / 1000).toFixed(1)}K tokens
+          </div>
+        </div>
+      </div>
+      <div style={{ width: 1, height: 32, background: T.borderSoft }} />
+      <div>
+        <div style={{ fontSize: 11.5, color: T.muted2, fontWeight: 600, letterSpacing: "0.08em" }}>估算成本</div>
+        <div style={{ fontSize: 15, fontWeight: 600, color: o.cost_cny >= 5 ? T.amber : T.text, fontFamily: "SF Mono, monospace" }}>
+          ¥{o.cost_cny.toFixed(2)} <span style={{ fontSize: 11, color: T.muted2, fontWeight: 400 }}>(${o.cost_usd.toFixed(3)})</span>
+        </div>
+      </div>
+      <div style={{ flex: 1 }} />
+      <div style={{ display: "flex", gap: 10 }}>
+        {engines.map(e => (
+          <div key={e.engine} style={{
+            padding: "4px 10px", borderRadius: 100, fontSize: 11,
+            background: e.engine === "opus" ? T.amberSoft : T.brandSoft,
+            color: e.engine === "opus" ? T.amber : T.brand,
+            fontWeight: 600, fontFamily: "SF Mono, monospace",
+          }}>
+            {e.engine} {e.calls} 次 · {(e.total_tokens/1000).toFixed(1)}K · ¥{e.cost_cny.toFixed(2)}
+          </div>
+        ))}
+      </div>
+      {o.fails > 0 && (
+        <div style={{ fontSize: 11, color: T.red, background: T.redSoft, padding: "3px 8px", borderRadius: 100 }}>
+          ⚠️ {o.fails} 次失败
+        </div>
+      )}
     </div>
   );
 }
