@@ -86,3 +86,23 @@
 - 不需要 AI-HANDOFF.md（单机项目，没有 Mac mini 后厨）
 - 不需要 TECHNICAL-SPEC.md（没有多方协议，PRD 的 API 清单 + 数据模型就是契约）
 - 不需要 handoff-check.sh（本地项目，启动就行）
+
+---
+
+## D-008 - 人设注入两档开关：深度理解 vs 轻快模式（2026-04-24）
+
+**背景**：每次 AI 调用都带完整人设文件（4 个 .md，~7200 token）会浪费 token 且拖慢响应。但只带 300 token 精简版又可能丢失风格细节。
+
+**结论**：前端加一个 checkbox「深度理解业务」（默认勾选），对应两档：
+- **勾选（deep=true）**：加载 persona-prompt.md（300 token）+ 完整人设文件（~7200 token）+ 知识库匹配 + 行为记忆 ≈ 8000 token
+- **不勾选（deep=false）**：只加载 persona-prompt.md（300 token）
+
+**实现要点**：
+1. `00 AI清华哥/persona-prompt.md`：新建，300 token 精简版，从 4 个原始文件提炼
+2. `ai.py` 的关卡层：新增 `deep` 参数，决定加载哪档
+3. 每个内容生产 API（rewrite/ad/moments/article/topics）加 `deep: bool = True` 参数
+4. 前端每个内容生产页面上方放一个 checkbox，默认 checked
+
+**代价**：每个 API 多一个参数。但未来新技能只要走 `get_ai_client()`，自动继承两档能力。
+
+**关键原则**：persona-prompt.md 放在 Obsidian 知识库里（`00 AI清华哥/`），清华哥随时能在 Obsidian 里打开编辑，工厂只读。
