@@ -23,3 +23,4 @@ logs/
 logs-api.log
 .claude/launch.json
 .pytest_cache/
+data/wechat-cover/

@@ -71,6 +71,7 @@ from backend.services import article as article_service
 from backend.services import settings as settings_service
 from backend.services import skill_loader
 from backend.services import wechat_pipeline
+from backend.services import wechat_scripts
 
 UPLOAD_DIR = AUDIO_DIR / "uploads"
 COVER_DIR = DATA_DIR / "covers"
@@ -888,6 +889,115 @@ class WechatWriteReq(BaseModel):
 def wechat_write(req: WechatWriteReq):
     result = wechat_pipeline.write_article(req.topic, req.title, req.outline)
     return result
+
+
+# ─── Phase 2.5 · 段间配图 ───────────────────────────────────
+
+class WechatPlanImagesReq(BaseModel):
+    content: str
+    title: str
+    n: int = 4
+
+
+@app.post("/api/wechat/plan-images")
+def wechat_plan_images(req: WechatPlanImagesReq):
+    """AI 产 n 条段间配图 prompt(不真生图),给前端确认后再调 /section-image。"""
+    plans = wechat_scripts.plan_section_images(req.content, req.title, n=req.n)
+    return {"plans": plans}
+
+
+class WechatSectionImageReq(BaseModel):
+    prompt: str
+    size: str = "16:9"
+
+
+@app.post("/api/wechat/section-image")
+def wechat_section_image(req: WechatSectionImageReq):
+    """真生一张图(30-60s,可能更久),上传微信图床,返回 mmbiz URL。"""
+    try:
+        return wechat_scripts.gen_section_image(req.prompt, size=req.size)
+    except wechat_scripts.WechatScriptError as e:
+        raise HTTPException(500, str(e))
+
+
+# ─── Phase 3 · HTML 拼装 ─────────────────────────────────────
+
+class WechatHtmlReq(BaseModel):
+    title: str
+    content_md: str
+    section_images: list[dict[str, Any]] = Field(default_factory=list)
+    hero_badge: str = "老板必看"
+    hero_highlight: str = ""
+    hero_subtitle: str = ""
+
+
+@app.post("/api/wechat/html")
+def wechat_html(req: WechatHtmlReq):
+    try:
+        return wechat_scripts.assemble_html(
+            title=req.title,
+            content_md=req.content_md,
+            section_images=req.section_images,
+            hero_badge=req.hero_badge,
+            hero_highlight=req.hero_highlight,
+            hero_subtitle=req.hero_subtitle,
+        )
+    except wechat_scripts.WechatScriptError as e:
+        raise HTTPException(500, str(e))
+
+
+# ─── Phase 4 · 封面 ──────────────────────────────────────────
+
+class WechatCoverReq(BaseModel):
+    title: str
+    label: str = "清华哥说"
+
+
+@app.post("/api/wechat/cover")
+def wechat_cover(req: WechatCoverReq):
+    try:
+        r = wechat_scripts.gen_cover(req.title, label=req.label)
+        # 暴露本地 URL 给前端预览
+        p = Path(r["local_path"])
+        if p.exists():
+            r["media_url"] = f"/media/wechat-cover/{p.name}"
+            # 把生成的封面移到 data/wechat-cover 让静态挂载 /media 也能访问
+            # (generate_cover.py 默认输出到 /tmp/preview/cover.jpg,
+            #  复制一份到 DATA_DIR 下好让前端 <img> 直接预览)
+            target_dir = DATA_DIR / "wechat-cover"
+            target_dir.mkdir(parents=True, exist_ok=True)
+            import shutil
+            target = target_dir / p.name
+            shutil.copy2(p, target)
+            r["media_url"] = media_url(target)
+            r["local_path_served"] = str(target)
+        return r
+    except wechat_scripts.WechatScriptError as e:
+        raise HTTPException(500, str(e))
+
+
+# ─── Phase 5 · 推送草稿箱 ────────────────────────────────────
+
+class WechatPushReq(BaseModel):
+    title: str
+    digest: str
+    html_path: str   # /tmp/preview/wechat_article.html
+    cover_path: str  # /tmp/preview/cover.jpg 或 data/wechat-cover/xxx.jpg
+    author: str = "清华哥"
+
+
+@app.post("/api/wechat/push")
+def wechat_push(req: WechatPushReq):
+    try:
+        return wechat_scripts.push_to_wechat(
+            title=req.title,
+            digest=req.digest,
+            html_path=req.html_path,
+            cover_path=req.cover_path,
+            author=req.author,
+        )
+    except wechat_scripts.WechatScriptError as e:
+        raise HTTPException(500, str(e))
 
 
 if __name__ == "__main__":
