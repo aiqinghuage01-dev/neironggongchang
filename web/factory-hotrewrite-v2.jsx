@@ -65,12 +65,27 @@ function PageHotrewrite({ onNav }) {
     setStep("input"); setErr("");
     setHotspot(""); setAnalyze(null);
     setPickedAngle(null); setScript(null);
+    clearWorkflow("hotrewrite");
   }
+
+  // 工作流持久化 (D-016)
+  const wfState = { step, hotspot, analyze, pickedAngle, script };
+  const wfRestore = (s) => {
+    if (s.step) setStep(s.step);
+    if (s.hotspot != null) setHotspot(s.hotspot);
+    if (s.analyze) setAnalyze(s.analyze);
+    if (s.pickedAngle) setPickedAngle(s.pickedAngle);
+    if (s.script) setScript(s.script);
+  };
+  const wf = useWorkflowPersist({ ns: "hotrewrite", state: wfState, onRestore: wfRestore });
 
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", background: T.bg, position: "relative", overflow: "hidden" }}>
       <HotHeader current={step} onBack={() => onNav("home")} skillInfo={skillInfo} />
       <div style={{ flex: 1, overflow: "auto" }}>
+        <WfRestoreBanner show={wf.hasSnapshot} onDismiss={wf.dismissSnapshot}
+          onClear={() => { reset(); wf.dismissSnapshot(); }}
+          label="热点改写工作流" />
         {err && (
           <div style={{ maxWidth: 820, margin: "16px auto 0", padding: 12, background: T.redSoft, color: T.red, borderRadius: 10, fontSize: 13 }}>
             ⚠️ {err}

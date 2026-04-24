@@ -47,12 +47,29 @@ function PageTouliu({ onNav }) {
   function reset() {
     setStep("input"); setErr("");
     setResult(null);
+    clearWorkflow("touliu");
   }
+
+  // 工作流持久化 (D-016)
+  const wfState = { step, pitch, industry, targetAction, n, channel, result };
+  const wfRestore = (s) => {
+    if (s.step) setStep(s.step);
+    if (s.pitch != null) setPitch(s.pitch);
+    if (s.industry != null) setIndustry(s.industry);
+    if (s.targetAction != null) setTargetAction(s.targetAction);
+    if (s.n != null) setN(s.n);
+    if (s.channel != null) setChannel(s.channel);
+    if (s.result) setResult(s.result);
+  };
+  const wf = useWorkflowPersist({ ns: "touliu", state: wfState, onRestore: wfRestore });
 
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", background: T.bg, position: "relative", overflow: "hidden" }}>
       <TLHeader current={step} onBack={() => onNav("home")} skillInfo={skillInfo} />
       <div style={{ flex: 1, overflow: "auto" }}>
+        <WfRestoreBanner show={wf.hasSnapshot} onDismiss={wf.dismissSnapshot}
+          onClear={() => { reset(); wf.dismissSnapshot(); }}
+          label="投流文案工作流" />
         {err && (
           <div style={{ maxWidth: 1040, margin: "16px auto 0", padding: 12, background: T.redSoft, color: T.red, borderRadius: 10, fontSize: 13 }}>
             ⚠️ {err}

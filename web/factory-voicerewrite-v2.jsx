@@ -58,12 +58,27 @@ function PageVoicerewrite({ onNav }) {
     setStep("input"); setErr("");
     setTranscript(""); setAnalyze(null);
     setPickedAngle(null); setScript(null);
+    clearWorkflow("voicerewrite");
   }
+
+  // 工作流持久化 (D-016)
+  const wfState = { step, transcript, analyze, pickedAngle, script };
+  const wfRestore = (s) => {
+    if (s.step) setStep(s.step);
+    if (s.transcript != null) setTranscript(s.transcript);
+    if (s.analyze) setAnalyze(s.analyze);
+    if (s.pickedAngle) setPickedAngle(s.pickedAngle);
+    if (s.script) setScript(s.script);
+  };
+  const wf = useWorkflowPersist({ ns: "voicerewrite", state: wfState, onRestore: wfRestore });
 
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", background: T.bg, position: "relative", overflow: "hidden" }}>
       <VoiceHeader current={step} onBack={() => onNav("home")} skillInfo={skillInfo} />
       <div style={{ flex: 1, overflow: "auto" }}>
+        <WfRestoreBanner show={wf.hasSnapshot} onDismiss={wf.dismissSnapshot}
+          onClear={() => { reset(); wf.dismissSnapshot(); }}
+          label="录音改写工作流" />
         {err && (
           <div style={{ maxWidth: 820, margin: "16px auto 0", padding: 12, background: T.redSoft, color: T.red, borderRadius: 10, fontSize: 13 }}>
             ⚠️ {err}

@@ -265,7 +265,26 @@ function PageWechat({ onNav }) {
     setImagePlans([]); setHtmlResult(null);
     setCoverResult(null); setPushResult(null);
     setAutoMode(false); setAutoSteps([]);
+    clearWorkflow("wechat");
   }
+
+  // ─── 工作流持久化 (D-016) · 刷新浏览器不丢中间态 ───────
+  const wfState = { step, topic, titles, pickedTitle, outline, article, imagePlans, htmlResult, coverResult, pushResult, autoMode, skipImages, autoSteps };
+  const wfRestore = (s) => {
+    if (s.step) setStep(s.step === "auto" ? "topic" : s.step); // auto step 挂起不恢复(重跑成本高),回落到 topic
+    if (s.topic != null) setTopic(s.topic);
+    if (s.titles) setTitles(s.titles);
+    if (s.pickedTitle != null) setPickedTitle(s.pickedTitle);
+    if (s.outline) setOutline(s.outline);
+    if (s.article) setArticle(s.article);
+    if (s.imagePlans) setImagePlans(s.imagePlans);
+    if (s.htmlResult) setHtmlResult(s.htmlResult);
+    if (s.coverResult) setCoverResult(s.coverResult);
+    if (s.pushResult) setPushResult(s.pushResult);
+    // autoMode/autoSteps 不恢复 · pipeline 不能续跑
+    if (s.skipImages != null) setSkipImages(s.skipImages);
+  };
+  const wf = useWorkflowPersist({ ns: "wechat", state: wfState, onRestore: wfRestore });
 
   function startAuto() {
     if (!topic.trim()) return;
@@ -277,6 +296,9 @@ function PageWechat({ onNav }) {
     <div style={{ flex: 1, display: "flex", flexDirection: "column", background: T.bg, position: "relative", overflow: "hidden" }}>
       <WxHeader current={step} onBack={() => onNav("home")} skillInfo={skillInfo} autoMode={autoMode} />
       <div style={{ flex: 1, overflow: "auto" }}>
+        <WfRestoreBanner show={wf.hasSnapshot} onDismiss={wf.dismissSnapshot}
+          onClear={() => { reset(); wf.dismissSnapshot(); }}
+          label="公众号工作流" />
         {err && (
           <div style={{ maxWidth: 820, margin: "16px auto 0", padding: 12, background: T.redSoft, color: T.red, borderRadius: 10, fontSize: 13 }}>
             ⚠️ {err}

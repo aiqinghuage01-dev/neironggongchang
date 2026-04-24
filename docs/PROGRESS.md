@@ -170,7 +170,11 @@ Obsidian 知识库 / 00 AI清华哥 /
       "今日 5 次 · 8.2K tokens · ¥2.21 · opus 占 95%"
       价格表: Opus $15/$75 per M · DeepSeek $0.14/$0.28 per M · 汇率 7.2
       settings.engine_pricing / usd_to_cny 可覆盖
-- [ ] **[P5] 工作流 localStorage 持久化**
+- [x] **[P5] 工作流 localStorage 持久化** factory-persist.jsx 通用 hook
+      useWorkflowPersist({ns, state, onRestore}) + 500ms 防抖保存 + 顶部 WfRestoreBanner
+      4 个 skill 全覆盖: wechat / hotrewrite / voicerewrite / touliu
+      刷新浏览器 / 重启不丢中间态, reset() 自动清 localStorage
+      autoMode 子 step 挂起不恢复(pipeline 不能续跑,回落到 topic 重走)
 - [ ] **[P6] skill 骨架生成器 scripts/add_skill.py**
 - [ ] **[P7] 测试扩展**
 - [ ] **[P8] 首页技能中心卡片**
