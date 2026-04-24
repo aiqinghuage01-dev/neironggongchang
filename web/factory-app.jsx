@@ -15,6 +15,7 @@ function FactoryApp() {
       case "works":      return <PageWorks onNav={setPage} />;
       case "knowledge":  return <PageKnowledge onNav={setPage} />;
       case "settings":   return <PageSettings onNav={setPage} />;
+      case "planner": return <PagePlanner onNav={setPage} />;
       default:           return <PageHome onNav={setPage} />;
     }
   };

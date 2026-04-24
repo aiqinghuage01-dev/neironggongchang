@@ -868,6 +868,7 @@ def article_expand(req: ArticleExpandReq):
     return {**result, "kb_used": [c["path"] for c in (kb_chunks or [])], "deep": req.deep}
 
 
+from backend.services import planner_pipeline
 # ═══════════════════════════════════════════════════════════════════
 # 公众号文章 skill 接入(D-010)
 # Skill 源: ~/Desktop/skills/公众号文章/
@@ -1156,6 +1157,44 @@ class TouliuLintReq(BaseModel):
 @app.post("/api/touliu/lint")
 def touliu_lint(req: TouliuLintReq):
     return touliu_pipeline.lint_batch(req.batch, target_action=req.target_action)
+
+
+
+
+# ═══════════════════════════════════════════════════════════════════
+# content-planner skill 接入 (D-017 骨架,根据实际调整)
+# Skill 源: ~/Desktop/skills/content-planner/
+# ═══════════════════════════════════════════════════════════════════
+
+PLANNER_SKILL_SLUG = "content-planner"
+
+
+@app.get("/api/planner/skill-info")
+def planner_skill_info():
+    try:
+        return skill_loader.skill_info(PLANNER_SKILL_SLUG)
+    except skill_loader.SkillNotFound as e:
+        raise HTTPException(404, str(e))
+
+
+class PlannerAnalyzeReq(BaseModel):
+    brief: str   # 活动描述: "下周三给 200 个老板讲 AI 内容获客,有 1 个助理"
+
+
+@app.post("/api/planner/analyze")
+def planner_analyze(req: PlannerAnalyzeReq):
+    return planner_pipeline.analyze_event(req.brief)
+
+
+class PlannerWriteReq(BaseModel):
+    brief: str
+    detected: dict[str, Any] = Field(default_factory=dict)
+    level: dict[str, Any] = Field(default_factory=dict)
+
+
+@app.post("/api/planner/write")
+def planner_write(req: PlannerWriteReq):
+    return planner_pipeline.write_plan(req.brief, req.detected, req.level)
 
 
 if __name__ == "__main__":

@@ -149,6 +149,9 @@ DEFAULT_ENGINE_ROUTES = {
     "article.outline":    "deepseek",
     "article.expand":     "opus",       # 长文
     "topics.generate":    "deepseek",   # 选题列表,短 JSON
+    # content-planner skill (D-017 骨架)
+    "planner.analyze":    "deepseek",
+    "planner.write":      "opus",
 }
 
 

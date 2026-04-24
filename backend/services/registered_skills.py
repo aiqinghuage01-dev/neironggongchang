@@ -57,6 +57,16 @@ REGISTERED_SKILLS: list[dict[str, Any]] = [
         "steps": 2,
         "has_scripts": True,
     },
+    {
+        "slug": "content-planner",
+        "api_prefix": "planner",
+        "page_id": "planner",
+        "icon": "🗓️",
+        "label": "内容策划",
+        "subtitle": "活动前内容产出策划 · 三档目标 + 6 模块完整方案",
+        "steps": 3,
+        "has_scripts": False,
+    },
 ]
 
 

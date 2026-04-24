@@ -27,12 +27,8 @@ def test_skill_directory_exists(slug, api_prefix, has_scripts):
 def test_skill_pipeline_module_importable(slug, api_prefix, has_scripts):
     """每个接入的 skill 对应的 pipeline 模块能导入。"""
     import importlib
-    mod_name = {
-        "wechat": "backend.services.wechat_pipeline",
-        "hotrewrite": "backend.services.hotrewrite_pipeline",
-        "voicerewrite": "backend.services.voicerewrite_pipeline",
-        "touliu": "backend.services.touliu_pipeline",
-    }[api_prefix]
+    # 模块名 = backend.services.<api_prefix>_pipeline (统一约定)
+    mod_name = f"backend.services.{api_prefix}_pipeline"
     importlib.import_module(mod_name)
 
 

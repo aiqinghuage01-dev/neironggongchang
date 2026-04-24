@@ -216,6 +216,14 @@ Obsidian 知识库 / 00 AI清华哥 /
 P0-P10 所有任务落地, 14 个 commit 从 `09faf92` 到今日末 commit。
 完整变更见 CHANGELOG.md · 接入新 skill 参见 docs/NEW-SKILL-PLAYBOOK.md
 
+## Bonus 任务(P10 之后,cron 继续干活时做的)
+
+- [x] **content-planner skill 接入 (D-022)** — 第 5 个接入的 skill
+      用 scripts/add_skill.py 一键生成骨架(测试 D-017 可用性) +
+      改 pipeline 适配特殊输出(三档目标 + 6 模块策划) +
+      改 jsx 三档目标卡片 + 6 模块手风琴展示
+      端到端: 一句"下周给老板讲课" → 推断信息 + 三档目标 → 6 模块完整方案
+
 ---
 
 ## D-010 已完成 · 公众号 skill 全链路 GUI
