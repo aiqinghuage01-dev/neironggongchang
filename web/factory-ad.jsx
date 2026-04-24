@@ -32,7 +32,7 @@ function PageAd({ onNav }) {
     setLoading(true); setItems([]);
     setStep("batch");
     try {
-      const r = await api.post("/api/ad/generate", { pitch: pitch.trim(), platform, n: 5, use_kb: true });
+      const r = await api.post("/api/ad/generate", { pitch: pitch.trim(), platform, n: 5, use_kb: true, deep: getDeep() });
       setItems(r.items || []);
       setKbUsed(r.kb_used || []);
       // 默认勾选最高分那版
@@ -175,6 +175,9 @@ function StepPitch({ pitch, setPitch, platform, setPlatform, onGo, loading }) {
       <div style={{ textAlign: "center", marginBottom: 28 }}>
         <div style={{ fontSize: 28, fontWeight: 700, color: T.text, marginBottom: 8, letterSpacing: "-0.02em" }}>说说这次要推的是啥? 💰</div>
         <div style={{ fontSize: 14, color: T.muted }}>一句话说清卖点 · 小华拉知识库 · 批量出 5 版 · 自动挑最佳</div>
+        <div style={{ marginTop: 12, display: "flex", justifyContent: "center" }}>
+          <DeepToggle />
+        </div>
       </div>
 
       <div style={{ background: "#fff", border: `1.5px solid ${T.brand}`, boxShadow: `0 0 0 5px ${T.brandSoft}`, borderRadius: 16, padding: 18, marginBottom: 18 }}>

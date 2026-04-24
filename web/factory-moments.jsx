@@ -20,7 +20,7 @@ function PageMoments({ onNav }) {
     setLoading(true); setItems([]);
     setStep("derive");
     try {
-      const r = await api.post("/api/moments/derive", { topic: topic.trim(), n: 5, use_kb: true });
+      const r = await api.post("/api/moments/derive", { topic: topic.trim(), n: 5, use_kb: true, deep: getDeep() });
       setItems(r.items || []);
       setKbUsed(r.kb_used || []);
     } catch (e) { alert(e.message); setStep("topic"); }
@@ -132,6 +132,9 @@ function MStepTopic({ topic, setTopic, onGo, loading }) {
       <div style={{ textAlign: "center", marginBottom: 24 }}>
         <div style={{ fontSize: 28, fontWeight: 700, color: T.text, marginBottom: 8, letterSpacing: "-0.02em" }}>发一组朋友圈吧 📱</div>
         <div style={{ fontSize: 14, color: T.muted }}>一个话题 · 小华从金句库衍生 3-5 条不同角度 · 配图一键复制</div>
+        <div style={{ marginTop: 12, display: "flex", justifyContent: "center" }}>
+          <DeepToggle />
+        </div>
       </div>
 
       <div style={{ background: "#fff", border: `1.5px solid ${T.brand}`, boxShadow: `0 0 0 5px ${T.brandSoft}`, borderRadius: 16, padding: 18, marginBottom: 18 }}>

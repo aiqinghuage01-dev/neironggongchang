@@ -21,7 +21,7 @@ function PageWechat({ onNav }) {
     setLoading(true);
     setStep("outline");
     try {
-      const r = await api.post("/api/article/outline", { topic: topic.trim(), use_kb: true });
+      const r = await api.post("/api/article/outline", { topic: topic.trim(), use_kb: true, deep: getDeep() });
       setOutline(r.outline || []);
       setKbUsed(r.kb_used || []);
     } catch (e) { alert(e.message); setStep("topic"); }
@@ -32,7 +32,7 @@ function PageWechat({ onNav }) {
     setLoading(true);
     setStep("expand");
     try {
-      const r = await api.post("/api/article/expand", { topic: topic.trim(), outline, use_kb: true });
+      const r = await api.post("/api/article/expand", { topic: topic.trim(), outline, use_kb: true, deep: getDeep() });
       setArticle(r);
       setStep("layout");
     } catch (e) { alert(e.message); setStep("outline"); }
@@ -130,6 +130,9 @@ function AStepTopic({ topic, setTopic, onGo, loading }) {
       <div style={{ textAlign: "center", marginBottom: 28 }}>
         <div style={{ fontSize: 28, fontWeight: 700, color: T.text, marginBottom: 8, letterSpacing: "-0.02em" }}>今天想写什么选题? 📄</div>
         <div style={{ fontSize: 14, color: T.muted }}>一个观点 · 小华自动拉知识库 · 出 2000+ 字方法论长文</div>
+        <div style={{ marginTop: 12, display: "flex", justifyContent: "center" }}>
+          <DeepToggle />
+        </div>
       </div>
 
       <div style={{ background: "#fff", border: `1.5px solid ${T.brand}`, boxShadow: `0 0 0 5px ${T.brandSoft}`, borderRadius: 16, padding: 18, marginBottom: 18 }}>

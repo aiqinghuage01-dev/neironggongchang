@@ -295,7 +295,7 @@ function TopicTab({ list, onReload, onDel, onUse }) {
     if (!genSeed.trim()) return;
     setGening(true);
     try {
-      await api.post("/api/topics/generate", { seed: genSeed.trim(), n: 10 });
+      await api.post("/api/topics/generate", { seed: genSeed.trim(), n: 10, deep: getDeep() });
       setGenSeed(""); setShowGen(false);
       onReload();
     } catch (e) { alert(e.message); }
@@ -327,7 +327,10 @@ function TopicTab({ list, onReload, onDel, onUse }) {
 
       {showGen && (
         <div style={{ padding: 14, background: "#fff", border: `1px solid ${T.brand}`, borderRadius: 10, marginBottom: 14 }}>
-          <div style={{ fontSize: 12, color: T.muted, marginBottom: 8 }}>💡 告诉小华一个主题/方向,小华从你知识库出 10 个选题(一次性入库)</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+            <div style={{ fontSize: 12, color: T.muted, flex: 1 }}>💡 告诉小华一个主题/方向,小华从你知识库出 10 个选题(一次性入库)</div>
+            <DeepToggle compact />
+          </div>
           <div style={{ display: "flex", gap: 10 }}>
             <input
               value={genSeed}

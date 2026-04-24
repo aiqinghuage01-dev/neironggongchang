@@ -453,7 +453,7 @@ function StepScript({ original, initialFinal, author, sourceUrl, onNext, onPrev 
         const kbBlock = chunks.map(c => `## ${c.title}${c.heading ? " · " + c.heading : ""}\n${c.text}`).join("\n\n");
         text = `【可参考的知识库素材,可适度引用】\n${kbBlock}\n\n【要改写的原文案】\n${original}`;
       }
-      const r = await api.post("/api/rewrite", { text, style });
+      const r = await api.post("/api/rewrite", { text, style, deep: getDeep() });
       setFinal(r.text);
       setTokens(r.tokens || 0);
     } catch (e) { setErr(e.message); }
@@ -481,9 +481,12 @@ function StepScript({ original, initialFinal, author, sourceUrl, onNext, onPrev 
 
   return (
     <div style={{ padding: "32px 40px 120px", maxWidth: 960, margin: "0 auto" }}>
-      <div style={{ marginBottom: 20 }}>
-        <div style={{ fontSize: 24, fontWeight: 700, color: T.text, marginBottom: 6 }}>改成你的话 ✍️</div>
-        <div style={{ fontSize: 13, color: T.muted }}>挑个风格,小华帮你改。不满意直接在右边改,或按下面快捷再来一版。</div>
+      <div style={{ marginBottom: 20, display: "flex", alignItems: "flex-start", gap: 12 }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 24, fontWeight: 700, color: T.text, marginBottom: 6 }}>改成你的话 ✍️</div>
+          <div style={{ fontSize: 13, color: T.muted }}>挑个风格,小华帮你改。不满意直接在右边改,或按下面快捷再来一版。</div>
+        </div>
+        <DeepToggle />
       </div>
 
       <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
@@ -554,7 +557,7 @@ function StepScript({ original, initialFinal, author, sourceUrl, onNext, onPrev 
             if (!final) return;
             setSending(true);
             try {
-              const r = await api.post("/api/rewrite", { text: final + "\n\n(要求:" + t + ")", style });
+              const r = await api.post("/api/rewrite", { text: final + "\n\n(要求:" + t + ")", style, deep: getDeep() });
               setFinal(r.text);
               setTokens(x => x + (r.tokens || 0));
             } catch (e) { setErr(e.message); }
