@@ -108,6 +108,9 @@ DEFAULT_ENGINE_ROUTES = {
     "hotrewrite.analyze":    "deepseek",  # 拆解 + 3 角度,JSON 输出
     "hotrewrite.write":      "opus",      # 1800-2600 字口播正文,质量优先
     "hotrewrite.self-check": "deepseek",  # 六维自检
+    # 录音文案改写 skill (D-013)
+    "voicerewrite.analyze":  "deepseek",  # 提骨架 + 2 角度
+    "voicerewrite.write":    "opus",      # 改写 + 自检一次性出,opus 质量稳
     # 短视频 / 改写
     "rewrite":            "opus",       # 短视频口播文案,风格决定
     # 批量生成类

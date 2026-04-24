@@ -73,6 +73,7 @@ from backend.services import skill_loader
 from backend.services import wechat_pipeline
 from backend.services import wechat_scripts
 from backend.services import hotrewrite_pipeline
+from backend.services import voicerewrite_pipeline
 
 UPLOAD_DIR = AUDIO_DIR / "uploads"
 COVER_DIR = DATA_DIR / "covers"
@@ -1042,6 +1043,43 @@ class HotrewriteWriteReq(BaseModel):
 @app.post("/api/hotrewrite/write")
 def hotrewrite_write(req: HotrewriteWriteReq):
     return hotrewrite_pipeline.write_script(req.hotspot, req.breakdown, req.angle)
+
+
+# ═══════════════════════════════════════════════════════════════════
+# 录音文案改写 skill 接入 (D-013)
+# Skill 源: ~/Desktop/skills/录音文案改写/
+# 3 步: analyze(提骨架+2角度) → write(轻改写+自检清单) → done
+# ═══════════════════════════════════════════════════════════════════
+
+VOICEREWRITE_SKILL_SLUG = "录音文案改写"
+
+
+@app.get("/api/voicerewrite/skill-info")
+def voicerewrite_skill_info():
+    try:
+        return skill_loader.skill_info(VOICEREWRITE_SKILL_SLUG)
+    except skill_loader.SkillNotFound as e:
+        raise HTTPException(404, str(e))
+
+
+class VoicerewriteAnalyzeReq(BaseModel):
+    transcript: str
+
+
+@app.post("/api/voicerewrite/analyze")
+def voicerewrite_analyze(req: VoicerewriteAnalyzeReq):
+    return voicerewrite_pipeline.analyze_recording(req.transcript)
+
+
+class VoicerewriteWriteReq(BaseModel):
+    transcript: str
+    skeleton: dict[str, Any] = Field(default_factory=dict)
+    angle: dict[str, Any] = Field(default_factory=dict)
+
+
+@app.post("/api/voicerewrite/write")
+def voicerewrite_write(req: VoicerewriteWriteReq):
+    return voicerewrite_pipeline.write_script(req.transcript, req.skeleton, req.angle)
 
 
 if __name__ == "__main__":

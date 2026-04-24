@@ -10,6 +10,7 @@ function FactoryApp() {
       case "wechat":     return <PageWechat onNav={setPage} />;
       case "moments":    return <PageMoments onNav={setPage} />;
       case "hotrewrite": return <PageHotrewrite onNav={setPage} />;
+      case "voicerewrite": return <PageVoicerewrite onNav={setPage} />;
       case "materials":  return <PageMaterials onNav={setPage} />;
       case "works":      return <PageWorks onNav={setPage} />;
       case "knowledge":  return <PageKnowledge onNav={setPage} />;

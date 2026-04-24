@@ -8,6 +8,7 @@ const NAV_MAIN = [
   { id: "wechat", icon: "📄", label: "公众号" },
   { id: "moments", icon: "📱", label: "朋友圈" },
   { id: "hotrewrite", icon: "🔥", label: "热点改写" },
+  { id: "voicerewrite", icon: "🎙️", label: "录音改写" },
 ];
 const NAV_ASSETS = [
   { id: "materials", icon: "📥", label: "素材库" },

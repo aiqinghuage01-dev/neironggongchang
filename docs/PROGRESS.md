@@ -152,7 +152,9 @@ Obsidian 知识库 / 00 AI清华哥 /
 - [x] **[P1] 热点文案改写V2 skill** hotrewrite_pipeline + 3 步 UI
       `/api/hotrewrite/{analyze,write,skill-info}`, 路由 `wechat → 🔥 热点改写`
       sidebar 新增入口。端到端 /analyze 7s 返回 3 个切入角度(DeepSeek)。
-- [ ] **[P2] 录音文案改写 skill**
+- [x] **[P2] 录音文案改写 skill** voicerewrite_pipeline + 3 步 UI
+      `/api/voicerewrite/{analyze,write,skill-info}`, sidebar 🎙️ 录音改写
+      端到端 /analyze 7.7s(DeepSeek), 提骨架 + 2 角度,语气锚点精准捕捉。
 - [ ] **[P3] touliu-agent 替换 /api/ad**
 - [ ] **[P4] Token/成本监控 + 首页 widget**
 - [ ] **[P5] 工作流 localStorage 持久化**
