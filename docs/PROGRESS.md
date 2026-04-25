@@ -267,8 +267,9 @@ P0-P10 所有任务落地, 14 个 commit 从 `09faf92` 到今日末 commit。
 
 按可独立回滚切 6 个子 commit, 每轮一个:
 
-- [ ] **D-040a 数据层** night_jobs + night_job_runs 表 +
-      backend/services/night_shift.py CRUD service + tests (纯加, 无 UI/scheduler)
+- [x] **D-040a 数据层** night_jobs + night_job_runs 表 + night_shift.py
+      CRUD service (create/list/update/delete/set_enabled · start_run/finish_run/list_runs/
+      latest_run_for_job · get_digest 24h success 滚动汇总) · tests/test_night_shift.py 22/22
 - [ ] **D-040b API** 7 个 /api/night/* endpoints (jobs CRUD / run-now / runs / digest)
       jobs/{id}/run 复用 tasks_runner 走 tasks 池
 - [ ] **D-040c 调度器** APScheduler 接入 cron + watchdog file_watch, 启动钩子,
