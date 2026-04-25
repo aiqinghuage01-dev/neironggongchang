@@ -66,25 +66,26 @@ function listWorkflows() {
 }
 
 // ─── 恢复提示条(放在页面顶部) ───────────────────────────
+// C21: WfRestoreBanner 风格统一 (padding 12x16 / radius 10 / border 44 / icon 18 flexShrink)
 function WfRestoreBanner({ show, onDismiss, onClear, label }) {
   if (!show) return null;
   return (
     <div style={{
-      maxWidth: 1080, margin: "16px auto 0", padding: "10px 16px",
+      maxWidth: 1080, margin: "16px auto 0", padding: "12px 16px",
       background: T.amberSoft, border: `1px solid ${T.amber}44`,
       borderRadius: 10, fontSize: 12.5, color: T.amber,
-      display: "flex", alignItems: "center", gap: 10,
+      display: "flex", alignItems: "center", gap: 12,
     }}>
-      <span style={{ fontSize: 14 }}>✨</span>
-      <span style={{ flex: 1 }}>已恢复上次未完成的 <b>{label || "工作流"}</b> · 不想要的话可以清空重来</span>
+      <span style={{ fontSize: 18, flexShrink: 0 }}>✨</span>
+      <span style={{ flex: 1, lineHeight: 1.5 }}>已恢复上次未完成的 <b>{label || "工作流"}</b> · 不想要的话可以清空重来</span>
       <button onClick={onClear} style={{
-        padding: "3px 10px", fontSize: 11, background: "transparent",
+        padding: "4px 12px", fontSize: 11.5, background: "transparent",
         border: `1px solid ${T.amber}44`, borderRadius: 100,
         color: T.amber, cursor: "pointer", fontFamily: "inherit",
       }}>🗑️ 清空重来</button>
       <button onClick={onDismiss} style={{
-        padding: "3px 10px", fontSize: 11, background: T.amber,
-        border: "none", borderRadius: 100, color: "#fff", cursor: "pointer", fontFamily: "inherit",
+        padding: "4px 12px", fontSize: 11.5, background: T.amber,
+        border: "none", borderRadius: 100, color: "#fff", cursor: "pointer", fontFamily: "inherit", fontWeight: 500,
       }}>知道了</button>
     </div>
   );

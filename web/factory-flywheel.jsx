@@ -132,22 +132,25 @@ function useFromMake(currentSkill) {
   };
 }
 
-// 顶部 banner — skill 入口处用
+// 顶部 banner — skill 入口处用 (C21 风格统一: padding 12x16 / radius 10 / border 44 透明度)
 function FromMakeBanner({ fromMake, dismiss, label }) {
   if (!fromMake) return null;
   return (
     <div style={{
-      padding: "10px 14px", background: T.brandSoft,
-      border: `1px solid ${T.brand}55`, borderRadius: 8,
-      display: "flex", alignItems: "center", gap: 10, fontSize: 12.5,
+      padding: "12px 16px", background: T.brandSoft,
+      border: `1px solid ${T.brand}44`, borderRadius: 10,
+      display: "flex", alignItems: "center", gap: 12, fontSize: 12.5,
       marginBottom: 12,
     }}>
-      <span style={{ fontSize: 16 }}>🎬</span>
-      <span style={{ flex: 1, color: T.text }}>
+      <span style={{ fontSize: 18, flexShrink: 0 }}>🎬</span>
+      <span style={{ flex: 1, color: T.text, lineHeight: 1.5 }}>
         你从 <b>做视频</b> 来 · {label || "完成后点下面 CTA 自动带文案回去继续"}
       </span>
       <button onClick={dismiss} title="不带回, 在这继续"
-        style={{ background: "transparent", border: "none", color: T.muted2, cursor: "pointer", fontSize: 12, fontFamily: "inherit" }}>×</button>
+        style={{
+          background: "transparent", border: "none", color: T.muted2, cursor: "pointer",
+          fontSize: 16, fontFamily: "inherit", padding: "2px 6px", lineHeight: 1,
+        }}>×</button>
     </div>
   );
 }
@@ -232,8 +235,8 @@ function ErrorBanner({ err, actions }) {
   const h = humanizeError(err);
   return (
     <div style={{
-      padding: 12, background: T.redSoft, border: `1px solid ${T.red}33`,
-      borderRadius: 8, marginBottom: 12,
+      padding: "12px 16px", background: T.redSoft, border: `1px solid ${T.red}44`,
+      borderRadius: 10, marginBottom: 12,
     }}>
       <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
         <span style={{ fontSize: 20, flexShrink: 0 }}>{h.icon}</span>
