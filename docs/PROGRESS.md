@@ -429,7 +429,12 @@ D-062 系列方向: **不是单点优化, 是按 user journey 全流程闭环检
       跨链路共性 5 类问题, 优先级排
       D-062c-t 实施 backlog (按 P0/P1/P2 分 6 phase)
       文档维护规则: 修一项打勾 + 每 3 拍 audit 复盘新断点
-- [ ] **D-062c-t** 按 audit 推进 (cron 自动迭代到 16:35 停)
+- [x] **D-062c** hotrewrite 完成态 → 做成视频 + PageMakeV2 自动填 textarea + banner
+- [x] **D-062d** voicerewrite 完成态 → 做成视频 (同款 CTA)
+- [x] **D-062e** touliu n 默认 1 + [1, 3, 5, 10] 选项 + 每条文案下"用这条做视频"
+- [x] **D-062f** wechat write 完成态加 ✨摘金句段做视频 (有选段则带选段, 无则带全文) + 推送草稿提示
+- [x] **D-062g** moments copy 完成态加每条 🎬 做视频 + 底部 "把第 1 条做成视频" CTA
+- [ ] **D-062h-t** 余下 backlog (Step 5 多平台发布占位, 空状态飞轮按钮, 跨页 state 锚, 默认值, SSE)
 
 清华哥拍板的产品架构修正:
 1. 平台只做数字人内容 (真人视频用手机 "开拍" 自己搞)

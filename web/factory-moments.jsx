@@ -58,7 +58,7 @@ function PageMoments({ onNav }) {
         {step === "topic" && <MStepTopic topic={topic} setTopic={setTopic} onGo={derive} loading={loading} />}
         {step === "derive" && <MStepDeriving topic={topic} items={items} loading={loading} onPrev={() => setStep("topic")} onNext={() => setStep("cover")} />}
         {step === "cover" && <MStepCover items={items} coversMap={coversMap} onGenCover={genCoverFor} onPrev={() => setStep("derive")} onNext={() => setStep("copy")} />}
-        {step === "copy" && <MStepCopy items={items} coversMap={coversMap} onPrev={() => setStep("cover")} onDone={() => onNav("home")} />}
+        {step === "copy" && <MStepCopy items={items} coversMap={coversMap} onPrev={() => setStep("cover")} onDone={() => onNav("home")} onNav={onNav} topic={topic} />}
       </div>
       <MChatBar prompt={sp.prompt} chips={sp.chips} />
     </div>
@@ -256,12 +256,27 @@ function MStepCover({ items, coversMap, onGenCover, onPrev, onNext }) {
 }
 
 // Step 4 · 一键复制
-function MStepCopy({ items, coversMap, onPrev, onDone }) {
+function MStepCopy({ items, coversMap, onPrev, onDone, onNav, topic }) {
   const [copiedIdx, setCopiedIdx] = React.useState(null);
   function doCopy(i) {
     navigator.clipboard?.writeText(items[i]?.text || "");
     setCopiedIdx(i);
     setTimeout(() => setCopiedIdx(null), 1500);
+  }
+  // D-062g: 单条 → 视频
+  function makeVideo(i) {
+    if (!onNav) return;
+    const m = items[i];
+    if (!m) return;
+    try {
+      localStorage.setItem("make_v2_seed_script", (m.text || "").trim());
+      localStorage.setItem("make_v2_seed_from", JSON.stringify({
+        skill: "moments",
+        title: `朋友圈 · ${(m.type || topic || "金句").slice(0, 24)}`,
+        ts: Date.now(),
+      }));
+    } catch (_) {}
+    onNav("make");
   }
   return (
     <div style={{ padding: "32px 40px 120px", maxWidth: 820, margin: "0 auto" }}>
@@ -290,6 +305,9 @@ function MStepCopy({ items, coversMap, onPrev, onDone }) {
                       <Btn size="sm">⬇ 下图</Btn>
                     </a>
                   )}
+                  {onNav && (
+                    <Btn size="sm" variant="primary" onClick={() => makeVideo(i)}>🎬 做视频</Btn>
+                  )}
                 </div>
                 <div style={{ fontSize: 13.5, color: T.text, lineHeight: 1.85, whiteSpace: "pre-wrap" }}>{m.text}</div>
               </div>
@@ -301,6 +319,20 @@ function MStepCopy({ items, coversMap, onPrev, onDone }) {
       <div style={{ marginTop: 18, padding: 12, background: T.amberSoft, border: `1px solid ${T.amber}33`, borderRadius: 10, fontSize: 12.5, color: T.amber }}>
         🚧 一键定时发布到微信朋友圈 · Phase 3 落地(需要接微信 SDK / UI 自动化)
       </div>
+
+      {onNav && (
+        <div style={{
+          marginTop: 14, padding: 14,
+          background: `linear-gradient(135deg, ${T.brandSoft} 0%, #fff 100%)`,
+          border: `1px solid ${T.brandSoft}`, borderRadius: 12,
+          display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap",
+        }}>
+          <span style={{ fontSize: 12.5, fontWeight: 600, color: T.text }}>✨ 这组朋友圈还能干啥</span>
+          <span style={{ fontSize: 11.5, color: T.muted }}>挑一条最炸的 → 做成数字人视频,一稿多发</span>
+          <div style={{ flex: 1 }} />
+          <Btn size="sm" variant="primary" onClick={() => makeVideo(0)}>🎬 把第 1 条做成视频 →</Btn>
+        </div>
+      )}
 
       <div style={{ display: "flex", marginTop: 20 }}>
         <Btn variant="outline" onClick={onPrev}>← 换配图</Btn>

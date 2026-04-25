@@ -144,10 +144,16 @@
 - [x] **D-062c** hotrewrite 完成态加 ✨"做成数字人视频"按钮 + script 预填 (待 commit hash)
       + PageMakeV2 检测 localStorage 自动填 textarea + 显 banner "从 🔥 热点改写 带过来"
       = D-062c 同时把 D-062m/n 的"跨页面 state 锚机制" 也做了
-- [ ] **D-062d** voicerewrite 完成态加同款 CTA
-- [ ] **D-062e** touliu 每条文案下加"用这条做视频"按钮
-- [ ] **D-062f** wechat 完成态加"摘金句段做视频"+"推送草稿"双 CTA
-- [ ] **D-062g** moments 完成态加同款 CTA
+- [x] **D-062d** voicerewrite 完成态加同款 CTA (VStepWrite + onNav, banner pattern)
+- [x] **D-062e** touliu 每条文案下加"用这条做视频"按钮
+      n 默认 1, 选项 [1, 3, 5, 10] (旧 [5, 10, 15] 太重)
+      TLBatchCard onNav + makeVideo() 写 seed + skill: touliu
+- [x] **D-062f** wechat 完成态加"摘金句段做视频"+"推送草稿"双 CTA
+      WxStepWrite 底部追加渐变 CTA 卡: 选中段 ≥ 10 字优先用选段, 否则带全文(切 1200)
+      推送草稿提示沿用现有 next 链路 (write → images → html → cover → push)
+- [x] **D-062g** moments 完成态加同款 CTA
+      MStepCopy 每条 + 🎬 做视频 mini button
+      底部追加 "把第 1 条做成视频" 渐变 CTA
 - [ ] **D-062h** PageMakeV2 Step 5 加"同 mp4 套别的模板"已有,加"多平台发布"占位
 
 ### Phase 2 — 数据空时启动飞轮(P0)
