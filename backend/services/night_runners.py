@@ -1,10 +1,11 @@
-"""小华夜班 · 4 条预设任务 + 真 runner (D-040f).
+"""小华夜班 · 4 条预设任务 + 真 runner (D-040f → D-047 增量).
 
 注册到 night_executor._RUNNERS 里, 让 night_executor.run_job_async 调.
 
 实装情况 (诚实):
   ✓ daily_recap          真 runner: 抓昨日 ai_usage 统计, 写小华工作日志.md
-  ⏸ content-planner      placeholder: 等 D-040f-2 接 planner_pipeline 真跑
+  ✓ content-planner      真 runner (D-047): AI 基于人设出 5 条选题候选写 hot_topics
+                         (非真"抓对标账号爆款" — 那需要爬虫, 没现成 skill)
   ⏸ one-fish-many-meals  placeholder: ~/Desktop/skills/ 下没这个 skill
   ⏸ kb-compiler          placeholder: ~/Desktop/skills/ 下没这个 skill
 
@@ -184,7 +185,124 @@ def daily_recap_runner(job: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-# ─── 占位 runner: 3 个未实装 ──────────────────────────────────
+# ─── 真 runner: 凌晨抓热点 (AI 出选题候选, D-047) ──────────────
+# spec 想要"抓对标账号 24h 爆款" — 那需要爬虫, 没现成 skill.
+# 当下能做: AI 基于人设产 5 条选题候选, 写 hot_topics 表. 不是真"抓"
+# 但能给清华哥早上有东西看 + 点 "做成视频" 跳生产部.
+
+_TOPIC_SYSTEM = (
+    "你在执行小华夜班的「凌晨抓热点」任务. 当前没有真爬虫接入, 你需要 "
+    "**基于清华哥的人设和定位**, 产出 5 条今天可写的选题候选.\n\n"
+    "选题要求:\n"
+    "1. 标题字数控制在 8-22 字\n"
+    "2. 必须扣清华哥定位 (10 年科技 + AI 实战 + 给老板看)\n"
+    "3. 5 条之间话题/角度有差异化\n"
+    "4. 每条配 1 句话说明为什么这条匹配清华哥定位\n"
+    "5. 每条评估热度 (1-100), 越高越值得做\n\n"
+    "禁忌:\n"
+    "- 震惊体 / 标题党 / 空泛大词 (颠覆/革命/最强)\n"
+    "- 蹭明星私事 / 政治敏感\n\n"
+    "输出 JSON 格式 (顶层 array):\n"
+    '[{"title":"...","heat_score":85,"match_reason":"..."}, ...]'
+)
+
+
+def content_planner_runner(job: dict[str, Any]) -> dict[str, Any]:
+    """AI 基于人设产 5 条选题候选, 写 hot_topics 表.
+
+    返回:
+      output_summary  → "AI 出 5 条选题候选 · 最高 ¥85 分: 《xxx》"
+      output_refs     → [{kind:"hot_topic", id:N}, ...]
+      log             → 5 条 title + heat_score + match_reason
+    """
+    from shortvideo.ai import get_ai_client
+    from shortvideo.works import insert_hot_topic
+    import json
+    import re as _re
+
+    try:
+        ai = get_ai_client(route_key="topics.generate")
+        r = ai.chat(
+            prompt="请基于人设, 产出 5 条选题候选. 直接返回 JSON, 不要任何前言.",
+            system=_TOPIC_SYSTEM,
+            deep=True,
+            temperature=0.85,
+            max_tokens=1500,
+        )
+    except Exception as e:
+        return {
+            "output_summary": "AI 调用失败",
+            "output_refs": None,
+            "log": f"{type(e).__name__}: {e}",
+        }
+
+    text = r.text or ""
+    # 解析顶层 array
+    m = _re.search(r"\[[\s\S]*\]", text)
+    if not m:
+        return {
+            "output_summary": "AI 返回格式不对, 解析不出选题",
+            "output_refs": None,
+            "log": f"AI raw response (尾部 500 字):\n{text[-500:]}",
+        }
+    try:
+        topics = json.loads(m.group(0))
+        if not isinstance(topics, list):
+            raise ValueError("not a list")
+    except Exception as e:
+        return {
+            "output_summary": "AI 返回 JSON 解析失败",
+            "output_refs": None,
+            "log": f"parse error: {e}\nraw:\n{text[-500:]}",
+        }
+
+    inserted_ids: list[dict[str, Any]] = []
+    log_lines = ["[凌晨抓热点 · AI 出 5 条选题候选]", ""]
+    for t in topics[:8]:  # 最多保 8 条
+        title = (t.get("title") or "").strip()
+        if not title:
+            continue
+        heat_score = int(t.get("heat_score") or 0)
+        match_reason = (t.get("match_reason") or "").strip() or None
+        try:
+            tid = insert_hot_topic(
+                title=title,
+                platform="ai-generated",
+                heat_score=heat_score,
+                match_persona=True,
+                match_reason=match_reason,
+                fetched_from="night-shift",
+            )
+            inserted_ids.append({"kind": "hot_topic", "id": tid})
+            log_lines.append(f"- 🔥{heat_score:>3} 《{title}》 — {match_reason or '(无理由)'}")
+        except Exception as e:
+            log_lines.append(f"- ⚠️ 写入失败 《{title}》: {e}")
+
+    if not inserted_ids:
+        return {
+            "output_summary": "AI 出选题但 0 条写入成功",
+            "output_refs": None,
+            "log": "\n".join(log_lines),
+        }
+
+    # 找最高分一条做 summary 引子
+    sorted_topics = sorted(
+        [t for t in topics if t.get("title")],
+        key=lambda t: int(t.get("heat_score") or 0),
+        reverse=True,
+    )
+    top_title = sorted_topics[0].get("title") if sorted_topics else ""
+    top_heat = int(sorted_topics[0].get("heat_score") or 0) if sorted_topics else 0
+    summary = f"AI 出 {len(inserted_ids)} 条选题 · 最高 🔥{top_heat}: 《{top_title[:18]}》"
+
+    return {
+        "output_summary": summary,
+        "output_refs": inserted_ids,
+        "log": "\n".join(log_lines),
+    }
+
+
+# ─── 占位 runner: 2 个未实装 ──────────────────────────────────
 
 def _placeholder_with_msg(name: str, why: str):
     def _runner(job: dict[str, Any]) -> dict[str, Any]:
@@ -212,13 +330,7 @@ def register_all() -> None:
     if _REGISTERED:
         return
     night_executor.register_runner("daily-recap", daily_recap_runner)
-    night_executor.register_runner(
-        "content-planner",
-        _placeholder_with_msg(
-            "凌晨抓热点",
-            "等 planner_pipeline.analyze + write 接入 + 写 materials 表"
-        ),
-    )
+    night_executor.register_runner("content-planner", content_planner_runner)
     night_executor.register_runner(
         "one-fish-many-meals",
         _placeholder_with_msg(

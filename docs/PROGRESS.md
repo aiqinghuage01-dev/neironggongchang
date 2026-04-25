@@ -337,6 +337,17 @@ P0-P10 所有任务落地, 14 个 commit 从 `09faf92` 到今日末 commit。
       跳过的: WorkBuddy 的"单次"模式 — APScheduler cron 没真"一次性"语义,
       要做需后端加 expires_at 字段, 超本轮 scope. 用户需要单次时可以 enabled=False
       手动跑.
+- [x] **D-047 凌晨抓热点 真 runner (AI 出选题)**
+      D-040f 时是占位 runner. 本轮实装 content-planner runner:
+      AI 基于人设产 5 条选题候选, 写 hot_topics 表 (fetched_from="night-shift",
+      match_persona=True). NightDigestCard 显示 "AI 出 5 条选题 · 最高 🔥92: 《...》",
+      点 "看选题" 跳 materials 页 (已经有 hot-topics tab).
+      诚实交代: spec 写"抓对标账号 24h 爆款", 但 content-planner skill 实际
+      是"活动策划"不是抓爆款, 真爬虫没现成 skill. 当下能做就是 AI 出选题候选,
+      给用户早上有东西看 + 一键做成视频. 真"抓爆款"留 backlog 等爬虫 skill.
+      output_refs: [{kind:"hot_topic", id:N}, ...] (D-040 散落标签真有数据可显示了)
+      tests/test_night_runners.py 13/13 (+4: 5 选题 / 解析失败 / AI 抛 / 部分 title 空)
+
 - [x] **D-040f 4 条预设 seed + 1 个真 runner**
       backend/services/night_runners.py · DEFAULT_NIGHT_JOBS 4 条种子 + seed_defaults() 幂等创建.
       registered_runners 4 个: 1 真 + 3 占位.

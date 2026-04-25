@@ -132,18 +132,116 @@ def test_daily_recap_with_failures(tmp_db):
 
 
 def test_placeholder_runner_writes_helpful_log(tmp_db):
-    """3 个未实装的 runner 应该返回明确"未接入"消息, 不崩."""
+    """剩余 2 个未实装的 runner (one-fish / kb-compiler) 应该返回'未接入'消息不崩."""
     from backend.services import night_executor, night_shift
-    # seed + run content-planner job
     from backend.services import night_runners
     night_runners.seed_defaults()
-    job = next(j for j in night_shift.list_jobs() if j["name"] == "凌晨抓热点")
-    runner = night_executor._RUNNERS["content-planner"]
+    job = next(j for j in night_shift.list_jobs() if j["name"] == "一鱼多吃")
+    runner = night_executor._RUNNERS["one-fish-many-meals"]
     out = runner(job)
     assert "未接入" in out["output_summary"]
-    assert "凌晨抓热点" in out["output_summary"]
     assert out["output_refs"] is None
-    assert "planner_pipeline" in (out["log"] or "")
+    assert "watchdog" in (out["log"] or "")
+
+
+# ─── 凌晨抓热点 (D-047 真 runner) ──────────────────────────────
+
+class _FakeAIResult:
+    def __init__(self, text):
+        self.text = text
+        self.prompt_tokens = 0
+        self.completion_tokens = 0
+        self.total_tokens = 0
+
+
+class _FakeAIClient:
+    def __init__(self, response_text):
+        self._text = response_text
+    def chat(self, prompt, system=None, deep=True, temperature=0.7, max_tokens=2000):
+        return _FakeAIResult(self._text)
+
+
+def test_content_planner_runner_real_ai_5_topics(tmp_db, monkeypatch):
+    """AI 返回合法 JSON 5 条 → 全写 hot_topics, summary 含最高分标题."""
+    from backend.services import night_runners
+    from shortvideo import ai as ai_module
+
+    fake_response = """[
+        {"title": "一个老板花3万学AI", "heat_score": 92, "match_reason": "实战 + 痛点"},
+        {"title": "AI 替团队的真实账", "heat_score": 88, "match_reason": "决策视角"},
+        {"title": "凌晨3点跟AI下指令", "heat_score": 75, "match_reason": "场景化故事"},
+        {"title": "10年程序员转头", "heat_score": 70, "match_reason": "身份切换"},
+        {"title": "AI不替代你的部分", "heat_score": 80, "match_reason": "反转角度"}
+    ]"""
+    monkeypatch.setattr(ai_module, "get_ai_client",
+                        lambda route_key=None: _FakeAIClient(fake_response))
+
+    job = {"id": 1, "name": "凌晨抓热点", "skill_slug": "content-planner"}
+    out = night_runners.content_planner_runner(job)
+
+    assert "AI 出 5 条选题" in out["output_summary"]
+    assert "🔥92" in out["output_summary"]
+    assert "一个老板花3万学AI" in out["output_summary"]
+    # 5 条都写到 hot_topics
+    assert len(out["output_refs"]) == 5
+    assert all(r["kind"] == "hot_topic" for r in out["output_refs"])
+
+    from shortvideo.works import list_hot_topics
+    saved = list_hot_topics(limit=10)
+    assert len(saved) == 5
+    titles = {h.title for h in saved}
+    assert "一个老板花3万学AI" in titles
+    assert all(h.fetched_from == "night-shift" for h in saved)
+    assert all(h.match_persona == 1 for h in saved)
+
+
+def test_content_planner_runner_ai_returns_garbage(tmp_db, monkeypatch):
+    """AI 返回非 JSON → 不崩, 写明白错误."""
+    from backend.services import night_runners
+    from shortvideo import ai as ai_module
+    monkeypatch.setattr(ai_module, "get_ai_client",
+                        lambda route_key=None: _FakeAIClient("我不会出选题"))
+    job = {"id": 1, "name": "凌晨抓热点", "skill_slug": "content-planner"}
+    out = night_runners.content_planner_runner(job)
+    assert "格式不对" in out["output_summary"] or "解析" in out["output_summary"]
+    assert out["output_refs"] is None
+
+
+def test_content_planner_runner_ai_throws(tmp_db, monkeypatch):
+    """AI 抛异常 → 不崩."""
+    from backend.services import night_runners
+    from shortvideo import ai as ai_module
+
+    class _Boom:
+        def chat(self, *a, **kw):
+            raise RuntimeError("apimart 余额不足")
+
+    monkeypatch.setattr(ai_module, "get_ai_client",
+                        lambda route_key=None: _Boom())
+    job = {"id": 1, "name": "凌晨抓热点", "skill_slug": "content-planner"}
+    out = night_runners.content_planner_runner(job)
+    assert "AI 调用失败" in out["output_summary"]
+    assert "apimart 余额不足" in (out["log"] or "")
+
+
+def test_content_planner_runner_partial_save(tmp_db, monkeypatch):
+    """AI 返回 5 条但其中 2 条 title 为空 → 只写 3 条, summary 反映."""
+    from backend.services import night_runners
+    from shortvideo import ai as ai_module
+
+    fake = """[
+        {"title": "好选题 1", "heat_score": 90, "match_reason": "x"},
+        {"title": "", "heat_score": 70},
+        {"title": "好选题 2", "heat_score": 85, "match_reason": "y"},
+        {"title": "  ", "heat_score": 60},
+        {"title": "好选题 3", "heat_score": 80}
+    ]"""
+    monkeypatch.setattr(ai_module, "get_ai_client",
+                        lambda route_key=None: _FakeAIClient(fake))
+    job = {"id": 1, "name": "凌晨抓热点", "skill_slug": "content-planner"}
+    out = night_runners.content_planner_runner(job)
+    assert len(out["output_refs"]) == 3
+    assert "AI 出 3 条选题" in out["output_summary"]
 
 
 def test_run_seeded_job_via_executor(tmp_db):
