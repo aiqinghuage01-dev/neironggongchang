@@ -48,7 +48,11 @@ function PageHotrewrite({ onNav }) {
   const [hotspot, setHotspot] = React.useState("");
   const [analyze, setAnalyze] = React.useState(null);  // {breakdown, angles}
   const [pickedAngle, setPickedAngle] = React.useState(null);
-  const [script, setScript] = React.useState(null);     // {content, word_count, self_check, tokens}
+  const [script, setScript] = React.useState(null);     // {content, word_count, self_check, tokens} — 当前展示的那篇 (back compat)
+  // D-062nn-C4: 累积所有写过的版本, 让用户对比挑
+  const [versions, setVersions] = React.useState([]);   // [{content, angle, mode_label, word_count, self_check, tokens, ts}]
+  const [activeVersionIdx, setActiveVersionIdx] = React.useState(0);
+  const [appendingVersion, setAppendingVersion] = React.useState(false);
 
   // D-062nn-C3: 改写模式 (checkbox 制, 默认 ☑ 业务)
   const [withBiz, setWithBiz] = React.useState(true);
@@ -107,27 +111,59 @@ function PageHotrewrite({ onNav }) {
     });
   }
 
+  // D-062nn-C4: 抽出 callWrite 让 pickAngle / addVersion 复用
+  async function callWrite(angle, modeLabel) {
+    const r = await api.post("/api/hotrewrite/write", {
+      hotspot: hotspot.trim(),
+      breakdown: analyze?.breakdown || {},
+      angle,
+      modes: { with_biz: withBiz, pure_rewrite: pureRewrite },
+    });
+    return { ...r, angle, mode_label: modeLabel, ts: Date.now() };
+  }
+
   function pickAngle(angle) {
     setPickedAngle(angle);
+    setVersions([]);  // 换角度从 0 开始
     return runStep({
       nextStep: "write", rollbackStep: "angles", clearSetter: setScript,
       apiCall: async () => {
-        // D-062nn-C3: 把 modes 一起传给后端 (backend 暂未读, 后续接, 不破坏现有 schema)
-        const r = await api.post("/api/hotrewrite/write", {
-          hotspot: hotspot.trim(),
-          breakdown: analyze?.breakdown || {},
-          angle,
-          modes: { with_biz: withBiz, pure_rewrite: pureRewrite },
-        });
-        setScript(r);
+        const modeLabel = withBiz ? (pureRewrite ? "结合业务+纯改写" : "结合业务") : "纯改写";
+        const v = await callWrite(angle, modeLabel);
+        setScript(v);
+        setVersions([v]);
+        setActiveVersionIdx(0);
       },
     });
+  }
+
+  // D-062nn-C4: 同角度再来一版 (复用现有 angle, append 到 versions[])
+  async function addAnotherVersion(sameAngle = true, newAngle = null) {
+    const angle = sameAngle ? pickedAngle : newAngle;
+    if (!angle) return;
+    if (!sameAngle) setPickedAngle(newAngle);
+    setAppendingVersion(true); setErr("");
+    try {
+      const modeLabel = withBiz ? (pureRewrite ? "结合业务+纯改写" : "结合业务") : "纯改写";
+      const v = await callWrite(angle, modeLabel + (sameAngle ? " · 再来一版" : " · 换角度"));
+      const newVersions = [...versions, v];
+      setVersions(newVersions);
+      setActiveVersionIdx(newVersions.length - 1);
+      setScript(v);
+    } catch (e) { setErr(e.message); }
+    finally { setAppendingVersion(false); }
+  }
+
+  function switchVersion(idx) {
+    setActiveVersionIdx(idx);
+    setScript(versions[idx]);
   }
 
   function reset() {
     setStep("input"); setErr("");
     setHotspot(""); setAnalyze(null);
     setPickedAngle(null); setScript(null);
+    setVersions([]); setActiveVersionIdx(0);
     clearWorkflow("hotrewrite");
   }
 
@@ -161,7 +197,13 @@ function PageHotrewrite({ onNav }) {
         {step === "input"  && <HotStepInput hotspot={hotspot} setHotspot={setHotspot} onGo={doAnalyze} loading={loading} skillInfo={skillInfo} />}
         {step === "angles" && <HotStepAngles analyze={analyze} loading={loading} onPick={pickAngle} onPrev={() => setStep("input")} onRegen={doAnalyze}
           withBiz={withBiz} setWithBiz={setWithBiz} pureRewrite={pureRewrite} setPureRewrite={setPureRewrite} />}
-        {step === "write"  && <HotStepWrite script={script} hotspot={hotspot} angle={pickedAngle} loading={loading} onPrev={() => setStep("angles")} onRewrite={() => pickAngle(pickedAngle)} onReset={reset} onNav={onNav} />}
+        {step === "write"  && <HotStepWrite script={script} hotspot={hotspot} angle={pickedAngle} loading={loading} onPrev={() => setStep("angles")} onRewrite={() => pickAngle(pickedAngle)} onReset={reset} onNav={onNav}
+          versions={versions} activeVersionIdx={activeVersionIdx} onSwitchVersion={switchVersion}
+          allAngles={analyze?.angles || []}
+          onAddSameAngle={() => addAnotherVersion(true)}
+          onAddOtherAngle={(a) => addAnotherVersion(false, a)}
+          appendingVersion={appendingVersion}
+        />}
       </div>
     </div>
   );
@@ -397,7 +439,8 @@ function HotStepAngles({ analyze, loading, onPick, onPrev, onRegen, withBiz, set
 }
 
 // ─── Step 3 · 正文 + 六维自检 ───────────────────────────
-function HotStepWrite({ script, hotspot, angle, loading, onPrev, onRewrite, onReset, onNav }) {
+function HotStepWrite({ script, hotspot, angle, loading, onPrev, onRewrite, onReset, onNav,
+  versions, activeVersionIdx, onSwitchVersion, allAngles, onAddSameAngle, onAddOtherAngle, appendingVersion }) {
   if (loading || !script) return <Spinning icon="✍️" phases={[
     { text: "读 skill 完整方法论", sub: "Step 2-5 · 流量骨架 + 人设 + 业务植入" },
     { text: "3 秒判词开场", sub: "直接态度,不先背景" },
@@ -421,13 +464,38 @@ function HotStepWrite({ script, hotspot, angle, loading, onPrev, onRewrite, onRe
     setTimeout(() => setCopied(false), 1500);
   }
 
+  // D-062nn-C4: 切角度的 popover
+  const [showAngleSwitch, setShowAngleSwitch] = React.useState(false);
+  const otherAngles = (allAngles || []).filter(a => a?.label !== angle?.label);
+
   return (
     <div style={{ padding: "32px 40px 120px", maxWidth: 1080, margin: "0 auto" }}>
+      {/* D-062nn-C4: 多版 tab 切换 (versions 数组 > 1 时显) */}
+      {versions && versions.length > 1 && (
+        <div style={{ marginBottom: 14, padding: 10, background: T.bg2, borderRadius: 10, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 12, fontWeight: 600, color: T.text }}>📚 共 {versions.length} 版:</span>
+          {versions.map((v, i) => (
+            <button key={i} onClick={() => onSwitchVersion(i)}
+              title={`角度: ${v.angle?.label || ""} · ${new Date(v.ts).toLocaleTimeString().slice(0, 5)}`}
+              style={{
+                padding: "4px 12px", fontSize: 11.5, fontFamily: "inherit",
+                background: i === activeVersionIdx ? T.brand : "#fff",
+                color: i === activeVersionIdx ? "#fff" : T.muted,
+                border: `1px solid ${i === activeVersionIdx ? T.brand : T.borderSoft}`,
+                borderRadius: 100, cursor: "pointer", fontWeight: i === activeVersionIdx ? 600 : 500,
+              }}>
+              第 {i + 1} 版 · {v.mode_label}
+            </button>
+          ))}
+        </div>
+      )}
+
       <div style={{ marginBottom: 16, display: "flex", alignItems: "flex-start", gap: 16 }}>
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 6 }}>热点口播正文 · {script.word_count} 字 ✍️</div>
           <div style={{ fontSize: 12, color: T.muted }}>
             角度: <b style={{ color: T.text }}>{angle?.label}</b> · write {script.tokens?.write} tok · check {script.tokens?.check} tok
+            {script.mode_label && <> · 模式: <b style={{ color: T.text }}>{script.mode_label}</b></>}
           </div>
         </div>
         <div style={{ padding: 12, background: sc.pass ? T.brandSoft : T.redSoft, border: `1px solid ${sc.pass ? T.brand + "44" : T.red + "44"}`, borderRadius: 10, fontSize: 12, color: sc.pass ? T.brand : T.red, minWidth: 240 }}>
@@ -443,9 +511,40 @@ function HotStepWrite({ script, hotspot, angle, loading, onPrev, onRewrite, onRe
       </div>
       {sc.summary && <div style={{ marginTop: 10, padding: 10, background: T.bg2, borderRadius: 8, fontSize: 12, color: T.muted, lineHeight: 1.6 }}>💬 <b>总评:</b> {sc.summary}</div>}
 
-      <div style={{ display: "flex", gap: 10, marginTop: 18, alignItems: "center" }}>
-        <Btn variant="outline" onClick={onPrev}>← 换角度</Btn>
-        <Btn onClick={onRewrite}>🔄 同角度再来一版</Btn>
+      {/* D-062nn-C4: 操作行 — 多版累积 + 切角度 + 复制 */}
+      <div style={{ display: "flex", gap: 10, marginTop: 18, alignItems: "center", flexWrap: "wrap", position: "relative" }}>
+        <Btn variant="outline" onClick={onPrev}>← 改角度选择</Btn>
+        <Btn onClick={onAddSameAngle || onRewrite} disabled={appendingVersion}>
+          {appendingVersion ? "AI 写中..." : "🔄 再来一版 (同角度)"}
+        </Btn>
+        {otherAngles.length > 0 && (
+          <div style={{ position: "relative" }}>
+            <Btn onClick={() => setShowAngleSwitch(!showAngleSwitch)} disabled={appendingVersion}>
+              🎯 换角度再写 ▾
+            </Btn>
+            {showAngleSwitch && (
+              <div style={{
+                position: "absolute", top: "100%", left: 0, marginTop: 6,
+                background: "#fff", border: `1px solid ${T.border}`, borderRadius: 10,
+                boxShadow: "0 8px 24px rgba(0,0,0,0.12)", padding: 8, zIndex: 10, minWidth: 280,
+              }}>
+                {otherAngles.map((a, i) => (
+                  <div key={i} onClick={() => {
+                    setShowAngleSwitch(false);
+                    onAddOtherAngle && onAddOtherAngle(a);
+                  }} style={{
+                    padding: "8px 10px", borderRadius: 6, cursor: "pointer", fontSize: 12.5,
+                    color: T.text, lineHeight: 1.5,
+                  }}
+                    onMouseEnter={e => { e.currentTarget.style.background = T.brandSoft; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}>
+                    <b>{a.label}</b> · <span style={{ color: T.muted }}>{a.audience}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
         <div style={{ flex: 1 }} />
         <Btn onClick={copy} variant={copied ? "soft" : "default"}>{copied ? "✓ 已复制" : "📋 复制正文"}</Btn>
         <Btn onClick={onReset}>再写一条热点</Btn>
