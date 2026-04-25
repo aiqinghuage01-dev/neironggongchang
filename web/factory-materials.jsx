@@ -266,15 +266,19 @@ function HotTab({ list, onReload, onDel, onUse }) {
       )}
 
       {visibleList.length === 0 ? (
-        <div style={{ textAlign: "center", padding: 60, color: T.muted }}>
-          <div style={{ fontSize: 44, marginBottom: 12 }}>{nightFilter ? "🌙" : "🔥"}</div>
+        <div style={{ textAlign: "center", padding: "40px 20px", color: T.muted }}>
+          <div style={{ fontSize: 44, marginBottom: 8 }}>{nightFilter ? "🌙" : "🔥"}</div>
           <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 6, color: T.text }}>
             {nightFilter ? "暂无夜班产出的热点" : "还没维护热点"}
           </div>
-          <div style={{ fontSize: 13 }}>
+          <div style={{ fontSize: 12.5, marginBottom: 16 }}>
             {nightFilter
-              ? "去 🌙 小华夜班 启用「凌晨抓热点」, 23:00 自动 AI 出选题"
-              : "点「＋ 加一条热点」手动录入当日热点 · Phase 3 会自动从 tavily 抓"}
+              ? "下面启用「凌晨抓热点」, 23:00 后自动出选题"
+              : "可手动「＋ 加一条」, 也可让小华夜里自动抓 ↓"}
+          </div>
+          {/* D-062i: 飞轮 CTA */}
+          <div style={{ maxWidth: 480, margin: "0 auto", textAlign: "left" }}>
+            <NightHotFlywheel onTopics={onReload} compact />
           </div>
         </div>
       ) : (

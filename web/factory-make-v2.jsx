@@ -244,9 +244,10 @@ function MakeV2StepScript({ script, setScript, onNext, onNav, seedFrom, onDismis
         {!hotTopics ? (
           <div style={{ fontSize: 11.5, color: T.muted2, padding: 10 }}>加载…</div>
         ) : hotTopics.length === 0 ? (
-          <div style={{ fontSize: 12, color: T.muted, padding: 12, textAlign: "center", background: T.bg2, borderRadius: 6 }}>
-            热点库空 · 去 📥 素材库 / 🔥 热点 tab 加几条 · 或启用 🌙 小华夜班 · 凌晨抓热点
-          </div>
+          // D-062i: 飞轮 CTA 替代静态文字
+          <NightHotFlywheel onTopics={() => {
+            api.get("/api/hot-topics?limit=10").then(items => setHotTopics(items || [])).catch(() => {});
+          }} />
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             {hotTopics.slice(0, 3).map(t => (

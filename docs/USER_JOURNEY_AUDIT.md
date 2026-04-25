@@ -162,10 +162,14 @@
       不接 OAuth (Phase 4 再做), 不 window.open 外链 (URL 易腐)
 
 ### Phase 2 — 数据空时启动飞轮(P0)
-- [ ] **D-062i** hot_topics 空时加"启用夜班 / 立即试一次"按钮
+- [x] **D-062i** hot_topics 空时加"启用夜班 / 立即试一次"按钮
+      新建 web/factory-flywheel.jsx 共享组件 NightHotFlywheel
+      调用链: seed-defaults → list-jobs 找 凌晨抓热点 → PATCH enabled=true 或 POST /run
+      "立即抓"轮询 30 × 3s 看 runs status, 成功调 onTopics 回调刷新
+      接入: PageMakeV2 Step 1 + PageMaterials HotTab 两处空状态
 - [ ] **D-062j** topics 空时加"AI 生 5 条"按钮(已有 /api/topics/generate)
 - [ ] **D-062k** works 空时加"现在做第一条"按钮
-- [ ] **D-062l** 各 skill empty state 统一加"启动飞轮"组件 (复用)
+- [ ] **D-062l** 各 skill empty state 统一加"启动飞轮"组件 (D-062i 已抽好, 后续按需接)
 
 ### Phase 3 — 跨页面 state(P1)
 - [ ] **D-062m** localStorage make_v2_seed_script + from_make 锚机制
@@ -182,7 +186,27 @@
 - [ ] **D-062t** 前端 SSE 客户端 + progress UI
 
 ### Phase 6 — 自我复盘(每 3 拍做一次)
-- [ ] **D-062-AUDIT-N** 走一遍流程找新断点,加进本文档
+- [x] **D-062-AUDIT-1** 2026-04-25 14:10 复盘 (D-062c-h 后第一拍)
+      新发现的断点 (写进 backlog 7-9 期):
+      - **D-062u** PageMakeV2 Step 1 6-skill cards desc 提示已过时
+        line 274 仍写 "写完返回这里粘贴" — 实际 D-062c-g 已自动 seed
+        改: 文案换成 "写完一键带回 (跨页 state 已通)" + 加图标
+      - **D-062v** Step 2 emptyTip 无行动按钮
+        声音空 → 应该一键跳 ⚙️ 设置·克隆样本上传 (现在只是文字)
+        数字人空 → 应该一键跳 柿榴后台 + 加 "去柿榴 →" 按钮 (没"按钮")
+      - **D-062w** Step 3 模板空提示是开发者向, 用户根本看不懂
+        现 line 602: "到 ~/Desktop/skills/digital-human-video-v5/templates/ 加 .yaml"
+        改: "用朴素无模板模式继续 (直接出数字人 mp4)" → 一键跳过 Step 3
+      - **D-062x** D-062o 反向 anchor 还没做
+        从 PageMakeV2 跳到 hotrewrite 等, 完成后 onNav("make") 不带"反向 anchor"
+        各 skill 应检测 from_make=true → 完成态显 "🎬 返回做视频继续" 主按钮
+        否则用户得自己去 sidebar 点回去
+      - **D-062y** WxStepWrite 选段 ≥10 字才显 toolbar, 用户不知道
+        建议: 即使没选段, CTA 卡也加 "未选段则带全文" 提示 (已有, 但要更显眼)
+        OR: 在 textarea 上方先加固定 "选段 ≥ 10 字解锁选段 CTA"
+      - **D-062z** Step 5 "标记已发"无导出/统计入口
+        现状: 标了已发只是本地 UI tag, 没法导出周报/复盘
+        建议: 沿 storeKey 跨视频聚合, sidebar "我的作品" tab 显多平台发布矩阵
 
 ---
 
