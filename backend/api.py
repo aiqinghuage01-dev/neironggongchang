@@ -1006,7 +1006,7 @@ def stats_home():
 
 
 # ---- 作品库 ----
-@app.get("/api/works")
+@app.get("/api/works", tags=["档案部"], summary="作品库列表")
 def works_list(limit: int = 50):
     items = list_works(limit=limit)
     out = []
@@ -1033,27 +1033,28 @@ def works_list(limit: int = 50):
     return out
 
 
-@app.delete("/api/works/{work_id}")
+@app.delete("/api/works/{work_id}", tags=["档案部"], summary="删作品 (可选删本地文件)")
 def works_delete(work_id: int, remove_file: bool = False):
+    """remove_file=True 同时删本地视频/音频文件; False (默认) 只删 DB 记录留文件."""
     delete_work(work_id, remove_file=remove_file)
     return {"ok": True}
 
 
 # ---- 数据指标:手动录入 + 查询 + 排行 ----
 class MetricUpsertReq(BaseModel):
-    platform: str
-    views: int = 0
-    likes: int = 0
-    comments: int = 0
-    shares: int = 0
-    saves: int = 0
-    followers_gained: int = 0
-    conversions: int = 0
-    completion_rate: Optional[float] = None
-    notes: Optional[str] = None
+    platform: str = Field(..., description="平台: douyin / shipinhao / xiaohongshu / wechat / kuaishou / weibo")
+    views: int = Field(0, ge=0, description="播放量")
+    likes: int = Field(0, ge=0, description="点赞")
+    comments: int = Field(0, ge=0, description="评论")
+    shares: int = Field(0, ge=0, description="分享/转发")
+    saves: int = Field(0, ge=0, description="收藏")
+    followers_gained: int = Field(0, ge=0, description="新增粉丝")
+    conversions: int = Field(0, ge=0, description="转化数 (留资/到店/加微等)")
+    completion_rate: Optional[float] = Field(None, ge=0, le=1, description="完播率 0-1")
+    notes: Optional[str] = Field(None, description="备注")
 
 
-@app.get("/api/works/{work_id}/metrics")
+@app.get("/api/works/{work_id}/metrics", tags=["档案部"], summary="查作品在各平台的指标")
 def work_metrics_get(work_id: int):
     items = list_metrics(work_id)
     return [{
@@ -1066,8 +1067,9 @@ def work_metrics_get(work_id: int):
     } for m in items]
 
 
-@app.post("/api/works/{work_id}/metrics")
+@app.post("/api/works/{work_id}/metrics", tags=["档案部"], summary="录入作品指标 (按 work+platform upsert)")
 def work_metrics_upsert(work_id: int, req: MetricUpsertReq):
+    """每条 work × platform 唯一. 重复录入同 work + platform 会更新而非新增."""
     mid = upsert_metric(
         work_id=work_id, platform=req.platform,
         views=req.views, likes=req.likes, comments=req.comments,
@@ -1078,15 +1080,15 @@ def work_metrics_upsert(work_id: int, req: MetricUpsertReq):
     return {"id": mid, "ok": True}
 
 
-@app.delete("/api/metrics/{metric_id}")
+@app.delete("/api/metrics/{metric_id}", tags=["档案部"], summary="删一条指标记录")
 def metric_delete(metric_id: int):
     delete_metric(metric_id)
     return {"ok": True}
 
 
-@app.get("/api/works/analytics")
+@app.get("/api/works/analytics", tags=["档案部"], summary="作品库效果分析 TOP 10")
 def works_analytics(limit: int = 50):
-    """作品库效果分析:TOP 10 + 各平台总量 + 历史汇总."""
+    """TOP 10 (按总曝光排序) + 各平台总量汇总 + 历史. 给作品库 PageWorks 数据 tab 用."""
     all_metrics = list_all_metrics(limit=500)
     all_works = {w.id: w for w in list_works(limit=500)}
 
@@ -1181,16 +1183,16 @@ def materials_delete(material_id: int):
 
 # ---- 热点库 ----
 class HotTopicReq(BaseModel):
-    title: str
-    platform: Optional[str] = None
-    heat_score: int = 0
-    match_persona: bool = False
-    match_reason: Optional[str] = None
-    source_url: Optional[str] = None
-    fetched_from: str = "manual"
+    title: str = Field(..., description="热点标题")
+    platform: Optional[str] = Field(None, description="来源平台 douyin/xiaohongshu/shipinhao/weibo/kuaishou/ai-generated")
+    heat_score: int = Field(0, ge=0, le=100, description="热度 1-100")
+    match_persona: bool = Field(False, description="是否匹配清华哥定位")
+    match_reason: Optional[str] = Field(None, description="匹配原因 (一句话)")
+    source_url: Optional[str] = Field(None, description="原热点链接")
+    fetched_from: str = Field("manual", description="来源: manual / night-shift (D-047 凌晨抓热点) / tavily 等")
 
 
-@app.get("/api/hot-topics")
+@app.get("/api/hot-topics", tags=["档案部"], summary="热点列表")
 def hot_topics_list(limit: int = 50):
     items = list_hot_topics(limit=limit)
     return [{
@@ -1201,8 +1203,9 @@ def hot_topics_list(limit: int = 50):
     } for h in items]
 
 
-@app.post("/api/hot-topics")
+@app.post("/api/hot-topics", tags=["档案部"], summary="新增热点")
 def hot_topics_add(req: HotTopicReq):
+    """手动维护或夜班 runner 写入. 素材库 HotTab "🌙 来自夜班 (N)" 过滤靠 fetched_from."""
     tid = insert_hot_topic(
         title=req.title, platform=req.platform, heat_score=req.heat_score,
         match_persona=req.match_persona, match_reason=req.match_reason,
@@ -1211,7 +1214,7 @@ def hot_topics_add(req: HotTopicReq):
     return {"id": tid, "ok": True}
 
 
-@app.delete("/api/hot-topics/{topic_id}")
+@app.delete("/api/hot-topics/{topic_id}", tags=["档案部"], summary="删热点")
 def hot_topics_delete(topic_id: int):
     delete_hot_topic(topic_id)
     return {"ok": True}
@@ -1219,14 +1222,14 @@ def hot_topics_delete(topic_id: int):
 
 # ---- 选题库 ----
 class TopicReq(BaseModel):
-    title: str
-    description: Optional[str] = None
-    tags: Optional[str] = None
-    heat_score: int = 0
-    source: str = "manual"
+    title: str = Field(..., description="选题标题")
+    description: Optional[str] = Field(None, description="选题描述/角度")
+    tags: Optional[str] = Field(None, description="标签, 逗号分隔")
+    heat_score: int = Field(0, ge=0, le=100, description="热度评分")
+    source: str = Field("manual", description="来源: manual / generate (AI 批量生成) / hot (从热点转化)")
 
 
-@app.get("/api/topics")
+@app.get("/api/topics", tags=["档案部"], summary="选题列表")
 def topics_list(limit: int = 100):
     items = list_topics(limit=limit)
     return [{
@@ -1237,7 +1240,7 @@ def topics_list(limit: int = 100):
     } for t in items]
 
 
-@app.post("/api/topics")
+@app.post("/api/topics", tags=["档案部"], summary="新增选题")
 def topics_add(req: TopicReq):
     tid = insert_topic(
         title=req.title, description=req.description,
@@ -1246,7 +1249,7 @@ def topics_add(req: TopicReq):
     return {"id": tid, "ok": True}
 
 
-@app.delete("/api/topics/{topic_id}")
+@app.delete("/api/topics/{topic_id}", tags=["档案部"], summary="删选题")
 def topics_delete(topic_id: int):
     delete_topic(topic_id)
     return {"ok": True}
@@ -1254,9 +1257,9 @@ def topics_delete(topic_id: int):
 
 # ---- 选题批量生成(简化版,用 DeepSeek) ----
 class TopicGenReq(BaseModel):
-    seed: str
-    n: int = 10
-    deep: bool = True
+    seed: str = Field(..., description="种子提示, 例 '老板用 AI 自动化' / '内容创业'")
+    n: int = Field(10, ge=3, le=30, description="出几条选题, 默认 10")
+    deep: bool = Field(True, description="True=注入完整人设 (~7500 token) · False=精简人设 (~300 token)")
 
 
 def _dedup_topic_title(title: str, existing_prefixes: set[str]) -> bool:
@@ -1268,7 +1271,7 @@ def _dedup_topic_title(title: str, existing_prefixes: set[str]) -> bool:
     return True
 
 
-@app.post("/api/topics/generate")
+@app.post("/api/topics/generate", tags=["档案部"], summary="AI 批量出选题 (走 deepseek + 人设 + 历史去重)")
 def topics_generate(req: TopicGenReq):
     """选题批量生成 (D-025 优化): 结构化输出 + 自动去重 + 字数过滤 + 避免和已有库重复。"""
     kb_chunks = kb_service.match(req.seed, k=3) if req.seed else []
@@ -1371,13 +1374,15 @@ def topics_generate(req: TopicGenReq):
 
 
 # ---- 知识库(Obsidian vault 只读) ----
-@app.get("/api/kb/tree")
+@app.get("/api/kb/tree", tags=["档案部"], summary="知识库目录树")
 def kb_tree(refresh: bool = False):
+    """读 ~/Desktop/清华哥知识库/ 整体目录结构. refresh=true 强刷缓存."""
     return kb_service.build_tree(refresh=refresh)
 
 
-@app.get("/api/kb/doc")
+@app.get("/api/kb/doc", tags=["档案部"], summary="读单篇文档")
 def kb_doc(path: str):
+    """path 是相对知识库根目录的路径, 例 '03 灵感系统/test.md'."""
     try:
         return kb_service.read_doc(path)
     except FileNotFoundError as e:
@@ -1385,23 +1390,24 @@ def kb_doc(path: str):
 
 
 class KbSearchReq(BaseModel):
-    query: str
-    k: int = 8
+    query: str = Field(..., description="搜索关键词")
+    k: int = Field(8, ge=1, le=30, description="返回 top k 条匹配, 默认 8")
 
 
-@app.post("/api/kb/search")
+@app.post("/api/kb/search", tags=["档案部"], summary="文档级搜索")
 def kb_search(req: KbSearchReq):
+    """命中文档列表, 含 path / title / 命中片段."""
     return kb_service.search(req.query, k=req.k)
 
 
 class KbMatchReq(BaseModel):
-    query: str
-    k: int = 5
+    query: str = Field(..., description="搜索关键词")
+    k: int = Field(5, ge=1, le=20, description="返回 top k 条 chunk")
 
 
-@app.post("/api/kb/match")
+@app.post("/api/kb/match", tags=["档案部"], summary="chunk 级匹配 (给 prompt 注入用)")
 def kb_match(req: KbMatchReq):
-    """chunk 级别匹配,供文案生成 prompt 注入."""
+    """chunk 级别匹配, 比 /search 粒度更细. 供文案生成 prompt 注入."""
     return kb_service.match(req.query, k=req.k)
 
 

@@ -54,7 +54,8 @@
 - ✓ **公众号 8 步 11 个 endpoint (D-053): 已规范** (skill-info / titles / outline / write / rewrite-section / plan-images / section-image / html / templates / cover / push)
 - ✓ **投流 + 热点改写 + 录音改写 + 内容策划 12 个 endpoint (D-054): 已规范**
 - ✓ **违规审查 4 + 即梦 AIGC 5 = 9 个 endpoint (D-055): 已规范**
-- ⏸ 还没补的: hot-topics 3 / topics 3 / works ~5 / kb ~5 / settings ~3 / ai 4 / tasks 3 / 总部首页 stats / shiliu / cosyvoice / chat / ad / moments / article 等 ~30 个
+- ✓ **档案部 17 个 endpoint (D-056): 已规范** (works/metrics/hot-topics/topics/kb)
+- ⏸ 还没补的: settings ~3 / ai 4 / tasks 3 / 总部首页 stats / shiliu / cosyvoice / chat / 旧 ad / moments / article / materials 等 ~15 个
 **做法**: 一段一段补 (一次一个 skill 全部 endpoints). 不阻塞功能, 但学员版 poju.ai 部署前要补完.
 
 ---
