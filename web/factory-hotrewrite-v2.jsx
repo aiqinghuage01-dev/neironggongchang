@@ -153,6 +153,19 @@ function HotHeader({ current, onBack, skillInfo }) {
 // ─── Step 1 · 输入热点 ──────────────────────────────────
 function HotStepInput({ hotspot, setHotspot, onGo, loading, skillInfo }) {
   const ready = !!hotspot.trim() && !loading;
+  // D-062aa: 加今日热点候选, 一键塞进 textarea (原 audit path A item 1)
+  const [hotTopics, setHotTopics] = React.useState(null);
+  function reloadTopics() {
+    api.get("/api/hot-topics?limit=10")
+      .then(items => setHotTopics(items || []))
+      .catch(() => setHotTopics([]));
+  }
+  React.useEffect(reloadTopics, []);
+  function pickTopic(t) {
+    const seed = `# 来自热点库 (${t.platform || "?"} · 热度 ${t.heat_score || 0})\n${t.title}\n${t.match_reason ? "\n匹配原因: " + t.match_reason : ""}`;
+    setHotspot(seed);
+  }
+
   return (
     <div style={{ padding: "40px 40px 60px", maxWidth: 720, margin: "0 auto" }}>
       <div style={{ textAlign: "center", marginBottom: 24 }}>
@@ -174,6 +187,38 @@ function HotStepInput({ hotspot, setHotspot, onGo, loading, skillInfo }) {
             border: "none", borderRadius: 100, cursor: ready ? "pointer" : "not-allowed", fontFamily: "inherit",
           }}>{loading ? "拆解中..." : "开始拆解 →"}</button>
         </div>
+      </div>
+
+      {/* D-062aa: 今日热点 (候选 / 飞轮 CTA) */}
+      <div style={{ background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 12, padding: 14, marginBottom: 18 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+          <span style={{ fontSize: 13, fontWeight: 600, color: T.text }}>📅 今日热点</span>
+          <Tag size="xs" color="gray">{hotTopics?.length || 0}</Tag>
+          <span style={{ fontSize: 10.5, color: T.muted2 }}>· 点一条一键塞 textarea</span>
+        </div>
+        {!hotTopics ? (
+          <div style={{ fontSize: 11, color: T.muted2, padding: 8 }}>加载…</div>
+        ) : hotTopics.length === 0 ? (
+          <NightHotFlywheel onTopics={reloadTopics} compact />
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {hotTopics.slice(0, 3).map(t => (
+              <div key={t.id} onClick={() => pickTopic(t)}
+                style={{
+                  padding: "7px 10px",
+                  background: t.fetched_from === "night-shift" ? "linear-gradient(135deg, #fff8ec, #fff)" : T.bg2,
+                  border: `1px solid ${T.borderSoft}`, borderRadius: 6, cursor: "pointer",
+                  display: "flex", alignItems: "center", gap: 10, fontSize: 12,
+                }}>
+                <span style={{ fontWeight: 700, color: T.amber, minWidth: 36, fontSize: 12.5 }}>🔥{t.heat_score || 0}</span>
+                {t.platform && <Tag size="xs" color="pink">{t.platform}</Tag>}
+                {t.fetched_from === "night-shift" && <Tag size="xs" color="amber">🌙</Tag>}
+                <span style={{ flex: 1, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.title}</span>
+                <span style={{ fontSize: 10.5, color: T.brand, fontWeight: 500, whiteSpace: "nowrap" }}>用这条 →</span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {skillInfo && (

@@ -213,7 +213,6 @@
         现状: 标了已发只是本地 UI tag, 没法导出周报/复盘
         建议: 沿 storeKey 跨视频聚合, sidebar "我的作品" tab 显多平台发布矩阵
 
-- [x] **D-062-AUDIT-2** 2026-04-25 14:25 复盘 (AUDIT-1 + 4 commit 后第二拍)
       新发现的 bug + 待修:
       - **D-062-AUDIT-2-fix1** ✅ PageMaterials HotTab/TopicTab "做成视频" 不带 seed
         line 82-83 onUse 之前只 onNav("make"), 用户辛苦挑的热点/选题完全丢失
@@ -232,6 +231,23 @@
           - 秒数 Tag 颜色 blue → amber
           - 多挂一个 amber Tag "⚠ 偏长 · 建议精简 300-500"
         不强制截断, 让用户自己决策 (可能他真要长口播)
+
+- [x] **D-062-AUDIT-3** 2026-04-25 14:35 复盘 (AUDIT-2 + 3 commit 后第三拍)
+      新发现:
+      - **D-062aa** ✅ PageHotrewrite Step 1 没列今日热点候选
+        原 Path A audit 第 1 条断点早就发现, 但只在 PageMakeV2 Step 1 修了 (D-062a)
+        sidebar 直接进 🔥 热点改写的用户还得自己粘热点, 跟 audit 不一致
+        Fix: HotStepInput 加 hotTopics state + 拉 /api/hot-topics + 列前 3 条
+        点 → 拼"# 来自热点库 (...)"模板塞 textarea (与 PageMakeV2 Step 1 一致)
+        热点空时直接显 NightHotFlywheel CTA (复用 D-062i 共享组件)
+      - **D-062bb** voicerewrite 同样问题: Step 1 让用户粘 transcript, 没"上传音频自动转写"
+        backlog 早就有, 还没接 /api/transcribe/submit (audit Path B item 1)
+      - **D-062cc** Step 4 align/render 失败时 errorMsg 只在 localErr 里
+        错误又长又难懂时 (e.g. broll 生图 quota), 用户只看到 "⚠️ ..." 一长串
+        建议: 加常见错误码映射表 + "重试" / "改 prompt" 按钮
+      - **D-062dd** sidebar 各 skill 入口没"今日产出"小数字
+        用户进 sidebar 不知道 "我今天做了几条投流", 缺即时反馈
+        优先级 P3, 可加 dot 计数 (近 24h 该 skill 调用数 / works.created_today 等)
 
 ---
 
