@@ -248,6 +248,146 @@ def align_script(
     }
 
 
+# ─── D-060a B-roll 真生图 ─────────────────────────────────────
+# B 型 top_image (4:3 横版) / C 型 screen_image (9:16 竖版).
+# 走 ~/.claude/skills/poju-image-gen/poju-img.py (跟 wechat 段间图同款 apimart).
+# 下载到 SKILL_ROOT/assets/brolls/<template_id>/<filename>, 同时更新模板 YAML.
+
+import shutil
+import subprocess
+
+POJU_IMG = Path.home() / ".claude/skills/poju-image-gen/poju-img.py"
+
+# 每个 B/C scene 的 broll 文件名约定 (跟 SKILL.md 既有约定保持一致)
+def _broll_filename(scene_type: str, scene_idx_in_type: int, ext: str = "png") -> str:
+    """
+    B 型: b{idx_in_type}_top.{ext}    例 b0_top.png
+    C 型: c{idx_in_type}_screen.{ext} 例 c0_screen.png
+    idx_in_type 是该 scene 在 B/C 同类型里的顺序(从 0 起), 不是全局 idx.
+    跟 skill render.py 的 b_plates / c_plates 命名对齐.
+    """
+    t = scene_type.upper()
+    if t == "B":
+        return f"b{scene_idx_in_type}_top.{ext}"
+    if t == "C":
+        return f"c{scene_idx_in_type}_screen.{ext}"
+    raise Dhv5Error(f"only B/C scenes have broll, got {scene_type}")
+
+
+def _broll_size_for_scene(scene_type: str) -> str:
+    """B 横版 4:3 / C 竖版 9:16 (matches dhv5 template visual spec)."""
+    t = scene_type.upper()
+    if t == "B":
+        return "4:3"
+    if t == "C":
+        return "9:16"
+    raise Dhv5Error(f"unsupported scene type: {scene_type}")
+
+
+def generate_broll(
+    template_id: str,
+    scene_idx: int,
+    regen: bool = False,
+) -> dict[str, Any]:
+    """给某 scene 生 broll 图 (subprocess 调 poju-img.py).
+
+    Args:
+      template_id: 模板 id
+      scene_idx:   scene 全局索引 (0-based, 模板 scenes 数组里的位置)
+      regen:       True 强制重生, False 已存在跳过
+
+    Returns:
+      {
+        "scene_idx": int,
+        "scene_type": "B" | "C",
+        "filename": "b0_top.png",
+        "local_path": "/Users/.../assets/brolls/<id>/b0_top.png",
+        "url": "/skills/dhv5/brolls/<id>/b0_top.png",
+        "size_bytes": int,
+        "elapsed_sec": float,
+        "skipped": bool,  # True 表示已存在没重生
+        "prompt": str,    # 实际用的 prompt
+      }
+
+    抛 Dhv5Error 当 scene 不存在 / 类型不支持 / 没 prompt / poju-img 失败.
+    """
+    if not POJU_IMG.exists():
+        raise Dhv5Error(f"poju-img.py 不存在: {POJU_IMG}")
+
+    full = load_template_full(template_id)
+    raw_scenes = full.get("scenes") or []
+    if scene_idx < 0 or scene_idx >= len(raw_scenes):
+        raise Dhv5Error(f"scene_idx {scene_idx} 超界 (共 {len(raw_scenes)} scenes)")
+    scene = raw_scenes[scene_idx]
+    stype = (scene.get("type") or "").upper()
+    if stype not in {"B", "C"}:
+        raise Dhv5Error(f"只 B/C scene 有 broll, scene #{scene_idx} 是 {stype}")
+
+    # 拿 prompt: B 用 top_image_prompt / C 用 screen_image_prompt
+    prompt_field = "top_image_prompt" if stype == "B" else "screen_image_prompt"
+    prompt = (scene.get(prompt_field) or "").strip()
+    if not prompt:
+        raise Dhv5Error(f"scene #{scene_idx} 缺 {prompt_field}, 没法生图")
+
+    # 算同类型顺序索引 (做 filename 用)
+    idx_in_type = sum(1 for s in raw_scenes[:scene_idx] if (s.get("type") or "").upper() == stype)
+    fname = _broll_filename(stype, idx_in_type)
+    out_dir = SKILL_ROOT / "assets" / "brolls" / template_id
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_path = out_dir / fname
+
+    # 已存在 + 不强制重生 → 跳过
+    if out_path.exists() and not regen:
+        return {
+            "scene_idx": scene_idx,
+            "scene_type": stype,
+            "filename": fname,
+            "local_path": str(out_path),
+            "url": f"/skills/dhv5/brolls/{template_id}/{fname}",
+            "size_bytes": out_path.stat().st_size,
+            "elapsed_sec": 0,
+            "skipped": True,
+            "prompt": prompt,
+        }
+
+    # subprocess 调 poju-img.py 生图
+    import time as _t
+    t0 = _t.time()
+    size = _broll_size_for_scene(stype)
+    try:
+        r = subprocess.run(
+            ["python3", str(POJU_IMG), prompt, "--size", size,
+             "--out", str(out_dir.parent.parent.parent)],  # poju-img 自己会建子目录
+            capture_output=True, text=True, timeout=120,
+            env={**__import__("os").environ},
+        )
+    except subprocess.TimeoutExpired:
+        raise Dhv5Error("生图超时 120s")
+
+    if r.returncode != 0:
+        raise Dhv5Error(
+            f"poju-img 失败 rc={r.returncode}\nstderr: {(r.stderr or '')[-300:]}\nstdout: {(r.stdout or '')[-300:]}"
+        )
+
+    src_path = (r.stdout or "").strip().splitlines()[-1] if r.stdout.strip() else ""
+    if not src_path or not Path(src_path).exists():
+        raise Dhv5Error(f"poju-img 没输出有效路径: stdout={r.stdout[-200:]}")
+
+    # 拷贝到 dhv5 brolls 目录, 用约定 filename
+    shutil.copy2(src_path, out_path)
+    return {
+        "scene_idx": scene_idx,
+        "scene_type": stype,
+        "filename": fname,
+        "local_path": str(out_path),
+        "url": f"/skills/dhv5/brolls/{template_id}/{fname}",
+        "size_bytes": out_path.stat().st_size,
+        "elapsed_sec": round(_t.time() - t0, 1),
+        "skipped": False,
+        "prompt": prompt,
+    }
+
+
 def render_async(
     template_id: str,
     digital_human_video: str,

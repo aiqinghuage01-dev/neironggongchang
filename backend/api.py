@@ -132,6 +132,11 @@ _DHV5_OUTPUTS = Path.home() / "Desktop/skills/digital-human-video-v5/outputs"
 if _DHV5_OUTPUTS.exists():
     app.mount("/skills/dhv5/outputs", StaticFiles(directory=str(_DHV5_OUTPUTS)), name="dhv5-outputs")
 
+# D-060a: 暴露 dhv5 brolls 给前端 align step 预览缩略
+_DHV5_BROLLS = Path.home() / "Desktop/skills/digital-human-video-v5/assets/brolls"
+if _DHV5_BROLLS.exists():
+    app.mount("/skills/dhv5/brolls", StaticFiles(directory=str(_DHV5_BROLLS)), name="dhv5-brolls")
+
 init_db()
 
 # --------- 模型 ----------
@@ -2069,6 +2074,19 @@ def dhv5_align(req: Dhv5AlignReq):
     from backend.services import dhv5_pipeline
     try:
         return dhv5_pipeline.align_script(req.template_id, req.transcript, mode=req.mode)
+    except dhv5_pipeline.Dhv5Error as e:
+        raise HTTPException(400, str(e))
+
+
+@app.post("/api/dhv5/broll/{template_id}/{scene_idx}", tags=["v5 视频"], summary="给单 scene 生 B-roll 图")
+def dhv5_broll(template_id: str, scene_idx: int, regen: bool = False):
+    """B 型 4:3 横版 / C 型 9:16 竖版. 走 ~/.claude/skills/poju-image-gen (apimart).
+    存 ~/Desktop/skills/digital-human-video-v5/assets/brolls/<template_id>/.
+    返 {scene_idx, scene_type, filename, local_path, url, size_bytes, skipped, prompt}.
+    skipped=true 表示文件已存在且 regen=false."""
+    from backend.services import dhv5_pipeline
+    try:
+        return dhv5_pipeline.generate_broll(template_id, scene_idx, regen=regen)
     except dhv5_pipeline.Dhv5Error as e:
         raise HTTPException(400, str(e))
 

@@ -227,3 +227,86 @@ def test_align_script_ai_throws_raises(monkeypatch):
 def test_align_script_unknown_template_raises():
     with pytest.raises(dhv5_pipeline.Dhv5Error):
         dhv5_pipeline.align_script("not-exist", "x", mode="auto")
+
+
+# ─── D-060a B-roll 单元 ──────────────────────────────────────
+
+def test_broll_filename_b_type():
+    assert dhv5_pipeline._broll_filename("B", 0) == "b0_top.png"
+    assert dhv5_pipeline._broll_filename("B", 3) == "b3_top.png"
+
+
+def test_broll_filename_c_type():
+    assert dhv5_pipeline._broll_filename("C", 0) == "c0_screen.png"
+    assert dhv5_pipeline._broll_filename("C", 1) == "c1_screen.png"
+
+
+def test_broll_filename_a_type_raises():
+    with pytest.raises(dhv5_pipeline.Dhv5Error):
+        dhv5_pipeline._broll_filename("A", 0)
+
+
+def test_broll_filename_lowercase_normalized():
+    assert dhv5_pipeline._broll_filename("b", 0) == "b0_top.png"
+
+
+def test_broll_size_for_scene_b_is_4_3():
+    assert dhv5_pipeline._broll_size_for_scene("B") == "4:3"
+
+
+def test_broll_size_for_scene_c_is_9_16():
+    assert dhv5_pipeline._broll_size_for_scene("C") == "9:16"
+
+
+def test_broll_size_for_scene_a_raises():
+    with pytest.raises(dhv5_pipeline.Dhv5Error):
+        dhv5_pipeline._broll_size_for_scene("A")
+
+
+@skip_no_skill
+def test_generate_broll_a_scene_raises():
+    """A 型 scene 没 broll 概念, 调用应抛."""
+    full = dhv5_pipeline.load_template_full("01-peixun-gaoxiao")
+    a_idx = next(i for i, s in enumerate(full["scenes"]) if (s.get("type") or "").upper() == "A")
+    with pytest.raises(dhv5_pipeline.Dhv5Error) as exc:
+        dhv5_pipeline.generate_broll("01-peixun-gaoxiao", a_idx)
+    assert "B/C" in str(exc.value)
+
+
+@skip_no_skill
+def test_generate_broll_unknown_template_raises():
+    with pytest.raises(dhv5_pipeline.Dhv5Error):
+        dhv5_pipeline.generate_broll("not-exist", 0)
+
+
+@skip_no_skill
+def test_generate_broll_out_of_range_raises():
+    with pytest.raises(dhv5_pipeline.Dhv5Error) as exc:
+        dhv5_pipeline.generate_broll("01-peixun-gaoxiao", 999)
+    assert "超界" in str(exc.value)
+
+
+@skip_no_skill
+def test_generate_broll_existing_file_skipped():
+    """已存在 broll + regen=false → 跳过, 不真调 poju-img.
+    01-peixun-gaoxiao 的 brolls 应该是预生成好的 (用户文件).
+    """
+    full = dhv5_pipeline.load_template_full("01-peixun-gaoxiao")
+    # 找第一个 B 型 scene
+    b_idx = None
+    for i, s in enumerate(full["scenes"]):
+        if (s.get("type") or "").upper() == "B":
+            b_idx = i; break
+    if b_idx is None:
+        pytest.skip("模板没 B scene")
+    # 检查 broll 文件是否预生成 (才能跑这个测试)
+    idx_in_type = sum(1 for s in full["scenes"][:b_idx] if (s.get("type") or "").upper() == "B")
+    fname = f"b{idx_in_type}_top.png"
+    out_dir = dhv5_pipeline.SKILL_ROOT / "assets" / "brolls" / "01-peixun-gaoxiao"
+    if not (out_dir / fname).exists():
+        pytest.skip(f"{fname} 未预生成, 跳过")
+    out = dhv5_pipeline.generate_broll("01-peixun-gaoxiao", b_idx, regen=False)
+    assert out["skipped"] is True
+    assert out["scene_type"] == "B"
+    assert out["elapsed_sec"] == 0
+    assert out["filename"] == fname
