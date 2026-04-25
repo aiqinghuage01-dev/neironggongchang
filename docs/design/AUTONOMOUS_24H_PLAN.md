@@ -128,6 +128,7 @@
 - C5+ voicerewrite VStepInput hero polish — 字号 30 + 副标人话 + textarea minHeight + 字数 Tag
 - AUDIT-7 复盘 (Phase 1 完成后) — 写 5 个 todo (各 step hero 不一致 / wechat moments 后续 step 没动 / planner Step 1 没动)
 - A7-todo2+3 hotrewrite + planner Step 1 hero polish — 字号 30 + 副标人话 + minHeight + 字数 Tag
+- C10 Step 1 复用最近做过的 — 拉 /api/works?limit=3, RecentWorkCard mini 卡, 一键塞 textarea
 
 ## 卡住记录
 

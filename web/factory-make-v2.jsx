@@ -179,6 +179,21 @@ function MakeV2StepScript({ script, setScript, onNext, onNav, seedFrom, onDismis
       .catch(() => setHotTopics([]));
   }, []);
 
+  // C10: 最近做过的视频 (复用快捷入口 · 拉 3 条)
+  const [recentWorks, setRecentWorks] = React.useState(null);
+  React.useEffect(() => {
+    api.get("/api/works?limit=3")
+      .then(items => setRecentWorks(items || []))
+      .catch(() => setRecentWorks([]));
+  }, []);
+
+  function reuseWork(w) {
+    // 复用 work.final_text 当 seed (final_text 已 truncate 120 字 by backend)
+    if (!w.final_text) return;
+    setScript(w.final_text);
+    // 不触发 setSeedFrom (没 dismiss banner 机制), 用户能看到 textarea 已填
+  }
+
   function pickHotTopic(t) {
     // 只塞文案模式: 把热点拼成 seed 塞 textarea, 用户自己写
     const seed = `# 热点 (来自 ${t.platform || "?"}, 热度 ${t.heat_score})\n${t.title}\n\n${t.match_reason ? "我的角度: " + t.match_reason + "\n\n" : ""}---\n\n口播正文:\n`;
@@ -429,6 +444,26 @@ function MakeV2StepScript({ script, setScript, onNext, onNav, seedFrom, onDismis
         </div>
       )}
 
+      {/* C10: 复用最近做过的 (3 条 mini 卡, 一键塞 textarea) */}
+      {recentWorks && recentWorks.length > 0 && (
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 12 }}>
+            <span style={{ fontSize: 15, fontWeight: 600, color: T.text }}>♻️ 复用最近做过的</span>
+            <span style={{ fontSize: 11, color: T.muted2 }}>· 选一条把文案塞回上面继续</span>
+            <div style={{ flex: 1 }} />
+            <button onClick={() => onNav("works")}
+              style={{ background: "transparent", border: "none", color: T.muted2, cursor: "pointer", fontSize: 11.5, fontFamily: "inherit" }}>
+              全部 →
+            </button>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 10 }}>
+            {recentWorks.slice(0, 3).map(w => (
+              <RecentWorkCard key={w.id} w={w} onReuse={() => reuseWork(w)} />
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* D-062nn-C1: 6 大 skill 卡 — 删研发文案标题, 改简洁 hero */}
       <div style={{ marginBottom: 16 }}>
         <div style={{ fontSize: 15, fontWeight: 600, color: T.text, marginBottom: 12 }}>
@@ -442,6 +477,46 @@ function MakeV2StepScript({ script, setScript, onNext, onNav, seedFrom, onDismis
             }} />
           ))}
         </div>
+      </div>
+    </div>
+  );
+}
+
+// C10: 最近作品 mini 卡 (复用入口)
+function RecentWorkCard({ w, onReuse }) {
+  const statusMap = {
+    published: { color: T.green, label: "已发" },
+    ready: { color: T.brand, label: "待发" },
+    generating: { color: T.amber, label: "合成中" },
+    pending: { color: T.muted2, label: "等" },
+    failed: { color: T.red, label: "失败" },
+  };
+  const st = statusMap[w.status] || { color: T.muted2, label: w.status || "" };
+  const dateStr = w.created_at
+    ? new Date(w.created_at * 1000).toLocaleDateString("zh-CN", { month: "2-digit", day: "2-digit" })
+    : "";
+  return (
+    <div onClick={onReuse} style={{
+      padding: 14, background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 10,
+      cursor: "pointer", transition: "all 0.1s",
+      display: "flex", flexDirection: "column", gap: 6,
+    }}
+      onMouseEnter={e => { e.currentTarget.style.borderColor = T.brand; e.currentTarget.style.boxShadow = `0 0 0 3px ${T.brandSoft}`; }}
+      onMouseLeave={e => { e.currentTarget.style.borderColor = T.borderSoft; e.currentTarget.style.boxShadow = "none"; }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        <span style={{ fontSize: 13, fontWeight: 600, color: T.text, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {w.title || `#${w.id}`}
+        </span>
+        <Tag size="xs" color={w.status === "published" ? "green" : w.status === "ready" ? "brand" : "gray"}>{st.label}</Tag>
+      </div>
+      <div style={{ fontSize: 11.5, color: T.muted, lineHeight: 1.5,
+                    display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+        {w.final_text || "(无文案)"}
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 10.5, color: T.muted2 }}>
+        <span>{dateStr}</span>
+        <div style={{ flex: 1 }} />
+        <span style={{ color: T.brand, fontWeight: 500 }}>♻️ 用这条 →</span>
       </div>
     </div>
   );
