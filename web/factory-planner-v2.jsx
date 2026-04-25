@@ -82,7 +82,7 @@ function PagePlanner({ onNav }) {
         )}
         {step === "input"  && <PStepInput brief={brief} setBrief={setBrief} onGo={doAnalyze} loading={loading} />}
         {step === "levels" && <PStepLevels analysis={analysis} loading={loading} onPick={pickLevel} onPrev={() => setStep("input")} onRegen={doAnalyze} />}
-        {step === "plan"   && <PStepPlan plan={planResult} level={pickedLevel} loading={loading} onPrev={() => setStep("levels")} onReset={reset} />}
+        {step === "plan"   && <PStepPlan plan={planResult} level={pickedLevel} loading={loading} onPrev={() => setStep("levels")} onReset={reset} onNav={onNav} brief={brief} />}
       </div>
     </div>
   );
@@ -183,7 +183,7 @@ function PStepLevels({ analysis, loading, onPick, onPrev, onRegen }) {
   );
 }
 
-function PStepPlan({ plan, level, loading, onPrev, onReset }) {
+function PStepPlan({ plan, level, loading, onPrev, onReset, onNav, brief }) {
   if (loading || !plan) return <Spinning icon="📋" phases={[
     { text: "拉 SKILL.md 6 模块结构", sub: "前/中/后 + 团队 + 清单 + 知识沉淀" },
     { text: "活动前: 设备 + 人员 + 前置素材", sub: "" },
@@ -232,8 +232,49 @@ function PStepPlan({ plan, level, loading, onPrev, onReset }) {
       <div style={{ display: "flex", gap: 10, marginTop: 18 }}>
         <Btn variant="outline" onClick={onPrev}>← 换档次</Btn>
         <div style={{ flex: 1 }} />
-        <Btn variant="primary" onClick={onReset}>再策划一个活动</Btn>
+        <Btn onClick={onReset}>再策划一个活动</Btn>
       </div>
+
+      {/* C9: 完成态加 "从策划摘段做视频" CTA (策划完直接出预热视频) */}
+      {onNav && (p.summary || p.before_event) && (
+        <div style={{
+          marginTop: 16, padding: 16,
+          background: "linear-gradient(135deg, #f6fbf7, #fff)",
+          border: `1.5px solid ${T.brand}`, boxShadow: `0 0 0 4px ${T.brandSoft}`,
+          borderRadius: 12, display: "flex", alignItems: "center", gap: 14,
+        }}>
+          <div style={{ fontSize: 26 }}>✨</div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 14, fontWeight: 600, color: T.text }}>下一步: 把策划摘成预热视频?</div>
+            <div style={{ fontSize: 12, color: T.muted, marginTop: 3 }}>
+              一键带活动概要 + 内容计划 → 做视频 Step 1, 选改写 / 直接做
+            </div>
+          </div>
+          <Btn variant="primary" onClick={() => {
+            // seed: summary + after_event 第一段 (内容生产计划)
+            let seed = "";
+            if (p.summary) seed += p.summary + "\n\n";
+            const afterEvent = p.after_event || {};
+            const afterEntries = Object.entries(afterEvent).filter(([k]) => k !== "title").slice(0, 2);
+            if (afterEntries.length) {
+              seed += `# 活动后的内容计划\n`;
+              afterEntries.forEach(([k, v]) => {
+                if (typeof v === "string") seed += `${k}: ${v}\n`;
+                else if (Array.isArray(v)) seed += `${k}: ${v.slice(0, 3).join(" / ")}\n`;
+              });
+            }
+            try {
+              localStorage.setItem("make_v2_seed_script", seed.trim() || (brief || ""));
+              localStorage.setItem("make_v2_seed_from", JSON.stringify({
+                skill: "planner",
+                title: `策划: ${(brief || "").slice(0, 24)}`,
+                ts: Date.now(),
+              }));
+            } catch (_) {}
+            onNav("make");
+          }}>🎬 做成预热视频 →</Btn>
+        </div>
+      )}
     </div>
   );
 }

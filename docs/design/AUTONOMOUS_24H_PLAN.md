@@ -124,6 +124,7 @@
 - C6 PageTouliu Step 1 升级 — hero + 大输入框 + ParamRow 抽组件 + skill 资源默认折叠
 - C7 PageWechat WxStepTopic 升级 — hero + 大输入框 + 副标改人话 + skill 资源默认折叠
 - C8 PageMoments MStepTopic 升级 — hero 字号 30 + 字数 Tag + 提交按钮升级
+- C9 PagePlanner 加做视频链路 — PStepPlan 完成态 "做成预热视频" CTA, seed=summary+after_event
 
 ## 卡住记录
 
