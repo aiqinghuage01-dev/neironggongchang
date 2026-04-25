@@ -132,11 +132,14 @@ function PageWorks({ onNav }) {
 
 function EmptyWorks({ onGo }) {
   return (
-    <div style={{ textAlign: "center", padding: 80, color: T.muted }}>
-      <div style={{ fontSize: 44, marginBottom: 12 }}>🎬</div>
-      <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 6, color: T.text }}>还没做过视频</div>
-      <div style={{ fontSize: 13, marginBottom: 18 }}>点下面开干,第一条会出现在这</div>
-      <Btn variant="primary" onClick={onGo}>去做视频 →</Btn>
+    <div style={{ maxWidth: 480, margin: "60px auto", padding: 32, textAlign: "center",
+                  background: "#fff", border: `1px solid ${T.brand}55`, borderRadius: 16 }}>
+      <div style={{ fontSize: 56, marginBottom: 14 }}>🎬</div>
+      <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 8, color: T.text }}>还没做过视频</div>
+      <div style={{ fontSize: 13.5, marginBottom: 22, color: T.muted, lineHeight: 1.6 }}>
+        粘个链接 / 写段文案 / 选个热点 → 30s 出第一条
+      </div>
+      <Btn variant="primary" onClick={onGo}>🎬 现在去做第一条 →</Btn>
     </div>
   );
 }
@@ -150,39 +153,61 @@ function WorkCard({ w, onPick }) {
     failed: { color: "red", text: "失败" },
   };
   const st = statusMap[w.status] || { color: "gray", text: w.status };
+  const [hover, setHover] = React.useState(false);
 
   return (
-    <div onClick={onPick} style={{
-      background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 10,
-      overflow: "hidden", cursor: "pointer", transition: "all 0.15s",
-    }}>
+    <div onClick={onPick}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        background: "#fff",
+        border: `1px solid ${hover ? T.brand : T.borderSoft}`,
+        boxShadow: hover ? `0 4px 16px rgba(47,122,82,0.12)` : "0 1px 2px rgba(0,0,0,0.03)",
+        borderRadius: 12, overflow: "hidden",
+        cursor: "pointer", transition: "all 0.15s",
+      }}>
       <div style={{
         aspectRatio: "9 / 16",
         background: w.local_url ? "#000" : "linear-gradient(135deg, #1e293b 0%, #475569 100%)",
-        display: "flex", alignItems: "flex-end", padding: 10, color: "#fff", fontSize: 10.5,
+        display: "flex", alignItems: "flex-end", padding: 12, color: "#fff", fontSize: 11,
         position: "relative", overflow: "hidden",
       }}>
         {w.local_url ? (
           <video src={api.media(w.local_url)} muted preload="metadata"
             style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
         ) : (
-          <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", fontSize: 32, opacity: 0.5 }}>▶</div>
+          <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", fontSize: 36, opacity: 0.5 }}>▶</div>
         )}
-        <div style={{ position: "absolute", top: 8, right: 8 }}>
+        {/* 顶部状态 + 时长 */}
+        <div style={{ position: "absolute", top: 10, right: 10 }}>
           <Tag size="xs" color={st.color}>{st.text}</Tag>
         </div>
+        {w.duration_sec ? (
+          <div style={{ position: "absolute", top: 10, left: 10,
+                        padding: "2px 8px", borderRadius: 100,
+                        background: "rgba(0,0,0,0.55)", color: "#fff",
+                        fontSize: 10.5, fontFamily: "SF Mono, monospace", fontWeight: 600 }}>
+            {Math.round(w.duration_sec)}s
+          </div>
+        ) : null}
+        {/* 底部水印 */}
         <div style={{ position: "relative", zIndex: 1, textShadow: "0 1px 3px rgba(0,0,0,0.6)" }}>
-          <div style={{ marginBottom: 4, opacity: 0.85 }}>@清华哥聊私域</div>
-          <div style={{ opacity: 0.7, fontFamily: "SF Mono, monospace" }}>{w.duration_sec ? `${Math.round(w.duration_sec)}s` : ""}</div>
+          <div style={{ opacity: 0.85, fontWeight: 500 }}>@清华哥聊私域</div>
         </div>
       </div>
-      <div style={{ padding: 10 }}>
-        <div style={{ fontSize: 12.5, color: T.text, fontWeight: 500, lineHeight: 1.4, marginBottom: 6, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", minHeight: 32 }}>
+      <div style={{ padding: "12px 14px" }}>
+        <div style={{
+          fontSize: 13, color: T.text, fontWeight: 500, lineHeight: 1.5,
+          marginBottom: 8, display: "-webkit-box", WebkitLineClamp: 2,
+          WebkitBoxOrient: "vertical", overflow: "hidden", minHeight: 39,
+        }}>
           {w.title || (w.final_text || "").slice(0, 40)}
         </div>
-        <div style={{ fontSize: 10.5, color: T.muted2 }}>
-          {new Date(w.created_at * 1000).toLocaleDateString("zh-CN", { month: "2-digit", day: "2-digit" })}
-          {w.shiliu_video_id ? ` · 石榴 ${w.shiliu_video_id}` : ""}
+        <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 10.5, color: T.muted2 }}>
+          <span>📅 {new Date(w.created_at * 1000).toLocaleDateString("zh-CN", { month: "2-digit", day: "2-digit" })}</span>
+          {w.shiliu_video_id && <span>· 柿榴 #{w.shiliu_video_id}</span>}
+          <div style={{ flex: 1 }} />
+          {hover && <span style={{ color: T.brand, fontWeight: 500 }}>看详情 →</span>}
         </div>
       </div>
     </div>
