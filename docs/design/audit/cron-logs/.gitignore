@@ -1,0 +1,3 @@
+tick-*.log
+launchd-*.log
+.tick.lock
