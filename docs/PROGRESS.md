@@ -4,7 +4,28 @@
 
 ---
 
-## 当前状态（2026-04-24 晚 · 第二次 session）
+## 当前状态（2026-04-25 · DoD 制度上线）
+
+**版本**：v0.3.3 — Definition of Done 三层制度落地
+
+**本次 session 完成**：
+
+1. **指令层** — `CLAUDE.md` / `AGENTS.md` 加"完工铁律"段
+   - UI 改动必须 `preview_screenshot` + `preview_console_logs` 自验
+   - 后端改动必须 `pytest -x` + `curl` 自验
+   - bug fix 必须连回归测试一起 commit
+   - 禁说"刷一下浏览器" / "应该好了"
+2. **系统层** — `.claude/settings.json` 加 PostToolUse hook
+   - 每次 `Edit` / `Write` 自动注入完工铁律提醒到 Claude 上下文
+3. **目的** — 消除 Claude "伪完成"反复（改完代码就声称完成、把验证甩给用户）。完整方案见 `~/.claude/plans/users-black-chen-desktop-neironggongcha-radiant-cook.md`
+
+**下一步**：
+- 习惯层：用户侧训练自己听到"刷一下浏览器"立刻打回
+- 一周后回看：bug fix commit 是不是开始带回归测试
+
+---
+
+## 上一个 session（2026-04-24 晚 · 第二次 session）
 
 **版本**：v0.3.2 -- D-008 人设注入两档开关上线
 

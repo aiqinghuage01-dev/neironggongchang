@@ -1,6 +1,6 @@
-# CLAUDE.md
+# AGENTS.md
 
-> AI (Claude / GPT / 其他) 进入本项目前必读。按本文指示读对应文档，否则容易做偏。
+> AI (Codex / GPT / 其他) 进入本项目前必读。按本文指示读对应文档，否则容易做偏。
 
 ---
 
@@ -12,7 +12,7 @@
 ### 架构
 - 前端：React CDN + Babel（`web/index.html`），跑在 `:8001`
 - 后端：FastAPI（`backend/api.py`），跑在 `:8000`
-- AI 引擎：Claude Opus（via OpenClaw proxy `:3456`）/ DeepSeek（备选）
+- AI 引擎：Codex Opus（via OpenClaw proxy `:3456`）/ DeepSeek（备选）
 - 数字人：石榴 16AI API
 - 声音克隆：CosyVoice 2 本地 sidecar `:8766`
 - 知识库：Obsidian vault 只读（`~/Desktop/清华哥知识库/`）
@@ -46,7 +46,7 @@ cat docs/PROGRESS.md
 | `docs/TECHNICAL-DECISIONS.md` | 技术决策档案（为什么这么做） | 踩到新坑/做新决策就补 |
 | `docs/NEW-SKILL-PLAYBOOK.md` | **新 skill 接入手册**（D-010 范式） | 接新 skill 时必读 |
 | `CHANGELOG.md` | 版本演进 + 按决策号分组 | 每发版补一节 |
-| `CLAUDE.md`（本文） | AI 入口路标 | 极少改，改了要简短 |
+| `AGENTS.md`（本文） | AI 入口路标 | 极少改，改了要简短 |
 | `README.md` | 项目总入口（给人看） | 偶尔维护 |
 
 ---
@@ -128,7 +128,7 @@ python scripts/smoke_new_apis.py   # 新 API 冒烟
 ### 目录结构（核心）
 ```
 neironggongchang/
-  CLAUDE.md              <- 你在读这个
+  AGENTS.md              <- 你在读这个
   PRD_v2.md              <- 产品事实源
   docs/
     PROGRESS.md          <- 进度看板（必读）
@@ -145,7 +145,7 @@ neironggongchang/
       article.py         <- 公众号长文
   shortvideo/
     ai.py                <- AI 引擎抽象层（Opus / DeepSeek 切换）
-    claude_opus.py       <- Claude Opus 客户端
+    claude_opus.py       <- Codex Opus 客户端
     deepseek.py          <- DeepSeek 客户端
     shiliu.py            <- 石榴数字人 API
     qingdou.py           <- 轻抖（链接->文案）

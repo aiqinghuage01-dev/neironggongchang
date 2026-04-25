@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '⚠️ 完工铁律：UI 改→preview_screenshot+console；后端改→pytest+curl；bug fix→加回归测试。没证据不许说 done。'"
+          }
+        ]
+      }
+    ]
+  }
+}
