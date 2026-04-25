@@ -676,6 +676,65 @@ def sanitize_for_push(html: str) -> dict[str, Any]:
 _DIAG_DIR = PREVIEW_DIR
 
 
+# ─── D-046 头像合法上传 ────────────────────────────────────
+# 模板硬编码的头像 URL ?from=appmsg 是别人公众号资源, sanitize 整剥导致 push
+# 后头像丢. 解法: 用户在 ~/.wechat-article-config 里配 author_avatar_path
+# 指向本地图, push 流程先调 upload_article_image.sh 上传到 mmbiz, 拿合法 URL,
+# 替换 HTML 里头像 src. 任何步骤失败 silent 跳过, 退化到剥头像 (不阻塞 push).
+
+_WECHAT_CONFIG_PATH = Path.home() / ".wechat-article-config"
+
+
+def _read_wechat_config() -> dict:
+    if not _WECHAT_CONFIG_PATH.exists():
+        return {}
+    try:
+        return json.loads(_WECHAT_CONFIG_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def upload_article_image(image_path: Path, timeout: int = 30) -> str:
+    """subprocess 调 skill 的 upload_article_image.sh, 拿 mmbiz 永久 URL.
+
+    脚本依赖 ~/.wechat-article-config 的 wechat_appid / wechat_appsecret.
+    脚本 stdout 输出 URL, stderr 输 log 文本. 失败抛 WechatScriptError.
+    """
+    if not image_path.exists():
+        raise WechatScriptError(f"头像文件不存在: {image_path}")
+    scripts_dir = skill_loader.load_skill(SKILL_SLUG)["scripts_dir"]
+    script = scripts_dir / "upload_article_image.sh"
+    if not script.exists():
+        raise WechatScriptError(f"上传脚本不存在: {script}")
+    r = _run(["bash", str(script), str(image_path)], timeout=timeout, cwd=str(scripts_dir))
+    url = (r.stdout or "").strip().splitlines()[-1] if r.stdout.strip() else ""
+    if not url.startswith("http"):
+        raise WechatScriptError(f"upload_article_image 未输出 URL: stdout={r.stdout[-300:]}")
+    return url
+
+
+# 模板头像识别正则: <a href="...mp.weixin.qq.com/mp/profile_ext..."><img...></a>
+# 这是 v3-clean 模板硬编码的头像锚, 全篇唯一. 只换这里的 img src.
+_AVATAR_BLOCK_RE = re.compile(
+    r'(<a\b[^>]*href="https?://mp\.weixin\.qq\.com/mp/profile_ext[^"]*"[^>]*>\s*'
+    r'<img\b[^>]*?src=)(["\'])([^"\']*)\2',
+    re.IGNORECASE | re.S,
+)
+
+
+def replace_template_avatar(html: str, new_url: str) -> tuple[str, int]:
+    """把模板硬编码头像 img 的 src 换成 new_url. 返回 (新 html, 替换次数)."""
+    if not new_url or not html:
+        return html, 0
+    count = 0
+    def _sub(m: re.Match) -> str:
+        nonlocal count
+        count += 1
+        return f"{m.group(1)}{m.group(2)}{new_url}{m.group(2)}"
+    out = _AVATAR_BLOCK_RE.sub(_sub, html)
+    return out, count
+
+
 def push_to_wechat(
     title: str,
     digest: str,
@@ -698,8 +757,32 @@ def push_to_wechat(
         if not Path(p).exists():
             raise WechatScriptError(f"文件不存在: {p}")
 
-    # ── D-042 推送前 sanitize ──
     original_html = Path(html_path).read_text(encoding="utf-8")
+
+    # ── D-046 头像合法上传 (在 sanitize 之前): 用户配 author_avatar_path 的话
+    # 上传到 mmbiz 拿合法 URL, 替换模板硬编码头像 src. 失败 silent 跳, 退化到 D-045 剥头像.
+    avatar_meta = {"path": None, "url": None, "replaced": 0, "error": None, "elapsed_sec": 0}
+    cfg = _read_wechat_config()
+    avatar_path_str = cfg.get("author_avatar_path") or ""
+    if avatar_path_str:
+        avatar_path = Path(avatar_path_str).expanduser()
+        avatar_meta["path"] = str(avatar_path)
+        if avatar_path.exists():
+            try:
+                t_av = time.time()
+                new_url = upload_article_image(avatar_path)
+                avatar_meta["url"] = new_url
+                avatar_meta["elapsed_sec"] = round(time.time() - t_av, 1)
+                replaced_html, n_replaced = replace_template_avatar(original_html, new_url)
+                avatar_meta["replaced"] = n_replaced
+                if n_replaced > 0:
+                    original_html = replaced_html
+            except Exception as e:
+                avatar_meta["error"] = f"{type(e).__name__}: {e}"
+        else:
+            avatar_meta["error"] = "本地头像文件不存在"
+
+    # ── D-042 推送前 sanitize ──
     clean_result = sanitize_for_push(original_html)
     sanitized_html = clean_result["clean"]
 
@@ -707,7 +790,7 @@ def push_to_wechat(
     sanitized_path = _DIAG_DIR / "last_push_request.html"
     sanitized_path.write_text(sanitized_html, encoding="utf-8")
 
-    # 诊断 dump (D-043: 加 rewritten 字段)
+    # 诊断 dump (D-043: rewritten · D-046: avatar)
     diag = {
         "title": title,
         "digest": digest,
@@ -721,6 +804,7 @@ def push_to_wechat(
         "img_count_sanitized": len(re.findall(r"<img\b", sanitized_html)),
         "removed": clean_result["removed"],
         "rewritten": clean_result.get("rewritten", {}),
+        "avatar": avatar_meta,
     }
     (_DIAG_DIR / "last_push_request.json").write_text(
         json.dumps(diag, ensure_ascii=False, indent=2), encoding="utf-8",
@@ -740,4 +824,5 @@ def push_to_wechat(
         "sanitize_removed": clean_result["removed"],
         "sanitize_rewritten": clean_result.get("rewritten", {}),
         "sanitized_html_path": str(sanitized_path),
+        "avatar": avatar_meta,
     }
