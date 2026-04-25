@@ -184,6 +184,54 @@ function MakeV2StepScript({ script, setScript, onNext, onNav, seedFrom, onDismis
     setScript(seed);
   }
 
+  // D-062mm (清华哥反馈 #18): 智能识别 URL / 文案, 显不同的下一步按钮
+  // - URL → "📎 提取文案" 主 (走轻抖 ASR), "🎬 直接做(不提)" 次
+  // - 文案 → "🎬 做数字人 →" 主, "✍️ 改写优化一下" 次 (跳 voicerewrite)
+  // - 空 → "↑ 先填文案" 灰
+  const trimmed = script.trim();
+  const isUrlLike = trimmed.length > 0 && trimmed.length < 200 &&
+    (/^https?:\/\//.test(trimmed) ||
+     /v\.douyin\.com|xhslink|weibo\.com|kuaishou\.com|b23\.tv|youtu\.be|youtube\.com/.test(trimmed));
+  const isContentLike = trimmed.length >= 10 && !isUrlLike;
+
+  const [extracting, setExtracting] = React.useState(false);
+  const [extractMsg, setExtractMsg] = React.useState("");
+  async function extractFromUrl() {
+    if (!trimmed || extracting) return;
+    setExtracting(true); setExtractMsg("已提交轻抖 ASR · 通常 1-3 分钟...");
+    try {
+      const sub = await api.post("/api/transcribe/submit", { url: trimmed });
+      const batchId = sub.batch_id;
+      for (let i = 0; i < 60; i++) {
+        await new Promise(s => setTimeout(s, 5000));
+        try {
+          const q = await api.get(`/api/transcribe/query/${batchId}`);
+          if (q.status === "success" && q.text) {
+            setScript(q.text);
+            setExtractMsg(`✓ 提取了 ${q.text.length} 字 · ${q.title || ""} · 改完点"做数字人"`);
+            return;
+          }
+          if (q.status === "failed") {
+            setExtractMsg(`提取失败: ${q.error || "(无 detail)"}`);
+            return;
+          }
+          setExtractMsg(`等转写... ${q.status} (已 ${i * 5}s)`);
+        } catch (_) {}
+      }
+      setExtractMsg("等了 5 分钟还没出, 换个链接或去 ⚙️ 设置看 transcribe");
+    } catch (e) { setExtractMsg(`提取失败: ${e.message}`); }
+    finally { setExtracting(false); }
+  }
+
+  function rewriteThis() {
+    // 把当前文案塞 voicerewrite (它有"改写"能力)
+    try {
+      localStorage.setItem("voicerewrite_seed_transcript", trimmed);
+      setFromMake("voicerewrite");  // 设 anchor, voicerewrite 完成后会带回来
+    } catch (_) {}
+    onNav("voicerewrite");
+  }
+
   return (
     <div>
       {/* D-062c: 从其它 skill 跳来的 seed banner */}
@@ -210,17 +258,17 @@ function MakeV2StepScript({ script, setScript, onNext, onNav, seedFrom, onDismis
         </div>
       </div>
 
-      {/* === 文案输入区 (D-062ll 大圆角绿边 hero) === */}
+      {/* === 文案输入区 (D-062ll/mm 大圆角绿边 hero + 智能 3 路径) === */}
       <div style={{
         background: "#fff",
         border: `1.5px solid ${T.brand}`,
         boxShadow: `0 0 0 5px ${T.brandSoft}`,
-        borderRadius: 16, padding: 18, marginBottom: 24,
+        borderRadius: 16, padding: 18, marginBottom: 16,
       }}>
         <textarea
           value={script}
           onChange={e => setScript(e.target.value)}
-          placeholder="在这里粘文案，或者直接贴一段口播..."
+          placeholder="粘视频链接 (抖音/小红书/B站...), 或者直接贴一段口播文案..."
           rows={10}
           style={{
             width: "100%", padding: 12, border: "none",
@@ -229,32 +277,81 @@ function MakeV2StepScript({ script, setScript, onNext, onNav, seedFrom, onDismis
             color: T.text, minHeight: 200,
           }} />
 
-        <div style={{ marginTop: 12, paddingTop: 14, borderTop: `1px solid ${T.borderSoft}`,
-                      display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-          {script.length === 0 ? (
-            <span style={{ fontSize: 12, color: T.muted2 }}>✨ 小华自动跟踪字数 + 秒数, 偏长会提醒</span>
+        {/* 状态行 (字数 / 提取进度) */}
+        <div style={{ marginTop: 10, paddingTop: 12, borderTop: `1px solid ${T.borderSoft}`,
+                      display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", minHeight: 28 }}>
+          {trimmed.length === 0 ? (
+            <span style={{ fontSize: 12, color: T.muted2 }}>✨ 自动识别 URL 还是文案 · 选下面的下一步</span>
+          ) : isUrlLike ? (
+            <>
+              <Tag size="xs" color="blue">🔗 像短视频链接</Tag>
+              <span style={{ fontSize: 11, color: T.muted2 }}>下面"提取文案"走轻抖 ASR (1-3 分钟)</span>
+            </>
           ) : (
             <>
-              <Tag size="xs" color="gray">{script.length} 字</Tag>
-              <Tag size="xs" color={script.length > 600 ? "amber" : "blue"}>~{Math.round(script.length / 3.5)} 秒口播</Tag>
-              {script.length > 600 && (
+              <Tag size="xs" color="gray">{trimmed.length} 字</Tag>
+              <Tag size="xs" color={trimmed.length > 600 ? "amber" : "blue"}>~{Math.round(trimmed.length / 3.5)} 秒口播</Tag>
+              {trimmed.length > 600 && (
                 <Tag size="xs" color="amber">⚠ 偏长 · 建议精简 300-500</Tag>
               )}
-              <button onClick={() => setScript("")} title="清空"
-                style={{ background: "transparent", border: "none", color: T.muted2, cursor: "pointer", fontSize: 12, fontFamily: "inherit" }}>
-                清空
-              </button>
             </>
           )}
-          <div style={{ flex: 1 }} />
-          <button onClick={onNext} disabled={!script.trim()} style={{
-            padding: "10px 24px", fontSize: 14, fontWeight: 600,
-            background: script.trim() ? T.brand : T.muted3, color: "#fff",
-            border: "none", borderRadius: 100,
-            cursor: script.trim() ? "pointer" : "not-allowed", fontFamily: "inherit",
-          }}>
-            {script.trim() ? "下一步: 声音 + 数字人 →" : "↑ 先填文案"}
-          </button>
+          {script && (
+            <button onClick={() => setScript("")} title="清空"
+              style={{ background: "transparent", border: "none", color: T.muted2, cursor: "pointer", fontSize: 11, fontFamily: "inherit", marginLeft: "auto" }}>
+              清空
+            </button>
+          )}
+        </div>
+
+        {extractMsg && (
+          <div style={{ marginTop: 8, fontSize: 12, color: extractMsg.startsWith("✓") ? T.brand : extractMsg.startsWith("提取失败") ? T.red : T.muted, lineHeight: 1.5 }}>
+            {extractMsg}
+          </div>
+        )}
+
+        {/* D-062mm: 动态 3 路径按钮 */}
+        <div style={{ marginTop: 14, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+          {trimmed.length === 0 ? (
+            <button disabled style={{
+              padding: "10px 24px", fontSize: 14, fontWeight: 600,
+              background: T.muted3, color: "#fff",
+              border: "none", borderRadius: 100,
+              cursor: "not-allowed", fontFamily: "inherit",
+            }}>↑ 先填文案 / 链接</button>
+          ) : isUrlLike ? (
+            // URL 模式
+            <>
+              <button onClick={extractFromUrl} disabled={extracting} style={{
+                padding: "10px 22px", fontSize: 14, fontWeight: 600,
+                background: extracting ? T.muted3 : T.brand, color: "#fff",
+                border: "none", borderRadius: 100,
+                cursor: extracting ? "not-allowed" : "pointer", fontFamily: "inherit",
+              }}>{extracting ? "提取中..." : "📎 提取文案 →"}</button>
+              <span style={{ fontSize: 11, color: T.muted2, flex: 1 }}>
+                提完会自动填回, 你看看要不要改写, 再做数字人
+              </span>
+            </>
+          ) : (
+            // 文案模式
+            <>
+              <button onClick={onNext} style={{
+                padding: "10px 22px", fontSize: 14, fontWeight: 600,
+                background: T.brand, color: "#fff",
+                border: "none", borderRadius: 100,
+                cursor: "pointer", fontFamily: "inherit",
+              }}>🎬 做数字人 →</button>
+              <button onClick={rewriteThis} style={{
+                padding: "9px 18px", fontSize: 13, fontWeight: 500,
+                background: "#fff", color: T.muted,
+                border: `1px solid ${T.border}`, borderRadius: 100,
+                cursor: "pointer", fontFamily: "inherit",
+              }}>✍️ 先改写优化</button>
+              <span style={{ fontSize: 11, color: T.muted2, flex: 1 }}>
+                先改写: 跳 🎙️ 录音改写 (人味重排), 完成自动带回这里
+              </span>
+            </>
+          )}
         </div>
       </div>
 

@@ -22,6 +22,18 @@ function PageVoicerewrite({ onNav }) {
   const [skillInfo, setSkillInfo] = React.useState(null);
   React.useEffect(() => { api.get("/api/voicerewrite/skill-info").then(setSkillInfo).catch(() => {}); }, []);
 
+  // D-062mm: 检测 make 那边丢过来的 voicerewrite_seed_transcript, 自动填 textarea
+  React.useEffect(() => {
+    try {
+      const seed = localStorage.getItem("voicerewrite_seed_transcript");
+      if (seed && !transcript) {
+        setTranscript(seed);
+        localStorage.removeItem("voicerewrite_seed_transcript");
+      }
+    } catch (_) {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   async function runStep({ nextStep, rollbackStep, clearSetter, apiCall }) {
     if (clearSetter) clearSetter(null);
     setStep(nextStep);
