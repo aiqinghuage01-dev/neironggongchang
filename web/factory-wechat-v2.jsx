@@ -236,7 +236,11 @@ function PageWechat({ onNav }) {
 
   function assembleHtml(templateName) {
     // D-034: 接受 template 参数 · undefined 走默认 v3-clean
-    const tpl = templateName || htmlResult?.template || "v3-clean";
+    // D-041: 防御式取值 — 直接 onClick={assembleHtml} 时 templateName=SyntheticEvent (HTMLButtonElement),
+    //        会被塞进 request body 引发 "Converting circular structure to JSON" 崩溃
+    const tpl = (typeof templateName === "string" && templateName)
+      ? templateName
+      : (htmlResult?.template || "v3-clean");
     const section_images = imagePlans.filter(p => p.mmbiz_url).map(p => ({ mmbiz_url: p.mmbiz_url }));
     return runStep({
       nextStep: "html", rollbackStep: "images", clearSetter: setHtmlResult,
@@ -360,7 +364,7 @@ function PageWechat({ onNav }) {
         {step === "titles"  && <WxStepTitles titles={titles} loading={loading} onPick={genOutline} onPrev={() => setStep("topic")} onRegen={genTitles} autoMode={autoMode} />}
         {step === "outline" && <WxStepOutline outline={outline} setOutline={setOutline} title={pickedTitle} topic={topic} loading={loading} onPrev={() => setStep("titles")} onNext={writeArticle} onRegen={() => genOutline(pickedTitle)} />}
         {step === "write"   && <WxStepWrite article={article} loading={loading} onPrev={() => setStep("outline")} onNext={planImages} onRewrite={writeArticle} onRewriteSelection={rewriteSelection} />}
-        {step === "images"  && <WxStepImages plans={imagePlans} setPlans={setImagePlans} onGen={generateOneImage} loading={loading} onPrev={() => setStep("write")} onNext={assembleHtml} onRegen={planImages} />}
+        {step === "images"  && <WxStepImages plans={imagePlans} setPlans={setImagePlans} onGen={generateOneImage} loading={loading} onPrev={() => setStep("write")} onNext={() => assembleHtml()} onRegen={planImages} />}
         {step === "html"    && <WxStepHtml result={htmlResult} loading={loading} onPrev={() => setStep("images")} onNext={genCover} onSwitchTemplate={assembleHtml} />}
         {step === "cover"   && <WxStepCover cover={coverResult} title={pickedTitle} loading={loading} onPrev={() => setStep("html")} onNext={push} onRegen={genCover} onSelect={selectCover} />}
         {step === "push"    && <WxStepPush result={pushResult} loading={loading} onPrev={() => setStep("cover")} onReset={reset} onNav={onNav} />}
