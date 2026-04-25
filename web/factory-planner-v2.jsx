@@ -91,24 +91,33 @@ function PagePlanner({ onNav }) {
 function PStepInput({ brief, setBrief, onGo, loading }) {
   const ready = !!brief.trim() && !loading;
   return (
-    <div style={{ padding: "40px 40px 60px", maxWidth: 820, margin: "0 auto" }}>
-      <div style={{ textAlign: "center", marginBottom: 24 }}>
-        <div style={{ fontSize: 28, fontWeight: 700, color: T.text, marginBottom: 8 }}>明天/下周/下月有什么活动? 🗓️</div>
-        <div style={{ fontSize: 14, color: T.muted }}>讲课 · 出差 · 直播 · 分享 · 拜访 · 展会 · 一句话说清,小华规划怎么把内容产出做到最大化</div>
+    <div style={{ padding: "32px 40px 80px", maxWidth: 820, margin: "0 auto" }}>
+      {/* A7-todo3 hero polish (与其他 skill 一致 30px) */}
+      <div style={{ textAlign: "center", margin: "8px 0 24px" }}>
+        <div style={{ fontSize: 30, fontWeight: 700, color: T.text, letterSpacing: "-0.02em", marginBottom: 8 }}>
+          明天/下周/下月有什么活动? 🗓️
+        </div>
+        <div style={{ fontSize: 14, color: T.muted, lineHeight: 1.6 }}>
+          一句话讲活动 · 小华规划怎么把内容产出做到最大化
+        </div>
       </div>
       <div style={{ background: "#fff", border: `1.5px solid ${T.brand}`, boxShadow: `0 0 0 5px ${T.brandSoft}`, borderRadius: 16, padding: 18 }}>
         <textarea rows={6} value={brief} onChange={e => setBrief(e.target.value)}
-          placeholder="例:&#10;下周三在武汉给 200 个实体老板讲一天 AI 内容获客,有 1 个编导助理&#10;&#10;或简化:&#10;下周给老板讲课"
-          style={{ width: "100%", border: "none", outline: "none", background: "transparent", fontSize: 14, fontFamily: "inherit", resize: "vertical", lineHeight: 1.7, color: T.text }}
+          placeholder="例: 下周三在武汉给 200 个实体老板讲一天 AI 内容获客, 有 1 个编导助理"
+          style={{ width: "100%", padding: 12, border: "none", outline: "none", background: "transparent", fontSize: 14, fontFamily: "inherit", resize: "vertical", lineHeight: 1.7, color: T.text, minHeight: 140 }}
         />
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10, paddingTop: 12, borderTop: `1px solid ${T.borderSoft}` }}>
-          <div style={{ fontSize: 11.5, color: T.muted2 }}>🗓️ 缺什么细节小华自己推断 · 末尾会列推断结果让你纠正</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 12, paddingTop: 14, borderTop: `1px solid ${T.borderSoft}` }}>
+          {brief.trim() ? (
+            <Tag size="xs" color="gray">{brief.trim().length} 字</Tag>
+          ) : (
+            <span style={{ fontSize: 12, color: T.muted2 }}>✨ 缺什么细节小华自己推断, 末尾你看了再改</span>
+          )}
           <div style={{ flex: 1 }} />
           <button onClick={onGo} disabled={!ready} style={{
-            padding: "8px 20px", fontSize: 13, fontWeight: 600,
+            padding: "10px 22px", fontSize: 14, fontWeight: 600,
             background: ready ? T.brand : T.muted3, color: "#fff",
             border: "none", borderRadius: 100, cursor: ready ? "pointer" : "not-allowed", fontFamily: "inherit",
-          }}>{loading ? "推断中..." : "出三档目标 →"}</button>
+          }}>{loading ? "推断中..." : "🚀 出三档目标 →"}</button>
         </div>
       </div>
     </div>

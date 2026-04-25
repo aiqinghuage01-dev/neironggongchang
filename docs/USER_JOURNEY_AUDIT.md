@@ -329,6 +329,22 @@
         现在含: 飞轮 (NightHotFlywheel) + anchor (useFromMake) + 错误友好化 (humanizeError)
         建议: 重命名 factory-journey.jsx 或拆 3 个文件 (P3)
 
+- [x] **D-062-AUDIT-7** 2026-04-25 18:00 复盘 (Phase 1 C5-C9 完成后)
+      新发现 (后续 cron 拍来修):
+      - **D-062nn-A7-todo1** 各 skill Step 2/3 (angles/write) 标题字号 22px 不大
+        跟 Step 1 hero 30px 不一致, 走完 Step 1 进 Step 2 视觉断裂
+        Fix: 统一升 26-28px, 加 hero 风格的副标
+        涉及: hotrewrite/voicerewrite/touliu/wechat/moments 各 step 2-3
+      - **D-062nn-A7-todo2** PageHotrewrite Step 1 (input) hero 还是 28px 老样式
+        从 sidebar 直接进 🔥 热点改写 时看不到新 hero 风格
+        Fix: 跟 voicerewrite C5+ 同款, 升 30px hero + 副标人话
+      - **D-062nn-A7-todo3** PagePlanner Step 1 (PStepInput) 没 polish
+        Fix: 同 C5+ 模式 hero polish
+      - **D-062nn-A7-todo4** PageWechat Step 2-7 / PageMoments Step 2-4 / PageTouliu Step 2 都没动
+        Fix: 排进 Phase 2 后续, 优先级看用户使用频率
+      - **D-062nn-A7-todo5** voicerewrite VStepAngles 现 angles 卡 padding 18, 跟 hot Step 2 13px 不一致
+        Fix: 统一 angle 卡视觉 (后续抽 AngleCard 公共组件)
+
 ---
 
 ## 文档维护规则

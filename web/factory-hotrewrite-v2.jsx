@@ -271,25 +271,34 @@ function HotStepInput({ hotspot, setHotspot, onGo, loading, skillInfo }) {
   }
 
   return (
-    <div style={{ padding: "40px 40px 60px", maxWidth: 720, margin: "0 auto" }}>
-      <div style={{ textAlign: "center", marginBottom: 24 }}>
-        <div style={{ fontSize: 28, fontWeight: 700, color: T.text, marginBottom: 8, letterSpacing: "-0.02em" }}>什么热点要改写? 🔥</div>
-        <div style={{ fontSize: 14, color: T.muted }}>skill 自带方法论: 80% 价值输出 + 20% 业务植入 · 1800-2600 字口播</div>
+    <div style={{ padding: "32px 40px 80px", maxWidth: 720, margin: "0 auto" }}>
+      {/* A7-todo2 hero polish (与其他 skill 一致 30px) */}
+      <div style={{ textAlign: "center", margin: "8px 0 24px" }}>
+        <div style={{ fontSize: 30, fontWeight: 700, color: T.text, letterSpacing: "-0.02em", marginBottom: 8 }}>
+          什么热点要改写? 🔥
+        </div>
+        <div style={{ fontSize: 14, color: T.muted, lineHeight: 1.6 }}>
+          贴一条热点 · 小华出 3 个角度选 · 改写成你视角的口播 (1800-2600 字)
+        </div>
       </div>
 
       <div style={{ background: "#fff", border: `1.5px solid ${T.brand}`, boxShadow: `0 0 0 5px ${T.brandSoft}`, borderRadius: 16, padding: 18, marginBottom: 18 }}>
         <textarea rows={6} value={hotspot} onChange={e => setHotspot(e.target.value)}
-          placeholder="贴一条热点(事件描述/新闻链接/关键信息都行)...&#10;&#10;例:最近某平台头部主播人设翻车,大量带货数据作假被曝光..."
-          style={{ width: "100%", border: "none", outline: "none", background: "transparent", fontSize: 14.5, fontFamily: "inherit", resize: "vertical", lineHeight: 1.7, color: T.text }}
+          placeholder="例:最近某平台头部主播人设翻车, 大量带货数据作假被曝光..."
+          style={{ width: "100%", padding: 12, border: "none", outline: "none", background: "transparent", fontSize: 14.5, fontFamily: "inherit", resize: "vertical", lineHeight: 1.7, color: T.text, minHeight: 140 }}
         />
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10, paddingTop: 12, borderTop: `1px solid ${T.borderSoft}` }}>
-          <div style={{ fontSize: 11.5, color: T.muted2 }}>🔥 skill 会先拆解事件,给你 3 个切入角度挑</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 12, paddingTop: 14, borderTop: `1px solid ${T.borderSoft}` }}>
+          {hotspot.trim() ? (
+            <Tag size="xs" color="gray">{hotspot.trim().length} 字</Tag>
+          ) : (
+            <span style={{ fontSize: 12, color: T.muted2 }}>✨ 写完点 "开始拆解" · 小华给 3 个切入角度</span>
+          )}
           <div style={{ flex: 1 }} />
           <button onClick={onGo} disabled={!ready} style={{
-            padding: "8px 20px", fontSize: 13, fontWeight: 600,
+            padding: "10px 22px", fontSize: 14, fontWeight: 600,
             background: ready ? T.brand : T.muted3, color: "#fff",
             border: "none", borderRadius: 100, cursor: ready ? "pointer" : "not-allowed", fontFamily: "inherit",
-          }}>{loading ? "拆解中..." : "开始拆解 →"}</button>
+          }}>{loading ? "拆解中..." : "🚀 开始拆解 →"}</button>
         </div>
       </div>
 

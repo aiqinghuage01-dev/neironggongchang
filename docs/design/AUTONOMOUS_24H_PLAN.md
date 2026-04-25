@@ -125,6 +125,9 @@
 - C7 PageWechat WxStepTopic 升级 — hero + 大输入框 + 副标改人话 + skill 资源默认折叠
 - C8 PageMoments MStepTopic 升级 — hero 字号 30 + 字数 Tag + 提交按钮升级
 - C9 PagePlanner 加做视频链路 — PStepPlan 完成态 "做成预热视频" CTA, seed=summary+after_event
+- C5+ voicerewrite VStepInput hero polish — 字号 30 + 副标人话 + textarea minHeight + 字数 Tag
+- AUDIT-7 复盘 (Phase 1 完成后) — 写 5 个 todo (各 step hero 不一致 / wechat moments 后续 step 没动 / planner Step 1 没动)
+- A7-todo2+3 hotrewrite + planner Step 1 hero polish — 字号 30 + 副标人话 + minHeight + 字数 Tag
 
 ## 卡住记录
 
