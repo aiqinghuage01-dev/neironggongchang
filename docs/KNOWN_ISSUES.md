@@ -67,6 +67,18 @@
 
 ---
 
+### 9. factory-flow.jsx + factory-dhv5-v2.jsx 还在 load 但部分代码已 deprecated
+**位置**:
+- `web/factory-flow.jsx`: 旧 PageMake 6 步, 已不被 case "make" 引用 (现走 PageMakeV2)
+- `web/factory-dhv5-v2.jsx`: PageDhv5 已不在 sidebar, 但其组件 (DhvTemplateCard / Dhv5SceneRow / DHV5_CATEGORIES / DHV5_DURATION_BUCKETS) 被 PageMakeV2 复用
+
+**当前**: 两个文件仍 load, 文件头都有 deprecated 注释说清楚现状.
+**清理前提**: 确认 PageMakeV2 完整可用 (D-061 全套跑通) 后, D-062 时:
+1. 把 dhv5 共用组件搬到独立 utils 文件 (e.g. `factory-dhv5-utils.jsx`)
+2. 从 index.html 移除 factory-flow.jsx + factory-dhv5-v2.jsx
+3. case "dhv5" route 删掉
+**优先级**: P3 polish, 不阻塞功能.
+
 ## 已修的(归档, 可以从这里删)
 
 - ✅ D-038 公众号 8 步 wfRestore 旧 coverResult 兼容性 / push 422 cover_path / 顶栏 step dot 不能点

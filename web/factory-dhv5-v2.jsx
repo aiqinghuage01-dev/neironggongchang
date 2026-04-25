@@ -1,13 +1,20 @@
-// factory-dhv5-v2.jsx — 🎬 v5 模板成片 (D-059b)
+// factory-dhv5-v2.jsx — ⚠️ 部分 DEPRECATED (D-061a 起) ⚠️
+// PageDhv5 作为独立 sidebar 入口已废 — 模板剪辑现在融进 PageMakeV2 Step 3+4
+// (factory-make-v2.jsx).
 //
-// 用户拍板的关键设计:
-//   数字人 mp4 是上游复用资源 (顶部锁定)
-//   v5 是下游"套不同模板剪辑成多版"剪辑器 (主区模板挑选)
-//   一次数字人投入, N 版本产出
+// 本文件 *仍 load* 因为 PageMakeV2 复用了这里 export 的组件:
+//   · DhvTemplateCard (Step 3 模板网格用)
+//   · Dhv5SceneRow (Step 4 内联编辑 + B-roll 展开 panel)
+//   · DHV5_CATEGORIES / DHV5_DURATION_BUCKETS (Step 3 筛选)
 //
-// 本轮 (D-059b) 只做 Step 1+2: 选数字人 + 选模板
-// D-059c 文案对齐 + B-roll
-// D-059d 渲染 + 预览 + "用同 mp4 再套" 复用闭环
+// PageDhv5 本身保留路由 case "dhv5" 但 sidebar 没入口, 没人调用.
+// 后续 D-062 可以把上面 4 个共用组件移到独立 utils 文件,
+// 然后 PageDhv5 + 本文件其它无用代码可以彻底清理.
+//
+// === 旧版本注释 ===
+// 用户拍板: 数字人 mp4 是上游复用资源, v5 套模板剪辑成多版
+// (这个原则现在由 PageMakeV2 全流程承载, 数字人在 Step 2 造好,
+//  Step 3 选模板, Step 4 剪辑 — 跟 PageDhv5 单页里 3 步是一样的逻辑)
 
 const DHV5_CATEGORIES = ["全部", "培训", "电商", "财经", "三农", "教育", "情感", "职场", "未分类"];
 const DHV5_DURATION_BUCKETS = [

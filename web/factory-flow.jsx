@@ -1,5 +1,15 @@
-// factory-flow.jsx — 做视频 6 步完整流程,对齐 docs/design_v3/factory3-flow.jsx 视觉,接真 API
-// 步骤:素材 → 文案 → 声音 → 形象 → 剪辑 → 发布(中间态:扒文案中 / 合成中)
+// factory-flow.jsx — ⚠️ DEPRECATED (D-061b 起) ⚠️
+// 这是旧版 PageMake (做视频 6 步: 素材→文案→声音→形象→剪辑→发布).
+// 新版在 factory-make-v2.jsx (PageMakeV2 5 步: 文案→声音+数字人→选模板→剪辑→预览+发布).
+// case "make" 在 factory-app.jsx 已切到 PageMakeV2.
+//
+// 本文件仍 load 但 PageMake 已不被任何 route 引用 — 保留作 reference.
+// 如果想看当年的实现 (KbInjectBar / StepTranscribing 等组件) 仍可用.
+// 待清华哥确认无遗漏后, D-062 时彻底从 index.html 移除 load.
+//
+// === 旧版本注释 ===
+// 做视频 6 步完整流程, 对齐 docs/design_v3/factory3-flow.jsx 视觉, 接真 API
+// 步骤: 素材 → 文案 → 声音 → 形象 → 剪辑 → 发布
 
 const FLOW_STEPS = [
   { id: "source",  n: 1, label: "素材" },
