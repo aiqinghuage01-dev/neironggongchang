@@ -2078,15 +2078,20 @@ def dhv5_align(req: Dhv5AlignReq):
         raise HTTPException(400, str(e))
 
 
+class Dhv5BrollReq(BaseModel):
+    prompt_override: Optional[str] = Field(None, description="可选 — 用户编辑过的 prompt, 不传走 YAML 原 prompt")
+
+
 @app.post("/api/dhv5/broll/{template_id}/{scene_idx}", tags=["v5 视频"], summary="给单 scene 生 B-roll 图")
-def dhv5_broll(template_id: str, scene_idx: int, regen: bool = False):
+def dhv5_broll(template_id: str, scene_idx: int, regen: bool = False, req: Optional[Dhv5BrollReq] = None):
     """B 型 4:3 横版 / C 型 9:16 竖版. 走 ~/.claude/skills/poju-image-gen (apimart).
     存 ~/Desktop/skills/digital-human-video-v5/assets/brolls/<template_id>/.
     返 {scene_idx, scene_type, filename, local_path, url, size_bytes, skipped, prompt}.
-    skipped=true 表示文件已存在且 regen=false."""
+    skipped=true 表示文件已存在且 regen=false 且无 prompt_override."""
     from backend.services import dhv5_pipeline
+    prompt_override = req.prompt_override if req else None
     try:
-        return dhv5_pipeline.generate_broll(template_id, scene_idx, regen=regen)
+        return dhv5_pipeline.generate_broll(template_id, scene_idx, regen=regen, prompt_override=prompt_override)
     except dhv5_pipeline.Dhv5Error as e:
         raise HTTPException(400, str(e))
 

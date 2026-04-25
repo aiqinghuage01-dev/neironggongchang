@@ -288,13 +288,15 @@ def generate_broll(
     template_id: str,
     scene_idx: int,
     regen: bool = False,
+    prompt_override: str | None = None,
 ) -> dict[str, Any]:
     """给某 scene 生 broll 图 (subprocess 调 poju-img.py).
 
     Args:
-      template_id: 模板 id
-      scene_idx:   scene 全局索引 (0-based, 模板 scenes 数组里的位置)
-      regen:       True 强制重生, False 已存在跳过
+      template_id:     模板 id
+      scene_idx:       scene 全局索引 (0-based, 模板 scenes 数组里的位置)
+      regen:           True 强制重生, False 已存在跳过
+      prompt_override: 用户调过的 prompt (D-060c 前端编辑用), 不传走 YAML 原 prompt
 
     Returns:
       {
@@ -323,9 +325,9 @@ def generate_broll(
     if stype not in {"B", "C"}:
         raise Dhv5Error(f"只 B/C scene 有 broll, scene #{scene_idx} 是 {stype}")
 
-    # 拿 prompt: B 用 top_image_prompt / C 用 screen_image_prompt
+    # 拿 prompt: 优先 prompt_override · 否则 B 用 top_image_prompt / C 用 screen_image_prompt
     prompt_field = "top_image_prompt" if stype == "B" else "screen_image_prompt"
-    prompt = (scene.get(prompt_field) or "").strip()
+    prompt = (prompt_override or scene.get(prompt_field) or "").strip()
     if not prompt:
         raise Dhv5Error(f"scene #{scene_idx} 缺 {prompt_field}, 没法生图")
 
@@ -336,8 +338,9 @@ def generate_broll(
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / fname
 
-    # 已存在 + 不强制重生 → 跳过
-    if out_path.exists() and not regen:
+    # 已存在 + 不强制重生 + 没改 prompt → 跳过
+    # (prompt_override 给了说明用户想重生, 即便文件存在也要重打 apimart)
+    if out_path.exists() and not regen and not prompt_override:
         return {
             "scene_idx": scene_idx,
             "scene_type": stype,

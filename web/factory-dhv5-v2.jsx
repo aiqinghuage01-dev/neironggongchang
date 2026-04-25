@@ -99,6 +99,51 @@ function PageDhv5({ onNav }) {
     setAlignedScenes(prev => prev.map((s, i) => i === idx ? { ...s, [field]: value } : s));
   }
 
+  // D-060c B-roll 前端
+  const [expandedSceneIdx, setExpandedSceneIdx] = React.useState(null);  // 单值, 同时只展开一个
+  const [generatingBrollIdx, setGeneratingBrollIdx] = React.useState(null);
+  const [brollUrls, setBrollUrls] = React.useState({});  // { sceneIdx: url }
+
+  // 加载 align 结果时, 预填 broll urls (从已存在的文件路径推断)
+  React.useEffect(() => {
+    if (!alignedScenes || !selectedTemplateId) return;
+    // alignedScenes 可能含模板原 top_image / screen_image (相对路径), 转 url
+    const initial = {};
+    alignedScenes.forEach((s, i) => {
+      const t = (s.type || "").toUpperCase();
+      const rel = t === "B" ? s.top_image : t === "C" ? s.screen_image : null;
+      if (rel) {
+        // rel 形如 "assets/brolls/01-peixun-gaoxiao/b0_top.png"
+        // mount 在 /skills/dhv5/brolls, 去掉 "assets/brolls/" prefix
+        const cleaned = rel.replace(/^assets\/brolls\//, "");
+        initial[i] = `/skills/dhv5/brolls/${cleaned}`;
+      }
+    });
+    setBrollUrls(initial);
+  }, [alignedScenes, selectedTemplateId]);
+
+  async function generateBroll(idx, regen = false) {
+    const scene = alignedScenes[idx];
+    const t = (scene.type || "").toUpperCase();
+    const promptField = t === "B" ? "top_image_prompt" : "screen_image_prompt";
+    const promptInScene = scene[promptField] || "";
+    const promptOriginal = scene[`__original_${promptField}`] || promptInScene;
+    const promptChanged = promptInScene.trim() !== promptOriginal.trim();
+
+    setGeneratingBrollIdx(idx); setErr("");
+    try {
+      const r = await api.post(
+        `/api/dhv5/broll/${selectedTemplateId}/${idx}?regen=${regen ? 1 : 0}`,
+        promptChanged ? { prompt_override: promptInScene.trim() } : {}
+      );
+      setBrollUrls(prev => ({ ...prev, [idx]: r.url + `?t=${Date.now()}` }));  // bust cache
+    } catch (e) {
+      setErr(e.message || "生图失败");
+    } finally {
+      setGeneratingBrollIdx(null);
+    }
+  }
+
   function backToSelect() {
     setStep("select");
   }
@@ -346,7 +391,13 @@ function PageDhv5({ onNav }) {
                   🎬 {alignedScenes.length} 个 scenes · 内联编辑下面的字段
                 </div>
                 {alignedScenes.map((s, i) => (
-                  <Dhv5SceneRow key={i} idx={i} scene={s} onChange={(field, v) => updateSceneField(i, field, v)} />
+                  <Dhv5SceneRow key={i} idx={i} scene={s}
+                    onChange={(field, v) => updateSceneField(i, field, v)}
+                    expanded={expandedSceneIdx === i}
+                    onToggleExpand={() => setExpandedSceneIdx(prev => prev === i ? null : i)}
+                    brollUrl={brollUrls[i]}
+                    generating={generatingBrollIdx === i}
+                    onGenerate={(regen) => generateBroll(i, regen)} />
                 ))}
 
                 <div style={{ marginTop: 18, padding: 16, background: "#fff", border: `1.5px solid ${T.brand}`, boxShadow: `0 0 0 4px ${T.brandSoft}`, borderRadius: 12, display: "flex", alignItems: "center", gap: 14 }}>
@@ -619,38 +670,107 @@ function Dhv5Header({ step, template, dhVideoPath, onBack }) {
   );
 }
 
-// ─── Dhv5SceneRow (单 scene 行 · 内联编辑) ──────────────────
-function Dhv5SceneRow({ idx, scene, onChange }) {
+// ─── Dhv5SceneRow (单 scene · 内联编辑 + B/C broll 展开 D-060c) ─
+function Dhv5SceneRow({ idx, scene, onChange, expanded, onToggleExpand, brollUrl, generating, onGenerate }) {
   const t = (scene.type || "").toUpperCase();
   const isB = t === "B";
+  const isC = t === "C";
+  const hasBroll = isB || isC;
   const fieldKey = isB ? "big_text" : "subtitle";
   const fieldVal = scene[fieldKey] || "";
   const sceneColor = t === "A" ? T.brand : t === "B" ? T.amber : T.text;
+  const promptField = isB ? "top_image_prompt" : "screen_image_prompt";
+  const promptVal = scene[promptField] || "";
+
   return (
-    <div style={{
-      display: "flex", alignItems: "center", gap: 10, padding: "10px 12px",
-      background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 8, fontSize: 12,
-    }}>
-      <span style={{ color: T.muted2, fontFamily: "SF Mono, monospace", fontSize: 11, minWidth: 18 }}>#{idx + 1}</span>
-      <span title={`${t} 型 · ${(scene.start || 0).toFixed(1)}s - ${(scene.end || 0).toFixed(1)}s`}
-        style={{
-          width: 22, height: 22, borderRadius: "50%", background: sceneColor, color: "#fff",
-          display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700,
-        }}>{t}</span>
-      <span style={{ color: T.muted2, fontFamily: "SF Mono, monospace", fontSize: 10.5, minWidth: 64 }}>
-        {(scene.start || 0).toFixed(1)}-{(scene.end || 0).toFixed(1)}s
-      </span>
-      <input
-        value={fieldVal}
-        onChange={e => onChange(fieldKey, e.target.value)}
-        placeholder={isB ? "大字金句 4-10 字" : "字幕 8-18 字"}
-        style={{
-          flex: 1, padding: "6px 10px", border: `1px solid ${T.borderSoft}`, borderRadius: 6,
-          fontSize: 12.5, fontFamily: "inherit", outline: "none", background: "#fff",
-        }} />
-      <span style={{ fontSize: 10, color: fieldVal.length > (isB ? 10 : 18) ? T.red : T.muted3, fontFamily: "SF Mono, monospace", minWidth: 32, textAlign: "right" }}>
-        {fieldVal.length}/{isB ? 10 : 18}
-      </span>
+    <div style={{ background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 8 }}>
+      {/* 主行 */}
+      <div style={{
+        display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", fontSize: 12,
+      }}>
+        <span style={{ color: T.muted2, fontFamily: "SF Mono, monospace", fontSize: 11, minWidth: 18 }}>#{idx + 1}</span>
+        <span title={`${t} 型 · ${(scene.start || 0).toFixed(1)}s - ${(scene.end || 0).toFixed(1)}s`}
+          style={{
+            width: 22, height: 22, borderRadius: "50%", background: sceneColor, color: "#fff",
+            display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700,
+          }}>{t}</span>
+        <span style={{ color: T.muted2, fontFamily: "SF Mono, monospace", fontSize: 10.5, minWidth: 64 }}>
+          {(scene.start || 0).toFixed(1)}-{(scene.end || 0).toFixed(1)}s
+        </span>
+        <input
+          value={fieldVal}
+          onChange={e => onChange(fieldKey, e.target.value)}
+          placeholder={isB ? "大字金句 4-10 字" : "字幕 8-18 字"}
+          style={{
+            flex: 1, padding: "6px 10px", border: `1px solid ${T.borderSoft}`, borderRadius: 6,
+            fontSize: 12.5, fontFamily: "inherit", outline: "none", background: "#fff",
+          }} />
+        <span style={{ fontSize: 10, color: fieldVal.length > (isB ? 10 : 18) ? T.red : T.muted3, fontFamily: "SF Mono, monospace", minWidth: 32, textAlign: "right" }}>
+          {fieldVal.length}/{isB ? 10 : 18}
+        </span>
+        {hasBroll && (
+          <button onClick={onToggleExpand}
+            title={expanded ? "收起 broll" : "展开 broll"}
+            style={{
+              padding: "3px 8px", fontSize: 11, borderRadius: 6, border: `1px solid ${T.borderSoft}`,
+              background: expanded ? T.brandSoft : "#fff",
+              color: expanded ? T.brand : T.muted, cursor: "pointer", fontFamily: "inherit",
+              display: "inline-flex", alignItems: "center", gap: 4,
+            }}>
+            📷 {brollUrl ? "" : "缺"} {expanded ? "▲" : "▼"}
+          </button>
+        )}
+      </div>
+      {/* 展开面板 (仅 B/C) */}
+      {hasBroll && expanded && (
+        <div style={{ borderTop: `1px solid ${T.borderSoft}`, padding: 12, display: "flex", gap: 12, background: T.bg2 }}>
+          {/* broll 缩略 */}
+          <div style={{
+            width: isB ? 160 : 90, aspectRatio: isB ? "4/3" : "9/16",
+            borderRadius: 6, overflow: "hidden", flexShrink: 0,
+            background: brollUrl ? "#000" : T.bg3,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            color: T.muted2, fontSize: 10, textAlign: "center", padding: 8,
+            border: `1px solid ${T.borderSoft}`,
+          }}>
+            {brollUrl ? (
+              <img src={api.media(brollUrl)} alt="broll"
+                style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+            ) : (
+              <div>未生<br />{isB ? "4:3" : "9:16"}</div>
+            )}
+          </div>
+          {/* prompt 编辑 + 操作 */}
+          <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 8 }}>
+            <textarea
+              value={promptVal}
+              onChange={e => onChange(promptField, e.target.value)}
+              placeholder={`${isB ? "横版 4:3" : "竖版 9:16"} broll prompt (可改)`}
+              rows={3}
+              style={{
+                width: "100%", padding: 8, border: `1px solid ${T.borderSoft}`, borderRadius: 6,
+                fontSize: 11.5, fontFamily: "inherit", outline: "none", resize: "vertical",
+                lineHeight: 1.6, background: "#fff",
+              }} />
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <span style={{ fontSize: 10, color: T.muted2, fontFamily: "SF Mono, monospace" }}>
+                走 ~/.claude/skills/poju-image-gen apimart · 30-60s/张
+              </span>
+              <div style={{ flex: 1 }} />
+              {brollUrl && (
+                <Btn size="sm" variant="outline" onClick={() => onGenerate(true)} disabled={generating}>
+                  {generating ? "生图中…" : "🔄 重生"}
+                </Btn>
+              )}
+              {!brollUrl && (
+                <Btn size="sm" variant="primary" onClick={() => onGenerate(false)} disabled={generating}>
+                  {generating ? "生图中…" : "🎨 生这张"}
+                </Btn>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
