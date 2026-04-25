@@ -79,8 +79,28 @@ function PageMaterials({ onNav }) {
               onNav("make");
             }} onDel={delMaterial} onReload={loadAll} />
           )}
-          {tab === "hot" && <HotTab list={hots} onReload={loadAll} onDel={delHot} onUse={(h) => onNav("make")} />}
-          {tab === "topic" && <TopicTab list={topics} onReload={loadAll} onDel={delTopic} onUse={(t) => onNav("make")} />}
+          {tab === "hot" && <HotTab list={hots} onReload={loadAll} onDel={delHot} onUse={(h) => {
+            // D-062-AUDIT-2 fix: 之前只 onNav("make") 不带 seed, 用户白点
+            try {
+              const seed = `# 热点 (${h.platform || "?"} · 热度 ${h.heat_score || 0})\n${h.title}\n\n${h.match_reason ? "我的角度: " + h.match_reason + "\n\n" : ""}---\n\n口播正文:\n`;
+              localStorage.setItem("make_v2_seed_script", seed);
+              localStorage.setItem("make_v2_seed_from", JSON.stringify({
+                skill: "hot-topic", title: (h.title || "").slice(0, 30), ts: Date.now(),
+              }));
+            } catch (_) {}
+            onNav("make");
+          }} />}
+          {tab === "topic" && <TopicTab list={topics} onReload={loadAll} onDel={delTopic} onUse={(t) => {
+            // D-062-AUDIT-2 fix: 同上, 选题不带 seed 跳过去等于白点
+            try {
+              const seed = `# 选题\n${t.title}\n\n口播正文:\n`;
+              localStorage.setItem("make_v2_seed_script", seed);
+              localStorage.setItem("make_v2_seed_from", JSON.stringify({
+                skill: "topic", title: (t.title || "").slice(0, 30), ts: Date.now(),
+              }));
+            } catch (_) {}
+            onNav("make");
+          }} />}
           {tab === "clip" && <EmptyTabHint tip={MATERIAL_TABS.find(t => t.id === "clip").emptyTip} onAdd={() => {}} />}
         </div>
       </div>

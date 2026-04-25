@@ -162,6 +162,8 @@ const MAKE_V2_SCRIPT_SKILLS = [
 const MAKE_V2_SKILL_NAMES = {
   hotrewrite: "🔥 热点改写", voicerewrite: "🎙️ 录音改写", ad: "💰 投流文案",
   wechat: "📄 公众号", moments: "📱 朋友圈", planner: "📋 内容策划",
+  // D-062-AUDIT-2: 素材库直跳来源 (heat / topic)
+  "hot-topic": "🔥 热点库", topic: "💡 选题库",
 };
 
 function MakeV2StepScript({ script, setScript, onNext, onNav, seedFrom, onDismissSeed }) {

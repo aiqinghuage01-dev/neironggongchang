@@ -212,6 +212,23 @@
         现状: 标了已发只是本地 UI tag, 没法导出周报/复盘
         建议: 沿 storeKey 跨视频聚合, sidebar "我的作品" tab 显多平台发布矩阵
 
+- [x] **D-062-AUDIT-2** 2026-04-25 14:25 复盘 (AUDIT-1 + 4 commit 后第二拍)
+      新发现的 bug + 待修:
+      - **D-062-AUDIT-2-fix1** ✅ PageMaterials HotTab/TopicTab "做成视频" 不带 seed
+        line 82-83 onUse 之前只 onNav("make"), 用户辛苦挑的热点/选题完全丢失
+        现已修: 写 make_v2_seed_script + skill: "hot-topic" / "topic"
+        加 MAKE_V2_SKILL_NAMES 映射, banner 显 "🔥 热点库 / 💡 选题库 来"
+      - **D-062-AUDIT-2-todo1** ViralTab onUse 用 window.__materialHandoff
+        与新的 localStorage seed 机制不统一 — 双轨 state 后期会乱
+        建议: 下一拍统一改成 localStorage make_v2_seed_*, 删 window.__materialHandoff
+      - **D-062-AUDIT-2-todo2** PageMakeV2 Step 1 hot_topics 列表点 "用这条 →"
+        line 174 写的是 hardcoded 模板, 而非走 hot-topic seed 机制
+        现状能工作 (因为本就在 PageMakeV2 内), 但语义不一致
+      - **D-062-AUDIT-2-todo3** seed 文案过长无截断/警告
+        wechat 长文 → make Step 1, 1500+ 字直接灌进 textarea
+        当前: Tag 显 "X 字 ~Y 秒" 让用户看, 但没 enforce 上限
+        建议: 超 600 字时 banner 加 "建议精简到 300-500 字" hint
+
 ---
 
 ## 文档维护规则
