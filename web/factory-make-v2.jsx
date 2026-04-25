@@ -424,30 +424,105 @@ function PickerColumn({ title, items, selectedId, onSelect, loading, emptyTip })
   );
 }
 
-// ─── Step 3 选模板 (D-061e 接通) ──────────────────────────────
+// ─── Step 3 选模板 (D-061e · 复用 dhv5 卡片 + "朴素"选项) ────
 function MakeV2StepTemplate({ templateId, setTemplateId, onPrev, onNext }) {
+  const [templates, setTemplates] = React.useState(null);
+  const [filterCategory, setFilterCategory] = React.useState("全部");
+  const [filterDuration, setFilterDuration] = React.useState("all");
+  const [localErr, setLocalErr] = React.useState("");
+
+  React.useEffect(() => {
+    api.get("/api/dhv5/templates")
+      .then(r => setTemplates(r.templates || []))
+      .catch(e => { setTemplates([]); setLocalErr(e.message); });
+  }, []);
+
+  const filtered = !templates ? [] : templates.filter(t => {
+    if (filterCategory !== "全部" && t.category !== filterCategory) return false;
+    const bucket = DHV5_DURATION_BUCKETS.find(b => b.id === filterDuration) || DHV5_DURATION_BUCKETS[0];
+    if (!bucket.test(t.duration_sec || 0)) return false;
+    return true;
+  });
+
   return (
-    <div style={{ background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 12, padding: 20 }}>
-      <div style={{ fontSize: 16, fontWeight: 600, color: T.text, marginBottom: 6 }}>3. 选模板</div>
-      <div style={{ fontSize: 12, color: T.muted, marginBottom: 16 }}>
-        v5/v6/v7... 模板 + "朴素无模板"选项 · D-061e 复用 dhv5 选择器组件
+    <div>
+      <div style={{ marginBottom: 16, padding: 16, background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 12 }}>
+        <div style={{ fontSize: 14, fontWeight: 600, color: T.text, marginBottom: 6 }}>3. 选剪辑模板</div>
+        <div style={{ fontSize: 12, color: T.muted }}>
+          模板 = 节奏骨架 + 字体/音乐 + 配图 prompts · 数字人 mp4 套不同模板出多版
+        </div>
       </div>
 
-      <div style={{ padding: 20, background: T.bg2, borderRadius: 8, textAlign: "center", color: T.muted2, fontSize: 13 }}>
-        🚧 D-061e 接通: 复用 PageDhv5 的 DhvTemplateCard 网格 + 分类/时长筛选
+      {/* 朴素无模板选项 (放最上面) */}
+      <div onClick={() => setTemplateId(null)}
+        style={{
+          marginBottom: 14, padding: 14, background: "#fff",
+          border: templateId === null ? `2px solid ${T.brand}` : `1px solid ${T.borderSoft}`,
+          boxShadow: templateId === null ? `0 0 0 4px ${T.brandSoft}` : "none",
+          borderRadius: 10, cursor: "pointer", display: "flex", alignItems: "center", gap: 14,
+        }}>
+        <div style={{ fontSize: 28 }}>📹</div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 14, fontWeight: 600, color: T.text }}>朴素无模板 · 直接出片</div>
+          <div style={{ fontSize: 11.5, color: T.muted, marginTop: 3 }}>
+            数字人 mp4 不剪辑直接发, 适合"快出片"场景
+          </div>
+        </div>
+        {templateId === null && <Tag size="xs" color="green">已选</Tag>}
       </div>
 
-      {/* 过渡占位: 输入模板 id */}
-      <div style={{ marginTop: 14, padding: 12, background: T.bg2, borderRadius: 6 }}>
-        <div style={{ fontSize: 11, color: T.muted, marginBottom: 6 }}>过渡占位: 直接填模板 id (从 ~/Desktop/skills/digital-human-video-v5/templates/)</div>
-        <input value={templateId || ""} onChange={e => setTemplateId(e.target.value || null)}
-          placeholder="01-peixun-gaoxiao  · 留空 = 朴素无模板"
-          style={{ width: "100%", padding: "8px 10px", border: `1px solid ${T.border}`, borderRadius: 6, fontSize: 12, fontFamily: "SF Mono, monospace", outline: "none", background: "#fff" }} />
+      {/* 筛选 chip */}
+      <div style={{ display: "flex", gap: 6, marginBottom: 8, flexWrap: "wrap" }}>
+        {DHV5_CATEGORIES.map(c => (
+          <button key={c} onClick={() => setFilterCategory(c)}
+            style={{
+              padding: "4px 12px", fontSize: 11, borderRadius: 100, border: "none",
+              fontFamily: "inherit", cursor: "pointer",
+              background: filterCategory === c ? T.text : T.bg2,
+              color: filterCategory === c ? "#fff" : T.muted,
+              fontWeight: filterCategory === c ? 600 : 500,
+            }}>{c}</button>
+        ))}
       </div>
+      <div style={{ display: "flex", gap: 6, marginBottom: 14, flexWrap: "wrap" }}>
+        {DHV5_DURATION_BUCKETS.map(b => (
+          <button key={b.id} onClick={() => setFilterDuration(b.id)}
+            style={{
+              padding: "3px 10px", fontSize: 10.5, borderRadius: 100, border: "none",
+              fontFamily: "inherit", cursor: "pointer",
+              background: filterDuration === b.id ? T.brand : T.bg2,
+              color: filterDuration === b.id ? "#fff" : T.muted,
+              fontWeight: filterDuration === b.id ? 600 : 500,
+            }}>{b.label}</button>
+        ))}
+      </div>
+
+      {localErr && <div style={{ padding: 10, background: T.redSoft, color: T.red, borderRadius: 8, fontSize: 12, marginBottom: 14 }}>⚠️ {localErr}</div>}
+
+      {/* 模板网格 (复用 PageDhv5 的 DhvTemplateCard) */}
+      {!templates ? (
+        <div style={{ padding: 30, textAlign: "center", color: T.muted2 }}>加载模板…</div>
+      ) : filtered.length === 0 ? (
+        <div style={{ padding: 30, background: "#fff", border: `1px dashed ${T.border}`, borderRadius: 10, textAlign: "center", color: T.muted, fontSize: 13 }}>
+          {templates.length === 0
+            ? "还没有模板 · 到 ~/Desktop/skills/digital-human-video-v5/templates/ 加 .yaml"
+            : "当前筛选下没匹配的模板"}
+        </div>
+      ) : (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 12 }}>
+          {filtered.map(t => (
+            <DhvTemplateCard key={t.id} template={t}
+              selected={templateId === t.id}
+              onSelect={() => setTemplateId(t.id)} />
+          ))}
+        </div>
+      )}
 
       <div style={{ marginTop: 18, display: "flex", gap: 10, justifyContent: "space-between" }}>
         <Btn variant="outline" onClick={onPrev}>← 改数字人</Btn>
-        <Btn variant="primary" onClick={onNext}>下一步: 剪辑 →</Btn>
+        <Btn variant="primary" onClick={onNext}>
+          下一步: 剪辑 →
+        </Btn>
       </div>
     </div>
   );
