@@ -144,11 +144,67 @@ function VoiceHeader({ current, onBack, skillInfo }) {
 function VStepInput({ transcript, setTranscript, onGo, loading, skillInfo }) {
   const ready = !!transcript.trim() && !loading;
   const len = transcript.length;
+  // D-062bb: 短视频 URL → 自动转写 (走 /api/transcribe/submit, 轻抖)
+  const [url, setUrl] = React.useState("");
+  const [transcribing, setTranscribing] = React.useState(false);
+  const [transcribeMsg, setTranscribeMsg] = React.useState("");
+  async function transcribeUrl() {
+    if (!url.trim() || transcribing) return;
+    setTranscribing(true); setTranscribeMsg("");
+    try {
+      const sub = await api.post("/api/transcribe/submit", { url: url.trim() });
+      const batchId = sub.batch_id;
+      setTranscribeMsg(`已提交 (batch ${batchId}) · 等转写...`);
+      for (let i = 0; i < 60; i++) {  // 5 min max (60 × 5s)
+        await new Promise(s => setTimeout(s, 5000));
+        try {
+          const q = await api.get(`/api/transcribe/query/${batchId}`);
+          if (q.status === "success" && q.text) {
+            setTranscript(q.text);
+            setUrl("");
+            setTranscribeMsg(`✓ ${q.title || "转写完成"} · ${q.text.length} 字 · 已填进下面 textarea`);
+            return;
+          }
+          if (q.status === "failed") {
+            setTranscribeMsg(`转写失败: ${q.error || "(无 detail)"}`);
+            return;
+          }
+          setTranscribeMsg(`等转写... ${q.status} (${i * 5}s)`);
+        } catch (_) {}
+      }
+      setTranscribeMsg("等了 5 分钟还没出 · 短视频较长? 去 ⚙️ 设置看 transcribe 历史");
+    } catch (e) { setTranscribeMsg(`提交失败: ${e.message}`); }
+    finally { setTranscribing(false); }
+  }
+
   return (
     <div style={{ padding: "40px 40px 60px", maxWidth: 820, margin: "0 auto" }}>
       <div style={{ textAlign: "center", marginBottom: 24 }}>
         <div style={{ fontSize: 28, fontWeight: 700, color: T.text, marginBottom: 8, letterSpacing: "-0.02em" }}>录音转写了吗? 🎙️</div>
         <div style={{ fontSize: 14, color: T.muted }}>观点不变 · 口吻不丢 · 经历保留 · 默认一条完整文案</div>
+      </div>
+
+      {/* D-062bb: URL 自动转写 (短视频链接) */}
+      <div style={{ background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 12, padding: 14, marginBottom: 14 }}>
+        <div style={{ fontSize: 12.5, fontWeight: 600, color: T.text, marginBottom: 6 }}>🔗 有短视频链接? 一键自动转写</div>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <input value={url} onChange={e => setUrl(e.target.value)}
+            placeholder="抖音 / 视频号 / 小红书 等短视频 URL"
+            disabled={transcribing}
+            onKeyDown={e => { if (e.key === "Enter") transcribeUrl(); }}
+            style={{ flex: 1, minWidth: 240, padding: "8px 12px", border: `1px solid ${T.borderSoft}`, borderRadius: 8, fontSize: 13, fontFamily: "inherit", outline: "none" }} />
+          <Btn size="sm" variant="primary" onClick={transcribeUrl} disabled={!url.trim() || transcribing}>
+            {transcribing ? "转写中..." : "📥 拉文案"}
+          </Btn>
+        </div>
+        {transcribeMsg && (
+          <div style={{ marginTop: 6, fontSize: 11, color: transcribeMsg.startsWith("✓") ? T.brand : transcribeMsg.startsWith("提交失败") || transcribeMsg.startsWith("转写失败") ? T.red : T.muted }}>
+            {transcribeMsg}
+          </div>
+        )}
+        <div style={{ marginTop: 6, fontSize: 10.5, color: T.muted2 }}>
+          💡 走轻抖 ASR · 通常 1-3 分钟 · 上传本地 m4a/mp3 文件功能 待后端 ASR 接入 (D-062bb-ext)
+        </div>
       </div>
 
       <div style={{ background: "#fff", border: `1.5px solid ${T.brand}`, boxShadow: `0 0 0 5px ${T.brandSoft}`, borderRadius: 16, padding: 18, marginBottom: 18 }}>

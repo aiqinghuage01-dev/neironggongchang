@@ -240,8 +240,11 @@
         Fix: HotStepInput 加 hotTopics state + 拉 /api/hot-topics + 列前 3 条
         点 → 拼"# 来自热点库 (...)"模板塞 textarea (与 PageMakeV2 Step 1 一致)
         热点空时直接显 NightHotFlywheel CTA (复用 D-062i 共享组件)
-      - **D-062bb** voicerewrite 同样问题: Step 1 让用户粘 transcript, 没"上传音频自动转写"
-        backlog 早就有, 还没接 /api/transcribe/submit (audit Path B item 1)
+      - **D-062bb** ✅ voicerewrite Step 1 加 URL 自动转写 (短视频)
+        VStepInput 加"🔗 有短视频链接? 一键自动转写" 卡 (textarea 上方)
+        URL 输入 + Enter / 主按钮 → /api/transcribe/submit + 60×5s poll
+        success 自动塞 transcript + 显字数 + 标题; failed 显 error
+        本地 m4a/mp3 上传留 ext (D-062bb-ext) 待后端 ASR 接入
       - **D-062cc** Step 4 align/render 失败时 errorMsg 只在 localErr 里
         错误又长又难懂时 (e.g. broll 生图 quota), 用户只看到 "⚠️ ..." 一长串
         建议: 加常见错误码映射表 + "重试" / "改 prompt" 按钮
