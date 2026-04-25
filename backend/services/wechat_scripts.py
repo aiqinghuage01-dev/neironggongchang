@@ -595,27 +595,33 @@ def sanitize_for_push(html: str) -> dict[str, Any]:
             out = pat_self.sub("", out)
             removed[f"<{tag}>"] = removed.get(f"<{tag}>", 0) + n_self
 
-    # 1) 处理 <img>: 一次扫整个 img 标签, 决定保留(可能改 src) 还是整剥
+    # 1) 处理 <img>:
+    #    D-045 修正 D-043: ?from=appmsg 是"别家公众号资源"的天然标记 (template
+    #    硬编码的头像必带, 这次 push 的段间图通过 uploadimg 上传不带). 即便把
+    #    URL 清成 https 没 ?from=appmsg, mmbiz 资源 ID 不变 — WeChat draft/add
+    #    仍按"非己 add_material 上传"拒收 (errcode 45166).
+    #    所以 ?from=appmsg 必须整剥, 不能只清 URL.
     img_re = re.compile(r"<img\b[^>]*?/?>", re.IGNORECASE)
     def _img_sub(m: re.Match) -> str:
         full = m.group(0)
         src_m = re.search(r'\bsrc=(["\'])([^"\']*)\1', full, re.IGNORECASE)
         if not src_m:
-            # 没 src 的 img 标签, 直接剥
             removed["img_no_src"] = removed.get("img_no_src", 0) + 1
             return ""
         url = src_m.group(2)
-        # 先把 http→https 试探一下再判白名单, 否则 http://mmbiz 会误判外链
+        # 别家公众号 msg 资源 — 整剥 (D-042 原策略, D-045 复活)
+        if "?from=appmsg" in url or "&from=appmsg" in url:
+            removed["img_from_appmsg"] = removed.get("img_from_appmsg", 0) + 1
+            return ""
         probe = "https://" + url[len("http://"):] if url.startswith("http://") else url
         if not _ALLOWED_IMG_RE.match(probe):
             removed["img_external"] = removed.get("img_external", 0) + 1
             return ""
-        # 域名 OK, 规整 URL
+        # 域名 OK, 干净 mmbiz URL — 仅 http→https 规整 (D-043 仍有用)
         new_url, changes = _clean_img_url(url)
         if changes:
             for c in changes:
                 rewritten[c] = rewritten.get(c, 0) + 1
-            # 把 src 替换回去, 其它 attrs 原样保留
             return full.replace(src_m.group(0), f'src={src_m.group(1)}{new_url}{src_m.group(1)}', 1)
         return full
     out = img_re.sub(_img_sub, out)

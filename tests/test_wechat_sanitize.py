@@ -1,11 +1,13 @@
-"""sanitize_for_push 测试 (D-042 + D-043).
+"""sanitize_for_push 测试 (D-042 → D-043 → D-045).
 
-D-043 修正: 不再把 ?from=appmsg / http:// 的图整剥, 改成"清 URL 保 img":
-  http://mmbiz/qlogo → https://    (rewrite, 保 img)
-  ?from=appmsg / &from=appmsg     → strip (rewrite, 保 img)
+D-045 复活 D-042 的 "?from=appmsg 整剥" 策略 (D-043 改"清 URL 留 img"被实测打脸):
+  ?from=appmsg / &from=appmsg     → 整剥 (是"非己公众号资源"天然标记)
+  http://mmbiz/qlogo → https://    (干净 URL 才规整保留)
   域名外链 (apimart 等)             → 整剥 (推不上)
 
-⚠️ 诚实: 没有 WeChat sandbox, 真 push 通不通要靠用户验证.
+D-045 真实证据: 用户重试 D-043 sanitize 后的 HTML, 头像 URL 已 clean (无 ?from=appmsg
++ https), 但 WeChat 仍报 errcode 45166 — 说明 mmbiz 资源 ID 本身就是别人账号的,
+URL 清干净也救不了, 必须整剥.
 """
 from __future__ import annotations
 
@@ -56,33 +58,35 @@ def test_clean_img_url_combo_http_and_appmsg():
 
 # ─── sanitize_for_push 集成 ────────────────────────────────────
 
-def test_template_avatar_url_cleaned_not_stripped():
-    """D-043 改动: 模板头像 URL 该保留, 只清 URL."""
+def test_template_avatar_with_appmsg_stripped():
+    """D-045 复活 D-042 策略: 模板头像 URL 即使域名 mmbiz, ?from=appmsg 整剥.
+    理由: 这种 URL 是别家 msg 资源, 即便清 URL 也是别人账号 ID, WeChat 仍 45166.
+    """
     html = ('<a href="https://mp.weixin.qq.com/x">'
             '<img class="author-avatar" src="http://mmbiz.qpic.cn/g1XX.../0?from=appmsg"/></a>')
     r = sanitize_for_push(html)
-    # img 应该还在 (D-042 是整剥, 误伤)
-    assert "<img" in r["clean"]
-    assert "class=\"author-avatar\"" in r["clean"]
-    # URL 应该被规整
-    assert "https://mmbiz.qpic.cn/g1XX.../0" in r["clean"]
-    assert "http://" not in r["clean"]
-    assert "from=appmsg" not in r["clean"]
-    # rewrite 计数 ≥ 1
-    assert r["rewritten"].get("http→https", 0) == 1
-    assert r["rewritten"].get("strip ?from=appmsg", 0) == 1
-    # 不应有 img 被 removed
-    assert "img_from_appmsg" not in r["removed"]
-    assert "img_http_only" not in r["removed"]
+    # img 应该被整剥
+    assert "<img" not in r["clean"]
+    assert r["removed"].get("img_from_appmsg", 0) == 1
+    # 空 <a></a> 也清掉
+    assert "<a " not in r["clean"]
 
 
-def test_section_image_with_appmsg_kept():
-    """D-043: gen_section_image 上传后微信也回带 ?from=appmsg URL, 必须保留."""
-    html = '<p><img src="https://mmbiz.qpic.cn/section1?from=appmsg"/></p>'
+def test_section_image_no_appmsg_kept():
+    """段间图 from gen_section_image.sh 经 uploadimg 上传, URL 没 ?from=appmsg, 留."""
+    html = '<p><img src="https://mmbiz.qpic.cn/mmbiz_jpg/section1/0"/></p>'
     r = sanitize_for_push(html)
     assert "<img" in r["clean"]
     assert "section1" in r["clean"]
-    assert "from=appmsg" not in r["clean"]
+
+
+def test_http_mmbiz_without_appmsg_rewritten_to_https():
+    """干净 mmbiz URL 只是协议是 http → 升 https 保留 img."""
+    html = '<p><img src="http://mmbiz.qpic.cn/section/abc"/></p>'
+    r = sanitize_for_push(html)
+    assert "<img" in r["clean"]
+    assert "https://mmbiz.qpic.cn/section/abc" in r["clean"]
+    assert r["rewritten"].get("http→https", 0) == 1
 
 
 def test_external_image_apimart_still_stripped():
@@ -120,25 +124,19 @@ def test_unwraps_external_anchor_keeps_text():
     assert r["removed"].get("a_external", 0) == 1
 
 
-def test_real_failed_payload_avatar_now_kept_url_cleaned():
-    """复跑用户失败那篇的真实结构 — D-043 后头像保留 + URL 干净."""
+def test_real_failed_payload_avatar_stripped_section_kept():
+    """D-045: 模板硬编码头像 (?from=appmsg) 整剥; 干净段间图 (无 ?from=appmsg) 保留."""
     html = '''<section style="max-width:580px">
 <section align="center" style="padding:32px"><a href="https://mp.weixin.qq.com/mp/profile_ext?action=home&amp;__biz=MzkxMzQ0ODk4Ng==#wechat_redirect"><img alt="清华哥" height="88" src="http://mmbiz.qpic.cn/mmbiz_png/g1XXDunwiaWQhxtM4CtQDe6Y0cZ4Zhq7GpKibRWp1nxqQI6WQ4w0SkLY2LTZcx33nQgyfq0zt07KEj7So6OBgoQHOOMdubnZUalLn4UAibgIss/0?from=appmsg" style="width:88px" width="88"/></a></section>
 <p>正文</p>
-<p><img src="https://mmbiz.qpic.cn/mmbiz_jpg/section1/0?from=appmsg" /></p>
+<p><img src="https://mmbiz.qpic.cn/mmbiz_jpg/cleansectionimg/0" /></p>
 </section>'''
     r = sanitize_for_push(html)
-    # 头像现在保留
-    assert 'class' in r["clean"] or 'alt="清华哥"' in r["clean"]
-    assert "g1XXDunwiaWQhxtM4CtQDe6Y0cZ4Zhq7Gp" in r["clean"]
-    # 段间图也保留
-    assert "section1" in r["clean"]
-    # URL 都已规整
-    assert "from=appmsg" not in r["clean"]
-    assert "http://mmbiz" not in r["clean"]
-    # 计数: 2 张图都改了
-    assert r["rewritten"].get("strip ?from=appmsg", 0) == 2
-    assert r["rewritten"].get("http→https", 0) == 1
+    # 头像被整剥
+    assert "g1XXDunwiaWQhxtM4CtQDe6Y0cZ4Zhq7Gp" not in r["clean"]
+    assert r["removed"].get("img_from_appmsg", 0) == 1
+    # 段间图 (无 ?from=appmsg) 留
+    assert "cleansectionimg" in r["clean"]
 
 
 def test_image_without_src_stripped():
@@ -158,7 +156,14 @@ def test_empty_html_returns_empty():
 def test_single_quote_attrs():
     html = "<img src='http://mmbiz.qpic.cn/x?from=appmsg'>"
     r = sanitize_for_push(html)
+    # ?from=appmsg → 整剥
+    assert "<img" not in r["clean"]
+    assert r["removed"].get("img_from_appmsg", 0) == 1
+
+
+def test_single_quote_attrs_clean_url_kept():
+    """单引号 attr · 干净 mmbiz URL · http → https 规整保留."""
+    html = "<img src='http://mmbiz.qpic.cn/clean'>"
+    r = sanitize_for_push(html)
     assert "<img" in r["clean"]
-    assert "https://mmbiz.qpic.cn/x" in r["clean"]
-    assert "from=appmsg" not in r["clean"]
-    assert "http://" not in r["clean"]
+    assert "https://mmbiz.qpic.cn/clean" in r["clean"]
