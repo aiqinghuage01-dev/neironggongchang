@@ -765,15 +765,92 @@ function MakeV2StepPreview({ renderTaskId, setRenderTaskId, templateId, onReedit
         </div>
       ) : null}
 
-      {(isDone || isFailed) && (
-        <div style={{ marginTop: 18, padding: 14, background: T.bg2, borderRadius: 8, fontSize: 12, color: T.muted2 }}>
-          🚧 D-061g 接通: 修改意见 textarea + AI 重剪 + 多平台发布提示
-        </div>
+      {/* D-061g 修改意见反馈 + 发布 */}
+      {isDone && !isRawMode && (
+        <FeedbackPanel onReedit={onReedit} />
+      )}
+
+      {isDone && (
+        <PublishPanel outputPath={result?.output_path} outputUrl={result?.output_url} />
       )}
 
       <div style={{ marginTop: 18, display: "flex", gap: 10, justifyContent: "space-between" }}>
-        <Btn variant="outline" onClick={onReedit}>← 回剪辑</Btn>
+        <Btn variant="outline" onClick={onReedit}>{isRawMode ? "← 回剪辑" : "← 回剪辑改对齐"}</Btn>
         {isDone && <Btn variant="outline" onClick={onNewMp4}>♻️ 同 mp4 套别的模板</Btn>}
+      </div>
+    </div>
+  );
+}
+
+// ─── D-061g 修改意见反馈 ──────────────────────────────────────
+// 用户拍板新加: 不满意留 note, AI 重剪. 当前实现: note 跟着回剪辑步带过去
+// 实际"AI 自动改"留更后期 — 现版让用户自己看 note 改对齐字段或 broll prompt
+function FeedbackPanel({ onReedit }) {
+  const [note, setNote] = React.useState("");
+  return (
+    <div style={{ marginTop: 16, padding: 16, background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 12 }}>
+      <div style={{ fontSize: 13, fontWeight: 600, color: T.text, marginBottom: 6 }}>📝 不满意? 留个修改意见</div>
+      <div style={{ fontSize: 11.5, color: T.muted, marginBottom: 10 }}>
+        例: "第 3 段字幕太长改短点 / 把 b1 那张图换成餐饮场景 / B 段大字换成具体数字"
+        <br />
+        <span style={{ color: T.muted2 }}>(当前实现: 把 note 带回剪辑步, 你照着改字段 / 重生 broll · D-061g+ 接 AI 自动改)</span>
+      </div>
+      <textarea
+        value={note}
+        onChange={e => setNote(e.target.value)}
+        placeholder="哪段不满意 / 怎么改 / 字幕换啥词 / 哪张 broll 不对劲..."
+        rows={3}
+        style={{
+          width: "100%", padding: 10, border: `1px solid ${T.borderSoft}`, borderRadius: 6,
+          fontSize: 12.5, fontFamily: "inherit", outline: "none", resize: "vertical", lineHeight: 1.6,
+        }} />
+      <div style={{ marginTop: 10, display: "flex", gap: 8, justifyContent: "flex-end" }}>
+        <Btn size="sm" variant="primary" onClick={() => {
+          // 把 note 暂存到 localStorage 让剪辑步能拿到
+          if (note.trim()) {
+            try { localStorage.setItem("make_v2_feedback_note", note); } catch (_) {}
+          }
+          onReedit();
+        }} disabled={!note.trim()}>
+          带意见回剪辑步
+        </Btn>
+      </div>
+    </div>
+  );
+}
+
+// ─── 发布面板 (D-061g) ────────────────────────────────────────
+// 当前: 显成片 + 平台账号提示 (手动发) · Phase 4 接 OAuth 自动发
+function PublishPanel({ outputPath, outputUrl }) {
+  return (
+    <div style={{ marginTop: 16, padding: 16, background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 12 }}>
+      <div style={{ fontSize: 13, fontWeight: 600, color: T.text, marginBottom: 10 }}>🚀 发布</div>
+      <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+        {outputPath && (
+          <a href={outputUrl ? api.media(outputUrl) : "#"} download
+            target="_blank" rel="noreferrer"
+            style={{
+              display: "inline-flex", alignItems: "center", gap: 6,
+              padding: "8px 14px", borderRadius: 100, fontSize: 12.5,
+              background: T.text, color: "#fff", textDecoration: "none", fontWeight: 600,
+            }}>
+            ⬇️ 下载 mp4 到本地
+          </a>
+        )}
+        <span style={{ fontSize: 11.5, color: T.muted }}>
+          下载完手动发到各平台 (Phase 4 接 OAuth 自动发)
+        </span>
+      </div>
+      <div style={{ marginTop: 12, fontSize: 11, color: T.muted2, display: "flex", flexWrap: "wrap", gap: 14 }}>
+        {[
+          { plat: "抖音", emoji: "🎵" },
+          { plat: "视频号", emoji: "📺" },
+          { plat: "小红书", emoji: "📕" },
+          { plat: "快手", emoji: "⚡" },
+          { plat: "B 站", emoji: "📹" },
+        ].map(p => (
+          <span key={p.plat}>{p.emoji} {p.plat}</span>
+        ))}
       </div>
     </div>
   );
