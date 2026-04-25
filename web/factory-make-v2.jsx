@@ -151,13 +151,14 @@ function MakeV2Header({ current, onJump }) {
 // ─── Step 1 文案 — N 个大按钮文案板块 (D-061c) ─────────────
 // 用户拍板: "公众号 / 朋友圈本质都是文案的一部分", Step 1 是大板块,
 // N 个并列大按钮, 每个按钮 = 一个文案 skill.
+// D-062nn-C1: 6 skill 卡 desc 改人话, 删开发者向括号
 const MAKE_V2_SCRIPT_SKILLS = [
-  { id: "hotrewrite",   icon: "🔥", title: "热点改写", desc: "把今日热点改成你视角的口播 · 钩子+反差+金句" },
-  { id: "voicerewrite", icon: "🎙️", title: "录音改写", desc: "录音 → 转写 → 改写成口播 (修语序去口头禅)" },
-  { id: "ad",           icon: "💰", title: "投流文案", desc: "一个卖点 → 5-10 版投流 (痛/对/步/话/创)" },
-  { id: "wechat",       icon: "📄", title: "公众号长文", desc: "方法论长文 (回来后摘金句段做视频)" },
+  { id: "hotrewrite",   icon: "🔥", title: "热点改写",   desc: "把今日热点改成你视角的口播 · 钩子 + 反差 + 金句" },
+  { id: "voicerewrite", icon: "🎙️", title: "录音改写",   desc: "录音 / 直播 → 转写 + 改写成口播" },
+  { id: "ad",           icon: "💰", title: "投流文案",   desc: "一个卖点 → 5-10 版投流 (痛 / 对 / 步 / 话 / 创)" },
+  { id: "wechat",       icon: "📄", title: "公众号长文", desc: "方法论长文 · 2000+ 字 · 自动排版" },
   { id: "moments",      icon: "📱", title: "朋友圈短句", desc: "金句库衍生 N 条 · 适合做超短视频" },
-  { id: "planner",      icon: "📋", title: "内容策划", desc: "活动策划 → 策划完去录直播 → 录音改写" },
+  { id: "planner",      icon: "🗓️", title: "内容策划",   desc: "活动策划: 直播 / 讲课 / 分享 怎么把内容做满" },
 ];
 
 const MAKE_V2_SKILL_NAMES = {
@@ -394,16 +395,14 @@ function MakeV2StepScript({ script, setScript, onNext, onNav, seedFrom, onDismis
         )}
       </div>
 
-      {/* === 6 大文案 skill 按钮 (D-062a 下移 · D-062u/x 锚机制) === */}
-      <div style={{ background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 12, padding: 16 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: T.text, marginBottom: 4 }}>📋 或者用专门的文案 skill 写</div>
-        <div style={{ fontSize: 11, color: T.muted, marginBottom: 10 }}>
-          ✨ 写完点 skill 完成态的"做成视频" CTA, 文案自动带回这里 (跨页 state 已通)
+      {/* D-062nn-C1: 6 大 skill 卡 — 删研发文案标题, 改简洁 hero */}
+      <div style={{ marginBottom: 16 }}>
+        <div style={{ fontSize: 15, fontWeight: 600, color: T.text, marginBottom: 12 }}>
+          或者从这里开始写文案 ↓
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 10 }}>
           {MAKE_V2_SCRIPT_SKILLS.map(s => (
             <ScriptSkillCard key={s.id} skill={s} onClick={() => {
-              // D-062x: 跳出去前留 anchor, skill 内显 banner + CTA 改文案
               setFromMake(s.id);
               onNav(s.id);
             }} />
