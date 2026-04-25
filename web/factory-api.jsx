@@ -34,6 +34,13 @@ const api = {
       return r.json();
     });
   },
+  patch(path, body) {
+    return _trace("PATCH", path, async () => {
+      const r = await fetch(`${API_BASE}${path}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
+      if (!r.ok) throw new Error(`${path} HTTP ${r.status}: ${await r.text()}`);
+      return r.json();
+    });
+  },
   del(path) {
     return _trace("DELETE", path, async () => {
       const r = await fetch(`${API_BASE}${path}`, { method: "DELETE" });

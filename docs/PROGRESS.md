@@ -291,9 +291,20 @@ P0-P10 所有任务落地, 14 个 commit 从 `09faf92` 到今日末 commit。
       file_watch 留 D-040f 接 watchdog (一鱼多吃任务真要时再加, 用户说本地用爽优先).
       uv add apscheduler>=3.10 (3.11.2 + tzlocal 5.3.1).
       tests/test_night_scheduler.py 8/8.
-- [ ] **D-040d 总控页 + sidebar 改造**
-      sidebar: 首页→总部 / 加 "生产部 / 档案部 / 夜班" 分组 / 加 🌙 小华夜班 入口
-      NightShiftPage: 状态条 + 任务卡片 (开关/编辑/立即跑) + 历史日志
+- [x] **D-040d 总控页 + sidebar 改造**
+      sidebar (factory-shell.jsx): 首页→总部, 加 NavGroupLabel 组件, 在生产部/
+      档案部/夜班 3 段前显示分组小标题(展开态), 折叠态隐藏. 加 🌙 小华夜班 入口.
+      NightShiftPage (factory-night-v2.jsx, 18K 字): 顶栏 + 状态条 ("今晚自动跑
+      X 条任务" / 总条数·启用数·成功数·失败数) + 任务卡片网格 (icon/名字/触发器
+      /上次跑了/启用 toggle/立即跑/编辑/×) + 历史日志 (最近 30 条 flat list,
+      job icon + 时间 + summary + 耗时 + status tag) + NightJobEditor 模态
+      (name/icon/skill_slug/trigger_type 三选一/cron 输入+4 个预设 chip/
+      output_target 下拉/enabled). 4s 自动刷新看立即跑实时进度. humanizeCron
+      把 "0 23 * * *" 翻成 "每天 23:00".
+      api.patch 补上 (factory-api.jsx 之前只有 get/post/del).
+      factory-app.jsx 加 nightshift route. index.html 在 dreamina 后载入.
+      端到端 smoke 跑过: TestClient 模拟前端 8 步 (列空/创建/列 1 条/PATCH 开关
+      /立即跑+轮询占位 runner 落 success/digest/scheduler 状态/删) 全通.
 - [ ] **D-040e 总部播报 NightDigestCard + 散落标签**
       4 大方块下方 + 🔥98 热点条上方; 时间联动 (6-22h "昨晚做了 X" / 22-6h "今晚 N 件");
       0 产出整块隐藏不要"暂无"; 素材库/作品库/知识库加 "🌙 来自夜班 (N)" 过滤标签

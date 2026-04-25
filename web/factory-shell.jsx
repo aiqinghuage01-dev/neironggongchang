@@ -1,7 +1,8 @@
 // factory-shell.jsx — 窄侧栏 + 浮动小华 dock(LiDock)
 // 1:1 还原 docs/design_v3/factory3-shell.jsx
 
-const NAV_TOP = [{ id: "home", icon: "🏠", label: "首页" }];
+// D-040d 信息架构: 工厂四大板块 (首页→总部 + 生产部 / 档案部 / 夜班分组)
+const NAV_TOP = [{ id: "home", icon: "🏠", label: "总部" }];
 const NAV_MAIN = [
   { id: "make", icon: "🎬", label: "做视频" },
   { id: "ad", icon: "💰", label: "投流文案" },
@@ -18,7 +19,18 @@ const NAV_ASSETS = [
   { id: "works", icon: "🗂️", label: "作品库" },
   { id: "knowledge", icon: "📚", label: "知识库" },
 ];
+const NAV_NIGHT = [{ id: "nightshift", icon: "🌙", label: "小华夜班" }];
 const NAV_BOTTOM = [{ id: "settings", icon: "⚙️", label: "设置" }];
+
+function NavGroupLabel({ text, expanded }) {
+  if (!expanded) return null;
+  return (
+    <div style={{
+      fontSize: 10, color: T.muted3, fontWeight: 500,
+      padding: "10px 10px 4px", letterSpacing: 0.5,
+    }}>{text}</div>
+  );
+}
 
 function Sidebar({ active, onNav }) {
   const [hover, setHover] = React.useState(false);
@@ -42,14 +54,22 @@ function Sidebar({ active, onNav }) {
       {NAV_TOP.map((n) => (
         <NavItem key={n.id} item={n} active={active === n.id} expanded={hover} onClick={() => onNav(n.id)} />
       ))}
-      <div style={{ height: 1, background: T.borderSoft, margin: "8px 6px" }} />
+
+      <NavGroupLabel text="生产部" expanded={hover} />
       {NAV_MAIN.map((n) => (
         <NavItem key={n.id} item={n} active={active === n.id} expanded={hover} onClick={() => onNav(n.id)} />
       ))}
-      <div style={{ height: 1, background: T.borderSoft, margin: "8px 6px" }} />
+
+      <NavGroupLabel text="档案部" expanded={hover} />
       {NAV_ASSETS.map((n) => (
         <NavItem key={n.id} item={n} active={active === n.id} expanded={hover} onClick={() => onNav(n.id)} />
       ))}
+
+      <NavGroupLabel text="夜班" expanded={hover} />
+      {NAV_NIGHT.map((n) => (
+        <NavItem key={n.id} item={n} active={active === n.id} expanded={hover} onClick={() => onNav(n.id)} />
+      ))}
+
       <div style={{ flex: 1 }} />
       {NAV_BOTTOM.map((n) => (
         <NavItem key={n.id} item={n} active={active === n.id} expanded={hover} onClick={() => onNav(n.id)} />
