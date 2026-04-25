@@ -404,8 +404,9 @@ function MakeV2StepVoiceDh({ voiceId, setVoiceId, avatarId, setAvatarId, dhVideo
     return () => { stop = true; };
   }, [taskInfo]);
 
-  const speaker = speakers?.find(s => s.speaker_id === voiceId);
-  const avatar = avatars?.find(a => a.avatar_id === avatarId);
+  // D-062jj: backend /api/speakers 返回 {id, title}, 不是 speaker_id (前端字段名错了)
+  const speaker = speakers?.find(s => s.id === voiceId);
+  const avatar = avatars?.find(a => a.id === avatarId);
   const ready = !!speaker && !!avatar;
   const generating = !!taskInfo && !dhVideoPath;
   const done = !!dhVideoPath;
@@ -427,12 +428,12 @@ function MakeV2StepVoiceDh({ voiceId, setVoiceId, avatarId, setAvatarId, dhVideo
       {/* D-062ff: 全部声音 + 全部数字人 默认展开, 选中明显高亮 */}
       <div style={{ marginBottom: 16, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
         <PickerColumn title="🎙️ 声音 (CosyVoice)" loading={!speakers}
-          items={speakers?.map(s => ({ id: s.speaker_id, label: s.title || `#${s.speaker_id}` })) || []}
+          items={speakers?.map(s => ({ id: s.id, label: s.title || `#${s.id}` })) || []}
           selectedId={voiceId} onSelect={setVoiceId}
           emptyTip="还没有克隆声音 · 上传 1 段你的录音 (≥ 10s) 克隆专属音色"
           emptyAction={onNav ? { label: "去 ⚙️ 设置 · 克隆样本上传", onClick: () => onNav("settings") } : null} />
         <PickerColumn title="👤 数字人 (柿榴)" loading={!avatars}
-          items={avatars?.map(a => ({ id: a.avatar_id, label: a.title || `#${a.avatar_id}` })) || []}
+          items={avatars?.map(a => ({ id: a.id, label: a.title || `#${a.id}` })) || []}
           selectedId={avatarId} onSelect={setAvatarId}
           emptyTip="柿榴账号下还没数字人形象 · 去柿榴 Web 后台创建一个 (3-5 分钟 trained)"
           emptyAction={{ label: "📋 复制柿榴操作", onClick: () => {
