@@ -250,6 +250,23 @@ Obsidian 知识库 / 00 AI清华哥 /
 P0-P10 所有任务落地, 14 个 commit 从 `09faf92` 到今日末 commit。
 完整变更见 CHANGELOG.md · 接入新 skill 参见 docs/NEW-SKILL-PLAYBOOK.md
 
+## 下一阶段进行中 (⑤ 任务管理 · 用户主诉痛点)
+
+- [ ] **⑤ 全局任务清单 + 顶栏 TaskBar** (D-037)
+      用户痛点: "写长文/配图时切到别的页面回来工作流被吃了一截"
+      做法:
+      1. 后端改异步任务模式 · /api/wechat/write 立即返回 task_id, 后台跑
+      2. SQLite tasks 表 (id/kind/status/started/finished/payload/result/error)
+      3. 顶栏 TaskBar (任何页都能看到 "写长文 35s/60s" 进行中)
+      4. 任务详情抽屉 · 点 TaskBar 展开列表 · 点任务跳回原页恢复 state
+
+## 公众号 8 步打磨完成(D-033 ~ D-036)
+
+- [x] ① Step 5 配图 prompt 可改 + 6 风格预设 (D-033 `86c65eb`)
+- [x] ② Step 6 HTML 模板切换 V1/V2/V3 (D-034 `e31d399`)
+- [x] ④ Step 7 封面 4 选 1 + 再来一批 (D-035 `c75d5d2`)
+- [x] ③ Step 4 长文局部重写 + 7 快捷指令 (D-036 `4ccd0ca`)
+
 ## Bonus 任务(P10 之后,cron 继续干活时做的)
 
 - [x] **即梦(Dreamina) AIGC 接入 (D-028)** — CLI 工具型技能(非 SKILL.md 范式)
