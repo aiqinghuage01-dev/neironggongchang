@@ -5,7 +5,7 @@ function FactoryApp() {
   const render = () => {
     switch (page) {
       case "home":       return <PageHome onNav={setPage} />;
-      case "make":       return <PageMake onNav={setPage} />;
+      case "make":       return <PageMakeV2 onNav={setPage} />;
       case "ad":         return <PageAd onNav={setPage} />;
       case "wechat":     return <PageWechat onNav={setPage} />;
       case "moments":    return <PageMoments onNav={setPage} />;
