@@ -141,7 +141,9 @@
 ## D-062 实施 backlog(按优先级)
 
 ### Phase 1 — 各 skill 加"下一步" CTA(P0)
-- [ ] **D-062c** hotrewrite 完成态加 ✨"做成数字人视频"按钮 + script 预填
+- [x] **D-062c** hotrewrite 完成态加 ✨"做成数字人视频"按钮 + script 预填 (待 commit hash)
+      + PageMakeV2 检测 localStorage 自动填 textarea + 显 banner "从 🔥 热点改写 带过来"
+      = D-062c 同时把 D-062m/n 的"跨页面 state 锚机制" 也做了
 - [ ] **D-062d** voicerewrite 完成态加同款 CTA
 - [ ] **D-062e** touliu 每条文案下加"用这条做视频"按钮
 - [ ] **D-062f** wechat 完成态加"摘金句段做视频"+"推送草稿"双 CTA

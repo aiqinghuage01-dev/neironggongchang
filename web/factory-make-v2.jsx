@@ -33,6 +33,25 @@ function PageMakeV2({ onNav }) {
   const [alignedScenes, setAlignedScenes] = React.useState(null); // Step 4
   const [renderTaskId, setRenderTaskId] = React.useState(null);   // Step 5 trigger
 
+  // D-062c: 检测从其它 skill 跳来的 seed (localStorage make_v2_seed_script)
+  const [seedFrom, setSeedFrom] = React.useState(null);
+  React.useEffect(() => {
+    try {
+      const seed = localStorage.getItem("make_v2_seed_script");
+      const fromRaw = localStorage.getItem("make_v2_seed_from");
+      if (seed && !script) {
+        setScript(seed);
+        if (fromRaw) {
+          try { setSeedFrom(JSON.parse(fromRaw)); } catch (_) {}
+        }
+        // 用完清掉 (避免下次还自动填)
+        localStorage.removeItem("make_v2_seed_script");
+        localStorage.removeItem("make_v2_seed_from");
+      }
+    } catch (_) {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   function gotoStep(target) {
     setErr("");
     setStep(target);
@@ -50,7 +69,7 @@ function PageMakeV2({ onNav }) {
             </div>
           )}
 
-          {step === "script"   && <MakeV2StepScript script={script} setScript={setScript} onNext={() => gotoStep("voice-dh")} onNav={onNav} />}
+          {step === "script"   && <MakeV2StepScript script={script} setScript={setScript} onNext={() => gotoStep("voice-dh")} onNav={onNav} seedFrom={seedFrom} onDismissSeed={() => setSeedFrom(null)} />}
           {step === "voice-dh" && <MakeV2StepVoiceDh
                                     voiceId={voiceId} setVoiceId={setVoiceId}
                                     avatarId={avatarId} setAvatarId={setAvatarId}
@@ -137,7 +156,12 @@ const MAKE_V2_SCRIPT_SKILLS = [
   { id: "planner",      icon: "📋", title: "内容策划", desc: "活动策划 → 策划完去录直播 → 录音改写" },
 ];
 
-function MakeV2StepScript({ script, setScript, onNext, onNav }) {
+const MAKE_V2_SKILL_NAMES = {
+  hotrewrite: "🔥 热点改写", voicerewrite: "🎙️ 录音改写", ad: "💰 投流文案",
+  wechat: "📄 公众号", moments: "📱 朋友圈", planner: "📋 内容策划",
+};
+
+function MakeV2StepScript({ script, setScript, onNext, onNav, seedFrom, onDismissSeed }) {
   // D-062a: 当日热点预览 (从 hot_topics 表拉前 3 条)
   const [hotTopics, setHotTopics] = React.useState(null);
   React.useEffect(() => {
@@ -154,6 +178,20 @@ function MakeV2StepScript({ script, setScript, onNext, onNav }) {
 
   return (
     <div>
+      {/* D-062c: 从其它 skill 跳来的 seed banner */}
+      {seedFrom && (
+        <div style={{ marginBottom: 16, padding: 12, background: T.brandSoft, border: `1px solid ${T.brand}66`,
+                      borderRadius: 8, display: "flex", alignItems: "center", gap: 10, fontSize: 13 }}>
+          <span style={{ fontSize: 16 }}>✨</span>
+          <span style={{ flex: 1 }}>
+            从 <b>{MAKE_V2_SKILL_NAMES[seedFrom.skill] || seedFrom.skill}</b> 带过来的文案已自动填入
+            {seedFrom.title && <span style={{ color: T.muted, marginLeft: 6 }}>· {seedFrom.title}</span>}
+          </span>
+          <button onClick={onDismissSeed}
+            style={{ background: "transparent", border: "none", color: T.muted2, cursor: "pointer", fontSize: 12, fontFamily: "inherit" }}>×</button>
+        </div>
+      )}
+
       {/* === 文案输入区 (D-062a 置顶最显眼) === */}
       <div style={{ background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 12, padding: 20, marginBottom: 16 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>

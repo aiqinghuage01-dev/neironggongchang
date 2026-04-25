@@ -93,7 +93,7 @@ function PageHotrewrite({ onNav }) {
         )}
         {step === "input"  && <HotStepInput hotspot={hotspot} setHotspot={setHotspot} onGo={doAnalyze} loading={loading} skillInfo={skillInfo} />}
         {step === "angles" && <HotStepAngles analyze={analyze} loading={loading} onPick={pickAngle} onPrev={() => setStep("input")} onRegen={doAnalyze} />}
-        {step === "write"  && <HotStepWrite script={script} hotspot={hotspot} angle={pickedAngle} loading={loading} onPrev={() => setStep("angles")} onRewrite={() => pickAngle(pickedAngle)} onReset={reset} />}
+        {step === "write"  && <HotStepWrite script={script} hotspot={hotspot} angle={pickedAngle} loading={loading} onPrev={() => setStep("angles")} onRewrite={() => pickAngle(pickedAngle)} onReset={reset} onNav={onNav} />}
       </div>
     </div>
   );
@@ -244,7 +244,7 @@ function HotStepAngles({ analyze, loading, onPick, onPrev, onRegen }) {
 }
 
 // ─── Step 3 · 正文 + 六维自检 ───────────────────────────
-function HotStepWrite({ script, hotspot, angle, loading, onPrev, onRewrite, onReset }) {
+function HotStepWrite({ script, hotspot, angle, loading, onPrev, onRewrite, onReset, onNav }) {
   if (loading || !script) return <Spinning icon="✍️" phases={[
     { text: "读 skill 完整方法论", sub: "Step 2-5 · 流量骨架 + 人设 + 业务植入" },
     { text: "3 秒判词开场", sub: "直接态度,不先背景" },
@@ -295,8 +295,33 @@ function HotStepWrite({ script, hotspot, angle, loading, onPrev, onRewrite, onRe
         <Btn onClick={onRewrite}>🔄 同角度再来一版</Btn>
         <div style={{ flex: 1 }} />
         <Btn onClick={copy} variant={copied ? "soft" : "default"}>{copied ? "✓ 已复制" : "📋 复制正文"}</Btn>
-        <Btn variant="primary" onClick={onReset}>再写一条热点</Btn>
+        <Btn onClick={onReset}>再写一条热点</Btn>
       </div>
+
+      {/* D-062c: 完成态加 "下一步: 做成数字人视频" CTA */}
+      {onNav && script.content && (
+        <div style={{ marginTop: 16, padding: 16, background: "linear-gradient(135deg, #f6fbf7, #fff)",
+                      border: `1.5px solid ${T.brand}`, boxShadow: `0 0 0 4px ${T.brandSoft}`,
+                      borderRadius: 12, display: "flex", alignItems: "center", gap: 14 }}>
+          <div style={{ fontSize: 26 }}>✨</div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 14, fontWeight: 600, color: T.text }}>下一步: 把这条热点改写做成数字人视频?</div>
+            <div style={{ fontSize: 12, color: T.muted, marginTop: 3 }}>
+              一键带文案过去 · 选声音 + 数字人 + 模板 · 出片
+            </div>
+          </div>
+          <Btn variant="primary" onClick={() => {
+            try {
+              localStorage.setItem("make_v2_seed_script", script.content);
+              localStorage.setItem("make_v2_seed_from", JSON.stringify({
+                skill: "hotrewrite", title: hotspot?.slice(0, 30) || "热点改写",
+                ts: Date.now(),
+              }));
+            } catch (_) {}
+            onNav("make");
+          }}>🎬 做成数字人视频 →</Btn>
+        </div>
+      )}
     </div>
   );
 }
