@@ -113,17 +113,28 @@ function SectionCard({ section, accent, onClick, dim }) {
     green: T.brand, amber: T.amber, blue: T.blue, pink: T.pink, purple: T.purple, red: T.red, gray: T.muted,
   };
   const c = colorMap[accent];
+  const [hover, setHover] = React.useState(false);
   return (
-    <div onClick={onClick} style={{
-      padding: 18, background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 12,
-      cursor: "pointer", opacity: dim ? 0.75 : 1,
-    }}>
-      <div style={{ fontSize: 13.5, fontWeight: 600, color: T.text, marginBottom: 10, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{section.name}</div>
+    <div onClick={onClick}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        padding: 18, background: "#fff",
+        border: `1px solid ${hover ? c : T.borderSoft}`,
+        boxShadow: hover ? `0 4px 16px ${c}22` : "0 1px 2px rgba(0,0,0,0.03)",
+        borderRadius: 12,
+        cursor: "pointer", opacity: dim ? 0.75 : 1,
+        transition: "all 0.15s",
+      }}>
+      <div style={{ fontSize: 14, fontWeight: 600, color: T.text, marginBottom: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{section.name}</div>
       <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
-        <div style={{ fontSize: 28, fontWeight: 700, color: c, lineHeight: 1 }}>{section.doc_count}</div>
+        <div style={{ fontSize: 32, fontWeight: 700, color: c, lineHeight: 1, fontFamily: "SF Mono, monospace" }}>{section.doc_count}</div>
         <div style={{ fontSize: 11, color: T.muted }}>条</div>
       </div>
-      <div style={{ fontSize: 11, color: T.muted2, marginTop: 8 }}>{section.subsections.length} 个子分类</div>
+      <div style={{ fontSize: 11, color: T.muted2, marginTop: 10 }}>
+        {section.subsections.length} 个子分类
+        {hover && <span style={{ float: "right", color: c, fontWeight: 500 }}>看 →</span>}
+      </div>
     </div>
   );
 }

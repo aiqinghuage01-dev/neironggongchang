@@ -134,6 +134,7 @@
 - C13 Step 5 PublishPanel batch — "✓ 一键全标已发" + "撤销全部标记"
 - C14 PageWorks WorkCard + EmptyWorks polish — hover ring + 时长徽章 + Empty hero (480 max + 1 px brand border + 大 emoji)
 - C15 PageMaterials ViralCard/HotRow/TopicRow polish — 抽 HotRow + TopicRow 组件, 加 hover ring (跟 WorkCard 一致)
+- C16 PageKnowledge SectionCard polish — 加 hover ring (按 accent 色) + 数字 mono 32px + "看 →" hover 提示
 
 ## 卡住记录
 
