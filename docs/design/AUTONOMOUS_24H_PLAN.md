@@ -138,6 +138,7 @@
 - C17 PageHome BigAction polish — hot 卡 brand ring + hover ring + 大字 19px 700 + 删 "Phase 2 已通" dev 文案 → 用真实 hint 文案 (今日还没出过投流 等)
 - C18 PageHome 其他卡一致化 — AiUsageCard 14px radius / NightDigestDay amber tint / NightDigestNight blue tint / 今日最热 amber gradient 升级 (padding 16x20 → 18x22, radius 12 → 14, 加色调 33 border + 阴影)
 - C19 PageSettings SettingsSection polish — icon 升 40px brandSoft 底圆角 / 加 divider 分隔头部和内容 / radius 12 → 14 + 1px subtle shadow
+- C20 PageNight NightJobCard polish — icon 28px → 24px 但加 44x44 brandSoft 圆角底 (与 SettingsSection 一致) + hover ring (enabled 时) + radius 12 → 14
 
 ## 卡住记录
 

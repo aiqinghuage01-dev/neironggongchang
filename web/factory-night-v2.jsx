@@ -356,13 +356,27 @@ function NightJobCard({ job, runs, onToggle, onRun, onEdit, onDelete }) {
     : job.trigger_type === "file_watch"
       ? `监听 ${job.trigger_config?.path || "(未设)"}`
       : "只手动";
+  const [hover, setHover] = React.useState(false);
 
   return (
-    <div style={{ padding: 16, background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 12, display: "flex", alignItems: "center", gap: 14, opacity: job.enabled ? 1 : 0.55, transition: "opacity 0.15s" }}>
-      <div style={{ fontSize: 28, width: 36, textAlign: "center", flexShrink: 0 }}>{job.icon || "🌙"}</div>
+    <div
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        padding: "16px 20px", background: "#fff",
+        border: `1px solid ${hover && job.enabled ? T.brand : T.borderSoft}`,
+        boxShadow: hover && job.enabled ? `0 4px 12px rgba(47,122,82,0.10)` : "0 1px 2px rgba(0,0,0,0.03)",
+        borderRadius: 14, display: "flex", alignItems: "center", gap: 14,
+        opacity: job.enabled ? 1 : 0.55, transition: "all 0.15s",
+      }}>
+      <div style={{
+        fontSize: 24, width: 44, height: 44, flexShrink: 0,
+        background: job.enabled ? T.brandSoft : T.bg2, borderRadius: 10,
+        display: "flex", alignItems: "center", justifyContent: "center",
+      }}>{job.icon || "🌙"}</div>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-          <div style={{ fontSize: 14, fontWeight: 600, color: T.text }}>{job.name}</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 5 }}>
+          <div style={{ fontSize: 14.5, fontWeight: 600, color: T.text }}>{job.name}</div>
           {job.skill_slug && <Tag size="xs" color="blue">{job.skill_slug}</Tag>}
           {target && <span style={{ fontSize: 11, color: T.muted2 }}>→ {target.label}</span>}
         </div>
