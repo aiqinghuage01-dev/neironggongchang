@@ -120,7 +120,8 @@
 
 ## 已完成 (C 编号 + commit hash + 一句话)
 
-- C5 (TBD-hash) PageVoicerewrite 升级 — checkbox 模式 + 多版累积 + 改写完成态加 tab/再来一版/换角度
+- C5 PageVoicerewrite 升级 — checkbox 模式 + 多版累积 + 改写完成态加 tab/再来一版/换角度
+- C6 PageTouliu Step 1 升级 — hero + 大输入框 + ParamRow 抽组件 + skill 资源默认折叠
 
 ## 卡住记录
 

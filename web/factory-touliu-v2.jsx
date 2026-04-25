@@ -133,6 +133,34 @@ function TLHeader({ current, onBack, skillInfo }) {
   );
 }
 
+// C6: 参数行通用组件 (label + chip 组)
+function ParamRow({ label, items, value, onChange, getKey, getLabel, getTitle }) {
+  const _key = getKey || (x => x);
+  const _label = getLabel || (x => x);
+  return (
+    <div>
+      <div style={{ fontSize: 12.5, color: T.muted, fontWeight: 500, marginBottom: 8 }}>{label}</div>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        {items.map(it => {
+          const k = _key(it);
+          const on = k === value;
+          return (
+            <div key={k} title={getTitle ? getTitle(it) : undefined}
+              onClick={() => onChange(k)}
+              style={{
+                padding: "6px 14px", borderRadius: 100, fontSize: 12, cursor: "pointer",
+                background: on ? T.brandSoft : T.bg2,
+                color: on ? T.brand : T.muted,
+                border: `1px solid ${on ? T.brand : T.borderSoft}`,
+                fontWeight: on ? 600 : 500,
+              }}>{_label(it)}</div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 const INDUSTRIES = ["通用老板", "餐饮", "美业", "教培", "制造业", "门店零售", "建材/家装", "汽服"];
 const TARGETS = [
   { id: "点头像进直播间", label: "进直播间", hint: "默认 · 最稳" },
@@ -145,100 +173,58 @@ const CHANNELS = ["直播间", "短视频投放", "信息流", "混合"];
 function TLStepInput({ pitch, setPitch, industry, setIndustry, targetAction, setTargetAction, n, setN, channel, setChannel, loading, onGo, skillInfo }) {
   const ready = !!pitch.trim() && !loading;
   return (
-    <div style={{ padding: "40px 40px 60px", maxWidth: 820, margin: "0 auto" }}>
-      <div style={{ textAlign: "center", marginBottom: 24 }}>
-        <div style={{ fontSize: 28, fontWeight: 700, color: T.text, marginBottom: 8, letterSpacing: "-0.02em" }}>这批投流要推啥? 💰</div>
-        <div style={{ fontSize: 14, color: T.muted }}>skill 方法论: 结构分配 痛 3 对 2 步 2 话 2 创 1 · 每条过 6 维编导终检 + lint 质检</div>
+    <div style={{ padding: "32px 40px 80px", maxWidth: 820, margin: "0 auto" }}>
+      {/* C6 hero (跟 hotrewrite/voicerewrite 一致) */}
+      <div style={{ textAlign: "center", margin: "8px 0 24px" }}>
+        <div style={{ fontSize: 30, fontWeight: 700, color: T.text, letterSpacing: "-0.02em", marginBottom: 8 }}>
+          这批投流要推啥? 💰
+        </div>
+        <div style={{ fontSize: 14, color: T.muted, lineHeight: 1.6 }}>
+          一句话讲清卖点 · 小华按 5 种结构 (痛 / 对 / 步 / 话 / 创) 出 N 条
+        </div>
       </div>
 
-      <div style={{ background: "#fff", border: `1.5px solid ${T.brand}`, boxShadow: `0 0 0 5px ${T.brandSoft}`, borderRadius: 16, padding: 18, marginBottom: 14 }}>
+      {/* 卖点输入大对话框 */}
+      <div style={{ background: "#fff", border: `1.5px solid ${T.brand}`, boxShadow: `0 0 0 5px ${T.brandSoft}`, borderRadius: 16, padding: 18, marginBottom: 16 }}>
         <textarea rows={5} value={pitch} onChange={e => setPitch(e.target.value)}
-          placeholder="卖点描述 - 核心产品/服务 · 差异化 · 谁最需要...&#10;例:帮实体老板用 AI + 短视频做获客 · 三天出一条 · 不用拍摄不用剪辑"
-          style={{ width: "100%", border: "none", outline: "none", background: "transparent", fontSize: 14.5, fontFamily: "inherit", resize: "vertical", lineHeight: 1.7, color: T.text }}
+          placeholder="例:帮实体老板用 AI + 短视频做获客 · 三天出一条 · 不用拍摄不用剪辑"
+          style={{ width: "100%", padding: 12, border: "none", outline: "none", background: "transparent", fontSize: 14.5, fontFamily: "inherit", resize: "vertical", lineHeight: 1.7, color: T.text, minHeight: 120 }}
         />
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10, paddingTop: 12, borderTop: `1px solid ${T.borderSoft}` }}>
-          <div style={{ fontSize: 11.5, color: T.muted2 }}>💰 skill 自动按结构配比生成 · 末尾跑 lint 质检</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 12, paddingTop: 14, borderTop: `1px solid ${T.borderSoft}` }}>
+          {pitch.trim() ? (
+            <Tag size="xs" color="gray">{pitch.trim().length} 字</Tag>
+          ) : (
+            <span style={{ fontSize: 12, color: T.muted2 }}>✨ 选下面参数, 点 "生成"</span>
+          )}
           <div style={{ flex: 1 }} />
           <button onClick={onGo} disabled={!ready} style={{
-            padding: "8px 20px", fontSize: 13, fontWeight: 600,
+            padding: "10px 22px", fontSize: 14, fontWeight: 600,
             background: ready ? T.brand : T.muted3, color: "#fff",
             border: "none", borderRadius: 100, cursor: ready ? "pointer" : "not-allowed", fontFamily: "inherit",
-          }}>{loading ? `生成中 (${n} 条)...` : `一次性生成 ${n} 条 →`}</button>
+          }}>{loading ? `生成中 (${n} 条)...` : `🚀 生成 ${n} 条 →`}</button>
         </div>
       </div>
 
-      {/* 采集参数 - 一个表单行 */}
-      <div style={{ padding: 14, background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 12, marginBottom: 14 }}>
-        <div style={{ fontSize: 11.5, color: T.muted2, fontWeight: 600, letterSpacing: "0.08em", marginBottom: 10 }}>本批采集</div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-          <div>
-            <div style={{ fontSize: 11, color: T.muted, marginBottom: 5 }}>行业/品类</div>
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-              {INDUSTRIES.map(x => (
-                <div key={x} onClick={() => setIndustry(x)} style={{
-                  padding: "4px 10px", borderRadius: 100, fontSize: 11.5, cursor: "pointer",
-                  background: industry === x ? T.brandSoft : T.bg2,
-                  color: industry === x ? T.brand : T.muted,
-                  border: `1px solid ${industry === x ? T.brand : T.borderSoft}`,
-                  fontWeight: industry === x ? 600 : 500,
-                }}>{x}</div>
-              ))}
-            </div>
-          </div>
-          <div>
-            <div style={{ fontSize: 11, color: T.muted, marginBottom: 5 }}>目标动作</div>
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-              {TARGETS.map(t => (
-                <div key={t.id} title={t.hint} onClick={() => setTargetAction(t.id)} style={{
-                  padding: "4px 10px", borderRadius: 100, fontSize: 11.5, cursor: "pointer",
-                  background: targetAction === t.id ? T.brandSoft : T.bg2,
-                  color: targetAction === t.id ? T.brand : T.muted,
-                  border: `1px solid ${targetAction === t.id ? T.brand : T.borderSoft}`,
-                  fontWeight: targetAction === t.id ? 600 : 500,
-                }}>{t.label}</div>
-              ))}
-            </div>
-          </div>
-          <div>
-            <div style={{ fontSize: 11, color: T.muted, marginBottom: 5 }}>本批数量</div>
-            <div style={{ display: "flex", gap: 6 }}>
-              {[1, 3, 5, 10].map(x => (
-                <div key={x} onClick={() => setN(x)} style={{
-                  padding: "4px 14px", borderRadius: 100, fontSize: 11.5, cursor: "pointer",
-                  background: n === x ? T.brandSoft : T.bg2,
-                  color: n === x ? T.brand : T.muted,
-                  border: `1px solid ${n === x ? T.brand : T.borderSoft}`,
-                  fontWeight: n === x ? 600 : 500,
-                }}>{x} 条</div>
-              ))}
-            </div>
-          </div>
-          <div>
-            <div style={{ fontSize: 11, color: T.muted, marginBottom: 5 }}>适用渠道</div>
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-              {CHANNELS.map(c => (
-                <div key={c} onClick={() => setChannel(c)} style={{
-                  padding: "4px 10px", borderRadius: 100, fontSize: 11.5, cursor: "pointer",
-                  background: channel === c ? T.brandSoft : T.bg2,
-                  color: channel === c ? T.brand : T.muted,
-                  border: `1px solid ${channel === c ? T.brand : T.borderSoft}`,
-                  fontWeight: channel === c ? 600 : 500,
-                }}>{c}</div>
-              ))}
-            </div>
-          </div>
-        </div>
+      {/* C6 采集参数 视觉升级 (4 区段, 标题 13px 600) */}
+      <div style={{ background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 12, padding: 18, marginBottom: 14, display: "flex", flexDirection: "column", gap: 16 }}>
+        <ParamRow label="🏢 行业/品类" items={INDUSTRIES} value={industry} onChange={setIndustry} />
+        <ParamRow label="🎯 目标动作" items={TARGETS} value={targetAction} onChange={setTargetAction}
+          getKey={t => t.id} getLabel={t => t.label} getTitle={t => t.hint} />
+        <ParamRow label={`📦 本批数量 (默认 1)`} items={[1, 3, 5, 10]} value={n} onChange={setN}
+          getLabel={x => `${x} 条`} />
+        <ParamRow label="📺 适用渠道" items={CHANNELS} value={channel} onChange={setChannel} />
       </div>
 
       {skillInfo && (
-        <div style={{ padding: 14, background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 10, fontSize: 12, color: T.muted, lineHeight: 1.8 }}>
-          <div style={{ fontWeight: 600, color: T.text, marginBottom: 6 }}>skill 资源</div>
-          <div>SKILL.md · {skillInfo.skill_md_chars} 字符</div>
-          {Object.entries(skillInfo.references || {}).slice(0, 6).map(([k, v]) => (
-            <div key={k}>references/{k}.md · {v} 字符</div>
-          ))}
-          <div style={{ marginTop: 6, color: T.muted2 }}>注入 prompt 的: SKILL.md + style_rules + winning_patterns + industry_templates + golden_samples 前段</div>
-        </div>
+        <details style={{ padding: "10px 14px", background: T.bg2, borderRadius: 8, fontSize: 11.5, color: T.muted2, cursor: "pointer" }}>
+          <summary>skill 资源 (开发用 · 默认折叠)</summary>
+          <div style={{ marginTop: 8, lineHeight: 1.6 }}>
+            <div>SKILL.md · {skillInfo.skill_md_chars} 字符</div>
+            {Object.entries(skillInfo.references || {}).slice(0, 6).map(([k, v]) => (
+              <div key={k}>references/{k}.md · {v} 字符</div>
+            ))}
+          </div>
+        </details>
       )}
     </div>
   );
