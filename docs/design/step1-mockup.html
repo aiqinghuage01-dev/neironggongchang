@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>Step 1 交互稿 v1 (待清华哥确认)</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", sans-serif;
+      background: #faf8f4;
+      color: #1f2937;
+    }
+  </style>
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js"></script>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    // 沿用项目 brand 绿色调 (从 factory-tokens.jsx 抠的)
+    const T = {
+      brand: "#2f7a52",
+      brandSoft: "#e6f0eb",
+      text: "#1f2937",
+      muted: "#6b7280",
+      muted2: "#9ca3af",
+      muted3: "#d1d5db",
+      bg: "#faf8f4",
+      bg2: "#f5f1ea",
+      border: "#e7e2d8",
+      borderSoft: "#ece8df",
+      amber: "#b45309",
+      amberSoft: "#fef3c7",
+      red: "#b91c1c",
+      redSoft: "#fee2e2",
+      pink: "#be185d",
+      pinkSoft: "#fce7f3",
+      blue: "#1e40af",
+      blueSoft: "#dbeafe",
+      green: "#166534",
+      greenSoft: "#dcfce7",
+    };
+
+    function Tag({ children, color = "gray", size = "xs" }) {
+      const palette = {
+        green: { bg: T.greenSoft, fg: T.green },
+        blue: { bg: T.blueSoft, fg: T.blue },
+        amber: { bg: T.amberSoft, fg: T.amber },
+        pink: { bg: T.pinkSoft, fg: T.pink },
+        red: { bg: T.redSoft, fg: T.red },
+        gray: { bg: T.bg2, fg: T.muted },
+        brand: { bg: T.brandSoft, fg: T.brand },
+      }[color] || { bg: T.bg2, fg: T.muted };
+      const fz = size === "xs" ? 10.5 : 12;
+      return (
+        <span style={{
+          display: "inline-block",
+          padding: "2px 8px", borderRadius: 100,
+          fontSize: fz, fontWeight: 600,
+          background: palette.bg, color: palette.fg,
+          whiteSpace: "nowrap",
+        }}>{children}</span>
+      );
+    }
+
+    // ─── 中央对话框 (4 种输入状态切换) ─────────────────
+    function CentralBox() {
+      const [state, setState] = React.useState("empty"); // empty / url / mix / content
+      const samples = {
+        empty: "",
+        url: "https://v.douyin.com/abc123/",
+        mix: "5.87 p@D.Hv 09/26 dnq:/ 王自如聊01号员工 看似苛刻的招聘要求, 实则是在这个时代, 一个善用AI的人能让个人能力大幅提升... # 王自如 # AI # Claude  https://v.douyin.com/aQX-hnWYWtl/ 复制此链接, 打开Dou音搜索, 直接观看视频!",
+        content: "今天聊一个老板都被忽悠过的事 - AI 客服能不能取代真人客服。我做实体 8 年, 见过太多老板砸钱上 AI 系统, 三个月后又默默换回真人。问题不在 AI 不行, 问题在你以为 AI 是来'省人'的。其实 AI 是来'放大人'的...",
+      };
+      const text = samples[state];
+
+      function StatusRow() {
+        if (state === "empty") return <span style={{ fontSize: 12, color: T.muted2 }}>✨ 自动识别链接 / 文案 · 选下面动作</span>;
+        if (state === "url") return <><Tag color="blue">🔗 看起来是短视频链接</Tag><span style={{ fontSize: 11.5, color: T.muted2 }}>来源: 抖音</span></>;
+        if (state === "mix") return <><Tag color="blue">🔗 检测到链接 (隐藏在转发文里)</Tag><span style={{ fontSize: 11.5, color: T.muted2 }}>会提链接里的文案, 不是你贴的转发文</span></>;
+        return <><Tag color="gray">{text.length} 字</Tag><Tag color="blue">~{Math.round(text.length / 3.5)} 秒口播</Tag>{text.length > 600 && <Tag color="amber">⚠ 偏长 · 建议精简 300-500</Tag>}</>;
+      }
+
+      function ActionRow() {
+        if (state === "empty") return (
+          <button disabled style={btnDisabled}>↑ 先填文案 / 链接</button>
+        );
+        if (state === "url" || state === "mix") return (
+          <>
+            <button style={btnPrimary}>📎 提取原文案 →</button>
+            <button style={btnGhost}>🎬 不提了, 直接做</button>
+            <span style={{ fontSize: 11, color: T.muted2, flex: 1 }}>提完自动填回 textarea, 你再决定要不要改写</span>
+          </>
+        );
+        return (
+          <>
+            <button style={btnPrimary}>🎬 做数字人 →</button>
+            <button style={btnGhost}>✍️ 先改写优化 ▾</button>
+            <span style={{ fontSize: 11, color: T.muted2, flex: 1 }}>改写: 弹菜单选 ✍️ 爆款改写 / 🎙️ 录音改写</span>
+          </>
+        );
+      }
+
+      return (
+        <div>
+          {/* hero */}
+          <div style={{ textAlign: "center", margin: "12px 0 22px" }}>
+            <div style={{ fontSize: 30, fontWeight: 700, letterSpacing: "-0.02em", marginBottom: 8 }}>先给我点东西开始 👇</div>
+            <div style={{ fontSize: 14, color: T.muted, lineHeight: 1.6 }}>
+              粘链接 / 粘文案 / 选热点 / 用 skill 写 · 都接得住
+            </div>
+          </div>
+
+          {/* 状态切换 (mockup 控制台) */}
+          <div style={{ marginBottom: 14, padding: 10, background: T.bg2, borderRadius: 8, fontSize: 12 }}>
+            <span style={{ color: T.muted, marginRight: 12 }}>👁 切换状态查看:</span>
+            {[
+              { k: "empty", l: "空" },
+              { k: "url", l: "纯 URL" },
+              { k: "mix", l: "混合 (转发文+链接)" },
+              { k: "content", l: "纯文案" },
+            ].map(s => (
+              <button key={s.k} onClick={() => setState(s.k)} style={{
+                marginRight: 8, padding: "4px 12px",
+                background: state === s.k ? T.brand : "#fff", color: state === s.k ? "#fff" : T.muted,
+                border: `1px solid ${state === s.k ? T.brand : T.borderSoft}`,
+                borderRadius: 100, fontSize: 11.5, cursor: "pointer", fontFamily: "inherit",
+              }}>{s.l}</button>
+            ))}
+          </div>
+
+          {/* 主输入卡 (绿边大圆角 hero) */}
+          <div style={{
+            background: "#fff",
+            border: `1.5px solid ${T.brand}`,
+            boxShadow: `0 0 0 5px ${T.brandSoft}`,
+            borderRadius: 16, padding: 18, marginBottom: 16,
+          }}>
+            <textarea readOnly value={text}
+              placeholder="粘视频链接 (抖音/小红书/B 站...), 或者直接贴一段文案 / 念出来转写..."
+              style={{
+                width: "100%", padding: 12, border: "none",
+                fontSize: 14.5, fontFamily: "inherit", outline: "none",
+                resize: "vertical", lineHeight: 1.75, background: "transparent",
+                color: T.text, minHeight: 200,
+              }} />
+            <div style={{ marginTop: 10, paddingTop: 12, borderTop: `1px solid ${T.borderSoft}`,
+                          display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", minHeight: 28 }}>
+              <StatusRow />
+            </div>
+            <div style={{ marginTop: 14, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+              <ActionRow />
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    const btnPrimary = {
+      padding: "10px 22px", fontSize: 14, fontWeight: 600,
+      background: T.brand, color: "#fff", border: "none", borderRadius: 100,
+      cursor: "pointer", fontFamily: "inherit",
+    };
+    const btnGhost = {
+      padding: "9px 18px", fontSize: 13, fontWeight: 500,
+      background: "#fff", color: T.muted,
+      border: `1px solid ${T.border}`, borderRadius: 100,
+      cursor: "pointer", fontFamily: "inherit",
+    };
+    const btnDisabled = {
+      padding: "10px 24px", fontSize: 14, fontWeight: 600,
+      background: T.muted3, color: "#fff", border: "none", borderRadius: 100,
+      cursor: "not-allowed", fontFamily: "inherit",
+    };
+
+    // ─── 热点 top 3 大卡 (参照清华哥 GPT5.5 方案) ─────
+    function HotSection() {
+      const items = [
+        {
+          n: 1, title: "AI 客服集体下岗?一线从业者发声", match: 98, persona: true,
+          reason: "你擅长 AI 落地和个人视角, 一线经验更有说服力",
+          channels: ["🎵 抖音", "📺 视频号", "📄 公众号"],
+          fromNight: true,
+        },
+        {
+          n: 2, title: "普通人如何用一技之长变现 (真实案例拆解)", match: 93, persona: true,
+          reason: "你有真实案例和方法论, 能给到可复制路径",
+          channels: ["🎵 抖音", "📄 公众号", "📱 朋友圈"],
+        },
+        {
+          n: 3, title: "2026 年内容创业的 3 个机会点", match: 90, persona: true,
+          reason: "你擅长趋势判断, 帮粉丝提前布局",
+          channels: ["📄 公众号", "📱 朋友圈"],
+        },
+      ];
+
+      return (
+        <div style={{ marginTop: 32, marginBottom: 20 }}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 12 }}>
+            <span style={{ fontSize: 17, fontWeight: 700, color: T.text }}>🔥 今天最值得拍的 3 个</span>
+            <div style={{ flex: 1 }} />
+            <a href="#" style={{ color: T.muted2, fontSize: 11.5, textDecoration: "none" }}>全部 (6) →</a>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {items.map(t => (
+              <div key={t.n} style={{
+                padding: "16px 20px", borderRadius: 12,
+                background: t.fromNight ? "linear-gradient(135deg, #fff8ec 0%, #fff 60%)" : "#fff",
+                border: `1px solid ${T.borderSoft}`,
+                display: "flex", flexDirection: "column", gap: 10,
+              }}>
+                {/* 顶部: 序号 + 标题 + 匹配度 */}
+                <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
+                  <span style={{
+                    minWidth: 26, height: 26, borderRadius: 6,
+                    background: t.n === 1 ? T.brand : T.bg2,
+                    color: t.n === 1 ? "#fff" : T.muted,
+                    fontSize: 13, fontWeight: 700,
+                    display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+                  }}>{t.n}</span>
+                  <span style={{ fontSize: 15, fontWeight: 600, color: T.text, flex: 1, lineHeight: 1.5 }}>{t.title}</span>
+                  <span style={{
+                    fontSize: 12, fontWeight: 600, color: T.brand,
+                    padding: "3px 10px", background: T.brandSoft, borderRadius: 4, whiteSpace: "nowrap",
+                  }}>匹配度 {t.match}%</span>
+                </div>
+                {/* 匹配原因 */}
+                <div style={{ fontSize: 12.5, color: T.muted, lineHeight: 1.6, paddingLeft: 38 }}>
+                  <span style={{
+                    fontSize: 10.5, color: T.brand, fontWeight: 600,
+                    padding: "1px 6px", background: T.brandSoft, borderRadius: 3, marginRight: 6,
+                  }}>匹配原因</span>
+                  {t.reason}
+                </div>
+                {/* 底部: 渠道 + 拍这条 */}
+                <div style={{ display: "flex", alignItems: "center", gap: 8, paddingLeft: 38, flexWrap: "wrap" }}>
+                  <span style={{ fontSize: 11, color: T.muted2 }}>建议渠道:</span>
+                  {t.channels.map(c => <Tag key={c} color="blue">{c}</Tag>)}
+                  {t.fromNight && <Tag color="amber">🌙 夜班</Tag>}
+                  <div style={{ flex: 1 }} />
+                  <button style={{
+                    background: "transparent", border: "none", color: T.muted2,
+                    cursor: "pointer", fontSize: 11, fontFamily: "inherit",
+                  }}>只塞文案</button>
+                  <button style={{
+                    padding: "8px 18px", fontSize: 13, fontWeight: 600,
+                    background: t.n === 1 ? T.brand : T.text, color: "#fff",
+                    border: "none", borderRadius: 100, cursor: "pointer", fontFamily: "inherit",
+                  }}>📸 拍这条 →</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    // ─── 6 大 skill 卡 (清理研发文案) ─────
+    function SkillSection() {
+      const skills = [
+        { id: "hotrewrite", icon: "🔥", title: "热点改写", desc: "把今日热点改成你视角的口播 · 钩子+反差+金句" },
+        { id: "baokuan", icon: "✍️", title: "爆款改写", desc: "贴一段别人的爆款 → 改成你能用的版本", isNew: true },
+        { id: "voicerewrite", icon: "🎙️", title: "录音改写", desc: "录音 / 直播 → 转写 + 改写成口播" },
+        { id: "ad", icon: "💰", title: "投流文案", desc: "一个卖点 → 5-10 版投流 (痛/对/步/话/创)" },
+        { id: "wechat", icon: "📄", title: "公众号长文", desc: "方法论长文 · 2000+ 字" },
+        { id: "moments", icon: "📱", title: "朋友圈短句", desc: "金句库衍生 N 条 · 适合做超短视频" },
+      ];
+      return (
+        <div style={{ marginTop: 24, marginBottom: 16 }}>
+          <div style={{ fontSize: 15, fontWeight: 600, color: T.text, marginBottom: 12 }}>
+            或者从这里开始写文案 ↓
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
+            {skills.map(s => (
+              <div key={s.id} style={{
+                padding: 14, background: "#fff",
+                border: `1px solid ${T.borderSoft}`, borderRadius: 10,
+                cursor: "pointer", position: "relative",
+              }}>
+                {s.isNew && <span style={{
+                  position: "absolute", top: 8, right: 8,
+                  fontSize: 9.5, fontWeight: 700, color: "#fff", background: T.amber,
+                  padding: "1px 6px", borderRadius: 3,
+                }}>NEW</span>}
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+                  <span style={{ fontSize: 22 }}>{s.icon}</span>
+                  <span style={{ fontSize: 14, fontWeight: 600, color: T.text }}>{s.title}</span>
+                  <div style={{ flex: 1 }} />
+                  <span style={{ fontSize: 11, color: T.brand }}>→</span>
+                </div>
+                <div style={{ fontSize: 11.5, color: T.muted, lineHeight: 1.5 }}>{s.desc}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    // ─── "拍这条" 跳出去后 PageHotrewrite 的设计 (新)─────
+    function HotrewritePreview() {
+      // D-062nn-v2: checkbox 制 (清华哥反馈 #22)
+      // 默认 ☑ 业务; 至少勾 1 个; 都勾 → 4 篇
+      const [withBiz, setWithBiz] = React.useState(true);
+      const [pureRewrite, setPureRewrite] = React.useState(false);
+
+      function toggleBiz() {
+        // 至少保留一个: 如果当前只有 biz 在, 不让取消
+        if (withBiz && !pureRewrite) return;
+        setWithBiz(!withBiz);
+      }
+      function togglePure() {
+        if (pureRewrite && !withBiz) return;
+        setPureRewrite(!pureRewrite);
+      }
+
+      const totalCount = (withBiz ? 2 : 0) + (pureRewrite ? 2 : 0);
+
+      return (
+        <div style={{ marginTop: 32 }}>
+          <div style={{
+            padding: 14, background: T.amberSoft, border: `1px solid ${T.amber}33`,
+            borderRadius: 10, marginBottom: 14,
+            fontSize: 12.5, color: T.amber, lineHeight: 1.6,
+          }}>
+            <b>📸 点 "拍这条 →" 后跳到这里 (PageHotrewrite Step 2 改写流程):</b><br />
+            自动填好 hotspot · 自动跳过 input 步 · 直接进 angles 选择.
+          </div>
+
+          {/* hotrewrite Step 2 angles preview */}
+          <div style={{ background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 12, padding: 18 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+              <Tag color="brand">🔥 热点改写 · Step 2</Tag>
+              <span style={{ fontSize: 12, color: T.muted }}>从 🎬 做视频带过来: AI 客服集体下岗?一线从业者发声</span>
+            </div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: T.text, marginBottom: 6 }}>挑一个切入角度 🎯</div>
+            <div style={{ fontSize: 12, color: T.muted, marginBottom: 14 }}>skill 给最多 3 个角度, 选一个再开始写</div>
+
+            {/* D-062nn-v2: checkbox 制 改写模式 */}
+            <div style={{ marginBottom: 14, padding: 14, background: T.brandSoft, borderRadius: 10, border: `1px solid ${T.brand}33` }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+                <span style={{ fontSize: 13, fontWeight: 600, color: T.text }}>改写模式</span>
+                <span style={{ fontSize: 11, color: T.muted }}>· 多选, 每勾一项加 2 篇</span>
+                <div style={{ flex: 1 }} />
+                <span style={{
+                  fontSize: 12, fontWeight: 700, color: T.brand,
+                  padding: "3px 12px", background: "#fff", borderRadius: 100,
+                }}>本次会出 {totalCount} 篇</span>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                {/* 结合业务 卡 */}
+                <label onClick={toggleBiz} style={{
+                  padding: "12px 14px", borderRadius: 8, cursor: withBiz && !pureRewrite ? "not-allowed" : "pointer",
+                  background: withBiz ? "#fff" : "transparent",
+                  border: `1.5px solid ${withBiz ? T.brand : T.muted3}`,
+                  display: "flex", alignItems: "flex-start", gap: 10,
+                  opacity: withBiz && !pureRewrite ? 0.85 : 1,
+                }}>
+                  <div style={{
+                    width: 18, height: 18, borderRadius: 4,
+                    border: `1.5px solid ${withBiz ? T.brand : T.muted2}`,
+                    background: withBiz ? T.brand : "transparent", flexShrink: 0, marginTop: 1,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    color: "#fff", fontSize: 12, fontWeight: 700,
+                  }}>{withBiz && "✓"}</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+                      <span style={{ fontSize: 13.5, fontWeight: 600, color: T.text }}>结合业务</span>
+                      <Tag color="green">推荐</Tag>
+                      <Tag color="brand">+2 篇</Tag>
+                    </div>
+                    <div style={{ fontSize: 11.5, color: T.muted, lineHeight: 1.5 }}>
+                      80% 价值 + 20% 业务植入 · V3 翻转版 + V4 圈人版
+                    </div>
+                  </div>
+                </label>
+
+                {/* 纯改写 卡 */}
+                <label onClick={togglePure} style={{
+                  padding: "12px 14px", borderRadius: 8, cursor: pureRewrite && !withBiz ? "not-allowed" : "pointer",
+                  background: pureRewrite ? "#fff" : "transparent",
+                  border: `1.5px solid ${pureRewrite ? T.brand : T.muted3}`,
+                  display: "flex", alignItems: "flex-start", gap: 10,
+                  opacity: pureRewrite && !withBiz ? 0.85 : 1,
+                }}>
+                  <div style={{
+                    width: 18, height: 18, borderRadius: 4,
+                    border: `1.5px solid ${pureRewrite ? T.brand : T.muted2}`,
+                    background: pureRewrite ? T.brand : "transparent", flexShrink: 0, marginTop: 1,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    color: "#fff", fontSize: 12, fontWeight: 700,
+                  }}>{pureRewrite && "✓"}</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+                      <span style={{ fontSize: 13.5, fontWeight: 600, color: T.text }}>纯改写</span>
+                      <Tag color="brand">+2 篇</Tag>
+                    </div>
+                    <div style={{ fontSize: 11.5, color: T.muted, lineHeight: 1.5 }}>
+                      不带业务植入 · V1 换皮版 + V2 狠劲版
+                    </div>
+                  </div>
+                </label>
+              </div>
+              <div style={{ marginTop: 8, fontSize: 10.5, color: T.muted2, lineHeight: 1.5 }}>
+                💡 默认勾"结合业务"出 2 篇 · 都勾出 4 篇 (业务 2 + 纯 2 对比) · 至少保留 1 个
+              </div>
+            </div>
+
+            {/* angles */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
+              {[
+                { id: "A", label: "情绪共鸣型", hint: "适合委屈/焦虑情绪入口", first: "AI 不是来抢工作的, 是来抢饭碗的..." },
+                { id: "B", label: "本质拆解型", hint: "适合给认知增量", first: "你以为 AI 在替代客服, 其实是在重塑..." },
+                { id: "C", label: "机会牵引型", hint: "适合机会感入口", first: "AI 客服下岗潮里, 真正赚钱的是..." },
+              ].map(a => (
+                <div key={a.id} style={{
+                  padding: 14, background: "#fff",
+                  border: `1px solid ${T.borderSoft}`, borderRadius: 10, cursor: "pointer",
+                }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: T.text }}>角度 {a.id}</span>
+                    <Tag color="blue">{a.label}</Tag>
+                  </div>
+                  <div style={{ fontSize: 11, color: T.muted2, marginBottom: 8 }}>{a.hint}</div>
+                  <div style={{
+                    padding: 8, background: T.brandSoft, borderRadius: 6,
+                    fontSize: 12, color: T.text, lineHeight: 1.6, fontStyle: "italic",
+                  }}>"{a.first}"</div>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ marginTop: 14, padding: 12, background: "#fffbf0", borderRadius: 8,
+                          fontSize: 11.5, color: T.amber }}>
+              💡 选完角度点 "开始写" → 一次出 {totalCount} 篇 (按勾选)
+              · 完成态可"再来一版 (同角度)" / "换角度再写" 累积 versions 让你挑
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    function App() {
+      return (
+        <div style={{ maxWidth: 1000, margin: "0 auto", padding: "32px 28px 80px" }}>
+          {/* 顶部说明条 */}
+          <div style={{
+            padding: 14, background: "#fff", borderRadius: 10,
+            border: `1px solid ${T.brand}33`, marginBottom: 24,
+            fontSize: 12.5, color: T.muted, lineHeight: 1.7,
+          }}>
+            <b style={{ color: T.brand }}>📐 Step 1 交互稿 v1 (待清华哥确认)</b><br />
+            浏览器打开看, 有交互. 5 个待决策点见 <code>docs/design/STEP1_INTERACTION_SPEC.md</code> 第 9 段.<br />
+            清华哥点头后逐 commit 落地. 不再扣玉米.
+          </div>
+
+          <CentralBox />
+          <HotSection />
+          <SkillSection />
+          <HotrewritePreview />
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+</body>
+</html>
