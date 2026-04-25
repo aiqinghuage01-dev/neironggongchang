@@ -256,9 +256,14 @@
         每条返回 {icon, title, suggestion}, 原始 msg 默认折叠
         actions 槽支持 "重试" + "关闭" 双按钮
         接入 PageMakeV2 Step 2/3/4 三处 localErr 显示
-      - **D-062dd** sidebar 各 skill 入口没"今日产出"小数字
-        用户进 sidebar 不知道 "我今天做了几条投流", 缺即时反馈
-        优先级 P3, 可加 dot 计数 (近 24h 该 skill 调用数 / works.created_today 等)
+      - **D-062dd** ✅ sidebar 各 skill 入口加"今日产出"
+        backend/api.py /api/stats/home 加 sidebar_counts dict (route_key 前缀聚合)
+        覆盖 9 个 skill: make/ad/wechat/moments/hotrewrite/voicerewrite/planner/compliance/dreamina
+        web/factory-shell.jsx Sidebar 拉一次 + 5 min 刷一次, 记 counts state
+        NavItem 加 count prop:
+          - 收起 (60px): 图标右上角小绿点 (无数字)
+          - 展开 (164px): 右侧 brandSoft 圆角徽章显数字
+        title 提示 "X · 今日 N 次"
 
 - [x] **D-062-AUDIT-4** 2026-04-25 14:50 复盘 (D-062cc/z 后第四拍)
       新发现的真 bug + 2 修:

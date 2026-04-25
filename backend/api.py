@@ -990,6 +990,19 @@ def stats_home():
     moments_today = counts["today"].get("moments.derive", 0)
     moments_yday  = counts["yesterday"].get("moments.derive", 0)
 
+    # D-062dd: 各 skill sidebar 入口"今日产出"小数字 (route_key 前缀聚合)
+    sidebar_counts = {
+        "make":         today_works,                              # 今日开 N 条视频
+        "ad":           ad_today,
+        "wechat":       wechat_today,
+        "moments":      moments_today,
+        "hotrewrite":   _sum("today", ["hotrewrite."]),
+        "voicerewrite": _sum("today", ["voicerewrite."]),
+        "planner":      _sum("today", ["planner."]),
+        "compliance":   _sum("today", ["compliance."]),
+        "dreamina":     _sum("today", ["dreamina.", "cover."]),   # AIGC 包含 cover
+    }
+
     return {
         "make": {
             "in_progress": in_progress, "today": today_works,
@@ -1014,6 +1027,7 @@ def stats_home():
         },
         "hot": top_hot,
         "_published_week": published_week,  # 调试字段,前端不一定用
+        "sidebar_counts": sidebar_counts,   # D-062dd 各 skill 今日产出
     }
 
 

@@ -37,6 +37,19 @@ function NavGroupLabel({ text, expanded }) {
 function Sidebar({ active, onNav }) {
   const [hover, setHover] = React.useState(false);
   const w = hover ? 164 : 60;
+  // D-062dd: 各 skill "今日产出" 计数 (拉一次 + 5 min 刷一次)
+  const [counts, setCounts] = React.useState({});
+  React.useEffect(() => {
+    function refresh() {
+      api.get("/api/stats/home")
+        .then(r => setCounts(r.sidebar_counts || {}))
+        .catch(() => {});
+    }
+    refresh();
+    const t = setInterval(refresh, 5 * 60 * 1000);
+    return () => clearInterval(t);
+  }, []);
+
   return (
     <aside
       onMouseEnter={() => setHover(true)}
@@ -54,12 +67,12 @@ function Sidebar({ active, onNav }) {
       </div>
 
       {NAV_TOP.map((n) => (
-        <NavItem key={n.id} item={n} active={active === n.id} expanded={hover} onClick={() => onNav(n.id)} />
+        <NavItem key={n.id} item={n} active={active === n.id} expanded={hover} onClick={() => onNav(n.id)} count={counts[n.id]} />
       ))}
 
       <NavGroupLabel text="生产部" expanded={hover} />
       {NAV_MAIN.map((n) => (
-        <NavItem key={n.id} item={n} active={active === n.id} expanded={hover} onClick={() => onNav(n.id)} />
+        <NavItem key={n.id} item={n} active={active === n.id} expanded={hover} onClick={() => onNav(n.id)} count={counts[n.id]} />
       ))}
 
       <NavGroupLabel text="档案部" expanded={hover} />
@@ -80,11 +93,13 @@ function Sidebar({ active, onNav }) {
   );
 }
 
-function NavItem({ item, active, expanded, onClick }) {
+function NavItem({ item, active, expanded, onClick, count }) {
+  // D-062dd: 今日产出 > 0 时显小绿点 / 数字
+  const showCount = typeof count === "number" && count > 0;
   return (
     <div
       onClick={onClick}
-      title={item.label}
+      title={showCount ? `${item.label} · 今日 ${count} 次` : item.label}
       style={{
         display: "flex", alignItems: "center", gap: 10,
         padding: "9px 10px", borderRadius: 8, cursor: "pointer",
@@ -92,10 +107,29 @@ function NavItem({ item, active, expanded, onClick }) {
         color: active ? T.brand : T.muted,
         fontSize: 13, fontWeight: active ? 600 : 500, marginBottom: 2,
         whiteSpace: "nowrap", overflow: "hidden",
+        position: "relative",
       }}
     >
-      <span style={{ fontSize: 17, flexShrink: 0, width: 20, textAlign: "center" }}>{item.icon}</span>
-      {expanded && <span>{item.label}</span>}
+      <span style={{ fontSize: 17, flexShrink: 0, width: 20, textAlign: "center", position: "relative" }}>
+        {item.icon}
+        {/* 收起时显小绿点 (右上角) */}
+        {!expanded && showCount && (
+          <span style={{
+            position: "absolute", top: -3, right: -2, width: 7, height: 7,
+            borderRadius: "50%", background: T.brand,
+          }} />
+        )}
+      </span>
+      {expanded && <span style={{ flex: 1 }}>{item.label}</span>}
+      {expanded && showCount && (
+        <span style={{
+          fontSize: 10, fontWeight: 600,
+          padding: "1px 6px", borderRadius: 100,
+          background: active ? "#fff" : T.brandSoft,
+          color: T.brand, fontFamily: "SF Mono, monospace",
+          minWidth: 16, textAlign: "center",
+        }}>{count}</span>
+      )}
     </div>
   );
 }
