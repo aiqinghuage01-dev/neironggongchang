@@ -154,7 +154,12 @@
 - [x] **D-062g** moments 完成态加同款 CTA
       MStepCopy 每条 + 🎬 做视频 mini button
       底部追加 "把第 1 条做成视频" 渐变 CTA
-- [ ] **D-062h** PageMakeV2 Step 5 加"同 mp4 套别的模板"已有,加"多平台发布"占位
+- [x] **D-062h** PageMakeV2 Step 5 多平台发布卡片化 (D-062h commit)
+      PublishPanel 改: chip 列表 → 5 张可操作卡 (抖音/视频号/小红书/快手/B站)
+      公共素材区: 复制标题(首句切 30 字) + 复制全文 + 复制 mp4 路径
+      每平台单独 "标记已发" toggle, localStorage 按 outputPath 分桶记状态
+      头部显 "已发 X/5" 计数 + 下载 mp4 按钮
+      不接 OAuth (Phase 4 再做), 不 window.open 外链 (URL 易腐)
 
 ### Phase 2 — 数据空时启动飞轮(P0)
 - [ ] **D-062i** hot_topics 空时加"启用夜班 / 立即试一次"按钮

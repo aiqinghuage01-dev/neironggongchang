@@ -89,6 +89,7 @@ function PageMakeV2({ onNav }) {
           {step === "preview"  && <MakeV2StepPreview
                                     renderTaskId={renderTaskId} setRenderTaskId={setRenderTaskId}
                                     templateId={templateId}
+                                    script={script}
                                     onReedit={() => gotoStep("edit")}
                                     onNewMp4={() => gotoStep("script")} />}
         </div>
@@ -798,7 +799,7 @@ function MakeV2StepEdit({ templateId, script, dhVideoPath, alignedScenes, setAli
 }
 
 // ─── Step 5 预览 + 反馈 (D-061g) ─────────────────────────────
-function MakeV2StepPreview({ renderTaskId, setRenderTaskId, templateId, onReedit, onNewMp4 }) {
+function MakeV2StepPreview({ renderTaskId, setRenderTaskId, templateId, script, onReedit, onNewMp4 }) {
   const [task, setTask] = React.useState(null);
 
   // 朴素无模板分支: renderTaskId 形如 "raw:/path/to/mp4"
@@ -864,7 +865,7 @@ function MakeV2StepPreview({ renderTaskId, setRenderTaskId, templateId, onReedit
       )}
 
       {isDone && (
-        <PublishPanel outputPath={result?.output_path} outputUrl={result?.output_url} />
+        <PublishPanel outputPath={result?.output_path} outputUrl={result?.output_url} script={script} />
       )}
 
       <div style={{ marginTop: 18, display: "flex", gap: 10, justifyContent: "space-between" }}>
@@ -912,38 +913,90 @@ function FeedbackPanel({ onReedit }) {
   );
 }
 
-// ─── 发布面板 (D-061g) ────────────────────────────────────────
-// 当前: 显成片 + 平台账号提示 (手动发) · Phase 4 接 OAuth 自动发
-function PublishPanel({ outputPath, outputUrl }) {
+// ─── 发布面板 (D-061g + D-062h) ───────────────────────────────
+// D-062h: 平台 chip 升级为可操作卡片 — 复制文案 / 复制路径 / 标记已发 (localStorage)
+// 不接 OAuth (Phase 4), 不 window.open 平台 URL (URL 易腐烂); 给清华哥手动发的全套素材
+function PublishPanel({ outputPath, outputUrl, script }) {
+  // 用 outputPath 当 key 存"已发"状态 — 同一条片子在不同平台标记互不影响
+  const storeKey = `publish_marks::${outputPath || "anon"}`;
+  const [marks, setMarks] = React.useState(() => {
+    try { return JSON.parse(localStorage.getItem(storeKey) || "{}"); } catch (_) { return {}; }
+  });
+  function toggle(plat) {
+    setMarks(prev => {
+      const next = { ...prev, [plat]: prev[plat] ? null : Date.now() };
+      try { localStorage.setItem(storeKey, JSON.stringify(next)); } catch (_) {}
+      return next;
+    });
+  }
+  function copy(text) { navigator.clipboard?.writeText(text || ""); }
+
+  // 从 script 抽 title (首句 ≤ 30 字) + 描述 (全文)
+  const firstLine = (script || "").split(/[\n。!?!?]/).find(s => s.trim().length >= 4) || "";
+  const title = firstLine.trim().slice(0, 30);
+  const desc = (script || "").trim();
+
+  const PLATFORMS = [
+    { plat: "抖音",   emoji: "🎵", hint: "≤ 21 字标题 · 加 3-5 个 # 话题" },
+    { plat: "视频号", emoji: "📺", hint: "短描述 · 配 1-2 张封面" },
+    { plat: "小红书", emoji: "📕", hint: "标题钩子 + 正文加表情符号" },
+    { plat: "快手",   emoji: "⚡", hint: "口语化标题 · 强 CTA 收口" },
+    { plat: "B 站",   emoji: "📹", hint: "标题不超过 80 字 · 简介详细" },
+  ];
+
+  const publishedCount = Object.values(marks).filter(Boolean).length;
+
   return (
     <div style={{ marginTop: 16, padding: 16, background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 12 }}>
-      <div style={{ fontSize: 13, fontWeight: 600, color: T.text, marginBottom: 10 }}>🚀 发布</div>
-      <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+      <div style={{ display: "flex", alignItems: "center", marginBottom: 10 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: T.text }}>🚀 多平台发布</div>
+        <span style={{ marginLeft: 8, fontSize: 11, color: T.muted2 }}>已发 {publishedCount}/{PLATFORMS.length}</span>
+        <div style={{ flex: 1 }} />
         {outputPath && (
-          <a href={outputUrl ? api.media(outputUrl) : "#"} download
-            target="_blank" rel="noreferrer"
+          <a href={outputUrl ? api.media(outputUrl) : "#"} download target="_blank" rel="noreferrer"
             style={{
               display: "inline-flex", alignItems: "center", gap: 6,
-              padding: "8px 14px", borderRadius: 100, fontSize: 12.5,
+              padding: "6px 12px", borderRadius: 100, fontSize: 11.5,
               background: T.text, color: "#fff", textDecoration: "none", fontWeight: 600,
             }}>
-            ⬇️ 下载 mp4 到本地
+            ⬇️ 下载 mp4
           </a>
         )}
-        <span style={{ fontSize: 11.5, color: T.muted }}>
-          下载完手动发到各平台 (Phase 4 接 OAuth 自动发)
-        </span>
       </div>
-      <div style={{ marginTop: 12, fontSize: 11, color: T.muted2, display: "flex", flexWrap: "wrap", gap: 14 }}>
-        {[
-          { plat: "抖音", emoji: "🎵" },
-          { plat: "视频号", emoji: "📺" },
-          { plat: "小红书", emoji: "📕" },
-          { plat: "快手", emoji: "⚡" },
-          { plat: "B 站", emoji: "📹" },
-        ].map(p => (
-          <span key={p.plat}>{p.emoji} {p.plat}</span>
-        ))}
+
+      {/* 公共素材区: 标题 + 描述, 一键复制 */}
+      {desc && (
+        <div style={{ marginBottom: 12, padding: 10, background: T.bg2, borderRadius: 8, fontSize: 12, color: T.muted, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <span style={{ color: T.text, fontWeight: 500 }}>📋 通用素材:</span>
+          <Btn size="sm" variant="outline" onClick={() => copy(title)}>复制标题 ({title.length}字)</Btn>
+          <Btn size="sm" variant="outline" onClick={() => copy(desc)}>复制全文 ({desc.length}字)</Btn>
+          {outputPath && <Btn size="sm" variant="outline" onClick={() => copy(outputPath)}>复制 mp4 路径</Btn>}
+        </div>
+      )}
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {PLATFORMS.map(p => {
+          const sent = !!marks[p.plat];
+          return (
+            <div key={p.plat} style={{
+              padding: "10px 12px", borderRadius: 8,
+              background: sent ? T.brandSoft : T.bg2,
+              border: `1px solid ${sent ? T.brand + "55" : T.borderSoft}`,
+              display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap",
+            }}>
+              <span style={{ fontSize: 16 }}>{p.emoji}</span>
+              <span style={{ fontSize: 12.5, fontWeight: 600, color: T.text, minWidth: 50 }}>{p.plat}</span>
+              <span style={{ fontSize: 10.5, color: T.muted2, flex: 1, minWidth: 160 }}>{p.hint}</span>
+              <Btn size="sm" variant={sent ? "soft" : "primary"} onClick={() => toggle(p.plat)}>
+                {sent ? `✓ 已发 ${new Date(marks[p.plat]).toLocaleTimeString().slice(0, 5)}` : "标记已发"}
+              </Btn>
+            </div>
+          );
+        })}
+      </div>
+
+      <div style={{ marginTop: 10, fontSize: 10.5, color: T.muted2, lineHeight: 1.6 }}>
+        💡 当前: 手动发 (复制文案 + 下载 mp4 → 各平台 App 上传) · 标记状态记在本地 · Phase 4 接 OAuth 后一键多发
       </div>
     </div>
   );
