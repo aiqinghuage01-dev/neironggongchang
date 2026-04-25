@@ -138,25 +138,26 @@ const MAKE_V2_SCRIPT_SKILLS = [
 ];
 
 function MakeV2StepScript({ script, setScript, onNext, onNav }) {
+  // D-062a: 当日热点预览 (从 hot_topics 表拉前 3 条)
+  const [hotTopics, setHotTopics] = React.useState(null);
+  React.useEffect(() => {
+    api.get("/api/hot-topics?limit=10")
+      .then(items => setHotTopics(items || []))
+      .catch(() => setHotTopics([]));
+  }, []);
+
+  function pickHotTopic(t) {
+    // 一键塞进 textarea 当 prompt seed
+    const seed = `# 热点 (来自 ${t.platform || "?"}, 热度 ${t.heat_score})\n${t.title}\n\n${t.match_reason ? "我的角度: " + t.match_reason + "\n\n" : ""}---\n\n口播正文:\n`;
+    setScript(seed);
+  }
+
   return (
     <div>
-      {/* 大按钮卡片网格 */}
-      <div style={{ marginBottom: 18 }}>
-        <div style={{ fontSize: 16, fontWeight: 600, color: T.text, marginBottom: 6 }}>1. 文案 — 你想从哪写起?</div>
-        <div style={{ fontSize: 12, color: T.muted, marginBottom: 14 }}>
-          每个按钮跳一个专门 skill · 写完返回这里粘贴成片用 (返回锚机制 D-061h 做)
-        </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 10 }}>
-          {MAKE_V2_SCRIPT_SKILLS.map(s => (
-            <ScriptSkillCard key={s.id} skill={s} onClick={() => onNav(s.id)} />
-          ))}
-        </div>
-      </div>
-
-      {/* 文案输入区 */}
-      <div style={{ background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 12, padding: 20 }}>
+      {/* === 文案输入区 (D-062a 置顶最显眼) === */}
+      <div style={{ background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 12, padding: 20, marginBottom: 16 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-          <div style={{ fontSize: 14, fontWeight: 600, color: T.text }}>📝 写好了, 粘贴在这里</div>
+          <div style={{ fontSize: 16, fontWeight: 600, color: T.text }}>1. 文案</div>
           <Tag size="xs" color="gray">{script.length} 字</Tag>
           {script.length > 0 && (
             <Tag size="xs" color="blue">~{Math.round(script.length / 3.5)} 秒口播</Tag>
@@ -172,18 +173,72 @@ function MakeV2StepScript({ script, setScript, onNext, onNav }) {
         <textarea
           value={script}
           onChange={e => setScript(e.target.value)}
-          placeholder="粘贴一段口播文案 (中文)... · 或者点上面的大按钮去专门 skill 写完再粘贴回来"
-          rows={10}
+          placeholder="把口播文案粘贴在这里 · 或者从下面的热点/skill 按钮开始..."
+          rows={12}
           style={{
-            width: "100%", padding: 14, border: `1px solid ${T.borderSoft}`, borderRadius: 8,
-            fontSize: 13, fontFamily: "inherit", outline: "none", resize: "vertical", lineHeight: 1.7,
+            width: "100%", padding: 16, border: `1px solid ${T.borderSoft}`, borderRadius: 8,
+            fontSize: 14, fontFamily: "inherit", outline: "none", resize: "vertical", lineHeight: 1.75,
           }} />
+
+        <div style={{ marginTop: 14, display: "flex", gap: 10, alignItems: "center" }}>
+          <Btn variant="primary" onClick={onNext} disabled={!script.trim()}>
+            {script.trim() ? "下一步: 声音 + 数字人 →" : "↑ 先填文案"}
+          </Btn>
+          <span style={{ fontSize: 11, color: T.muted2 }}>
+            填好 → 下一步生数字人 mp4
+          </span>
+        </div>
       </div>
 
-      <div style={{ marginTop: 18, display: "flex", gap: 10, justifyContent: "flex-end" }}>
-        <Btn variant="primary" onClick={onNext} disabled={!script.trim()}>
-          {script.trim() ? "下一步: 声音 + 数字人 →" : "↑ 先填文案"}
-        </Btn>
+      {/* === 当日热点 2-3 条 (D-062a) === */}
+      <div style={{ background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 12, padding: 16, marginBottom: 16 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: T.text }}>🔥 今日热点</div>
+          <Tag size="xs" color="gray">{hotTopics?.length || 0}</Tag>
+          <span style={{ fontSize: 11, color: T.muted2 }}>· 点一条一键塞文案区当 seed</span>
+          <div style={{ flex: 1 }} />
+          <button onClick={() => onNav("materials")}
+            style={{ background: "transparent", border: "none", color: T.brand, cursor: "pointer", fontSize: 11, fontFamily: "inherit" }}>
+            维护热点 →
+          </button>
+        </div>
+        {!hotTopics ? (
+          <div style={{ fontSize: 11.5, color: T.muted2, padding: 10 }}>加载…</div>
+        ) : hotTopics.length === 0 ? (
+          <div style={{ fontSize: 12, color: T.muted, padding: 12, textAlign: "center", background: T.bg2, borderRadius: 6 }}>
+            热点库空 · 去 📥 素材库 / 🔥 热点 tab 加几条 · 或启用 🌙 小华夜班 · 凌晨抓热点
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {hotTopics.slice(0, 3).map(t => (
+              <div key={t.id} onClick={() => pickHotTopic(t)}
+                style={{
+                  padding: "8px 12px", background: t.fetched_from === "night-shift" ? "linear-gradient(135deg, #fff8ec, #fff)" : T.bg2,
+                  border: `1px solid ${T.borderSoft}`, borderRadius: 6, cursor: "pointer",
+                  display: "flex", alignItems: "center", gap: 10, fontSize: 12,
+                }}>
+                <span style={{ fontWeight: 700, color: T.amber, minWidth: 36, fontSize: 13 }}>🔥{t.heat_score || 0}</span>
+                {t.platform && <Tag size="xs" color="pink">{t.platform}</Tag>}
+                {t.fetched_from === "night-shift" && <Tag size="xs" color="amber">🌙 夜班</Tag>}
+                <span style={{ flex: 1, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.title}</span>
+                <span style={{ fontSize: 11, color: T.brand, fontWeight: 500, whiteSpace: "nowrap" }}>用这条 →</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* === 6 大文案 skill 按钮 (D-062a 下移) === */}
+      <div style={{ background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 12, padding: 16 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: T.text, marginBottom: 4 }}>📋 或者用专门的文案 skill 写</div>
+        <div style={{ fontSize: 11, color: T.muted, marginBottom: 10 }}>
+          每个按钮跳 sidebar 对应 skill · 写完返回这里粘贴
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 10 }}>
+          {MAKE_V2_SCRIPT_SKILLS.map(s => (
+            <ScriptSkillCard key={s.id} skill={s} onClick={() => onNav(s.id)} />
+          ))}
+        </div>
       </div>
     </div>
   );
