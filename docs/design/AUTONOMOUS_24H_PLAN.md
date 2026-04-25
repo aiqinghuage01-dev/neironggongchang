@@ -133,6 +133,7 @@
 - C12 Step 4 SceneRow polish — 主行 padding 12x14 / font 12.5 / broll 按钮"缺图"amber 强调 + expanded brand border
 - C13 Step 5 PublishPanel batch — "✓ 一键全标已发" + "撤销全部标记"
 - C14 PageWorks WorkCard + EmptyWorks polish — hover ring + 时长徽章 + Empty hero (480 max + 1 px brand border + 大 emoji)
+- C15 PageMaterials ViralCard/HotRow/TopicRow polish — 抽 HotRow + TopicRow 组件, 加 hover ring (跟 WorkCard 一致)
 
 ## 卡住记录
 

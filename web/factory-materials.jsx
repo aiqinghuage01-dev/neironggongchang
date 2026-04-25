@@ -161,9 +161,50 @@ function ViralTab({ loading, list, onUse, onDel, onReload }) {
   );
 }
 
-function ViralCard({ m, onUse, onDel }) {
+// C15: 热点行 (HotTab 列表项, hover ring + 一致化)
+function HotRow({ h, onUse, onDel }) {
+  const [hover, setHover] = React.useState(false);
+  const fromNight = h.fetched_from === "night-shift";
+  const matched = !!h.match_persona;
   return (
-    <div style={{ padding: 16, background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 12, display: "flex", flexDirection: "column", gap: 10 }}>
+    <div onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+      style={{
+        display: "flex", alignItems: "center", gap: 14, padding: "14px 18px",
+        background: fromNight ? "linear-gradient(135deg, #fff8ec, #fff)" : "#fff",
+        border: `1px solid ${hover ? T.brand : matched ? T.brand + "55" : T.borderSoft}`,
+        boxShadow: hover ? `0 4px 12px rgba(47,122,82,0.10)` : "none",
+        borderRadius: 12, transition: "all 0.15s",
+      }}>
+      <div style={{ fontSize: 18, fontWeight: 700, color: T.amber, minWidth: 56,
+                    display: "flex", flexDirection: "column", lineHeight: 1 }}>
+        <span>🔥{h.heat_score}</span>
+      </div>
+      <Tag size="xs" color="pink">{h.platform || "-"}</Tag>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 14, color: T.text, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{h.title}</div>
+        {h.match_reason && <div style={{ fontSize: 11.5, color: T.muted, marginTop: 3 }}>{h.match_reason}</div>}
+      </div>
+      {fromNight && <Tag size="xs" color="amber">🌙 夜班</Tag>}
+      {matched && <Tag size="xs" color="green">✨ 匹配</Tag>}
+      <Btn size="sm" variant="primary" onClick={onUse}>做成视频</Btn>
+      <Btn size="sm" onClick={onDel}>🗑</Btn>
+    </div>
+  );
+}
+
+function ViralCard({ m, onUse, onDel }) {
+  const [hover, setHover] = React.useState(false);
+  return (
+    <div
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        padding: 16, background: "#fff",
+        border: `1px solid ${hover ? T.brand : T.borderSoft}`,
+        boxShadow: hover ? `0 4px 16px rgba(47,122,82,0.10)` : "0 1px 2px rgba(0,0,0,0.03)",
+        borderRadius: 12, display: "flex", flexDirection: "column", gap: 10,
+        transition: "all 0.15s",
+      }}>
       <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 13.5, fontWeight: 600, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
@@ -312,28 +353,9 @@ function HotTab({ list, onReload, onDel, onUse }) {
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          {visibleList.map(h => {
-            const fromNight = h.fetched_from === "night-shift";
-            return (
-              <div key={h.id} style={{
-                display: "flex", alignItems: "center", gap: 14, padding: "14px 18px",
-                background: fromNight ? "linear-gradient(135deg, #fff8ec, #fff)" : "#fff",
-                border: `1px solid ${h.match_persona ? T.brand + "55" : T.borderSoft}`,
-                borderRadius: 10,
-              }}>
-                <div style={{ fontSize: 17, fontWeight: 700, color: T.amber, minWidth: 50 }}>🔥{h.heat_score}</div>
-                <Tag size="xs" color="pink">{h.platform || "-"}</Tag>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13.5, color: T.text, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{h.title}</div>
-                  {h.match_reason && <div style={{ fontSize: 11, color: T.muted, marginTop: 2 }}>{h.match_reason}</div>}
-                </div>
-                {fromNight && <Tag size="xs" color="amber">🌙 夜班</Tag>}
-                {h.match_persona ? <Tag size="xs" color="green">✨ 匹配</Tag> : null}
-                <Btn size="sm" variant="primary" onClick={() => onUse(h)}>做成视频</Btn>
-                <Btn size="sm" onClick={() => onDel(h.id)}>🗑</Btn>
-              </div>
-            );
-          })}
+          {visibleList.map(h => (
+            <HotRow key={h.id} h={h} onUse={() => onUse(h)} onDel={() => onDel(h.id)} />
+          ))}
         </div>
       )}
     </>
@@ -449,25 +471,37 @@ function TopicTab({ list, onReload, onDel, onUse }) {
       ) : (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 10 }}>
           {list.map(t => (
-            <div key={t.id} style={{
-              display: "flex", alignItems: "center", gap: 12, padding: "12px 14px",
-              background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 10,
-            }}>
-              <div style={{ fontSize: 15 }}>💡</div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13.5, color: T.text, fontWeight: 500 }}>{t.title}</div>
-                <div style={{ fontSize: 10.5, color: T.muted2, marginTop: 2, display: "flex", gap: 6 }}>
-                  <Tag size="xs" color={t.source === "ai-batch" ? "green" : "gray"}>{t.source}</Tag>
-                  <span>· {new Date(t.created_at * 1000).toLocaleDateString("zh-CN", { month: "2-digit", day: "2-digit" })}</span>
-                </div>
-              </div>
-              <Btn size="sm" variant="primary" onClick={() => onUse(t)}>做成视频</Btn>
-              <Btn size="sm" onClick={() => onDel(t.id)}>🗑</Btn>
-            </div>
+            <TopicRow key={t.id} t={t} onUse={() => onUse(t)} onDel={() => onDel(t.id)} />
           ))}
         </div>
       )}
     </>
+  );
+}
+
+// C15: 选题行 (TopicTab 列表项, hover ring + 一致化)
+function TopicRow({ t, onUse, onDel }) {
+  const [hover, setHover] = React.useState(false);
+  return (
+    <div onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+      style={{
+        display: "flex", alignItems: "center", gap: 12, padding: "14px 16px",
+        background: "#fff",
+        border: `1px solid ${hover ? T.brand : T.borderSoft}`,
+        boxShadow: hover ? `0 4px 12px rgba(47,122,82,0.10)` : "none",
+        borderRadius: 12, transition: "all 0.15s",
+      }}>
+      <div style={{ fontSize: 18 }}>💡</div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 13.5, color: T.text, fontWeight: 500, lineHeight: 1.5 }}>{t.title}</div>
+        <div style={{ fontSize: 10.5, color: T.muted2, marginTop: 4, display: "flex", gap: 6 }}>
+          <Tag size="xs" color={t.source === "ai-batch" ? "green" : "gray"}>{t.source}</Tag>
+          <span>· {new Date(t.created_at * 1000).toLocaleDateString("zh-CN", { month: "2-digit", day: "2-digit" })}</span>
+        </div>
+      </div>
+      <Btn size="sm" variant="primary" onClick={onUse}>做成视频</Btn>
+      <Btn size="sm" onClick={onDel}>🗑</Btn>
+    </div>
   );
 }
 
