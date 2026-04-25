@@ -528,23 +528,110 @@ function MakeV2StepTemplate({ templateId, setTemplateId, onPrev, onNext }) {
   );
 }
 
-// ─── Step 4 剪辑 (D-061f 接通 align + render) ─────────────────
+// ─── Step 4 剪辑 (D-061f) ────────────────────────────────────
+// 复用 PageDhv5 的 align + render UI · 加 B-roll 展开支持 (Dhv5SceneRow)
+// 朴素无模板分支: 跳过 align/render, 直接把数字人 mp4 当成片传给 Step 5
 function MakeV2StepEdit({ templateId, script, dhVideoPath, alignedScenes, setAlignedScenes, onPrev, onRender }) {
+  const [aligning, setAligning] = React.useState(false);
   const [submitting, setSubmitting] = React.useState(false);
   const [localErr, setLocalErr] = React.useState("");
+  const [alignMode, setAlignMode] = React.useState("auto");
+  const [expandedSceneIdx, setExpandedSceneIdx] = React.useState(null);
+  const [generatingBrollIdx, setGeneratingBrollIdx] = React.useState(null);
+  const [brollUrls, setBrollUrls] = React.useState({});
 
-  async function trigger() {
+  // 朴素无模板 - 直接把 dhVideoPath 当成片
+  if (!templateId) {
+    return (
+      <div>
+        <div style={{ marginBottom: 16, padding: 16, background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 12 }}>
+          <div style={{ fontSize: 14, fontWeight: 600, color: T.text, marginBottom: 6 }}>4. 剪辑 — 朴素模式</div>
+          <div style={{ fontSize: 12, color: T.muted }}>
+            没选剪辑模板 · 数字人 mp4 直接当成片 · 不剪辑直接进预览
+          </div>
+        </div>
+        <div style={{ padding: 30, background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 12, textAlign: "center" }}>
+          <div style={{ fontSize: 32, marginBottom: 10 }}>📹</div>
+          <div style={{ fontSize: 13, color: T.muted, marginBottom: 14 }}>
+            朴素模式不需要剪辑步, 数字人 mp4 是最终成片
+          </div>
+          <video src={api.media(`/media/${dhVideoPath.split('/data/')[1] || ''}`)}
+            controls style={{ maxWidth: 360, maxHeight: 360, borderRadius: 6, background: "#000", display: dhVideoPath.includes('/data/') ? "inline-block" : "none" }} />
+          <div style={{ fontSize: 10.5, color: T.muted2, marginTop: 8, fontFamily: "SF Mono, monospace" }}>{dhVideoPath}</div>
+        </div>
+        <div style={{ marginTop: 18, display: "flex", gap: 10, justifyContent: "space-between" }}>
+          <Btn variant="outline" onClick={onPrev}>← 改模板</Btn>
+          <Btn variant="primary" onClick={() => onRender(`raw:${dhVideoPath}`)}>
+            下一步: 预览 →
+          </Btn>
+        </div>
+      </div>
+    );
+  }
+
+  async function runAlign() {
+    if (alignMode === "auto" && !script.trim()) {
+      setLocalErr("auto 模式需要文案 (回 Step 1)"); return;
+    }
+    setAligning(true); setLocalErr("");
+    try {
+      const r = await api.post("/api/dhv5/align", {
+        template_id: templateId,
+        transcript: script.trim(),
+        mode: alignMode,
+      });
+      setAlignedScenes(r.scenes || []);
+      // 预填 brollUrls (从模板原 top_image/screen_image 推 url)
+      const initial = {};
+      (r.scenes || []).forEach((s, i) => {
+        const t = (s.type || "").toUpperCase();
+        const rel = t === "B" ? s.top_image : t === "C" ? s.screen_image : null;
+        if (rel) {
+          const cleaned = rel.replace(/^assets\/brolls\//, "");
+          initial[i] = `/skills/dhv5/brolls/${cleaned}`;
+        }
+      });
+      setBrollUrls(initial);
+    } catch (e) {
+      setLocalErr(e.message || "对齐失败");
+    } finally {
+      setAligning(false);
+    }
+  }
+
+  function updateSceneField(idx, field, value) {
+    setAlignedScenes(prev => prev.map((s, i) => i === idx ? { ...s, [field]: value } : s));
+  }
+
+  async function generateBroll(idx, regen = false) {
+    const scene = alignedScenes[idx];
+    const t = (scene.type || "").toUpperCase();
+    const promptField = t === "B" ? "top_image_prompt" : "screen_image_prompt";
+    const promptInScene = scene[promptField] || "";
+    setGeneratingBrollIdx(idx); setLocalErr("");
+    try {
+      const r = await api.post(
+        `/api/dhv5/broll/${templateId}/${idx}?regen=${regen ? 1 : 0}`,
+        { prompt_override: promptInScene.trim() }
+      );
+      setBrollUrls(prev => ({ ...prev, [idx]: r.url + `?t=${Date.now()}` }));
+    } catch (e) {
+      setLocalErr(e.message || "生图失败");
+    } finally {
+      setGeneratingBrollIdx(null);
+    }
+  }
+
+  async function startRender() {
+    if (!alignedScenes || alignedScenes.length === 0) {
+      setLocalErr("先对齐文案再渲染"); return;
+    }
     setSubmitting(true); setLocalErr("");
     try {
-      // D-061f 接通: 模板模式调 dhv5 align + render
-      // 占位: 直接调 dhv5/render 不带 scenes_override (用模板默认 scenes)
-      if (!templateId) {
-        setLocalErr("朴素无模板渲染分支还没接 (D-061f-2)");
-        return;
-      }
       const r = await api.post("/api/dhv5/render", {
         template_id: templateId,
         digital_human_video: dhVideoPath,
+        scenes_override: alignedScenes,
       });
       onRender(r.task_id);
     } catch (e) {
@@ -555,26 +642,61 @@ function MakeV2StepEdit({ templateId, script, dhVideoPath, alignedScenes, setAli
   }
 
   return (
-    <div style={{ background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 12, padding: 20 }}>
-      <div style={{ fontSize: 16, fontWeight: 600, color: T.text, marginBottom: 6 }}>4. 剪辑</div>
-      <div style={{ fontSize: 12, color: T.muted, marginBottom: 16 }}>
-        AI 把文案切到模板 scenes · 内联调措辞 · B-roll 配图 · D-061f 接通
+    <div>
+      <div style={{ marginBottom: 16, padding: 16, background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 12 }}>
+        <div style={{ fontSize: 14, fontWeight: 600, color: T.text, marginBottom: 6 }}>4. 剪辑 — 模板 {templateId}</div>
+        <div style={{ fontSize: 12, color: T.muted }}>
+          AI 把文案切到 scenes · 内联调措辞 + B-roll prompt · 没图自动生
+        </div>
       </div>
 
-      <div style={{ padding: 20, background: T.bg2, borderRadius: 8, textAlign: "center", color: T.muted2, fontSize: 13 }}>
-        🚧 D-061f 接通: 复用 PageDhv5 align + Dhv5SceneRow + B-roll 展开 panel
+      {/* mode + 对齐触发 */}
+      <div style={{ background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 12, padding: 16, marginBottom: 16 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+          <div style={{ fontSize: 13, fontWeight: 600 }}>对齐模式</div>
+          <div style={{ display: "flex", gap: 6 }}>
+            {[
+              { id: "auto", label: "AI 自动切" },
+              { id: "placeholder", label: "用模板原字段" },
+              { id: "manual", label: "手动填" },
+            ].map(m => (
+              <button key={m.id} onClick={() => setAlignMode(m.id)}
+                style={{
+                  padding: "5px 12px", fontSize: 11.5, borderRadius: 100, border: "none",
+                  fontFamily: "inherit", cursor: "pointer",
+                  background: alignMode === m.id ? T.text : T.bg2,
+                  color: alignMode === m.id ? "#fff" : T.muted,
+                  fontWeight: alignMode === m.id ? 600 : 500,
+                }}>{m.label}</button>
+            ))}
+          </div>
+          <div style={{ flex: 1 }} />
+          <Btn variant="primary" onClick={runAlign} disabled={aligning}>
+            {aligning ? "对齐中…" : (alignedScenes ? "🔄 重新对齐" : "▶ 开始对齐")}
+          </Btn>
+        </div>
       </div>
 
-      <div style={{ marginTop: 14, padding: 12, background: T.bg2, borderRadius: 6, fontSize: 11.5, color: T.muted, fontFamily: "SF Mono, monospace" }}>
-        过渡占位: 现在直接用模板默认 scenes 渲染. <br />
-        template_id={templateId || "(朴素)"} · dh={dhVideoPath?.split("/").pop() || "(无)"} · script={script.length} 字
-      </div>
+      {localErr && <div style={{ padding: 10, background: T.redSoft, color: T.red, borderRadius: 8, fontSize: 12, marginBottom: 14 }}>⚠️ {localErr}</div>}
 
-      {localErr && <div style={{ marginTop: 10, padding: 10, background: T.redSoft, color: T.red, borderRadius: 6, fontSize: 12 }}>⚠️ {localErr}</div>}
+      {alignedScenes && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 18 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: T.text }}>🎬 {alignedScenes.length} 个 scenes · 内联编辑字段 + B-roll</div>
+          {alignedScenes.map((s, i) => (
+            <Dhv5SceneRow key={i} idx={i} scene={s}
+              onChange={(field, v) => updateSceneField(i, field, v)}
+              expanded={expandedSceneIdx === i}
+              onToggleExpand={() => setExpandedSceneIdx(prev => prev === i ? null : i)}
+              brollUrl={brollUrls[i]}
+              generating={generatingBrollIdx === i}
+              onGenerate={(regen) => generateBroll(i, regen)} />
+          ))}
+        </div>
+      )}
 
-      <div style={{ marginTop: 18, display: "flex", gap: 10, justifyContent: "space-between" }}>
+      <div style={{ display: "flex", gap: 10, justifyContent: "space-between" }}>
         <Btn variant="outline" onClick={onPrev}>← 改模板</Btn>
-        <Btn variant="primary" onClick={trigger} disabled={submitting || !templateId}>
+        <Btn variant="primary" onClick={startRender} disabled={submitting || !alignedScenes}>
           {submitting ? "提交中…" : "▶ 开始渲染 (3-10 分钟)"}
         </Btn>
       </div>
@@ -582,12 +704,16 @@ function MakeV2StepEdit({ templateId, script, dhVideoPath, alignedScenes, setAli
   );
 }
 
-// ─── Step 5 预览 + 反馈 (D-061g 接通) ─────────────────────────
+// ─── Step 5 预览 + 反馈 (D-061g) ─────────────────────────────
 function MakeV2StepPreview({ renderTaskId, setRenderTaskId, templateId, onReedit, onNewMp4 }) {
   const [task, setTask] = React.useState(null);
 
+  // 朴素无模板分支: renderTaskId 形如 "raw:/path/to/mp4"
+  const isRawMode = typeof renderTaskId === "string" && renderTaskId.startsWith("raw:");
+  const rawMp4Path = isRawMode ? renderTaskId.slice(4) : null;
+
   React.useEffect(() => {
-    if (!renderTaskId) return;
+    if (!renderTaskId || isRawMode) return;
     let stop = false;
     async function poll() {
       try {
@@ -599,10 +725,13 @@ function MakeV2StepPreview({ renderTaskId, setRenderTaskId, templateId, onReedit
     }
     poll();
     return () => { stop = true; };
-  }, [renderTaskId]);
+  }, [renderTaskId, isRawMode]);
 
-  const status = task?.status || "running";
-  const result = task?.result || null;
+  // 朴素模式: 把 task 模拟成已完成
+  const status = isRawMode ? "success" : (task?.status || "running");
+  const result = isRawMode
+    ? { output_path: rawMp4Path, output_url: `/media/${(rawMp4Path || "").split('/data/')[1] || ""}` }
+    : (task?.result || null);
   const isDone = status === "success";
   const isFailed = status === "failed" || status === "cancelled";
 
