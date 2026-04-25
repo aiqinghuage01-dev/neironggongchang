@@ -273,9 +273,11 @@
       - **D-062-AUDIT-4-fix2** ✅ 首页 hot 空状态用静态文字
         改用 NightHotFlywheel 共享组件 (与 PageMakeV2 / Materials / Hotrewrite 一致)
         飞轮成功后回调刷 stats/home
-      - **D-062-AUDIT-4-todo1** factory-entries.jsx 是死代码
-        PageAd/Wechat/Moments 都被 v2 文件覆盖, line 199 onNav("make") 不带 seed
-        但代码 unreachable, 优先级低 · 建议后续整体删 factory-entries.jsx
+      - **D-062-AUDIT-4-todo1** ✅ 删 factory-entries.jsx + factory-ad.jsx + factory-article.jsx
+        3 个文件 PageAd/PageWechat/PageMoments 早被 v2 文件 (touliu/wechat/moments) 覆盖
+        verified: grep 全 codebase, 内部 symbols (AD_CFG / GenericEntry / EntryInput / AD_STEPS / MarkdownPreview 等) 均无外部引用
+        index.html 删 3 行 script tag, 文件删除, 8001 静态服务自动反映
+        节省: 4 个 babel parse + ~1500 行死代码
       - **D-062-AUDIT-4-todo2** factory-flywheel.jsx 文件名不准确了
         现在含: 飞轮 (NightHotFlywheel) + anchor (useFromMake) + 错误友好化 (humanizeError)
         建议: 重命名 factory-journey.jsx 或拆 3 个文件 (P3)
