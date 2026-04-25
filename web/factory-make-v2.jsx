@@ -196,9 +196,10 @@ function MakeV2StepScript({ script, setScript, onNext, onNav, seedFrom, onDismis
   }
 
   function pickHotTopic(t) {
-    // 只塞文案模式: 把热点拼成 seed 塞 textarea, 用户自己写
+    // "只塞文案"模式: 把热点拼成 seed 塞 tab 4 (已写好的文案), 用户自己写
     const seed = `# 热点 (来自 ${t.platform || "?"}, 热度 ${t.heat_score})\n${t.title}\n\n${t.match_reason ? "我的角度: " + t.match_reason + "\n\n" : ""}---\n\n口播正文:\n`;
     setScript(seed);
+    setActiveTab("plainText");
   }
 
   // D-062nn-C2: "拍这条" → 拼丰富 seed 跳 hotrewrite
@@ -214,26 +215,34 @@ function MakeV2StepScript({ script, setScript, onNext, onNav, seedFrom, onDismis
     onNav("hotrewrite");
   }
 
-  // D-062mm (清华哥反馈 #18 / #21 截图): 智能识别 URL / 混合 / 文案
-  // - 纯 URL: trim 后 URL 开头, length < 200
-  // - 混合: 整体长但里面含 URL (典型: 抖音"5.87 ... 复制此链接打开 Dou音搜索" 转发文)
-  // - 纯文案: 上面都不是, length ≥ 10
-  const trimmed = script.trim();
+  // D-062oo-D 重构: 按"内容来源" 4-tab 分流, 删 popover (popover 把 3 个语义不同的 skill 平铺是错配)
+  // tab 1 别人的视频 → 提取 + 跳爆款改写 / 只提取切 tab 4
+  // tab 2 我自己录的 → 跳录音改写
+  // tab 3 今天的热点 → 拍这条 / 自粘热点 → 跳热点改写
+  // tab 4 已写好的文案 → 做数字人 / 次"爆款改写洗一下"
+  const [activeTab, setActiveTab] = React.useState("videoLink");
+  const [extractedBanner, setExtractedBanner] = React.useState(null); // {url, charCount} — tab 4 顶部 banner
+  const [tab1Url, setTab1Url] = React.useState("");
+  const [tab2Transcript, setTab2Transcript] = React.useState("");
+  const [tab3SelfHot, setTab3SelfHot] = React.useState("");
+
   const URL_PATTERN = /https?:\/\/[^\s]+|v\.douyin\.com\/[a-zA-Z0-9]+|xhslink\.com\/[a-zA-Z0-9]+|b23\.tv\/[a-zA-Z0-9]+/;
-  const urlMatch = trimmed.match(URL_PATTERN);
-  const extractedUrl = urlMatch ? urlMatch[0] : null;
-  const isUrlLike = trimmed.length > 0 && trimmed.length < 200 && !!extractedUrl;
-  const isMixedMode = trimmed.length >= 200 && !!extractedUrl;
-  const isContentLike = trimmed.length >= 10 && !isUrlLike && !isMixedMode;
 
   const [extracting, setExtracting] = React.useState(false);
   const [extractMsg, setExtractMsg] = React.useState("");
-  async function extractFromUrl() {
+
+  // tab 1 ASR 提取 — mode: "wash" (提完跳爆款改写) / "only" (提完切 tab 4)
+  async function doExtract(rawText, mode) {
+    const trimmed = (rawText || "").trim();
     if (!trimmed || extracting) return;
-    // 混合模式: 用 extractedUrl 而不是整段 trimmed
-    const urlToSubmit = isMixedMode ? extractedUrl : trimmed;
+    const m = trimmed.match(URL_PATTERN);
+    if (!m) {
+      setExtractMsg("没找到链接, 请确认是抖音/小红书/B 站链接");
+      return;
+    }
+    const urlToSubmit = m[0];
     setExtracting(true);
-    setExtractMsg(`已提交 ${isMixedMode ? "(从转发文里抓的链接) " : ""}轻抖 ASR · 通常 1-3 分钟...`);
+    setExtractMsg(`已提交 · 小华正在转写 · 通常 1-3 分钟...`);
     try {
       const sub = await api.post("/api/transcribe/submit", { url: urlToSubmit });
       const batchId = sub.batch_id;
@@ -241,12 +250,25 @@ function MakeV2StepScript({ script, setScript, onNext, onNav, seedFrom, onDismis
         await new Promise(s => setTimeout(s, 5000));
         try {
           const q = await api.get(`/api/transcribe/query/${batchId}`);
-          // 后端返回的是 "succeed" (Status Literal), 不是 "success" — 兼容多种写法
           const okStatus = ["succeed", "success", "done", "ok"].includes(q.status);
           if (okStatus && q.text) {
-            setScript(q.text);
-            setExtractMsg(`✓ 提取了 ${q.text.length} 字 · ${q.title || ""} · 改完点"做数字人"`);
+            const text = q.text;
+            setExtractMsg(`✓ 提取了 ${text.length} 字 · ${q.title || ""}`);
             setExtracting(false);
+            if (mode === "wash") {
+              // 提完直接跳爆款改写, 让用户在 baokuan 页选模式 + 出版本
+              try {
+                localStorage.setItem("baokuan_seed_text", text);
+                localStorage.setItem("baokuan_seed_auto_analyze", "1");
+                setFromMake("baokuan");
+              } catch (_) {}
+              onNav("baokuan");
+            } else {
+              // 只提取: 切 tab 4 + 填 script + 显 banner
+              setScript(text);
+              setExtractedBanner({ url: urlToSubmit, charCount: text.length });
+              setActiveTab("plainText");
+            }
             return;
           }
           if (q.status === "failed") {
@@ -256,43 +278,42 @@ function MakeV2StepScript({ script, setScript, onNext, onNav, seedFrom, onDismis
           setExtractMsg(`等转写... ${q.status} (已 ${(i + 1) * 5}s)`);
         } catch (_) {}
       }
-      setExtractMsg("等了 5 分钟还没出, 换个链接或去 ⚙️ 设置看 transcribe");
+      setExtractMsg("等了 5 分钟还没出, 换个链接或去 ⚙️ 设置看");
     } catch (e) { setExtractMsg(`提取失败: ${e.message}`); }
     finally { setExtracting(false); }
   }
 
-  // 改写 popover 状态 (清华哥拍板的方案 B)
-  const [showRewritePopover, setShowRewritePopover] = React.useState(false);
-  React.useEffect(() => {
-    if (!showRewritePopover) return;
-    const onDocClick = (e) => {
-      // 点 popover 外关闭 (popover 内 stopPropagation)
-      if (!e.target.closest("[data-rewrite-popover]")) setShowRewritePopover(false);
-    };
-    setTimeout(() => document.addEventListener("click", onDocClick), 0);
-    return () => document.removeEventListener("click", onDocClick);
-  }, [showRewritePopover]);
-
-  function rewriteVia(skill) {
-    // 三种 skill 改写: 录音改写 (轻量重排) / 爆款改写 (洗别人爆款) / 热点改写 (按新角度)
-    setShowRewritePopover(false);
+  // tab 2 主按钮: 跳录音改写
+  function jumpVoiceRewrite(text) {
+    const t = (text || "").trim();
+    if (!t) return;
     try {
-      if (skill === "voicerewrite") {
-        localStorage.setItem("voicerewrite_seed_transcript", trimmed);
-        setFromMake("voicerewrite");
-        onNav("voicerewrite");
-      } else if (skill === "baokuan") {
-        // D-063: 真接入爆款改写 (~/Desktop/skills/爆款改写-学员版/SKILL.md)
-        localStorage.setItem("baokuan_seed_text", trimmed);
-        setFromMake("baokuan");
-        onNav("baokuan");
-      } else if (skill === "hotrewrite") {
-        // 把当前文案当 hotspot 喂给 hotrewrite (按新角度重写)
-        localStorage.setItem("hotrewrite_seed_hotspot", trimmed);
-        setFromMake("hotrewrite");
-        onNav("hotrewrite");
-      }
+      localStorage.setItem("voicerewrite_seed_transcript", t);
+      setFromMake("voicerewrite");
     } catch (_) {}
+    onNav("voicerewrite");
+  }
+
+  // tab 3 自粘热点 主按钮: 跳热点改写
+  function jumpHotRewriteFromText(text) {
+    const t = (text || "").trim();
+    if (!t) return;
+    try {
+      localStorage.setItem("hotrewrite_seed_hotspot", t);
+      setFromMake("hotrewrite");
+    } catch (_) {}
+    onNav("hotrewrite");
+  }
+
+  // tab 4 次按钮 "爆款改写洗一下": 跳爆款改写
+  function jumpBaokuanFromText(text) {
+    const t = (text || "").trim();
+    if (!t) return;
+    try {
+      localStorage.setItem("baokuan_seed_text", t);
+      setFromMake("baokuan");
+    } catch (_) {}
+    onNav("baokuan");
   }
 
   return (
@@ -311,234 +332,413 @@ function MakeV2StepScript({ script, setScript, onNext, onNav, seedFrom, onDismis
         </div>
       )}
 
-      {/* D-062ll: 大对话框 hero (参照清华哥图17) */}
+      {/* D-062oo-D: hero + 4-tab segmented (按内容来源分流) */}
       <div style={{ textAlign: "center", margin: "8px 0 24px" }}>
-        <div style={{ fontSize: 30, fontWeight: 700, color: T.text, letterSpacing: "-0.02em", marginBottom: 8 }}>
-          先给我点东西开始 👇
+        <div style={{ fontSize: 28, fontWeight: 700, color: T.text, letterSpacing: "-0.02em", marginBottom: 8 }}>
+          你要做的视频从哪来? 👇
         </div>
         <div style={{ fontSize: 14, color: T.muted, lineHeight: 1.6 }}>
-          粘文案 / 选热点 / 点 skill · 小华都接得住
+          选一个起点 · 4 条路最后都汇到做数字人
         </div>
       </div>
 
-      {/* === 文案输入区 (D-062ll/mm 大圆角绿边 hero + 智能 3 路径) === */}
       <div style={{
-        background: "#fff",
-        border: `1.5px solid ${T.brand}`,
-        boxShadow: `0 0 0 5px ${T.brandSoft}`,
-        borderRadius: 16, padding: 18, marginBottom: 16,
+        display: "flex", gap: 4, padding: 4,
+        background: T.bg2, borderRadius: 100,
+        border: `1px solid ${T.borderSoft}`,
+        marginBottom: 18,
       }}>
-        <textarea
-          value={script}
-          onChange={e => setScript(e.target.value)}
-          placeholder="粘视频链接 (抖音/小红书/B站...), 或者直接贴一段口播文案..."
-          rows={10}
-          style={{
-            width: "100%", padding: 12, border: "none",
-            fontSize: 14.5, fontFamily: "inherit", outline: "none",
-            resize: "vertical", lineHeight: 1.75, background: "transparent",
-            color: T.text, minHeight: 200,
-          }} />
-
-        {/* 状态行 (字数 / 提取进度) */}
-        <div style={{ marginTop: 10, paddingTop: 12, borderTop: `1px solid ${T.borderSoft}`,
-                      display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", minHeight: 28 }}>
-          {trimmed.length === 0 ? (
-            <span style={{ fontSize: 12, color: T.muted2 }}>✨ 自动识别 URL 还是文案 · 选下面的下一步</span>
-          ) : isUrlLike ? (
-            <>
-              <Tag size="xs" color="blue">🔗 像短视频链接</Tag>
-              <span style={{ fontSize: 11, color: T.muted2 }}>下面"提取文案"走轻抖 ASR (1-3 分钟)</span>
-            </>
-          ) : isMixedMode ? (
-            <>
-              <Tag size="xs" color="blue">🔗 转发文里有链接</Tag>
-              <span style={{ fontSize: 11, color: T.muted2, fontFamily: "SF Mono, monospace" }}>{extractedUrl.slice(0, 50)}{extractedUrl.length > 50 ? "..." : ""}</span>
-              <span style={{ fontSize: 11, color: T.muted2 }}>· 提的是这条链接里的文案 (不是你贴的转发文)</span>
-            </>
-          ) : (
-            <>
-              <Tag size="xs" color="gray">{trimmed.length} 字</Tag>
-              <Tag size="xs" color={trimmed.length > 600 ? "amber" : "blue"}>~{Math.round(trimmed.length / 3.5)} 秒口播</Tag>
-              {trimmed.length > 600 && (
-                <Tag size="xs" color="amber">⚠ 偏长 · 建议精简 300-500</Tag>
-              )}
-            </>
-          )}
-          {script && (
-            <button onClick={() => setScript("")} title="清空"
-              style={{ background: "transparent", border: "none", color: T.muted2, cursor: "pointer", fontSize: 11, fontFamily: "inherit", marginLeft: "auto" }}>
-              清空
-            </button>
-          )}
-        </div>
-
-        {extractMsg && (
-          <div style={{ marginTop: 8, fontSize: 12, color: extractMsg.startsWith("✓") ? T.brand : extractMsg.startsWith("提取失败") ? T.red : T.muted, lineHeight: 1.5 }}>
-            {extractMsg}
-          </div>
-        )}
-
-        {/* D-062mm: 动态 3 路径按钮 */}
-        <div style={{ marginTop: 14, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-          {trimmed.length === 0 ? (
-            <button disabled style={{
-              padding: "10px 24px", fontSize: 14, fontWeight: 600,
-              background: T.muted3, color: "#fff",
+        {[
+          { id: "videoLink", icon: "📹", label: "别人的视频" },
+          { id: "myRecord",  icon: "🎙️", label: "我自己录的" },
+          { id: "hotPicks",  icon: "🔥", label: "今天的热点" },
+          { id: "plainText", icon: "✏️", label: "已写好的文案" },
+        ].map(t => (
+          <button key={t.id} onClick={() => setActiveTab(t.id)}
+            style={{
+              flex: 1, padding: "10px 14px", fontSize: 13.5, fontWeight: 600,
+              background: activeTab === t.id ? "#fff" : "transparent",
+              color: activeTab === t.id ? T.brand : T.muted,
               border: "none", borderRadius: 100,
-              cursor: "not-allowed", fontFamily: "inherit",
-            }}>↑ 先填文案 / 链接</button>
-          ) : isUrlLike ? (
-            // URL 模式
-            <>
-              <button onClick={extractFromUrl} disabled={extracting} style={{
-                padding: "10px 22px", fontSize: 14, fontWeight: 600,
-                background: extracting ? T.muted3 : T.brand, color: "#fff",
-                border: "none", borderRadius: 100,
-                cursor: extracting ? "not-allowed" : "pointer", fontFamily: "inherit",
-              }}>{extracting ? "提取中..." : "📎 提取文案 →"}</button>
-              <span style={{ fontSize: 11, color: T.muted2, flex: 1 }}>
-                提完会自动填回, 你看看要不要改写, 再做数字人
-              </span>
-            </>
-          ) : isMixedMode ? (
-            // 混合模式 (转发文 + 含 URL): 主走"提取链接里的文案", 次"用我贴的文字直接做"
-            <>
-              <button onClick={extractFromUrl} disabled={extracting} style={{
-                padding: "10px 22px", fontSize: 14, fontWeight: 600,
-                background: extracting ? T.muted3 : T.brand, color: "#fff",
-                border: "none", borderRadius: 100,
-                cursor: extracting ? "not-allowed" : "pointer", fontFamily: "inherit",
-              }}>{extracting ? "提取中..." : "📎 提取链接里的文案 →"}</button>
-              <button onClick={onNext} disabled={extracting} style={{
-                padding: "9px 18px", fontSize: 13, fontWeight: 500,
-                background: "#fff", color: T.muted,
-                border: `1px solid ${T.border}`, borderRadius: 100,
-                cursor: extracting ? "not-allowed" : "pointer", fontFamily: "inherit",
-              }}>🎬 用我贴的文字直接做</button>
-              <span style={{ fontSize: 11, color: T.muted2, flex: 1 }}>
-                提取的是 douyin/xhs 视频里的口播 · 不要就直接做
-              </span>
-            </>
-          ) : (
-            // 文案模式 (清华哥方案 B: 改写按钮 + popover 选 skill)
-            <>
-              <button onClick={onNext} style={{
-                padding: "10px 22px", fontSize: 14, fontWeight: 600,
-                background: T.brand, color: "#fff",
-                border: "none", borderRadius: 100,
-                cursor: "pointer", fontFamily: "inherit",
-              }}>🎬 做数字人 →</button>
-              <div data-rewrite-popover style={{ position: "relative" }}>
-                <button onClick={(e) => { e.stopPropagation(); setShowRewritePopover(!showRewritePopover); }}
-                  style={{
-                    padding: "9px 18px", fontSize: 13, fontWeight: 500,
-                    background: showRewritePopover ? T.brandSoft : "#fff",
-                    color: showRewritePopover ? T.brand : T.muted,
-                    border: `1px solid ${showRewritePopover ? T.brand : T.border}`, borderRadius: 100,
-                    cursor: "pointer", fontFamily: "inherit",
-                    display: "inline-flex", alignItems: "center", gap: 4,
-                  }}>✍️ 改写优化 ▾</button>
-                {showRewritePopover && (
-                  <div data-rewrite-popover style={{
-                    position: "absolute", top: "calc(100% + 6px)", left: 0,
-                    background: "#fff", border: `1px solid ${T.border}`, borderRadius: 12,
-                    boxShadow: "0 8px 24px rgba(0,0,0,0.12)",
-                    padding: 8, zIndex: 10, minWidth: 320,
-                  }}>
-                    <div style={{ padding: "6px 10px 4px", fontSize: 11, color: T.muted2, fontWeight: 600 }}>
-                      你想用哪种 skill 改写?
-                    </div>
-                    {[
-                      { id: "voicerewrite", icon: "🎙️", title: "录音改写", desc: "轻量重排, 删口头禅, 黄金三秒", recommend: true },
-                      { id: "baokuan", icon: "✍️", title: "爆款改写", desc: "换说法 + 去重, 适合洗别人爆款" },
-                      { id: "hotrewrite", icon: "🔥", title: "热点改写", desc: "把这段当题材, 按新角度重写 (1800+ 字)" },
-                    ].map(s => (
-                      <div key={s.id} onClick={() => rewriteVia(s.id)}
-                        style={{ padding: "10px 12px", borderRadius: 8, cursor: "pointer", display: "flex", alignItems: "flex-start", gap: 10 }}
-                        onMouseEnter={e => { e.currentTarget.style.background = T.brandSoft; }}
-                        onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}>
-                        <span style={{ fontSize: 18, flexShrink: 0 }}>{s.icon}</span>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 2 }}>
-                            <span style={{ fontSize: 13, fontWeight: 600, color: T.text }}>{s.title}</span>
-                            {s.recommend && <Tag size="xs" color="green">推荐</Tag>}
-                          </div>
-                          <div style={{ fontSize: 11.5, color: T.muted, lineHeight: 1.5 }}>{s.desc}</div>
-                          {s.note && <div style={{ fontSize: 10.5, color: T.muted2, marginTop: 2 }}>💡 {s.note}</div>}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+              boxShadow: activeTab === t.id ? "0 1px 3px rgba(0,0,0,0.08)" : "none",
+              cursor: "pointer", fontFamily: "inherit",
+              display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6,
+              whiteSpace: "nowrap",
+            }}>
+            <span>{t.icon}</span>{t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* ─── Tab 1: 别人的视频 ─── */}
+      {activeTab === "videoLink" && (() => {
+        const trimmed = tab1Url.trim();
+        const m = trimmed.match(URL_PATTERN);
+        const url = m ? m[0] : null;
+        const isUrlLike = trimmed.length > 0 && trimmed.length < 200 && !!url;
+        const isMixed = trimmed.length >= 200 && !!url;
+        const isInvalid = trimmed.length > 0 && !url;
+        const platform = url ? (
+          /douyin/i.test(url) ? "抖音" :
+          /xhslink|xiaohongshu/i.test(url) ? "小红书" :
+          /b23\.tv|bilibili/i.test(url) ? "B 站" : null
+        ) : null;
+        return (
+          <div>
+            <div style={{ marginBottom: 12, fontSize: 13.5, color: T.muted, lineHeight: 1.6 }}>
+              你刷到的那条爆款, 贴链接 (或抖音转发文) 给我 — 提取后默认洗成你的版本
+            </div>
+            <div style={{
+              background: "#fff", border: `1.5px solid ${T.brand}`,
+              boxShadow: `0 0 0 5px ${T.brandSoft}`,
+              borderRadius: 16, padding: 18, marginBottom: 16,
+            }}>
+              <textarea
+                value={tab1Url}
+                onChange={e => setTab1Url(e.target.value)}
+                placeholder="粘抖音/小红书/B 站链接, 或者抖音转发文 (我会自动找链接)..."
+                rows={5}
+                style={{
+                  width: "100%", padding: 12, border: "none",
+                  fontSize: 14.5, fontFamily: "inherit", outline: "none",
+                  resize: "vertical", lineHeight: 1.75, background: "transparent",
+                  color: T.text, minHeight: 100,
+                }} />
+              <div style={{ marginTop: 10, paddingTop: 12, borderTop: `1px solid ${T.borderSoft}`,
+                            display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", minHeight: 28 }}>
+                {trimmed.length === 0 ? (
+                  <span style={{ fontSize: 12, color: T.muted2 }}>↑ 把链接粘上面</span>
+                ) : isUrlLike ? (
+                  <>
+                    <Tag size="xs" color="blue">🔗 看起来是短视频链接</Tag>
+                    {platform && <Tag size="xs" color="gray">来源: {platform}</Tag>}
+                  </>
+                ) : isMixed ? (
+                  <>
+                    <Tag size="xs" color="blue">🔗 转发文里有链接</Tag>
+                    {platform && <Tag size="xs" color="gray">来源: {platform}</Tag>}
+                    <span style={{ fontSize: 11, color: T.muted2, fontFamily: "SF Mono, monospace" }}>
+                      {url.slice(0, 50)}{url.length > 50 ? "..." : ""}
+                    </span>
+                  </>
+                ) : (
+                  <Tag size="xs" color="amber">⚠ 没找到链接 — 文案请切到 ✏️ 已写好的文案</Tag>
                 )}
               </div>
-              <span style={{ fontSize: 11, color: T.muted2, flex: 1 }}>
-                选 skill → 跳过去自动填文案 → 改完一键带回继续做数字人
-              </span>
-            </>
-          )}
-        </div>
-      </div>
-
-      {/* D-062nn-C2: 今天最值得拍的 3 个 (大卡 · 参照 mockup) */}
-      {hotTopics === null ? null : hotTopics.length === 0 ? (
-        <div style={{ marginBottom: 20 }}>
-          <div style={{ fontSize: 17, fontWeight: 700, color: T.text, marginBottom: 12 }}>🔥 今天的热点</div>
-          <NightHotFlywheel onTopics={() => {
-            api.get("/api/hot-topics?limit=10").then(items => setHotTopics(items || [])).catch(() => {});
-          }} />
-        </div>
-      ) : (
-        <div style={{ marginBottom: 20 }}>
-          <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 12 }}>
-            <span style={{ fontSize: 17, fontWeight: 700, color: T.text }}>
-              🔥 今天最值得拍的 {Math.min(3, hotTopics.length)} 个
-            </span>
-            {/* 数量 < 3 时, 提示去抓更多 (清华哥定的 3 个方案) */}
-            {hotTopics.length < 3 && (
-              <span style={{ fontSize: 11, color: T.amber, padding: "1px 8px", background: T.amberSoft, borderRadius: 100 }}>
-                还差 {3 - hotTopics.length} 条
-              </span>
-            )}
-            <div style={{ flex: 1 }} />
-            {hotTopics.length >= 3 ? (
-              <button onClick={() => onNav("materials")}
-                style={{ background: "transparent", border: "none", color: T.muted2, cursor: "pointer", fontSize: 11.5, fontFamily: "inherit" }}>
-                全部 ({hotTopics.length}) →
-              </button>
-            ) : (
-              <button onClick={() => onNav("nightshift")}
-                style={{ background: "transparent", border: "none", color: T.brand, cursor: "pointer", fontSize: 11.5, fontFamily: "inherit", fontWeight: 500 }}>
-                🌙 启用夜班抓更多 →
-              </button>
-            )}
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {hotTopics.slice(0, 3).map((t, idx) => (
-              <HotPickCard key={t.id} t={t} idx={idx} onTake={() => takeThisHot(t)} onSeed={() => pickHotTopic(t)} />
-            ))}
-            {/* 占位卡 (告诉用户还有几个空位) */}
-            {hotTopics.length < 3 && Array.from({ length: 3 - hotTopics.length }).map((_, i) => (
-              <div key={`empty-${i}`} style={{
-                padding: "16px 20px", borderRadius: 12,
-                border: `1px dashed ${T.border}`,
-                display: "flex", alignItems: "center", gap: 12,
-                background: T.bg2, opacity: 0.7,
-              }}>
-                <span style={{
-                  minWidth: 26, height: 26, borderRadius: 6,
-                  background: "#fff", color: T.muted2, fontSize: 13, fontWeight: 700,
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  border: `1px dashed ${T.muted3}`, flexShrink: 0,
-                }}>{hotTopics.length + i + 1}</span>
-                <span style={{ flex: 1, fontSize: 13, color: T.muted2 }}>
-                  这条空着 · <span style={{ color: T.brand, cursor: "pointer", fontWeight: 500 }} onClick={() => onNav("materials")}>📥 去 维护一条</span> · 或 <span style={{ color: T.brand, cursor: "pointer", fontWeight: 500 }} onClick={() => onNav("nightshift")}>🌙 启用夜班自动抓</span>
-                </span>
+              {extractMsg && (
+                <div style={{ marginTop: 8, fontSize: 12, color: extractMsg.startsWith("✓") ? T.brand : extractMsg.startsWith("提取失败") || extractMsg.startsWith("没找到") ? T.red : T.muted, lineHeight: 1.5 }}>
+                  {extractMsg}
+                </div>
+              )}
+              <div style={{ marginTop: 14, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                {trimmed.length === 0 ? (
+                  <button disabled style={{
+                    padding: "10px 24px", fontSize: 14, fontWeight: 600,
+                    background: T.muted3, color: "#fff",
+                    border: "none", borderRadius: 100,
+                    cursor: "not-allowed", fontFamily: "inherit",
+                  }}>↑ 先粘链接</button>
+                ) : isInvalid ? (
+                  <button disabled style={{
+                    padding: "10px 24px", fontSize: 14, fontWeight: 600,
+                    background: T.muted3, color: "#fff",
+                    border: "none", borderRadius: 100,
+                    cursor: "not-allowed", fontFamily: "inherit",
+                  }}>↑ 这里只接链接</button>
+                ) : (
+                  <>
+                    <button onClick={() => doExtract(tab1Url, "wash")} disabled={extracting} style={{
+                      padding: "10px 22px", fontSize: 14, fontWeight: 600,
+                      background: extracting ? T.muted3 : T.brand, color: "#fff",
+                      border: "none", borderRadius: 100,
+                      cursor: extracting ? "not-allowed" : "pointer", fontFamily: "inherit",
+                    }}>{extracting ? "提取中..." : "📎 提取并洗成我的爆款 →"}</button>
+                    <button onClick={() => doExtract(tab1Url, "only")} disabled={extracting} style={{
+                      padding: "9px 18px", fontSize: 13, fontWeight: 500,
+                      background: "#fff", color: T.muted,
+                      border: `1px solid ${T.border}`, borderRadius: 100,
+                      cursor: extracting ? "not-allowed" : "pointer", fontFamily: "inherit",
+                    }}>📎 只提取不洗</button>
+                    <span style={{ fontSize: 11, color: T.muted2, flex: 1 }}>
+                      小华转写 · 通常 1-3 分钟
+                    </span>
+                  </>
+                )}
               </div>
-            ))}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ─── Tab 2: 我自己录的 ─── */}
+      {activeTab === "myRecord" && (() => {
+        const len = tab2Transcript.trim().length;
+        return (
+          <div>
+            <div style={{ marginBottom: 12, fontSize: 13.5, color: T.muted, lineHeight: 1.6 }}>
+              你录的那段音, 贴 <b>转写后的文字</b> 给我 — 我帮你删口头禅、加结构、不改观点
+            </div>
+            <div style={{
+              background: "#fff", border: `1.5px solid ${T.brand}`,
+              boxShadow: `0 0 0 5px ${T.brandSoft}`,
+              borderRadius: 16, padding: 18, marginBottom: 12,
+            }}>
+              <textarea
+                value={tab2Transcript}
+                onChange={e => setTab2Transcript(e.target.value)}
+                placeholder="把录音转写后的文字贴这里, 至少 50 字, 200-1500 字效果最好..."
+                rows={8}
+                style={{
+                  width: "100%", padding: 12, border: "none",
+                  fontSize: 14.5, fontFamily: "inherit", outline: "none",
+                  resize: "vertical", lineHeight: 1.75, background: "transparent",
+                  color: T.text, minHeight: 160,
+                }} />
+              <div style={{ marginTop: 10, paddingTop: 12, borderTop: `1px solid ${T.borderSoft}`,
+                            display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", minHeight: 28 }}>
+                {len === 0 ? (
+                  <span style={{ fontSize: 12, color: T.muted2 }}>↑ 把转写文字粘上面</span>
+                ) : (
+                  <>
+                    <Tag size="xs" color="gray">{len} 字</Tag>
+                    <Tag size="xs" color={len > 1500 ? "amber" : "blue"}>~{Math.round(len / 3.5)} 秒口播</Tag>
+                    {len < 50 && <Tag size="xs" color="amber">⚠ 太短, 抓不到结构</Tag>}
+                    {len > 2000 && <Tag size="xs" color="amber">⚠ 偏长, 建议拆段</Tag>}
+                  </>
+                )}
+              </div>
+              <div style={{ marginTop: 14, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                {len === 0 ? (
+                  <button disabled style={{
+                    padding: "10px 24px", fontSize: 14, fontWeight: 600,
+                    background: T.muted3, color: "#fff",
+                    border: "none", borderRadius: 100,
+                    cursor: "not-allowed", fontFamily: "inherit",
+                  }}>↑ 先填转写</button>
+                ) : (
+                  <>
+                    <button onClick={() => jumpVoiceRewrite(tab2Transcript)} style={{
+                      padding: "10px 22px", fontSize: 14, fontWeight: 600,
+                      background: T.brand, color: "#fff",
+                      border: "none", borderRadius: 100,
+                      cursor: "pointer", fontFamily: "inherit",
+                    }}>✏️ 帮我整理这段口播 →</button>
+                    <span style={{ fontSize: 11, color: T.muted2, flex: 1 }}>
+                      跳录音改写 → 出整理稿 → 一键带回做数字人
+                    </span>
+                  </>
+                )}
+              </div>
+            </div>
+            <div style={{
+              padding: 12, background: T.bg2, border: `1px solid ${T.borderSoft}`,
+              borderRadius: 8, fontSize: 12.5, color: T.muted, lineHeight: 1.7, marginBottom: 16,
+            }}>
+              <span style={{ fontSize: 14 }}>💡</span> <b style={{ color: T.text }}>还没转写?</b> 推荐去 <span style={{ color: T.brand, fontWeight: 500 }}>飞书妙记</span> / <span style={{ color: T.brand, fontWeight: 500 }}>讯飞听见</span> 转一下再贴回来 (录音文件直传暂不支持)
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ─── Tab 3: 今天的热点 (复用 HotPickCard 卡组 + 自粘热点) ─── */}
+      {activeTab === "hotPicks" && (
+        <div>
+          <div style={{ marginBottom: 12, fontSize: 13.5, color: T.muted, lineHeight: 1.6 }}>
+            小华今天给你选的 — 拍这条直接进改写流, 也可以自己粘一条
+          </div>
+          {hotTopics === null ? (
+            <div style={{ padding: 24, textAlign: "center", color: T.muted2, fontSize: 13 }}>
+              等小华喘口气 · 加载中...
+            </div>
+          ) : hotTopics.length === 0 ? (
+            <div style={{ marginBottom: 16 }}>
+              <NightHotFlywheel onTopics={() => {
+                api.get("/api/hot-topics?limit=10").then(items => setHotTopics(items || [])).catch(() => {});
+              }} />
+            </div>
+          ) : (
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 12 }}>
+                <span style={{ fontSize: 15, fontWeight: 600, color: T.text }}>
+                  🔥 今天最值得拍的 {Math.min(3, hotTopics.length)} 个
+                </span>
+                {hotTopics.length < 3 && (
+                  <span style={{ fontSize: 11, color: T.amber, padding: "1px 8px", background: T.amberSoft, borderRadius: 100 }}>
+                    还差 {3 - hotTopics.length} 条
+                  </span>
+                )}
+                <div style={{ flex: 1 }} />
+                {hotTopics.length >= 3 ? (
+                  <button onClick={() => onNav("materials")}
+                    style={{ background: "transparent", border: "none", color: T.muted2, cursor: "pointer", fontSize: 11.5, fontFamily: "inherit" }}>
+                    全部 ({hotTopics.length}) →
+                  </button>
+                ) : (
+                  <button onClick={() => onNav("nightshift")}
+                    style={{ background: "transparent", border: "none", color: T.brand, cursor: "pointer", fontSize: 11.5, fontFamily: "inherit", fontWeight: 500 }}>
+                    🌙 启用夜班抓更多 →
+                  </button>
+                )}
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {hotTopics.slice(0, 3).map((t, idx) => (
+                  <HotPickCard key={t.id} t={t} idx={idx} onTake={() => takeThisHot(t)} onSeed={() => pickHotTopic(t)} />
+                ))}
+                {hotTopics.length < 3 && Array.from({ length: 3 - hotTopics.length }).map((_, i) => (
+                  <div key={`empty-${i}`} style={{
+                    padding: "16px 20px", borderRadius: 12,
+                    border: `1px dashed ${T.border}`,
+                    display: "flex", alignItems: "center", gap: 12,
+                    background: T.bg2, opacity: 0.7,
+                  }}>
+                    <span style={{
+                      minWidth: 26, height: 26, borderRadius: 6,
+                      background: "#fff", color: T.muted2, fontSize: 13, fontWeight: 700,
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      border: `1px dashed ${T.muted3}`, flexShrink: 0,
+                    }}>{hotTopics.length + i + 1}</span>
+                    <span style={{ flex: 1, fontSize: 13, color: T.muted2 }}>
+                      这条空着 · <span style={{ color: T.brand, cursor: "pointer", fontWeight: 500 }} onClick={() => onNav("materials")}>📥 去 维护一条</span> · 或 <span style={{ color: T.brand, cursor: "pointer", fontWeight: 500 }} onClick={() => onNav("nightshift")}>🌙 启用夜班自动抓</span>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* 自粘热点 */}
+          <div style={{ marginTop: 18, paddingTop: 18, borderTop: `1px dashed ${T.border}` }}>
+            <div style={{ marginBottom: 10, fontSize: 13, color: T.muted, fontWeight: 500 }}>
+              或: 自己粘一条热点新闻
+            </div>
+            <div style={{
+              background: "#fff", border: `1.5px solid ${T.brand}`,
+              boxShadow: `0 0 0 5px ${T.brandSoft}`,
+              borderRadius: 16, padding: 18, marginBottom: 16,
+            }}>
+              <textarea
+                value={tab3SelfHot}
+                onChange={e => setTab3SelfHot(e.target.value)}
+                placeholder="贴新闻链接 / 标题 / 概要, 我帮你拆多角度..."
+                rows={3}
+                style={{
+                  width: "100%", padding: 12, border: "none",
+                  fontSize: 14, fontFamily: "inherit", outline: "none",
+                  resize: "vertical", lineHeight: 1.75, background: "transparent",
+                  color: T.text, minHeight: 60,
+                }} />
+              <div style={{ marginTop: 12 }}>
+                {tab3SelfHot.trim().length === 0 ? (
+                  <button disabled style={{
+                    padding: "10px 24px", fontSize: 14, fontWeight: 600,
+                    background: T.muted3, color: "#fff",
+                    border: "none", borderRadius: 100,
+                    cursor: "not-allowed", fontFamily: "inherit",
+                  }}>↑ 先粘热点</button>
+                ) : (
+                  <button onClick={() => jumpHotRewriteFromText(tab3SelfHot)} style={{
+                    padding: "10px 22px", fontSize: 14, fontWeight: 600,
+                    background: T.brand, color: "#fff",
+                    border: "none", borderRadius: 100,
+                    cursor: "pointer", fontFamily: "inherit",
+                  }}>🔥 改成我的角度 →</button>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       )}
+
+      {/* ─── Tab 4: 已写好的文案 ─── */}
+      {activeTab === "plainText" && (() => {
+        const trimmed = script.trim();
+        return (
+          <div>
+            <div style={{ marginBottom: 12, fontSize: 13.5, color: T.muted, lineHeight: 1.6 }}>
+              你自己写好的稿, 贴这里 — 直接做数字人, 或先用爆款公式洗一遍
+            </div>
+            {extractedBanner && (
+              <div style={{
+                marginBottom: 12, padding: 12, background: T.brandSoft,
+                border: `1px solid ${T.brand}66`, borderRadius: 8,
+                display: "flex", alignItems: "center", gap: 10, fontSize: 13,
+              }}>
+                <span style={{ fontSize: 16 }}>✓</span>
+                <span style={{ flex: 1 }}>
+                  从 <span style={{ fontFamily: "SF Mono, monospace", color: T.muted, fontSize: 12 }}>{extractedBanner.url}</span> 提取了 <b>{extractedBanner.charCount} 字</b> · 你可以直接做或先洗一遍
+                </span>
+                <button onClick={() => setExtractedBanner(null)}
+                  style={{ background: "transparent", border: "none", color: T.muted2, cursor: "pointer", fontSize: 12, fontFamily: "inherit" }}>×</button>
+              </div>
+            )}
+            <div style={{
+              background: "#fff", border: `1.5px solid ${T.brand}`,
+              boxShadow: `0 0 0 5px ${T.brandSoft}`,
+              borderRadius: 16, padding: 18, marginBottom: 16,
+            }}>
+              <textarea
+                value={script}
+                onChange={e => setScript(e.target.value)}
+                placeholder="把已经写好的口播文案贴这里..."
+                rows={8}
+                style={{
+                  width: "100%", padding: 12, border: "none",
+                  fontSize: 14.5, fontFamily: "inherit", outline: "none",
+                  resize: "vertical", lineHeight: 1.75, background: "transparent",
+                  color: T.text, minHeight: 160,
+                }} />
+              <div style={{ marginTop: 10, paddingTop: 12, borderTop: `1px solid ${T.borderSoft}`,
+                            display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", minHeight: 28 }}>
+                {trimmed.length === 0 ? (
+                  <span style={{ fontSize: 12, color: T.muted2 }}>↑ 把草稿粘上面</span>
+                ) : (
+                  <>
+                    <Tag size="xs" color="gray">{trimmed.length} 字</Tag>
+                    <Tag size="xs" color={trimmed.length > 600 ? "amber" : "blue"}>~{Math.round(trimmed.length / 3.5)} 秒口播</Tag>
+                    {trimmed.length > 600 && (
+                      <Tag size="xs" color="amber">⚠ 偏长 · 建议精简 300-500</Tag>
+                    )}
+                  </>
+                )}
+                {script && (
+                  <button onClick={() => { setScript(""); setExtractedBanner(null); }} title="清空"
+                    style={{ background: "transparent", border: "none", color: T.muted2, cursor: "pointer", fontSize: 11, fontFamily: "inherit", marginLeft: "auto" }}>
+                    清空
+                  </button>
+                )}
+              </div>
+              <div style={{ marginTop: 14, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                {trimmed.length === 0 ? (
+                  <button disabled style={{
+                    padding: "10px 24px", fontSize: 14, fontWeight: 600,
+                    background: T.muted3, color: "#fff",
+                    border: "none", borderRadius: 100,
+                    cursor: "not-allowed", fontFamily: "inherit",
+                  }}>↑ 先粘文案</button>
+                ) : (
+                  <>
+                    <button onClick={onNext} style={{
+                      padding: "10px 22px", fontSize: 14, fontWeight: 600,
+                      background: T.brand, color: "#fff",
+                      border: "none", borderRadius: 100,
+                      cursor: "pointer", fontFamily: "inherit",
+                    }}>🎬 做数字人 →</button>
+                    <button onClick={() => jumpBaokuanFromText(script)} style={{
+                      padding: "9px 18px", fontSize: 13, fontWeight: 500,
+                      background: "#fff", color: T.muted,
+                      border: `1px solid ${T.border}`, borderRadius: 100,
+                      cursor: "pointer", fontFamily: "inherit",
+                    }}>✍️ 爆款改写洗一下</button>
+                    <span style={{ fontSize: 11, color: T.muted2, flex: 1 }}>
+                      直接做 / 或者套爆款公式重组
+                    </span>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* C10: 复用最近做过的 (3 条 mini 卡, 一键塞 textarea) */}
       {recentWorks && recentWorks.length > 0 && (
