@@ -47,16 +47,12 @@
 
 ## 🟢 OpenAPI 文档进度 (B 方案延续)
 
-### 6. 老 endpoint 没补 tags / summary / Field description
-**位置**: backend/api.py.
-**状态**:
-- ✓ 小华夜班 7 + 公众号头像 3 (D-040b/D-051): 已规范
-- ✓ **公众号 8 步 11 个 endpoint (D-053): 已规范** (skill-info / titles / outline / write / rewrite-section / plan-images / section-image / html / templates / cover / push)
-- ✓ **投流 + 热点改写 + 录音改写 + 内容策划 12 个 endpoint (D-054): 已规范**
-- ✓ **违规审查 4 + 即梦 AIGC 5 = 9 个 endpoint (D-055): 已规范**
-- ✓ **档案部 17 个 endpoint (D-056): 已规范** (works/metrics/hot-topics/topics/kb)
-- ⏸ 还没补的: settings ~3 / ai 4 / tasks 3 / 总部首页 stats / shiliu / cosyvoice / chat / 旧 ad / moments / article / materials 等 ~15 个
-**做法**: 一段一段补 (一次一个 skill 全部 endpoints). 不阻塞功能, 但学员版 poju.ai 部署前要补完.
+### 6. ✅ OpenAPI 注释 100% 覆盖 — D-053 → D-057 完成
+**最终状态**: 106 个 endpoint 全部带 tags + summary, 分到 15 个 tag 组.
+按 tag 分布: 档案部 20 / 公众号 16 / 短视频 13 / 设置 11 / 小华夜班 9 /
+            总部 6 / AI 5 / 即梦 AIGC 5 / 投流 4 / 违规审查 4 /
+            热点改写 3 / 内容策划 3 / 全局任务 3 / 录音改写 3 / 朋友圈 1
+学员版 poju.ai 部署条件之一已满足. 后续新加 endpoint 默认带规范.
 
 ---
 

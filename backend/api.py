@@ -97,9 +97,10 @@ TAGS_METADATA = [
     {"name": "内容策划", "description": "content-planner skill (D-022)"},
     {"name": "违规审查", "description": "违禁违规审查 skill (D-026)"},
     {"name": "即梦 AIGC", "description": "Dreamina CLI 接入 (D-028)"},
-    {"name": "短视频", "description": "做视频流水线"},
-    {"name": "档案部", "description": "素材库 / 作品库 / 知识库"},
-    {"name": "设置", "description": "全局配置"},
+    {"name": "短视频", "description": "做视频流水线 (转写/语音克隆/数字人合成/封面/发布)"},
+    {"name": "朋友圈", "description": "朋友圈衍生 skill"},
+    {"name": "档案部", "description": "素材库 / 作品库 / 知识库 / 热点 / 选题"},
+    {"name": "设置", "description": "全局配置 / 偏好学习 / 行为记忆 / 工作日志开关"},
 ]
 
 app = FastAPI(
@@ -232,7 +233,7 @@ def _stop_night_scheduler():
 
 
 # --------- Endpoints ----------
-@app.get("/api/health")
+@app.get("/api/health", tags=["总部"], summary="健康检查 + 各依赖探活")
 def health():
     out: dict[str, Any] = {"ok": True, "time": int(time.time())}
     try:
@@ -253,7 +254,7 @@ def health():
 
 
 # ---- P1/P1b: 轻抖 ----
-@app.post("/api/transcribe/submit")
+@app.post("/api/transcribe/submit", tags=["短视频"], summary="ASR 转写提交 (URL 链接)")
 def transcribe_submit(req: TranscribeReq):
     try:
         with QingdouClient() as c:
@@ -263,7 +264,7 @@ def transcribe_submit(req: TranscribeReq):
         raise HTTPException(400, str(e))
 
 
-@app.get("/api/transcribe/query/{batch_id}")
+@app.get("/api/transcribe/query/{batch_id}", tags=["短视频"], summary="查转写结果")
 def transcribe_query(batch_id: str):
     try:
         with QingdouClient() as c:
@@ -281,7 +282,7 @@ def transcribe_query(batch_id: str):
 
 
 # ---- P2: DeepSeek 改写 ----
-@app.post("/api/rewrite")
+@app.post("/api/rewrite", tags=["短视频"], summary="改写口播文案 (走 ai 关卡层 + persona)")
 def rewrite(req: RewriteReq):
     style_map = {
         "casual": "轻松口语,像跟熟客聊天,句子短,有钩子",
@@ -295,14 +296,14 @@ def rewrite(req: RewriteReq):
 
 
 # ---- P3: 声音 ----
-@app.get("/api/speakers")
+@app.get("/api/speakers", tags=["短视频"], summary="CosyVoice 已克隆的声音列表")
 def speakers():
     with ShiliuClient() as c:
         items = c.list_speakers()
     return [{"id": s.speaker_id, "title": s.title} for s in items]
 
 
-@app.post("/api/voice/upload")
+@app.post("/api/voice/upload", tags=["短视频"], summary="上传音频参考样本 (供克隆用)")
 async def voice_upload(file: UploadFile = File(...)):
     """上传一个音频文件作为参考样本,供 CosyVoice 克隆使用。"""
     ext = Path(file.filename or "sample.wav").suffix or ".wav"
@@ -312,7 +313,7 @@ async def voice_upload(file: UploadFile = File(...)):
     return {"path": str(out), "media_url": media_url(out), "size": len(data), "name": file.filename}
 
 
-@app.post("/api/voice/clone")
+@app.post("/api/voice/clone", tags=["短视频"], summary="CosyVoice 克隆 (基于参考样本生成 speaker)")
 def voice_clone(req: VoiceCloneReq):
     tts = CosyVoiceLocal()
     if not tts.is_ready():
@@ -331,7 +332,7 @@ def voice_clone(req: VoiceCloneReq):
 
 
 # ---- P4: 数字人形象 ----
-@app.get("/api/avatars")
+@app.get("/api/avatars", tags=["短视频"], summary="数字人形象列表 (柿榴 sidecar)")
 def avatars():
     with ShiliuClient() as c:
         items = c.list_avatars()
@@ -339,7 +340,7 @@ def avatars():
 
 
 # ---- P5: 剪辑模板 ----
-@app.get("/api/templates")
+@app.get("/api/templates", tags=["短视频"], summary="视频模板列表 (柿榴)")
 def templates():
     # 5 个模板 - MVP 阶段都可用,样式在前端 CSS 里做差异
     return [
@@ -352,7 +353,7 @@ def templates():
 
 
 # ---- P6: 石榴视频 ----
-@app.post("/api/video/submit")
+@app.post("/api/video/submit", tags=["短视频"], summary="数字人视频合成提交 (柿榴 异步)")
 def video_submit(req: VideoSubmitReq):
     try:
         with ShiliuClient() as c:
@@ -374,7 +375,7 @@ def video_submit(req: VideoSubmitReq):
     return {"video_id": vid, "work_id": wid, "estimated_length_ms": length_ms}
 
 
-@app.get("/api/video/query/{video_id}")
+@app.get("/api/video/query/{video_id}", tags=["短视频"], summary="查视频合成结果")
 def video_query(video_id: int):
     try:
         with ShiliuClient() as c:
@@ -407,7 +408,7 @@ def video_query(video_id: int):
 
 
 # ---- P6 封面 GPT-Image-2 ----
-@app.post("/api/cover")
+@app.post("/api/cover", tags=["短视频"], summary="出短视频封面 (apimart 异步)")
 def cover_create(req: CoverReq):
     tasks = []
     for _ in range(max(1, min(req.n, 8))):
@@ -421,7 +422,7 @@ def cover_create(req: CoverReq):
     return {"tasks": tasks}
 
 
-@app.get("/api/cover/query/{task_id}")
+@app.get("/api/cover/query/{task_id}", tags=["短视频"], summary="查封面生成结果")
 def cover_query(task_id: str):
     t = COVER_TASKS.get(task_id)
     if not t:
@@ -430,7 +431,7 @@ def cover_query(task_id: str):
 
 
 # ---- 发布(模拟态) ----
-@app.post("/api/publish")
+@app.post("/api/publish", tags=["短视频"], summary="发布作品 (登记到 works 库, 不真发各平台)")
 def publish(req: PublishReq):
     w = get_work(req.work_id)
     if not w:
@@ -446,46 +447,46 @@ def publish(req: PublishReq):
 
 # ---- 首页统计 ----
 # ---- AI 引擎 ----
-@app.get("/api/ai/health")
+@app.get("/api/ai/health", tags=["AI"], summary="AI 引擎元信息 + 探活 (ping 一次)")
 def ai_health():
     return get_ai_info()
 
 
-@app.get("/api/ai/models")
+@app.get("/api/ai/models", tags=["AI"], summary="可用 Opus 模型列表 (settings 切换用)")
 def ai_models():
     return {"models": list_opus_models()}
 
 
-@app.get("/api/ai/routes")
+@app.get("/api/ai/routes", tags=["AI"], summary="引擎路由表 (默认 + 用户 override + 实际生效)")
 def ai_routes():
     """返回当前的引擎路由表(默认 + 用户 override + 实际生效)。"""
     return routes_info()
 
 
-@app.get("/api/ai/usage")
+@app.get("/api/ai/usage", tags=["AI"], summary="AI 用量聚合统计 (D-015)")
 def ai_usage_endpoint(range: str = "today"):
     """AI 调用用量聚合统计 (D-015)。range: today|yesterday|week|month|all"""
     from backend.services import ai_usage
     return ai_usage.get_usage(range_=range)
 
 
-@app.get("/api/ai/usage/recent")
+@app.get("/api/ai/usage/recent", tags=["AI"], summary="最近 N 次 AI 调用明细 (调试用)")
 def ai_usage_recent(limit: int = 50):
     """最近 N 次 AI 调用明细(调试用)。"""
     from backend.services import ai_usage
     return {"calls": ai_usage.recent_calls(limit=limit)}
 
 
-@app.get("/api/skills/catalog")
+@app.get("/api/skills/catalog", tags=["总部"], summary="技能中心目录 (已接入 + 桌面发现)")
 def skills_catalog():
-    """返回技能中心的完整目录:已接入 + 桌面 skills 里发现的未接入 skill。"""
+    """返回技能中心的完整目录: 已接入的 skill + 桌面 ~/Desktop/skills/ 里发现的未接入 skill."""
     return {"skills": registered_skills.list_catalog()}
 
 
 # ─── 全局任务清单 (D-037a) ───────────────────────────────
 # 只读 + 取消。endpoint 异步化在 D-037b 做。
 
-@app.get("/api/tasks")
+@app.get("/api/tasks", tags=["全局任务"], summary="任务列表 + 状态计数")
 def tasks_list(
     status: Optional[str] = None,
     kind: Optional[str] = None,
@@ -500,7 +501,7 @@ def tasks_list(
     }
 
 
-@app.get("/api/tasks/{task_id}")
+@app.get("/api/tasks/{task_id}", tags=["全局任务"], summary="任务详情 (404 if not found)")
 def tasks_get(task_id: str):
     from backend.services import tasks as tasks_service
     t = tasks_service.get_task(task_id)
@@ -509,7 +510,7 @@ def tasks_get(task_id: str):
     return t
 
 
-@app.post("/api/tasks/{task_id}/cancel")
+@app.post("/api/tasks/{task_id}/cancel", tags=["全局任务"], summary="软取消任务 (409 if already finished)")
 def tasks_cancel(task_id: str):
     from backend.services import tasks as tasks_service
     ok = tasks_service.cancel_task(task_id)
@@ -765,7 +766,7 @@ def dreamina_list_tasks():
     return dreamina_service.list_tasks()
 
 
-@app.post("/api/chat")
+@app.post("/api/chat", tags=["总部"], summary="小华自由对话 dock 多轮 (D-027)")
 def chat_dock(req: ChatDockReq, background_tasks: "BackgroundTasks" = None):
     """小华浮动 dock 自由对话(多轮)。messages 是完整对话历史,context 是当前页。
     返回后台异步触发偏好学习(D-030),失败吃掉不影响主响应。"""
@@ -809,7 +810,7 @@ def chat_dock(req: ChatDockReq, background_tasks: "BackgroundTasks" = None):
 
 # ─── 偏好学习 endpoints (D-030) ──────────────────────────
 
-@app.get("/api/preferences/status")
+@app.get("/api/preferences/status", tags=["设置"], summary="偏好学习开关状态 (D-030)")
 def preferences_status():
     from backend.services import preference
     return preference.status()
@@ -819,14 +820,14 @@ class PrefToggleReq(BaseModel):
     enabled: bool
 
 
-@app.post("/api/preferences/toggle")
+@app.post("/api/preferences/toggle", tags=["设置"], summary="切换偏好学习 (开启后从对话学偏好)")
 def preferences_toggle(req: PrefToggleReq):
     settings_service.update({"preference_learning_enabled": bool(req.enabled)})
     from backend.services import preference
     return preference.status()
 
 
-@app.get("/api/preferences/recent")
+@app.get("/api/preferences/recent", tags=["设置"], summary="最近学到的偏好列表 (D-030)")
 def preferences_recent(limit: int = 30):
     from backend.services import preference
     return {"preferences": preference.recent_preferences(limit=limit)}
@@ -834,7 +835,7 @@ def preferences_recent(limit: int = 30):
 
 # ─── 行为记忆注入开关 (D-031) ────────────────────────────
 
-@app.get("/api/memory-inject/status")
+@app.get("/api/memory-inject/status", tags=["设置"], summary="行为记忆注入开关状态 (D-031)")
 def memory_inject_status():
     from backend.services import memory_inject
     return memory_inject.stats()
@@ -842,13 +843,13 @@ def memory_inject_status():
 
 # ─── 效果分析 → 反哺选题 (D-032) ─────────────────────────
 
-@app.get("/api/insights/top-performers")
+@app.get("/api/insights/top-performers", tags=["总部"], summary="效果分析 TOP 共性 (D-032)")
 def insights_top_performers(limit: int = 10):
     from backend.services import insights
     return {"items": insights.top_performers(limit=limit)}
 
 
-@app.get("/api/insights/winning-patterns")
+@app.get("/api/insights/winning-patterns", tags=["总部"], summary="爆款模式总结 (D-032)")
 def insights_winning_patterns(refresh: bool = False):
     """跑量好的作品共性 · 1h 缓存,topics_generate 自动注入此结果。"""
     from backend.services import insights
@@ -859,7 +860,7 @@ class MemInjectToggleReq(BaseModel):
     enabled: bool
 
 
-@app.post("/api/memory-inject/toggle")
+@app.post("/api/memory-inject/toggle", tags=["设置"], summary="切换行为记忆注入 (开启后 deep=True 调用注入最近 20 条)")
 def memory_inject_toggle(req: MemInjectToggleReq):
     settings_service.update({"memory_injection_enabled": bool(req.enabled)})
     from backend.services import memory_inject
@@ -868,7 +869,7 @@ def memory_inject_toggle(req: MemInjectToggleReq):
 
 # ─── 小华工作日志(行为记忆 · D-023) ──────────────────────
 
-@app.get("/api/work-log/status")
+@app.get("/api/work-log/status", tags=["设置"], summary="小华工作日志开关状态 + 路径 (D-023)")
 def work_log_status():
     """看行为记忆开关 + 当前日志体积。"""
     from backend.services import work_log
@@ -879,7 +880,7 @@ class WorkLogToggleReq(BaseModel):
     enabled: bool
 
 
-@app.post("/api/work-log/toggle")
+@app.post("/api/work-log/toggle", tags=["设置"], summary="切换工作日志写入 (开启后每次 AI 调用追写)")
 def work_log_toggle(req: WorkLogToggleReq):
     """开关行为记忆写入。enabled=true 后,每次 AI 调用追加到 Obsidian 日志。"""
     settings_service.update({"work_log_enabled": bool(req.enabled)})
@@ -887,7 +888,7 @@ def work_log_toggle(req: WorkLogToggleReq):
     return work_log.status()
 
 
-@app.get("/api/work-log/recent")
+@app.get("/api/work-log/recent", tags=["设置"], summary="最近 N 条工作日志条目 (D-023)")
 def work_log_recent(limit: int = 20):
     """最近 N 条行为记忆(给前端调试页或首页 widget 用)。"""
     from backend.services import work_log
@@ -895,7 +896,7 @@ def work_log_recent(limit: int = 20):
 
 
 # ---- 设置 ----
-@app.get("/api/settings")
+@app.get("/api/settings", tags=["设置"], summary="读全部设置")
 def settings_get():
     return settings_service.get_all()
 
@@ -905,17 +906,17 @@ class SettingsUpdateReq(BaseModel):
         extra = "allow"
 
 
-@app.post("/api/settings")
+@app.post("/api/settings", tags=["设置"], summary="部分更新设置 (key/value 增量)")
 def settings_update(payload: dict[str, Any]):
     return settings_service.update(payload or {})
 
 
-@app.post("/api/settings/reset")
+@app.post("/api/settings/reset", tags=["设置"], summary="重置全部设置为默认")
 def settings_reset_ep():
     return settings_service.reset()
 
 
-@app.get("/api/stats/home")
+@app.get("/api/stats/home", tags=["总部"], summary="首页 4 方块统计 + 今日热点")
 def stats_home():
     """4 方块 + 1 热点条的统计数据 (D-024 接入 ai_calls 真实数据)。"""
     import time as _t
@@ -1148,7 +1149,7 @@ def works_analytics(limit: int = 50):
 
 
 # ---- 素材库(扒过的链接 + 原文案)----
-@app.get("/api/materials")
+@app.get("/api/materials", tags=["档案部"], summary="素材库列表 (含爆款参考)")
 def materials_list(limit: int = 100):
     items = list_materials(limit=limit)
     return [
@@ -1165,7 +1166,7 @@ def materials_list(limit: int = 100):
     ]
 
 
-@app.post("/api/materials")
+@app.post("/api/materials", tags=["档案部"], summary="新增素材")
 def materials_add(req: MaterialReq):
     mid = insert_material(
         original_text=req.original_text,
@@ -1175,7 +1176,7 @@ def materials_add(req: MaterialReq):
     return {"id": mid, "ok": True}
 
 
-@app.delete("/api/materials/{material_id}")
+@app.delete("/api/materials/{material_id}", tags=["档案部"], summary="删素材")
 def materials_delete(material_id: int):
     delete_material(material_id)
     return {"ok": True}
@@ -1420,7 +1421,7 @@ class AdGenerateReq(BaseModel):
     deep: bool = True
 
 
-@app.post("/api/ad/generate")
+@app.post("/api/ad/generate", tags=["投流"], summary="(旧) 5 版投流批量 · 已被 D-014 touliu 替代, 保留 fallback")
 def ad_generate(req: AdGenerateReq):
     kb_chunks = None
     if req.use_kb and req.pitch:
@@ -1439,7 +1440,7 @@ class MomentsDeriveReq(BaseModel):
     deep: bool = True
 
 
-@app.post("/api/moments/derive")
+@app.post("/api/moments/derive", tags=["朋友圈"], summary="朋友圈衍生 (从金句库出 N 条)")
 def moments_derive(req: MomentsDeriveReq):
     kb_chunks = None
     if req.use_kb and req.topic:
@@ -1455,7 +1456,7 @@ class ArticleOutlineReq(BaseModel):
     deep: bool = True
 
 
-@app.post("/api/article/outline")
+@app.post("/api/article/outline", tags=["公众号"], summary="(旧) 通用文章大纲 · 公众号 8 步用 /api/wechat/* 替代")
 def article_outline(req: ArticleOutlineReq):
     kb_chunks = None
     if req.use_kb and req.topic:
@@ -1471,7 +1472,7 @@ class ArticleExpandReq(BaseModel):
     deep: bool = True
 
 
-@app.post("/api/article/expand")
+@app.post("/api/article/expand", tags=["公众号"], summary="(旧) 通用文章长文展开 · 已被 /api/wechat/write 替代")
 def article_expand(req: ArticleExpandReq):
     kb_chunks = None
     if req.use_kb and req.topic:
