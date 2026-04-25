@@ -131,6 +131,7 @@
 - C10 Step 1 复用最近做过的 — 拉 /api/works?limit=3, RecentWorkCard mini 卡, 一键塞 textarea
 - C11 Step 3 朴素卡升级 — radio dot + brandSoft 选中 + 大卡风格 + 标题 24px hero
 - C12 Step 4 SceneRow polish — 主行 padding 12x14 / font 12.5 / broll 按钮"缺图"amber 强调 + expanded brand border
+- C13 Step 5 PublishPanel batch — "✓ 一键全标已发" + "撤销全部标记"
 
 ## 卡住记录
 

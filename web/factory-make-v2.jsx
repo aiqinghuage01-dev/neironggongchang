@@ -1398,13 +1398,42 @@ function PublishPanel({ outputPath, outputUrl, script }) {
   ];
 
   const publishedCount = Object.values(marks).filter(Boolean).length;
+  const allSent = publishedCount === PLATFORMS.length;
+
+  // C13: batch 操作 — 一键全发 / 撤销全部
+  function markAll() {
+    const ts = Date.now();
+    const next = {};
+    PLATFORMS.forEach(p => { next[p.plat] = ts; });
+    setMarks(next);
+    try { localStorage.setItem(storeKey, JSON.stringify(next)); } catch (_) {}
+  }
+  function clearAll() {
+    setMarks({});
+    try { localStorage.removeItem(storeKey); } catch (_) {}
+  }
 
   return (
     <div style={{ marginTop: 16, padding: 16, background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 12 }}>
-      <div style={{ display: "flex", alignItems: "center", marginBottom: 10 }}>
+      <div style={{ display: "flex", alignItems: "center", marginBottom: 10, gap: 10, flexWrap: "wrap" }}>
         <div style={{ fontSize: 13, fontWeight: 600, color: T.text }}>🚀 多平台发布</div>
-        <span style={{ marginLeft: 8, fontSize: 11, color: T.muted2 }}>已发 {publishedCount}/{PLATFORMS.length}</span>
+        <span style={{ fontSize: 11, color: T.muted2 }}>已发 {publishedCount}/{PLATFORMS.length}</span>
         <div style={{ flex: 1 }} />
+        {/* C13: batch 按钮 */}
+        {publishedCount > 0 && (
+          <button onClick={clearAll}
+            style={{ background: "transparent", border: "none", color: T.muted2, cursor: "pointer", fontSize: 11, fontFamily: "inherit" }}>
+            撤销全部标记
+          </button>
+        )}
+        {!allSent && (
+          <button onClick={markAll}
+            style={{
+              padding: "5px 12px", fontSize: 11.5, fontWeight: 500,
+              background: "#fff", color: T.brand, border: `1px solid ${T.brand}55`,
+              borderRadius: 100, cursor: "pointer", fontFamily: "inherit",
+            }}>✓ 一键全标已发</button>
+        )}
         {outputPath && (
           <a href={outputUrl ? api.media(outputUrl) : "#"} download target="_blank" rel="noreferrer"
             style={{
