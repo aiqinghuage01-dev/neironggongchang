@@ -267,8 +267,8 @@ function VStepInput({ transcript, setTranscript, onGo, loading, skillInfo }) {
   return (
     <div style={{ padding: "40px 40px 60px", maxWidth: 820, margin: "0 auto" }}>
       <div style={{ textAlign: "center", marginBottom: 24 }}>
-        <div style={{ fontSize: 28, fontWeight: 700, color: T.text, marginBottom: 8, letterSpacing: "-0.02em" }}>录音转写了吗? 🎙️</div>
-        <div style={{ fontSize: 14, color: T.muted }}>观点不变 · 口吻不丢 · 经历保留 · 默认一条完整文案</div>
+        <div style={{ fontSize: 30, fontWeight: 700, color: T.text, marginBottom: 8, letterSpacing: "-0.02em" }}>录音转写了吗? 🎙️</div>
+        <div style={{ fontSize: 14, color: T.muted, lineHeight: 1.6 }}>观点不变 · 口吻不丢 · 经历保留 · 改写出口播文案</div>
       </div>
 
       {/* D-062bb: URL 自动转写 (短视频链接) */}
@@ -296,11 +296,18 @@ function VStepInput({ transcript, setTranscript, onGo, loading, skillInfo }) {
 
       <div style={{ background: "#fff", border: `1.5px solid ${T.brand}`, boxShadow: `0 0 0 5px ${T.brandSoft}`, borderRadius: 16, padding: 18, marginBottom: 18 }}>
         <textarea rows={14} value={transcript} onChange={e => setTranscript(e.target.value)}
-          placeholder="把录音转写文本贴这里(通常很长,1000-5000 字)...&#10;&#10;skill 会:&#10;1. 提骨架 - 核心观点 / 关键经历 / 行业洞察&#10;2. 给最多 2 个切入角度(不罗列,只给最打动的)&#10;3. 按你选的角度做轻改写(黄金三秒 + 轻量重排 + 最小删减)"
-          style={{ width: "100%", border: "none", outline: "none", background: "transparent", fontSize: 14, fontFamily: "inherit", resize: "vertical", lineHeight: 1.7, color: T.text }}
+          placeholder="把录音文字贴在这里, 或者上面粘短视频链接自动转写..."
+          style={{ width: "100%", padding: 12, border: "none", outline: "none", background: "transparent", fontSize: 14, fontFamily: "inherit", resize: "vertical", lineHeight: 1.7, color: T.text, minHeight: 240 }}
         />
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10, paddingTop: 12, borderTop: `1px solid ${T.borderSoft}` }}>
-          <div style={{ fontSize: 11.5, color: T.muted2 }}>🎙️ 转写 {len} 字 · skill 严禁把你说的话改成广告</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 12, paddingTop: 14, borderTop: `1px solid ${T.borderSoft}` }}>
+          {len > 0 ? (
+            <>
+              <Tag size="xs" color="gray">{len} 字</Tag>
+              <span style={{ fontSize: 11, color: T.muted2 }}>· skill 严禁把你的话改成广告</span>
+            </>
+          ) : (
+            <span style={{ fontSize: 12, color: T.muted2 }}>✨ 写完点 "提骨架 + 给切入角度"</span>
+          )}
           <div style={{ flex: 1 }} />
           <button onClick={onGo} disabled={!ready} style={{
             padding: "8px 20px", fontSize: 13, fontWeight: 600,
