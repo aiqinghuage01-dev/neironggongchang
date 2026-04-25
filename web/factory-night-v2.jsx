@@ -115,6 +115,7 @@ function fmtTs(ts) {
 function PageNightShift({ onNav }) {
   const [jobs, setJobs] = React.useState([]);
   const [runs, setRuns] = React.useState([]);
+  const [historyTab, setHistoryTab] = React.useState("today");  // today | week | all
   const [loading, setLoading] = React.useState(true);
   const [err, setErr] = React.useState("");
   const [editing, setEditing] = React.useState(null);  // null | {} | {id, ...}
@@ -124,7 +125,7 @@ function PageNightShift({ onNav }) {
     try {
       const [j, r, s] = await Promise.all([
         api.get("/api/night/jobs"),
-        api.get("/api/night/runs?limit=30"),
+        api.get("/api/night/runs?limit=200"),  // D-049: 拉到 200 条, 客户端按 today/week/all 过滤
         api.get("/api/night/scheduler").catch(() => ({ running: false, scheduled: [] })),
       ]);
       setJobs(j.jobs || []);
@@ -253,33 +254,75 @@ function PageNightShift({ onNav }) {
             </div>
           )}
 
-          {/* 历史日志 */}
-          {runs.length > 0 && (
-            <div style={{ marginTop: 28 }}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: T.text, marginBottom: 10 }}>
-                📜 最近 {runs.length} 次跑了
+          {/* 历史日志 (D-049 加 today/week/all tab) */}
+          {runs.length > 0 && (() => {
+            const nowSec = Math.floor(Date.now() / 1000);
+            const todayStart = (() => { const d = new Date(); d.setHours(0,0,0,0); return Math.floor(d.getTime()/1000); })();
+            const weekStart = nowSec - 7 * 86400;
+            const filtered = historyTab === "today"
+              ? runs.filter(r => r.started_at >= todayStart)
+              : historyTab === "week"
+                ? runs.filter(r => r.started_at >= weekStart)
+                : runs;
+            const counts = {
+              today: runs.filter(r => r.started_at >= todayStart).length,
+              week: runs.filter(r => r.started_at >= weekStart).length,
+              all: runs.length,
+            };
+            const TABS = [
+              { id: "today", label: "今天" },
+              { id: "week",  label: "本周" },
+              { id: "all",   label: "全部" },
+            ];
+            return (
+              <div style={{ marginTop: 28 }}>
+                <div style={{ display: "flex", alignItems: "center", marginBottom: 10, gap: 10 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: T.text }}>📜 跑过的</div>
+                  <div style={{ flex: 1 }} />
+                  <div style={{ display: "flex", gap: 4, background: T.bg2, padding: 3, borderRadius: 100 }}>
+                    {TABS.map(t => (
+                      <button key={t.id} onClick={() => setHistoryTab(t.id)}
+                        style={{
+                          padding: "5px 14px", fontSize: 11.5, borderRadius: 100, border: "none",
+                          fontFamily: "inherit", cursor: "pointer", transition: "all 0.1s",
+                          background: historyTab === t.id ? T.text : "transparent",
+                          color: historyTab === t.id ? "#fff" : T.muted,
+                          fontWeight: historyTab === t.id ? 600 : 500,
+                        }}>
+                        {t.label} <span style={{ opacity: 0.7, marginLeft: 2 }}>{counts[t.id]}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {filtered.length === 0 ? (
+                  <div style={{ padding: 20, background: T.bg2, color: T.muted2, borderRadius: 8, fontSize: 12, textAlign: "center" }}>
+                    {historyTab === "today" ? "今天还没跑过 · 点上面任务的「立即跑」试试" :
+                     historyTab === "week" ? "本周还没跑过" : "还没跑过任何任务"}
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    {filtered.map(run => {
+                      const job = jobs.find(j => j.id === run.job_id);
+                      return (
+                        <div key={run.id} style={{ padding: "10px 14px", background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 8, display: "flex", alignItems: "center", gap: 10, fontSize: 12 }}>
+                          <span style={{ fontSize: 14 }}>{job?.icon || "🌙"}</span>
+                          <span style={{ fontWeight: 600, color: T.text, minWidth: 90 }}>{job?.name || `#${run.job_id}`}</span>
+                          <span style={{ color: T.muted2, fontFamily: "SF Mono, monospace", fontSize: 11 }}>{fmtTs(run.started_at)}</span>
+                          <span style={{ flex: 1, color: T.muted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {run.output_summary || (run.status === "running" ? "跑中…" : "—")}
+                          </span>
+                          {run.elapsed_sec ? <span style={{ color: T.muted2, fontFamily: "SF Mono, monospace", fontSize: 11 }}>{run.elapsed_sec}s</span> : null}
+                          <Tag size="xs" color={run.status === "success" ? "green" : run.status === "failed" ? "red" : "amber"}>
+                            {run.status === "success" ? "成功" : run.status === "failed" ? "失败" : "跑中"}
+                          </Tag>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                {runs.map(run => {
-                  const job = jobs.find(j => j.id === run.job_id);
-                  return (
-                    <div key={run.id} style={{ padding: "10px 14px", background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 8, display: "flex", alignItems: "center", gap: 10, fontSize: 12 }}>
-                      <span style={{ fontSize: 14 }}>{job?.icon || "🌙"}</span>
-                      <span style={{ fontWeight: 600, color: T.text, minWidth: 90 }}>{job?.name || `#${run.job_id}`}</span>
-                      <span style={{ color: T.muted2, fontFamily: "SF Mono, monospace", fontSize: 11 }}>{fmtTs(run.started_at)}</span>
-                      <span style={{ flex: 1, color: T.muted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        {run.output_summary || (run.status === "running" ? "跑中…" : "—")}
-                      </span>
-                      {run.elapsed_sec ? <span style={{ color: T.muted2, fontFamily: "SF Mono, monospace", fontSize: 11 }}>{run.elapsed_sec}s</span> : null}
-                      <Tag size="xs" color={run.status === "success" ? "green" : run.status === "failed" ? "red" : "amber"}>
-                        {run.status === "success" ? "成功" : run.status === "failed" ? "失败" : "跑中"}
-                      </Tag>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
+            );
+          })()}
         </div>
       </div>
 
