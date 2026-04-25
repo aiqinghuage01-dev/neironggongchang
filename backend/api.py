@@ -1354,19 +1354,20 @@ def wechat_templates():
 class WechatCoverReq(BaseModel):
     title: str
     label: str = "清华哥说"
+    n: int = 4   # D-035: 4 选 1, 旧调用 n=1 走 Chrome 模板单张
 
 
 @app.post("/api/wechat/cover")
 def wechat_cover(req: WechatCoverReq):
+    """D-035: 默认 n=4 走 apimart GPT-Image-2 出 4 张候选,4 选 1 不满意再来一批。
+    n=1 时走旧 Chrome 模板单张(兼容)."""
     try:
+        if req.n >= 2:
+            return wechat_scripts.gen_cover_batch(req.title, n=max(2, min(req.n, 8)))
+        # 旧路径: Chrome 模板单张
         r = wechat_scripts.gen_cover(req.title, label=req.label)
-        # 暴露本地 URL 给前端预览
         p = Path(r["local_path"])
         if p.exists():
-            r["media_url"] = f"/media/wechat-cover/{p.name}"
-            # 把生成的封面移到 data/wechat-cover 让静态挂载 /media 也能访问
-            # (generate_cover.py 默认输出到 /tmp/preview/cover.jpg,
-            #  复制一份到 DATA_DIR 下好让前端 <img> 直接预览)
             target_dir = DATA_DIR / "wechat-cover"
             target_dir.mkdir(parents=True, exist_ok=True)
             import shutil

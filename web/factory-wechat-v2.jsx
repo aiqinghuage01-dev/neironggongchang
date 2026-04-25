@@ -235,17 +235,33 @@ function PageWechat({ onNav }) {
   }
 
   function genCover() {
+    // D-035: 默认 n=4 走 apimart 4 张候选
     return runStep({
       nextStep: "cover", rollbackStep: "html", clearSetter: setCoverResult,
       apiCall: async () => {
-        const r = await api.post("/api/wechat/cover", { title: pickedTitle, label: "清华哥说" });
-        setCoverResult(r);
+        const r = await api.post("/api/wechat/cover", { title: pickedTitle, n: 4 });
+        // 自动选第一张已成功的
+        const firstOk = (r.covers || []).find(c => c.local_path);
+        setCoverResult({ ...r, selected_index: firstOk ? firstOk.index : 0 });
       },
     });
   }
 
+  function selectCover(idx) {
+    setCoverResult(prev => prev ? { ...prev, selected_index: idx } : prev);
+  }
+
   function push() {
     if (!htmlResult || !coverResult) { setErr("HTML 或封面缺失"); return; }
+    // 从 covers 数组挑选中的那张
+    let coverPath = "";
+    if (coverResult.covers) {
+      const selected = coverResult.covers[coverResult.selected_index ?? 0];
+      coverPath = selected?.local_path || "";
+    } else {
+      coverPath = coverResult.local_path_served || coverResult.local_path || "";
+    }
+    if (!coverPath) { setErr("没有可推送的封面 (4 张都失败,重生一批)"); return; }
     return runStep({
       nextStep: "push", rollbackStep: "cover", clearSetter: setPushResult,
       apiCall: async () => {
@@ -253,7 +269,7 @@ function PageWechat({ onNav }) {
           title: pickedTitle,
           digest: htmlResult.digest || "",
           html_path: htmlResult.wechat_html_path,
-          cover_path: coverResult.local_path_served || coverResult.local_path,
+          cover_path: coverPath,
           author: "清华哥",
         });
         setPushResult(r);
@@ -314,7 +330,7 @@ function PageWechat({ onNav }) {
         {step === "write"   && <WxStepWrite article={article} loading={loading} onPrev={() => setStep("outline")} onNext={planImages} onRewrite={writeArticle} />}
         {step === "images"  && <WxStepImages plans={imagePlans} setPlans={setImagePlans} onGen={generateOneImage} loading={loading} onPrev={() => setStep("write")} onNext={assembleHtml} onRegen={planImages} />}
         {step === "html"    && <WxStepHtml result={htmlResult} loading={loading} onPrev={() => setStep("images")} onNext={genCover} onSwitchTemplate={assembleHtml} />}
-        {step === "cover"   && <WxStepCover cover={coverResult} title={pickedTitle} loading={loading} onPrev={() => setStep("html")} onNext={push} onRegen={genCover} />}
+        {step === "cover"   && <WxStepCover cover={coverResult} title={pickedTitle} loading={loading} onPrev={() => setStep("html")} onNext={push} onRegen={genCover} onSelect={selectCover} />}
         {step === "push"    && <WxStepPush result={pushResult} loading={loading} onPrev={() => setStep("cover")} onReset={reset} onNav={onNav} />}
       </div>
     </div>
@@ -787,31 +803,87 @@ function WxStepHtml({ result, loading, onPrev, onNext, onSwitchTemplate }) {
 }
 
 // ─── Step 7 · 封面 ───────────────────────────────────────────
-function WxStepCover({ cover, title, loading, onPrev, onNext, onRegen }) {
+function WxStepCover({ cover, title, loading, onPrev, onNext, onRegen, onSelect }) {
   if (loading || !cover) return <Spinning icon="🖼️" phases={[
-    { text: "从标题抽 2-6 字主体", sub: `标题: 「${title}」` },
-    { text: "生成 cover.html · V2 亮色简洁版", sub: "米白→浅橙渐变底 · 红棕装饰线" },
-    { text: "启动本地截图服务器", sub: "临时 WEBrick 127.0.0.1 随机端口" },
-    { text: "Chrome headless 截图 900×383", sub: "公众号 2.35:1 官方比例" },
+    { text: "构造 4 个不同风格的 prompt", sub: "现代简约 / 暖色暖光 / 深色冲击 / 复古胶片" },
+    { text: "调 apimart GPT-Image-2 生第 1 张", sub: "16:9 横版 · 30-60s/张" },
+    { text: "生第 2 张", sub: "" },
+    { text: "生第 3 张", sub: "" },
+    { text: "生第 4 张 · 4 张完成", sub: "" },
+    { text: "下载到本地 · 复制到 /media", sub: "" },
   ]} />;
   if (!cover) return null;
+
+  // D-035: 4 选 1 模式. 兼容旧单张模式(cover.local_path 直接有)
+  const isBatch = Array.isArray(cover.covers);
+  const covers = isBatch ? cover.covers : [{ index: 0, local_path: cover.local_path_served || cover.local_path, media_url: cover.media_url, prompt: "(模板单张)" }];
+  const selectedIdx = cover.selected_index ?? 0;
+  const successCount = covers.filter(c => c.local_path).length;
+
   return (
-    <div style={{ padding: "32px 40px 120px", maxWidth: 820, margin: "0 auto" }}>
-      <div style={{ marginBottom: 16 }}>
-        <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 6 }}>封面 900×383 🖼️</div>
-        <div style={{ fontSize: 13, color: T.muted }}>V2 亮色简洁版 · 标签+大标题+作者 · 生成 {cover.elapsed_sec}s · {Math.round(cover.size_bytes/1024)} KB</div>
+    <div style={{ padding: "32px 40px 120px", maxWidth: 1080, margin: "0 auto" }}>
+      <div style={{ marginBottom: 16, display: "flex", alignItems: "flex-start", gap: 16 }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 6 }}>
+            封面 {isBatch ? `4 选 1 (${successCount}/${covers.length} 成功)` : ""} 🖼️
+          </div>
+          <div style={{ fontSize: 13, color: T.muted }}>
+            {isBatch ? "点选一张作为正式封面 · 不满意整批重来" : "V2 模板单张 · Chrome 截图"}
+            {cover.total_elapsed_sec && ` · 总耗时 ${cover.total_elapsed_sec}s`}
+          </div>
+        </div>
+        {isBatch && (
+          <Btn onClick={onRegen}>🔄 再来 4 张</Btn>
+        )}
       </div>
-      <div style={{ background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 12, padding: 12, marginBottom: 14 }}>
-        <img src={api.media(cover.media_url)} alt="cover" style={{ width: "100%", aspectRatio: "900/383", borderRadius: 8, objectFit: "cover" }} />
+
+      {/* grid · 4 选 1 */}
+      <div style={{ display: "grid", gridTemplateColumns: isBatch ? "repeat(2, 1fr)" : "1fr", gap: 14, marginBottom: 14 }}>
+        {covers.map((c, i) => {
+          const isSelected = i === selectedIdx;
+          const ok = !!c.local_path;
+          return (
+            <div key={i}
+              onClick={() => ok && isBatch && onSelect?.(c.index ?? i)}
+              style={{
+                background: "#fff",
+                border: `2px solid ${isSelected ? T.brand : T.borderSoft}`,
+                boxShadow: isSelected ? `0 0 0 4px ${T.brandSoft}` : "none",
+                borderRadius: 12, padding: 8, cursor: ok && isBatch ? "pointer" : "default",
+                transition: "all 0.15s",
+                opacity: ok ? 1 : 0.5,
+                position: "relative",
+              }}>
+              {ok ? (
+                <img src={api.media(c.media_url)} alt={`cover ${i+1}`}
+                  style={{ width: "100%", aspectRatio: "16/9", borderRadius: 6, objectFit: "cover", display: "block" }} />
+              ) : (
+                <div style={{ aspectRatio: "16/9", borderRadius: 6, background: T.bg2, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, color: T.red, padding: 12, textAlign: "center" }}>
+                  ⚠️ {(c.error || "失败").slice(0, 60)}
+                </div>
+              )}
+              <div style={{ fontSize: 11, color: T.muted2, marginTop: 6, padding: "0 4px", display: "flex", alignItems: "center", gap: 6 }}>
+                {isBatch && <Tag size="xs" color={isSelected ? "green" : "blue"}>#{i + 1}</Tag>}
+                <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.style || c.prompt}</span>
+                {c.elapsed_sec && <span style={{ fontFamily: "SF Mono, monospace" }}>{c.elapsed_sec}s</span>}
+              </div>
+              {isSelected && ok && (
+                <div style={{ position: "absolute", top: 12, right: 12, background: T.brand, color: "#fff", borderRadius: 100, fontSize: 11, padding: "3px 10px", fontWeight: 600 }}>
+                  ✓ 已选
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
-      <div style={{ padding: 12, background: T.bg2, borderRadius: 8, fontSize: 12, color: T.muted, lineHeight: 1.7 }}>
-        本地路径: <code style={{ fontSize: 11 }}>{cover.local_path_served || cover.local_path}</code>
-      </div>
-      <div style={{ display: "flex", gap: 10, marginTop: 18, alignItems: "center" }}>
+
+      <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
         <Btn variant="outline" onClick={onPrev}>← 回 HTML</Btn>
-        <Btn onClick={onRegen}>🔄 重生封面</Btn>
+        {isBatch && <Btn onClick={onRegen}>🔄 再来 4 张</Btn>}
         <div style={{ flex: 1 }} />
-        <Btn variant="primary" onClick={onNext}>推送草稿箱 →</Btn>
+        <Btn variant="primary" onClick={onNext} disabled={successCount === 0}>
+          {successCount === 0 ? "全部失败,先重生" : `推送草稿箱(用第 ${selectedIdx + 1} 张) →`}
+        </Btn>
       </div>
     </div>
   );

@@ -364,7 +364,82 @@ def _read_asset_text(filename: str) -> str:
     return p.read_text(encoding="utf-8") if p.exists() else ""
 
 
-# ─── Phase 4 · 封面 900×383 ──────────────────────────────────
+# ─── Phase 4 · 封面 4 选 1 (D-035) ───────────────────────
+
+COVER_STYLE_VARIANTS = [
+    "现代简约风格,大留白,清爽冷色调,高级感",
+    "暖色暖光,真实感照片,生活场景,自然氛围",
+    "深色高对比,大字醒目,锐利冲击力",
+    "复古胶片质感,80-90 年代色调,怀旧氛围",
+]
+
+
+def gen_cover_batch(title: str, n: int = 4) -> dict[str, Any]:
+    """用 apimart GPT-Image-2 生 n 张候选封面 · 16:9 · 串行避免并发限制。"""
+    from shortvideo.apimart import ApimartClient, ApimartError
+
+    cover_dir = PREVIEW_DIR.parent / "wechat-cover-batch"
+    cover_dir.mkdir(parents=True, exist_ok=True)
+    media_target_dir = None
+    try:
+        from shortvideo.config import DATA_DIR
+        media_target_dir = DATA_DIR / "wechat-cover-batch"
+        media_target_dir.mkdir(parents=True, exist_ok=True)
+    except Exception:
+        pass
+
+    base = f"公众号文章封面图 · 主题「{title}」 · 横版 16:9 · 视觉冲击 · 标题文字自然融入"
+    prompts = [f"{base} · {COVER_STYLE_VARIANTS[i % len(COVER_STYLE_VARIANTS)]}" for i in range(n)]
+
+    results = []
+    t0_total = time.time()
+    try:
+        client = ApimartClient()
+    except Exception as e:
+        raise WechatScriptError(f"apimart 客户端初始化失败: {e}")
+
+    with client as c:
+        for i, p in enumerate(prompts):
+            ts = int(time.time())
+            out = cover_dir / f"wxcover_{ts}_{i}.png"
+            try:
+                res = c.generate_and_download(p, out, size="16:9")
+                media_path = res.local_path or out
+                media_url_path = None
+                if media_target_dir and media_path and Path(media_path).exists():
+                    import shutil
+                    target = media_target_dir / Path(media_path).name
+                    shutil.copy2(media_path, target)
+                    try:
+                        from shortvideo.config import DATA_DIR
+                        media_url_path = "/media/" + str(target.relative_to(DATA_DIR)).replace("\\", "/")
+                    except Exception:
+                        pass
+                results.append({
+                    "index": i,
+                    "prompt": p,
+                    "style": COVER_STYLE_VARIANTS[i % len(COVER_STYLE_VARIANTS)],
+                    "local_path": str(media_path) if media_path else None,
+                    "media_url": media_url_path,
+                    "elapsed_sec": getattr(res, "elapsed_sec", 0),
+                })
+            except ApimartError as e:
+                results.append({
+                    "index": i, "prompt": p,
+                    "style": COVER_STYLE_VARIANTS[i % len(COVER_STYLE_VARIANTS)],
+                    "error": str(e)[:200],
+                })
+
+    succeeded = [r for r in results if r.get("local_path")]
+    return {
+        "covers": results,
+        "succeeded_count": len(succeeded),
+        "total_count": len(results),
+        "total_elapsed_sec": round(time.time() - t0_total, 1),
+    }
+
+
+# ─── Phase 4 旧版 · Chrome 模板封面(单张,保留兼容) ─────────
 
 def gen_cover(title: str, label: str = "清华哥说", output_path: str | None = None) -> dict[str, Any]:
     """生成 900×383 封面图,走 skill 的 generate_cover.py(Chrome headless 截图)。"""
