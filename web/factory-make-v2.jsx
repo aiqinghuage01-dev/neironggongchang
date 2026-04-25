@@ -200,43 +200,61 @@ function MakeV2StepScript({ script, setScript, onNext, onNav, seedFrom, onDismis
         </div>
       )}
 
-      {/* === 文案输入区 (D-062a 置顶最显眼) === */}
-      <div style={{ background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 12, padding: 20, marginBottom: 16 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-          <div style={{ fontSize: 16, fontWeight: 600, color: T.text }}>1. 文案</div>
-          <Tag size="xs" color="gray">{script.length} 字</Tag>
-          {script.length > 0 && (
-            <Tag size="xs" color={script.length > 600 ? "amber" : "blue"}>~{Math.round(script.length / 3.5)} 秒口播</Tag>
-          )}
-          {/* D-062-AUDIT-2-todo3: 文案过长警告 (数字人合成成本 ∝ 字数, 平台播放完成率 ∝ 短) */}
-          {script.length > 600 && (
-            <Tag size="xs" color="amber">⚠ 偏长 · 建议精简 300-500</Tag>
-          )}
-          <div style={{ flex: 1 }} />
-          {script && (
-            <button onClick={() => setScript("")} title="清空"
-              style={{ background: "transparent", border: "none", color: T.muted2, cursor: "pointer", fontSize: 12, fontFamily: "inherit" }}>
-              清空
-            </button>
-          )}
+      {/* D-062ll: 大对话框 hero (参照清华哥图17) */}
+      <div style={{ textAlign: "center", margin: "8px 0 24px" }}>
+        <div style={{ fontSize: 30, fontWeight: 700, color: T.text, letterSpacing: "-0.02em", marginBottom: 8 }}>
+          先给我点东西开始 👇
         </div>
+        <div style={{ fontSize: 14, color: T.muted, lineHeight: 1.6 }}>
+          粘文案 / 选热点 / 点 skill · 小华都接得住
+        </div>
+      </div>
+
+      {/* === 文案输入区 (D-062ll 大圆角绿边 hero) === */}
+      <div style={{
+        background: "#fff",
+        border: `1.5px solid ${T.brand}`,
+        boxShadow: `0 0 0 5px ${T.brandSoft}`,
+        borderRadius: 16, padding: 18, marginBottom: 24,
+      }}>
         <textarea
           value={script}
           onChange={e => setScript(e.target.value)}
-          placeholder="把口播文案粘贴在这里 · 或者从下面的热点/skill 按钮开始..."
-          rows={12}
+          placeholder="在这里粘文案，或者直接贴一段口播..."
+          rows={10}
           style={{
-            width: "100%", padding: 16, border: `1px solid ${T.borderSoft}`, borderRadius: 8,
-            fontSize: 14, fontFamily: "inherit", outline: "none", resize: "vertical", lineHeight: 1.75,
+            width: "100%", padding: 12, border: "none",
+            fontSize: 14.5, fontFamily: "inherit", outline: "none",
+            resize: "vertical", lineHeight: 1.75, background: "transparent",
+            color: T.text, minHeight: 200,
           }} />
 
-        <div style={{ marginTop: 14, display: "flex", gap: 10, alignItems: "center" }}>
-          <Btn variant="primary" onClick={onNext} disabled={!script.trim()}>
+        <div style={{ marginTop: 12, paddingTop: 14, borderTop: `1px solid ${T.borderSoft}`,
+                      display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          {script.length === 0 ? (
+            <span style={{ fontSize: 12, color: T.muted2 }}>✨ 小华自动跟踪字数 + 秒数, 偏长会提醒</span>
+          ) : (
+            <>
+              <Tag size="xs" color="gray">{script.length} 字</Tag>
+              <Tag size="xs" color={script.length > 600 ? "amber" : "blue"}>~{Math.round(script.length / 3.5)} 秒口播</Tag>
+              {script.length > 600 && (
+                <Tag size="xs" color="amber">⚠ 偏长 · 建议精简 300-500</Tag>
+              )}
+              <button onClick={() => setScript("")} title="清空"
+                style={{ background: "transparent", border: "none", color: T.muted2, cursor: "pointer", fontSize: 12, fontFamily: "inherit" }}>
+                清空
+              </button>
+            </>
+          )}
+          <div style={{ flex: 1 }} />
+          <button onClick={onNext} disabled={!script.trim()} style={{
+            padding: "10px 24px", fontSize: 14, fontWeight: 600,
+            background: script.trim() ? T.brand : T.muted3, color: "#fff",
+            border: "none", borderRadius: 100,
+            cursor: script.trim() ? "pointer" : "not-allowed", fontFamily: "inherit",
+          }}>
             {script.trim() ? "下一步: 声音 + 数字人 →" : "↑ 先填文案"}
-          </Btn>
-          <span style={{ fontSize: 11, color: T.muted2 }}>
-            填好 → 下一步生数字人 mp4
-          </span>
+          </button>
         </div>
       </div>
 
