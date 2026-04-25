@@ -99,6 +99,7 @@ TAGS_METADATA = [
     {"name": "即梦 AIGC", "description": "Dreamina CLI 接入 (D-028)"},
     {"name": "短视频", "description": "做视频流水线 (转写/语音克隆/数字人合成/封面/发布)"},
     {"name": "朋友圈", "description": "朋友圈衍生 skill"},
+    {"name": "v5 视频", "description": "数字人成片 v5 模板化 (D-059) — 下游套模板, 数字人 mp4 是上游复用资源"},
     {"name": "档案部", "description": "素材库 / 作品库 / 知识库 / 热点 / 选题"},
     {"name": "设置", "description": "全局配置 / 偏好学习 / 行为记忆 / 工作日志开关"},
 ]
@@ -1990,6 +1991,61 @@ class ComplianceWriteReq(BaseModel):
 def compliance_write(req: ComplianceWriteReq):
     """add_skill 范式留的 step 2 路径. 实际 /check 已一步到位."""
     return compliance_pipeline.write_output(req.input, req.analysis, req.angle)
+
+
+# ═══════════════════════════════════════════════════════════════════
+# 数字人成片 v5 模板化 接入 (D-059a)
+# Skill 源: ~/Desktop/skills/digital-human-video-v5/
+# 数字人 mp4 是上游复用资源 → 套不同模板剪辑成多版 (用户拍板的关键).
+# 本轮只做后端基建. 前端 PageDhv5 后续按 D-059b/c/d 做.
+# 渲染异步走 D-037a 的 tasks 池, 调用方轮询 GET /api/tasks/{task_id}.
+# ═══════════════════════════════════════════════════════════════════
+
+
+@app.get("/api/dhv5/templates", tags=["v5 视频"], summary="模板列表")
+def dhv5_templates_list():
+    """扫 ~/Desktop/skills/digital-human-video-v5/templates/*.yaml 返列表 + 元数据
+    (含智能时长 / 节奏标签 / 字数预算 / 样片视频路径). 给模板选择器用."""
+    from backend.services import dhv5_pipeline
+    return {"templates": dhv5_pipeline.list_templates()}
+
+
+@app.get("/api/dhv5/templates/{template_id}", tags=["v5 视频"], summary="单模板完整 YAML")
+def dhv5_templates_get(template_id: str):
+    """读单模板完整 YAML 配置. 给文案对齐 / 模板编辑器用."""
+    from backend.services import dhv5_pipeline
+    try:
+        return dhv5_pipeline.load_template_full(template_id)
+    except dhv5_pipeline.Dhv5Error as e:
+        raise HTTPException(404, str(e))
+
+
+class Dhv5RenderReq(BaseModel):
+    template_id: str = Field(..., description="模板 id (templates/<id>.yaml 不带后缀)")
+    digital_human_video: str = Field(..., description="数字人 mp4 绝对路径 (上游柿榴产出 / 用户上传)")
+    output_name: Optional[str] = Field(None, description="输出文件名 (无 .mp4 扩展). 默认 template_id_时间戳")
+    scenes_override: Optional[list[dict[str, Any]]] = Field(
+        None,
+        description="覆盖模板默认 scenes (D-059c 文案对齐结果走这里). 无则用 YAML 原 scenes.",
+    )
+
+
+@app.post("/api/dhv5/render", tags=["v5 视频"], summary="触发渲染 → 立即返 task_id")
+def dhv5_render(req: Dhv5RenderReq):
+    """异步渲染. 立即返 task_id, 真跑 3-10 分钟 (PIL plate + ffmpeg 合成).
+    调用方轮询 GET /api/tasks/{task_id} 看 status: running → success/failed.
+    success 时 task.result = {output_path, size_bytes, template_id}."""
+    from backend.services import dhv5_pipeline
+    try:
+        task_id = dhv5_pipeline.render_async(
+            template_id=req.template_id,
+            digital_human_video=req.digital_human_video,
+            output_name=req.output_name,
+            scenes_override=req.scenes_override,
+        )
+    except dhv5_pipeline.Dhv5Error as e:
+        raise HTTPException(400, str(e))
+    return {"task_id": task_id, "template_id": req.template_id}
 
 
 if __name__ == "__main__":
