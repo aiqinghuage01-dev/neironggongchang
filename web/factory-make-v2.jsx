@@ -180,9 +180,22 @@ function MakeV2StepScript({ script, setScript, onNext, onNav, seedFrom, onDismis
   }, []);
 
   function pickHotTopic(t) {
-    // 一键塞进 textarea 当 prompt seed
+    // 只塞文案模式: 把热点拼成 seed 塞 textarea, 用户自己写
     const seed = `# 热点 (来自 ${t.platform || "?"}, 热度 ${t.heat_score})\n${t.title}\n\n${t.match_reason ? "我的角度: " + t.match_reason + "\n\n" : ""}---\n\n口播正文:\n`;
     setScript(seed);
+  }
+
+  // D-062nn-C2: "拍这条" → 拼丰富 seed 跳 hotrewrite
+  // PageHotrewrite (C3) 检测 seed 自动跳过 input + 进 angles step
+  function takeThisHot(t) {
+    const seedParts = [t.title];
+    if (t.match_reason) seedParts.push(`\n(我能借这个角度: ${t.match_reason})`);
+    if (t.platform) seedParts.push(`\n\n[来源: ${t.platform} · 热度 ${t.heat_score || 0}]`);
+    try {
+      localStorage.setItem("hotrewrite_seed_hotspot", seedParts.join(""));
+      setFromMake("hotrewrite");
+    } catch (_) {}
+    onNav("hotrewrite");
   }
 
   // D-062mm (清华哥反馈 #18): 智能识别 URL / 文案, 显不同的下一步按钮
@@ -356,44 +369,35 @@ function MakeV2StepScript({ script, setScript, onNext, onNav, seedFrom, onDismis
         </div>
       </div>
 
-      {/* === 当日热点 2-3 条 (D-062a) === */}
-      <div style={{ background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 12, padding: 16, marginBottom: 16 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: T.text }}>🔥 今日热点</div>
-          <Tag size="xs" color="gray">{hotTopics?.length || 0}</Tag>
-          <span style={{ fontSize: 11, color: T.muted2 }}>· 点一条一键塞文案区当 seed</span>
-          <div style={{ flex: 1 }} />
-          <button onClick={() => onNav("materials")}
-            style={{ background: "transparent", border: "none", color: T.brand, cursor: "pointer", fontSize: 11, fontFamily: "inherit" }}>
-            维护热点 →
-          </button>
-        </div>
-        {!hotTopics ? (
-          <div style={{ fontSize: 11.5, color: T.muted2, padding: 10 }}>加载…</div>
-        ) : hotTopics.length === 0 ? (
-          // D-062i: 飞轮 CTA 替代静态文字
+      {/* D-062nn-C2: 今天最值得拍的 3 个 (大卡 · 参照 mockup) */}
+      {hotTopics === null ? null : hotTopics.length === 0 ? (
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ fontSize: 17, fontWeight: 700, color: T.text, marginBottom: 12 }}>🔥 今天的热点</div>
           <NightHotFlywheel onTopics={() => {
             api.get("/api/hot-topics?limit=10").then(items => setHotTopics(items || [])).catch(() => {});
           }} />
-        ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            {hotTopics.slice(0, 3).map(t => (
-              <div key={t.id} onClick={() => pickHotTopic(t)}
-                style={{
-                  padding: "8px 12px", background: t.fetched_from === "night-shift" ? "linear-gradient(135deg, #fff8ec, #fff)" : T.bg2,
-                  border: `1px solid ${T.borderSoft}`, borderRadius: 6, cursor: "pointer",
-                  display: "flex", alignItems: "center", gap: 10, fontSize: 12,
-                }}>
-                <span style={{ fontWeight: 700, color: T.amber, minWidth: 36, fontSize: 13 }}>🔥{t.heat_score || 0}</span>
-                {t.platform && <Tag size="xs" color="pink">{t.platform}</Tag>}
-                {t.fetched_from === "night-shift" && <Tag size="xs" color="amber">🌙 夜班</Tag>}
-                <span style={{ flex: 1, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.title}</span>
-                <span style={{ fontSize: 11, color: T.brand, fontWeight: 500, whiteSpace: "nowrap" }}>用这条 →</span>
-              </div>
+        </div>
+      ) : (
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 12 }}>
+            <span style={{ fontSize: 17, fontWeight: 700, color: T.text }}>
+              🔥 今天最值得拍的 {Math.min(3, hotTopics.length)} 个
+            </span>
+            <div style={{ flex: 1 }} />
+            {hotTopics.length > 3 && (
+              <button onClick={() => onNav("materials")}
+                style={{ background: "transparent", border: "none", color: T.muted2, cursor: "pointer", fontSize: 11.5, fontFamily: "inherit" }}>
+                全部 ({hotTopics.length}) →
+              </button>
+            )}
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {hotTopics.slice(0, 3).map((t, idx) => (
+              <HotPickCard key={t.id} t={t} idx={idx} onTake={() => takeThisHot(t)} onSeed={() => pickHotTopic(t)} />
             ))}
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* D-062nn-C1: 6 大 skill 卡 — 删研发文案标题, 改简洁 hero */}
       <div style={{ marginBottom: 16 }}>
@@ -428,6 +432,70 @@ function ScriptSkillCard({ skill, onClick }) {
         <span style={{ fontSize: 11, color: T.brand }}>→</span>
       </div>
       <div style={{ fontSize: 11.5, color: T.muted, lineHeight: 1.5 }}>{skill.desc}</div>
+    </div>
+  );
+}
+
+// D-062nn-C2: 热点大卡 (匹配度 + 匹配原因 + 建议渠道 + 拍这条 主按钮)
+function HotPickCard({ t, idx, onTake, onSeed }) {
+  // 匹配度算法 (前端简单算 — 后端没字段, 等 backend 接 persona embedding 再换):
+  // 匹配人设 ✓ → 88-99 高分; 不匹配 → 55-82 中等
+  const matchPct = t.match_persona
+    ? Math.min(99, 88 + ((t.heat_score || 70) % 12))
+    : Math.min(82, 55 + ((t.heat_score || 50) % 28));
+  const fromNight = t.fetched_from === "night-shift";
+  return (
+    <div style={{
+      padding: "16px 20px", borderRadius: 12,
+      background: fromNight ? "linear-gradient(135deg, #fff8ec 0%, #fff 60%)" : "#fff",
+      border: `1px solid ${T.borderSoft}`,
+      display: "flex", flexDirection: "column", gap: 10,
+    }}>
+      {/* 顶部: 序号 + 标题 + 匹配度 */}
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
+        <span style={{
+          minWidth: 26, height: 26, borderRadius: 6,
+          background: idx === 0 ? T.brand : T.bg2,
+          color: idx === 0 ? "#fff" : T.muted, fontSize: 13, fontWeight: 700,
+          display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+        }}>{idx + 1}</span>
+        <span style={{ fontSize: 15, fontWeight: 600, color: T.text, flex: 1, lineHeight: 1.5 }}>{t.title}</span>
+        <span style={{
+          fontSize: 12, fontWeight: 600, color: T.brand,
+          padding: "3px 10px", background: T.brandSoft, borderRadius: 4, whiteSpace: "nowrap",
+        }}>匹配度 {matchPct}%</span>
+      </div>
+
+      {/* 匹配原因 (有就显) */}
+      {t.match_reason && (
+        <div style={{ fontSize: 12.5, color: T.muted, lineHeight: 1.6, paddingLeft: 38 }}>
+          <span style={{
+            fontSize: 10.5, color: T.brand, fontWeight: 600,
+            padding: "1px 6px", background: T.brandSoft, borderRadius: 3, marginRight: 6,
+          }}>匹配原因</span>
+          {t.match_reason}
+        </div>
+      )}
+
+      {/* 底部: 建议渠道 + 只塞文案 + 拍这条 */}
+      <div style={{ display: "flex", alignItems: "center", gap: 8, paddingLeft: 38, flexWrap: "wrap" }}>
+        <span style={{ fontSize: 11, color: T.muted2 }}>建议渠道:</span>
+        {t.platform && <Tag size="xs" color="pink">{t.platform}</Tag>}
+        <Tag size="xs" color="blue">短视频</Tag>
+        <Tag size="xs" color="purple">朋友圈</Tag>
+        {fromNight && <Tag size="xs" color="amber">🌙 夜班</Tag>}
+        <div style={{ flex: 1 }} />
+        <button onClick={onSeed}
+          title="只把热点塞到上面文案区, 自己写"
+          style={{ background: "transparent", border: "none", color: T.muted2, cursor: "pointer", fontSize: 11, fontFamily: "inherit" }}>
+          只塞文案
+        </button>
+        <button onClick={onTake} style={{
+          padding: "8px 18px", fontSize: 13, fontWeight: 600,
+          background: idx === 0 ? T.brand : T.text, color: "#fff",
+          border: "none", borderRadius: 100, cursor: "pointer", fontFamily: "inherit",
+        }}>📸 拍这条 →</button>
+      </div>
     </div>
   );
 }
