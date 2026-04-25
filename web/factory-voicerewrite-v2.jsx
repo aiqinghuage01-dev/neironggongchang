@@ -86,7 +86,7 @@ function PageVoicerewrite({ onNav }) {
         )}
         {step === "input"  && <VStepInput transcript={transcript} setTranscript={setTranscript} onGo={doAnalyze} loading={loading} skillInfo={skillInfo} />}
         {step === "angles" && <VStepAngles analyze={analyze} loading={loading} onPick={pickAngle} onPrev={() => setStep("input")} onRegen={doAnalyze} />}
-        {step === "write"  && <VStepWrite script={script} angle={pickedAngle} loading={loading} onPrev={() => setStep("angles")} onRewrite={() => pickAngle(pickedAngle)} onReset={reset} />}
+        {step === "write"  && <VStepWrite script={script} angle={pickedAngle} loading={loading} onPrev={() => setStep("angles")} onRewrite={() => pickAngle(pickedAngle)} onReset={reset} onNav={onNav} />}
       </div>
     </div>
   );
@@ -245,7 +245,7 @@ function VStepAngles({ analyze, loading, onPick, onPrev, onRegen }) {
   );
 }
 
-function VStepWrite({ script, angle, loading, onPrev, onRewrite, onReset }) {
+function VStepWrite({ script, angle, loading, onPrev, onRewrite, onReset, onNav }) {
   if (loading || !script) return <Spinning icon="✍️" phases={[
     { text: "按你选的角度写黄金三秒", sub: "10-35 字 · 反差/结果/态度句" },
     { text: "轻量重排叙事", sub: "尊重用户原有叙事线,不强行重排" },
@@ -318,8 +318,33 @@ function VStepWrite({ script, angle, loading, onPrev, onRewrite, onReset }) {
         <Btn onClick={onRewrite}>🔄 同角度再来一版</Btn>
         <div style={{ flex: 1 }} />
         <Btn onClick={copy} variant={copied ? "soft" : "default"}>{copied ? "✓ 已复制" : "📋 复制文案"}</Btn>
-        <Btn variant="primary" onClick={onReset}>再来一条录音</Btn>
+        <Btn onClick={onReset}>再来一条录音</Btn>
       </div>
+
+      {/* D-062d: 完成态加 "做成视频" CTA */}
+      {onNav && script.content && (
+        <div style={{ marginTop: 16, padding: 16, background: "linear-gradient(135deg, #f6fbf7, #fff)",
+                      border: `1.5px solid ${T.brand}`, boxShadow: `0 0 0 4px ${T.brandSoft}`,
+                      borderRadius: 12, display: "flex", alignItems: "center", gap: 14 }}>
+          <div style={{ fontSize: 26 }}>✨</div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 14, fontWeight: 600, color: T.text }}>下一步: 把这条改写做成数字人视频?</div>
+            <div style={{ fontSize: 12, color: T.muted, marginTop: 3 }}>
+              一键带文案过去 · 选声音 + 数字人 + 模板 · 出片
+            </div>
+          </div>
+          <Btn variant="primary" onClick={() => {
+            try {
+              localStorage.setItem("make_v2_seed_script", script.content);
+              localStorage.setItem("make_v2_seed_from", JSON.stringify({
+                skill: "voicerewrite", title: (script.content || "").slice(0, 30),
+                ts: Date.now(),
+              }));
+            } catch (_) {}
+            onNav("make");
+          }}>🎬 做成数字人视频 →</Btn>
+        </div>
+      )}
     </div>
   );
 }
