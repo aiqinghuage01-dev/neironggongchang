@@ -209,9 +209,14 @@
       - **D-062y** ✅ WxStepWrite 选段 ≥10 字阈值显眼化
         CTA hint 改成 "💡 选中正文一段 (≥ 10 字) 再点 → 只带选段 · 不选则带全文(切 1200 字)"
         阈值 + 行为 + 全文 fallback 一行讲清
-      - **D-062z** Step 5 "标记已发"无导出/统计入口
-        现状: 标了已发只是本地 UI tag, 没法导出周报/复盘
-        建议: 沿 storeKey 跨视频聚合, sidebar "我的作品" tab 显多平台发布矩阵
+      - **D-062z** ✅ Step 5 标记已发跨视频聚合 (作品库新 tab)
+        web/factory-works.jsx 加 "📤 发布矩阵" tab 与 grid/analytics 平级
+        readAllMarks 扫 localStorage 所有 publish_marks::* 前缀键
+        顶部聚合: 已发视频总数 / 全平台覆盖数 / 5 平台累计发布数 (各 1 张 PubStatCard)
+        矩阵: 行=视频 (path basename + work title 若有 join), 列=5 平台 ✓/○
+        点 "查看" → 打开对应 WorkDrawer (与 grid 一致)
+        countPublishMarks() 顺便给 tab 显数字徽章
+        空状态明确引 "去做视频" CTA
 
       新发现的 bug + 待修:
       - **D-062-AUDIT-2-fix1** ✅ PageMaterials HotTab/TopicTab "做成视频" 不带 seed

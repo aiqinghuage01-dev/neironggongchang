@@ -68,6 +68,7 @@ function PageWorks({ onNav }) {
           {[
             { id: "grid", label: "📄 作品网格", n: works.length },
             { id: "analytics", label: "📊 数据看板", n: analytics?.total_works_with_data || 0 },
+            { id: "publish", label: "📤 发布矩阵", n: countPublishMarks() },  // D-062z
           ].map(t => {
             const on = view === t.id;
             return (
@@ -102,6 +103,10 @@ function PageWorks({ onNav }) {
               const w = works.find(x => x.id === wid);
               if (w) setPicked(w);
             }} />
+          )}
+          {/* D-062z: 多平台发布矩阵 (跨视频聚合 publish_marks::* localStorage) */}
+          {!loading && view === "publish" && (
+            <PublishMatrix works={works} onOpenWork={setPicked} onMake={() => onNav("make")} />
           )}
         </div>
       </div>
@@ -498,4 +503,152 @@ function RankTable({ rows, metric, metricLabel, onOpen }) {
   );
 }
 
-Object.assign(window, { PageWorks });
+// ─── D-062z 多平台发布矩阵 ─────────────────────────────────────
+// 数据源: localStorage 里所有 publish_marks::<outputPath> = {plat: ts | null}
+// (D-062h Step 5 PublishPanel 写入)
+// 聚合: 按 outputPath 一行, 各平台 ✓ / ○ + 总览统计
+
+const PUBLISH_MARK_PREFIX = "publish_marks::";
+const PUBLISH_PLATFORMS = ["抖音", "视频号", "小红书", "快手", "B 站"];
+
+function readAllMarks() {
+  const out = [];
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key || !key.startsWith(PUBLISH_MARK_PREFIX)) continue;
+      const path = key.slice(PUBLISH_MARK_PREFIX.length);
+      try {
+        const marks = JSON.parse(localStorage.getItem(key) || "{}");
+        out.push({ path, marks });
+      } catch (_) {}
+    }
+  } catch (_) {}
+  return out;
+}
+
+function countPublishMarks() {
+  return readAllMarks().filter(r => Object.values(r.marks).some(Boolean)).length;
+}
+
+function PublishMatrix({ works, onOpenWork, onMake }) {
+  const [rows, setRows] = React.useState(() => readAllMarks());
+  function reload() { setRows(readAllMarks()); }
+
+  // 平台聚合统计
+  const platCounts = {};
+  PUBLISH_PLATFORMS.forEach(p => { platCounts[p] = 0; });
+  rows.forEach(r => {
+    Object.entries(r.marks || {}).forEach(([p, ts]) => {
+      if (ts && platCounts[p] !== undefined) platCounts[p] += 1;
+    });
+  });
+  const totalMarked = rows.filter(r => Object.values(r.marks).some(Boolean)).length;
+  const fullCoverage = rows.filter(r => PUBLISH_PLATFORMS.every(p => r.marks[p])).length;
+
+  // works 按 path 索引便于 join
+  const worksByPath = {};
+  (works || []).forEach(w => {
+    const p = w.local_path || w.local_url || "";
+    if (p) worksByPath[p] = w;
+    // local_url 形如 /media/works/xx.mp4, 也试 /data/.../...
+  });
+
+  if (rows.length === 0) {
+    return (
+      <div style={{ padding: 60, textAlign: "center", color: T.muted }}>
+        <div style={{ fontSize: 44, marginBottom: 12 }}>📤</div>
+        <div style={{ fontSize: 15, fontWeight: 600, color: T.text, marginBottom: 6 }}>还没标记过任何已发</div>
+        <div style={{ fontSize: 13, marginBottom: 18 }}>
+          做完视频在 <b>🎬 做视频 Step 5</b> 各平台卡点 "标记已发" · 这里就会聚合
+        </div>
+        <Btn variant="primary" onClick={onMake}>去做视频 →</Btn>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      {/* 顶部聚合统计 */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10, marginBottom: 18 }}>
+        <PubStatCard label="标了已发的视频" value={totalMarked} sub={`共 ${rows.length} 条 publish 记录`} />
+        <PubStatCard label="全平台覆盖" value={fullCoverage} sub={`${PUBLISH_PLATFORMS.length} 平台都已发`} />
+        {PUBLISH_PLATFORMS.map(p => (
+          <PubStatCard key={p} label={p} value={platCounts[p]} sub={`累计已发 ${platCounts[p]} 条`} />
+        ))}
+      </div>
+
+      <div style={{ marginBottom: 10, display: "flex", alignItems: "center", gap: 10 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: T.text }}>📋 视频 × 平台矩阵</div>
+        <span style={{ fontSize: 11, color: T.muted2 }}>· 数据本地 (localStorage), 跨设备不同步</span>
+        <div style={{ flex: 1 }} />
+        <Btn size="sm" onClick={reload}>↻ 刷新</Btn>
+      </div>
+
+      {/* 矩阵 */}
+      <div style={{ background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 12, overflow: "hidden" }}>
+        {/* header */}
+        <div style={{
+          display: "grid", gridTemplateColumns: `1fr repeat(${PUBLISH_PLATFORMS.length}, 80px) 90px`,
+          padding: "10px 14px", background: T.bg2, fontSize: 11, fontWeight: 600, color: T.muted, gap: 8,
+        }}>
+          <div>视频路径</div>
+          {PUBLISH_PLATFORMS.map(p => <div key={p} style={{ textAlign: "center" }}>{p}</div>)}
+          <div style={{ textAlign: "center" }}>动作</div>
+        </div>
+        {rows.map((r, idx) => {
+          const w = worksByPath[r.path];
+          const basename = r.path.split("/").pop() || r.path;
+          return (
+            <div key={r.path + idx} style={{
+              display: "grid", gridTemplateColumns: `1fr repeat(${PUBLISH_PLATFORMS.length}, 80px) 90px`,
+              padding: "10px 14px", borderTop: `1px solid ${T.borderSoft}`, fontSize: 12, alignItems: "center", gap: 8,
+            }}>
+              <div style={{ minWidth: 0, overflow: "hidden" }}>
+                <div style={{ color: T.text, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {w ? (w.title || basename) : basename}
+                </div>
+                <div style={{ fontSize: 10, color: T.muted2, fontFamily: "SF Mono, monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.path}</div>
+              </div>
+              {PUBLISH_PLATFORMS.map(p => {
+                const ts = r.marks[p];
+                return (
+                  <div key={p} style={{ textAlign: "center" }}>
+                    {ts ? (
+                      <span title={`已发于 ${new Date(ts).toLocaleString()}`} style={{ fontSize: 14, color: T.brand }}>✓</span>
+                    ) : (
+                      <span style={{ fontSize: 14, color: T.muted3 }}>○</span>
+                    )}
+                  </div>
+                );
+              })}
+              <div style={{ textAlign: "center" }}>
+                {w ? (
+                  <Btn size="sm" onClick={() => onOpenWork(w)}>查看</Btn>
+                ) : (
+                  <span style={{ fontSize: 10.5, color: T.muted2 }}>(无 work 关联)</span>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div style={{ marginTop: 10, fontSize: 10.5, color: T.muted2, lineHeight: 1.6 }}>
+        💡 标记是本地 (localStorage) 行为, 不调任何后端. 跨设备/换浏览器丢. Phase 4 接 OAuth 后会落库.
+      </div>
+    </div>
+  );
+}
+
+function PubStatCard({ label, value, sub }) {
+  return (
+    <div style={{ padding: 12, background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 10 }}>
+      <div style={{ fontSize: 11, color: T.muted2, marginBottom: 4 }}>{label}</div>
+      <div style={{ fontSize: 22, fontWeight: 700, color: T.text, fontFamily: "SF Mono, monospace" }}>{value}</div>
+      {sub && <div style={{ fontSize: 10.5, color: T.muted, marginTop: 4 }}>{sub}</div>}
+    </div>
+  );
+}
+
+Object.assign(window, { PageWorks, PublishMatrix, countPublishMarks });
