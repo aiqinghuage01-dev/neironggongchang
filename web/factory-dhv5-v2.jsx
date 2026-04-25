@@ -690,18 +690,24 @@ function Dhv5SceneRow({ idx, scene, onChange, expanded, onToggleExpand, brollUrl
   const promptVal = scene[promptField] || "";
 
   return (
-    <div style={{ background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 8 }}>
-      {/* 主行 */}
+    <div style={{
+      background: "#fff",
+      border: `1px solid ${expanded ? T.brand + "55" : T.borderSoft}`,
+      borderRadius: 10,
+      transition: "border-color 0.1s",
+    }}>
+      {/* 主行 (C12 polish: padding + fontSize 略升, broll 按钮颜色加重) */}
       <div style={{
-        display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", fontSize: 12,
+        display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", fontSize: 12.5,
       }}>
-        <span style={{ color: T.muted2, fontFamily: "SF Mono, monospace", fontSize: 11, minWidth: 18 }}>#{idx + 1}</span>
+        <span style={{ color: T.muted2, fontFamily: "SF Mono, monospace", fontSize: 11, minWidth: 22 }}>#{idx + 1}</span>
         <span title={`${t} 型 · ${(scene.start || 0).toFixed(1)}s - ${(scene.end || 0).toFixed(1)}s`}
           style={{
-            width: 22, height: 22, borderRadius: "50%", background: sceneColor, color: "#fff",
-            display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700,
+            width: 24, height: 24, borderRadius: "50%", background: sceneColor, color: "#fff",
+            display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11.5, fontWeight: 700,
+            flexShrink: 0,
           }}>{t}</span>
-        <span style={{ color: T.muted2, fontFamily: "SF Mono, monospace", fontSize: 10.5, minWidth: 64 }}>
+        <span style={{ color: T.muted2, fontFamily: "SF Mono, monospace", fontSize: 10.5, minWidth: 70 }}>
           {(scene.start || 0).toFixed(1)}-{(scene.end || 0).toFixed(1)}s
         </span>
         <input
@@ -709,22 +715,23 @@ function Dhv5SceneRow({ idx, scene, onChange, expanded, onToggleExpand, brollUrl
           onChange={e => onChange(fieldKey, e.target.value)}
           placeholder={isB ? "大字金句 4-10 字" : "字幕 8-18 字"}
           style={{
-            flex: 1, padding: "6px 10px", border: `1px solid ${T.borderSoft}`, borderRadius: 6,
-            fontSize: 12.5, fontFamily: "inherit", outline: "none", background: "#fff",
+            flex: 1, padding: "7px 10px", border: `1px solid ${T.borderSoft}`, borderRadius: 6,
+            fontSize: 13, fontFamily: "inherit", outline: "none", background: "#fff",
           }} />
-        <span style={{ fontSize: 10, color: fieldVal.length > (isB ? 10 : 18) ? T.red : T.muted3, fontFamily: "SF Mono, monospace", minWidth: 32, textAlign: "right" }}>
+        <span style={{ fontSize: 10.5, color: fieldVal.length > (isB ? 10 : 18) ? T.red : T.muted3, fontFamily: "SF Mono, monospace", minWidth: 32, textAlign: "right" }}>
           {fieldVal.length}/{isB ? 10 : 18}
         </span>
         {hasBroll && (
           <button onClick={onToggleExpand}
-            title={expanded ? "收起 broll" : "展开 broll"}
+            title={expanded ? "收起 B-roll panel" : "展开 B-roll panel · 改 prompt + 重生图"}
             style={{
-              padding: "3px 8px", fontSize: 11, borderRadius: 6, border: `1px solid ${T.borderSoft}`,
+              padding: "5px 10px", fontSize: 11, borderRadius: 100, border: `1px solid ${expanded ? T.brand : T.borderSoft}`,
               background: expanded ? T.brandSoft : "#fff",
-              color: expanded ? T.brand : T.muted, cursor: "pointer", fontFamily: "inherit",
+              color: expanded ? T.brand : (brollUrl ? T.muted : T.amber),
+              cursor: "pointer", fontFamily: "inherit", fontWeight: 500,
               display: "inline-flex", alignItems: "center", gap: 4,
             }}>
-            📷 {brollUrl ? "" : "缺"} {expanded ? "▲" : "▼"}
+            {brollUrl ? "📷" : "📷 缺图"} {expanded ? "▲" : "▼"}
           </button>
         )}
       </div>
