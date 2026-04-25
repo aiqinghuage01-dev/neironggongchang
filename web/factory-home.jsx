@@ -53,6 +53,9 @@ function PageHome({ onNav }) {
             />
           </div>
 
+          {/* 🌙 小华夜班播报 (D-040e) · 时间联动 · 0 产出整块隐藏 */}
+          <NightDigestCard onNav={onNav} />
+
           {/* 今日最热一条:接 /api/hot-topics 第一条 */}
           {hot ? (
             <div style={{
@@ -265,4 +268,133 @@ function formatToday() {
   return `${d.getMonth() + 1} 月 ${d.getDate()} 日 · ${week}`;
 }
 
-Object.assign(window, { PageHome });
+// ─── 🌙 小华夜班播报卡 (D-040e) ────────────────────────────
+// 6:00-22:00 → "昨晚小华帮你做了 X 件事" + 产出条目
+// 22:00-6:00 → "今晚 23:00 起跑 N 条任务" + 任务预告
+// 0 产出 / 0 任务 → 整块隐藏 (不要 "暂无" 占位)
+
+const NIGHT_DIGEST_TARGET_LABELS = {
+  materials: { label: "看选题", page: "materials" },
+  works:     { label: "去作品库审", page: "works" },
+  knowledge: { label: "看一眼", page: "knowledge" },
+  home:      { label: "看总部", page: "home" },
+};
+
+function NightDigestCard({ onNav }) {
+  const hour = new Date().getHours();
+  const isDayMode = hour >= 6 && hour < 22;
+
+  const [digest, setDigest] = React.useState(null);
+  const [tonight, setTonight] = React.useState(null);
+
+  React.useEffect(() => {
+    if (isDayMode) {
+      api.get("/api/night/digest?since_hours=24")
+        .then(setDigest).catch(() => setDigest({ items: [], total_runs: 0 }));
+    } else {
+      api.get("/api/night/jobs?enabled_only=true")
+        .then(r => setTonight((r.jobs || []).filter(j => j.trigger_type === "cron")))
+        .catch(() => setTonight([]));
+    }
+  }, [isDayMode]);
+
+  if (isDayMode) {
+    if (!digest) return null;
+    if (!digest.items || digest.items.length === 0) return null;
+    return <NightDigestDay items={digest.items} onNav={onNav} />;
+  }
+  // 夜班模式
+  if (!tonight) return null;
+  if (tonight.length === 0) return null;
+  return <NightDigestNight jobs={tonight} onNav={onNav} />;
+}
+
+function NightDigestDay({ items, onNav }) {
+  return (
+    <div style={{
+      padding: "16px 20px", marginBottom: 16,
+      background: "linear-gradient(135deg, #fff8ec, #fff)",
+      border: `1px solid ${T.borderSoft}`, borderRadius: 12,
+    }}>
+      <div style={{ display: "flex", alignItems: "center", marginBottom: 10 }}>
+        <span style={{ fontSize: 14, fontWeight: 600, color: T.text }}>
+          🌙 昨晚小华帮你做了 {items.length} 件事
+        </span>
+        <div style={{ flex: 1 }} />
+        <span onClick={() => onNav("nightshift")}
+          style={{ fontSize: 11.5, color: T.brand, cursor: "pointer", fontWeight: 500 }}>
+          全部 →
+        </span>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        {items.slice(0, 4).map(it => {
+          const t = NIGHT_DIGEST_TARGET_LABELS[it.output_target] || null;
+          return (
+            <div key={it.run_id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, color: T.text }}>
+              <span style={{ color: T.muted2, minWidth: 14 }}>•</span>
+              <span style={{ fontSize: 14, lineHeight: 1 }}>{it.icon || "🌙"}</span>
+              <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                <span style={{ fontWeight: 500 }}>{it.job_name || "任务"}</span>
+                {it.output_summary ? <span style={{ color: T.muted, marginLeft: 6 }}>· {it.output_summary}</span> : null}
+              </span>
+              {t && (
+                <span onClick={() => onNav(t.page)}
+                  style={{ fontSize: 11, color: T.brand, cursor: "pointer", whiteSpace: "nowrap" }}>
+                  → {t.label}
+                </span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function NightDigestNight({ jobs, onNav }) {
+  // 算今晚最早 fire 的时间(粗糙: 取所有 cron 的小时部分最早值)
+  const earliestHour = jobs.reduce((min, j) => {
+    const m = (j.trigger_config?.cron || "").match(/^\S+\s+(\d+)\s/);
+    if (m) {
+      const h = parseInt(m[1], 10);
+      if (!isNaN(h) && h < min) return h;
+    }
+    return min;
+  }, 24);
+
+  const tonightLabel = earliestHour < 24
+    ? `今晚 ${String(earliestHour).padStart(2, "0")}:00 起跑 ${jobs.length} 条任务`
+    : `今晚有 ${jobs.length} 条任务待跑`;
+
+  return (
+    <div style={{
+      padding: "16px 20px", marginBottom: 16,
+      background: "linear-gradient(135deg, #f0f3ff, #fff)",
+      border: `1px solid ${T.borderSoft}`, borderRadius: 12,
+    }}>
+      <div style={{ display: "flex", alignItems: "center", marginBottom: 8 }}>
+        <span style={{ fontSize: 14, fontWeight: 600, color: T.text }}>
+          🌙 {tonightLabel}
+        </span>
+        <div style={{ flex: 1 }} />
+        <span onClick={() => onNav("nightshift")}
+          style={{ fontSize: 11.5, color: T.brand, cursor: "pointer", fontWeight: 500 }}>
+          看清单 →
+        </span>
+      </div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+        {jobs.slice(0, 8).map(j => (
+          <span key={j.id} style={{
+            fontSize: 11.5, padding: "3px 10px", borderRadius: 100,
+            background: T.bg2, color: T.muted, display: "inline-flex", alignItems: "center", gap: 4,
+          }}>
+            <span style={{ fontSize: 12 }}>{j.icon || "🌙"}</span>
+            {j.name}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+Object.assign(window, { PageHome, NightDigestCard });

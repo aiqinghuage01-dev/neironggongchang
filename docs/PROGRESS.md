@@ -305,9 +305,17 @@ P0-P10 所有任务落地, 14 个 commit 从 `09faf92` 到今日末 commit。
       factory-app.jsx 加 nightshift route. index.html 在 dreamina 后载入.
       端到端 smoke 跑过: TestClient 模拟前端 8 步 (列空/创建/列 1 条/PATCH 开关
       /立即跑+轮询占位 runner 落 success/digest/scheduler 状态/删) 全通.
-- [ ] **D-040e 总部播报 NightDigestCard + 散落标签**
-      4 大方块下方 + 🔥98 热点条上方; 时间联动 (6-22h "昨晚做了 X" / 22-6h "今晚 N 件");
-      0 产出整块隐藏不要"暂无"; 素材库/作品库/知识库加 "🌙 来自夜班 (N)" 过滤标签
+- [x] **D-040e 总部播报 NightDigestCard** (散落标签留 D-040f)
+      factory-home.jsx 加 NightDigestCard, 插在 4 大方块下方 / 🔥 热点条上方.
+      时间联动 (6-22h 白天模式 GET /api/night/digest 显示 "昨晚帮你做了 N 件事"
+      + 4 条产出 bullet + 引导跳对应库; 22-6h 夜班模式 GET /api/night/jobs?enabled_only
+      显示 "今晚 HH:00 起跑 N 条任务" + 任务 chips). 0 产出整块隐藏(不要"暂无"占位).
+      output_target → 引导文案: materials→看选题 / works→去作品库审 / knowledge→看一眼 / home→看总部.
+      渐变背景区分模式: 白天暖色 (#fff8ec→#fff) / 夜班冷色 (#f0f3ff→#fff).
+      散落标签 (素材库/作品库/知识库 "🌙 来自夜班 (N)" 过滤): 暂不做.
+      理由: D-040f 4 条预设 runner 还没接, output_refs 永远空, N 永远 0 按"0 隐藏"
+      规则永远不显示, 纯死代码. 留 D-040f 跟真 runner 一起.
+      端到端 smoke: 3 场景 (有 success 显白天 / 有 enabled cron 显夜班 / 全空隐藏).
 - [ ] **D-040f 4 条预设任务实装** 抓热点 / 一鱼多吃 / 知识库整理 / 昨日复盘
       各自 seed 对应 skill_slug 和 trigger_config
 
