@@ -158,6 +158,23 @@ function FromMakeBanner({ fromMake, dismiss, label }) {
 //      <ErrorBanner err={rawMsg} actions={[{ label: "重试", onClick }]} />
 
 const ERROR_PATTERNS = [
+  // ─── D-062ii 柿榴常见错误 (清华哥反馈触发) ───────────────
+  { match: /算力不足|余额不足|请充值|insufficient.*balance/i,
+    icon: "💰", title: "柿榴算力不足 (要充值)",
+    suggestion: "登录柿榴 Web 后台 → 充值 → 回来重试 · 这是 #1 高频原因" },
+  { match: /createByText.*code=1|video\/createByText/i,
+    icon: "🛠️", title: "柿榴 createByText 失败",
+    suggestion: "看原始错误 msg · 常见: 算力不足 / speaker_id 不存在 / avatar_id 不存在" },
+  { match: /speaker.*not.*found|speaker_id.*invalid|声音.*不存在/i,
+    icon: "🎙️", title: "声音 speaker_id 找不到",
+    suggestion: "去 ⚙️ 设置 看下当前 speaker 列表, 可能柿榴那边删了 · 重选一个声音" },
+  { match: /avatar.*not.*found|avatar_id.*invalid|数字人.*不存在|形象.*不存在/i,
+    icon: "👤", title: "数字人 avatar_id 找不到",
+    suggestion: "去 ⚙️ 设置 看下当前 avatar 列表, 可能柿榴那边删了 · 重选一个数字人" },
+  { match: /sidecar.*未就绪|cosyvoice.*not.*ready|503/i,
+    icon: "🛠️", title: "CosyVoice sidecar 没起",
+    suggestion: "终端跑 bash scripts/start_cosyvoice.sh 启动 sidecar" },
+  // ─── 其他原有 patterns ───────────────────────────────────
   { match: /模板不存在|模板.*不存在|template.*not.*found/i,
     icon: "📦", title: "模板不见了",
     suggestion: "回 Step 3 换一个模板, 或选朴素模式直接出片" },
@@ -188,9 +205,9 @@ const ERROR_PATTERNS = [
   { match: /缺.*prompt|没法生图.*prompt/i,
     icon: "✏️", title: "B-roll prompt 是空的",
     suggestion: "在场景卡里填一行 prompt (≥ 5 字) 再点生图" },
-  { match: /柿榴|qingdou|cosyvoice/i,
-    icon: "🛠️", title: "外部服务异常",
-    suggestion: "去 ⚙️ 设置 看一下 health, 大概率服务/key 配置问题" },
+  { match: /柿榴|qingdou/i,
+    icon: "🛠️", title: "柿榴异常",
+    suggestion: "看下面原始 message · 如果是网络/超时, 等 10s 重试 · 否则去柿榴 Web 后台看账号状态" },
   { match: /HTTP 5\d\d|server error|internal/i,
     icon: "💥", title: "服务器内部错误",
     suggestion: "后端崩了一下, 等 10s 重试 · 重复出现去看 server log" },
@@ -201,13 +218,13 @@ const ERROR_PATTERNS = [
 
 function humanizeError(rawMsg) {
   const msg = String(rawMsg || "").trim();
-  if (!msg) return { icon: "⚠️", title: "未知错误", suggestion: "", raw: msg };
+  if (!msg) return { icon: "⚠️", title: "未知错误", suggestion: "", raw: msg, matched: false };
   for (const p of ERROR_PATTERNS) {
     if (p.match.test(msg)) {
-      return { icon: p.icon, title: p.title, suggestion: p.suggestion, raw: msg };
+      return { icon: p.icon, title: p.title, suggestion: p.suggestion, raw: msg, matched: true };
     }
   }
-  return { icon: "⚠️", title: "出错了", suggestion: "看下面 message 找线索 · 大多重试一次能过", raw: msg };
+  return { icon: "⚠️", title: "出错了 (没匹配到已知模式)", suggestion: "下面是原始 message · 大多重试一次能过", raw: msg, matched: false };
 }
 
 function ErrorBanner({ err, actions }) {
@@ -225,9 +242,18 @@ function ErrorBanner({ err, actions }) {
           {h.suggestion && (
             <div style={{ fontSize: 12, color: T.red, marginTop: 2, opacity: 0.85 }}>{h.suggestion}</div>
           )}
-          <details style={{ marginTop: 6 }}>
-            <summary style={{ fontSize: 10.5, color: T.red, cursor: "pointer", opacity: 0.7 }}>看原始错误</summary>
-            <pre style={{ fontSize: 10, fontFamily: "SF Mono, monospace", color: T.red, whiteSpace: "pre-wrap", margin: "4px 0 0", lineHeight: 1.5, opacity: 0.7 }}>{h.raw}</pre>
+          {/* D-062ii (清华哥反馈): 没匹配 pattern → 原始 msg 默认展开 (用户能直接看到内容);
+                                  匹配了 → 仍折叠 (友好 title 已够用) */}
+          <details style={{ marginTop: 6 }} open={!h.matched}>
+            <summary style={{ fontSize: 10.5, color: T.red, cursor: "pointer", opacity: 0.7 }}>
+              {h.matched ? "看原始错误" : "原始错误 (默认展开):"}
+            </summary>
+            <pre style={{
+              fontSize: 11, fontFamily: "SF Mono, monospace", color: T.red,
+              whiteSpace: "pre-wrap", margin: "4px 0 0", lineHeight: 1.5,
+              opacity: 0.85, padding: "6px 8px", background: "#fff", borderRadius: 4,
+              border: `1px solid ${T.red}22`, maxHeight: 180, overflow: "auto",
+            }}>{h.raw}</pre>
           </details>
         </div>
         {actions && actions.length > 0 && (
