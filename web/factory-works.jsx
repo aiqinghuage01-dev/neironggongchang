@@ -107,7 +107,16 @@ function PageWorks({ onNav }) {
       </div>
 
       {picked && <WorkDrawer work={picked} onClose={() => setPicked(null)} onDel={() => delOne(picked.id)} onRemake={() => {
-        window.__materialHandoff = { original_text: picked.original_text, title: picked.title };
+        // D-062-AUDIT-2-todo1: 统一到 localStorage seed
+        try {
+          const seed = picked.original_text || picked.title || "";
+          if (seed) {
+            localStorage.setItem("make_v2_seed_script", seed);
+            localStorage.setItem("make_v2_seed_from", JSON.stringify({
+              skill: "rework", title: `重制: ${(picked.title || "").slice(0, 24)}`, ts: Date.now(),
+            }));
+          }
+        } catch (_) {}
         onNav("make");
       }} />}
 

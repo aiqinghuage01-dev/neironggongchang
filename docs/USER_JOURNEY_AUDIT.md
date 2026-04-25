@@ -218,9 +218,11 @@
         line 82-83 onUse 之前只 onNav("make"), 用户辛苦挑的热点/选题完全丢失
         现已修: 写 make_v2_seed_script + skill: "hot-topic" / "topic"
         加 MAKE_V2_SKILL_NAMES 映射, banner 显 "🔥 热点库 / 💡 选题库 来"
-      - **D-062-AUDIT-2-todo1** ViralTab onUse 用 window.__materialHandoff
-        与新的 localStorage seed 机制不统一 — 双轨 state 后期会乱
-        建议: 下一拍统一改成 localStorage make_v2_seed_*, 删 window.__materialHandoff
+      - **D-062-AUDIT-2-todo1** ✅ ViralTab + Works WorkDrawer onRemake 统一到 seed
+        删 window.__materialHandoff 双轨 (验证: 全 codebase grep 无 reader, 安全)
+        viral 用 m.original_text 作 seed; works 重制用 picked.original_text
+        skill 标 "viral" / "rework", MAKE_V2_SKILL_NAMES 加映射
+        banner 显 "🔥 爆款素材 / ♻️ 重做作品 来"
       - **D-062-AUDIT-2-todo2** PageMakeV2 Step 1 hot_topics 列表点 "用这条 →"
         line 174 写的是 hardcoded 模板, 而非走 hot-topic seed 机制
         现状能工作 (因为本就在 PageMakeV2 内), 但语义不一致

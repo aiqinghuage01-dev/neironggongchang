@@ -75,7 +75,16 @@ function PageMaterials({ onNav }) {
         <div style={{ maxWidth: 1100, margin: "0 auto" }}>
           {tab === "viral" && (
             <ViralTab loading={loading} list={materials} onUse={(m) => {
-              window.__materialHandoff = m;
+              // D-062-AUDIT-2-todo1: 统一到 localStorage seed (替代旧 window.__materialHandoff)
+              try {
+                const seed = m.original_text || m.title || "";
+                if (seed) {
+                  localStorage.setItem("make_v2_seed_script", seed);
+                  localStorage.setItem("make_v2_seed_from", JSON.stringify({
+                    skill: "viral", title: (m.title || "").slice(0, 30), ts: Date.now(),
+                  }));
+                }
+              } catch (_) {}
               onNav("make");
             }} onDel={delMaterial} onReload={loadAll} />
           )}

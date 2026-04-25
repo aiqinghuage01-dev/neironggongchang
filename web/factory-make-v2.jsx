@@ -164,6 +164,8 @@ const MAKE_V2_SKILL_NAMES = {
   wechat: "📄 公众号", moments: "📱 朋友圈", planner: "📋 内容策划",
   // D-062-AUDIT-2: 素材库直跳来源 (heat / topic)
   "hot-topic": "🔥 热点库", topic: "💡 选题库",
+  // D-062-AUDIT-2-todo1: viral 素材直跳 + works 重制
+  viral: "🔥 爆款素材", rework: "♻️ 重做作品",
 };
 
 function MakeV2StepScript({ script, setScript, onNext, onNav, seedFrom, onDismissSeed }) {
