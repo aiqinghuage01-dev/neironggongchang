@@ -12,6 +12,7 @@ const NAV_MAIN = [
   { id: "moments", icon: "📱", label: "朋友圈" },
   { id: "hotrewrite", icon: "🔥", label: "热点改写" },
   { id: "voicerewrite", icon: "🎙️", label: "录音改写" },
+  { id: "baokuan", icon: "✍️", label: "爆款改写" },
   { id: "planner", icon: "🗓️", label: "内容策划" },
   { id: "compliance", icon: "🛡️", label: "违规审查" },
   { id: "dreamina", icon: "🎨", label: "即梦 AIGC" },
@@ -53,7 +54,7 @@ function Sidebar({ active, onNav }) {
     // D-062-AUDIT-6-todo1: 监听 api-call event, OK POST 后延后刷
     const handler = (e) => {
       const info = e.detail || {};
-      if (info.ok && info.method === "POST" && info.path && /\/api\/(touliu|wechat|moments|hotrewrite|voicerewrite|planner|compliance|dreamina|cover|video)\b/.test(info.path)) {
+      if (info.ok && info.method === "POST" && info.path && /\/api\/(touliu|wechat|moments|hotrewrite|voicerewrite|baokuan|planner|compliance|dreamina|cover|video)\b/.test(info.path)) {
         setTimeout(refresh, 1500);
       }
     };

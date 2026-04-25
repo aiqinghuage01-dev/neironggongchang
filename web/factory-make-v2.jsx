@@ -164,6 +164,7 @@ const MAKE_V2_SCRIPT_SKILLS = [
 const MAKE_V2_SKILL_NAMES = {
   hotrewrite: "🔥 热点改写", voicerewrite: "🎙️ 录音改写", ad: "💰 投流文案",
   wechat: "📄 公众号", moments: "📱 朋友圈", planner: "📋 内容策划",
+  baokuan: "✍️ 爆款改写",
   // D-062-AUDIT-2: 素材库直跳来源 (heat / topic)
   "hot-topic": "🔥 热点库", topic: "💡 选题库",
   // D-062-AUDIT-2-todo1: viral 素材直跳 + works 重制
@@ -273,14 +274,18 @@ function MakeV2StepScript({ script, setScript, onNext, onNav, seedFrom, onDismis
   }, [showRewritePopover]);
 
   function rewriteVia(skill) {
-    // 三种 skill 改写: 录音改写 (轻量重排) / 爆款改写 (待接入, 暂走 voicerewrite) / 热点改写 (按角度)
+    // 三种 skill 改写: 录音改写 (轻量重排) / 爆款改写 (洗别人爆款) / 热点改写 (按新角度)
     setShowRewritePopover(false);
     try {
-      if (skill === "voicerewrite" || skill === "baokuan") {
-        // baokuan backend 还没接, 先用 voicerewrite 兜底 (都是改写性质)
+      if (skill === "voicerewrite") {
         localStorage.setItem("voicerewrite_seed_transcript", trimmed);
         setFromMake("voicerewrite");
         onNav("voicerewrite");
+      } else if (skill === "baokuan") {
+        // D-063: 真接入爆款改写 (~/Desktop/skills/爆款改写-学员版/SKILL.md)
+        localStorage.setItem("baokuan_seed_text", trimmed);
+        setFromMake("baokuan");
+        onNav("baokuan");
       } else if (skill === "hotrewrite") {
         // 把当前文案当 hotspot 喂给 hotrewrite (按新角度重写)
         localStorage.setItem("hotrewrite_seed_hotspot", trimmed);
@@ -446,7 +451,7 @@ function MakeV2StepScript({ script, setScript, onNext, onNav, seedFrom, onDismis
                     </div>
                     {[
                       { id: "voicerewrite", icon: "🎙️", title: "录音改写", desc: "轻量重排, 删口头禅, 黄金三秒", recommend: true },
-                      { id: "baokuan", icon: "✍️", title: "爆款改写", desc: "换说法 + 去重, 适合洗别人爆款", note: "暂走录音改写 (backend 待接)" },
+                      { id: "baokuan", icon: "✍️", title: "爆款改写", desc: "换说法 + 去重, 适合洗别人爆款" },
                       { id: "hotrewrite", icon: "🔥", title: "热点改写", desc: "把这段当题材, 按新角度重写 (1800+ 字)" },
                     ].map(s => (
                       <div key={s.id} onClick={() => rewriteVia(s.id)}

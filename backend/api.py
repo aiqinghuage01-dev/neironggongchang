@@ -75,6 +75,7 @@ from backend.services import wechat_pipeline
 from backend.services import wechat_scripts
 from backend.services import hotrewrite_pipeline
 from backend.services import voicerewrite_pipeline
+from backend.services import baokuan_pipeline
 from backend.services import touliu_pipeline
 from backend.services import registered_skills
 from backend.services import dreamina_service
@@ -1880,6 +1881,51 @@ class VoicerewriteWriteReq(BaseModel):
 def voicerewrite_write(req: VoicerewriteWriteReq):
     """走 opus, 改写 + 自检一次出. 保留口播感, 修语序去口头禅, 不删核心观点."""
     return voicerewrite_pipeline.write_script(req.transcript, req.skeleton, req.angle)
+
+
+# ═══════════════════════════════════════════════════════════════════
+# 爆款改写 skill 接入 (D-063)
+# Skill 源: ~/Desktop/skills/爆款改写-学员版/SKILL.md
+# 2 步: analyze (爆款基因 3 句话) → rewrite (按模式 pure/business/all 出 V1-V4)
+# ═══════════════════════════════════════════════════════════════════
+
+BAOKUAN_SKILL_SLUG = "爆款改写-学员版"
+
+
+@app.get("/api/baokuan/skill-info", tags=["爆款改写"], summary="skill 元信息")
+def baokuan_skill_info():
+    try:
+        return skill_loader.skill_info(BAOKUAN_SKILL_SLUG)
+    except skill_loader.SkillNotFound as e:
+        raise HTTPException(404, str(e))
+
+
+class BaokuanAnalyzeReq(BaseModel):
+    text: str = Field(..., description="原爆款文案 (整段贴进来)")
+
+
+@app.post("/api/baokuan/analyze", tags=["爆款改写"], summary="Step 1 爆款基因分析 (3 句话)")
+def baokuan_analyze(req: BaokuanAnalyzeReq):
+    """走 deepseek 5-7s. 输出 dna: why_hot / emotion_hook / structure 各一句话."""
+    return baokuan_pipeline.analyze_baokuan(req.text)
+
+
+class BaokuanRewriteReq(BaseModel):
+    text: str = Field(..., description="原爆款文案")
+    mode: str = Field("pure", description="模式: pure (V1+V2 纯改写) / business (V3+V4 业务钩子) / all (4 版全出)")
+    industry: str = Field("", description="行业 (业务/全都要时必填, 例 '餐饮老板')")
+    target_action: str = Field("", description="转化动作 (业务/全都要时必填, 例 '加微信' '到店')")
+    dna: dict[str, Any] = Field(default_factory=dict, description="Step 1 输出的爆款基因 (可选, 传了改写更准)")
+
+
+@app.post("/api/baokuan/rewrite", tags=["爆款改写"], summary="Step 2 按模式改写出 N 版 (V1/V2/V3/V4)")
+def baokuan_rewrite(req: BaokuanRewriteReq):
+    """走 opus 一次出 N 版. SKILL.md 严禁项硬约束: 前 5 秒不动 / 不超原文 30% / 无 AI 味."""
+    return baokuan_pipeline.rewrite(
+        text=req.text, mode=req.mode,
+        industry=req.industry, target_action=req.target_action,
+        dna=req.dna,
+    )
 
 
 # ═══════════════════════════════════════════════════════════════════

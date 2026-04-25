@@ -162,6 +162,9 @@ DEFAULT_ENGINE_ROUTES = {
     # 录音文案改写 skill (D-013)
     "voicerewrite.analyze":  "deepseek",  # 提骨架 + 2 角度
     "voicerewrite.write":    "opus",      # 改写 + 自检一次性出,opus 质量稳
+    # 爆款改写 skill (D-063)
+    "baokuan.analyze":       "deepseek",  # 爆款基因 3 句话, 短 JSON
+    "baokuan.rewrite":       "opus",      # 多版改写 (V1-V4), 质量优先
     # touliu-agent skill (D-014) 替换旧 ad.generate
     "touliu.generate":       "opus",      # 10 条 × 400-650 字,一次性大批量,opus 稳
     # 短视频 / 改写

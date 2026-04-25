@@ -48,6 +48,16 @@ REGISTERED_SKILLS: list[dict[str, Any]] = [
         "has_scripts": False,
     },
     {
+        "slug": "爆款改写-学员版",
+        "api_prefix": "baokuan",
+        "page_id": "baokuan",
+        "icon": "✍️",
+        "label": "爆款改写",
+        "subtitle": "别人的爆款 → 自己能用的版本 · 纯改写或加业务钩子",
+        "steps": 2,
+        "has_scripts": False,
+    },
+    {
         "slug": "touliu-agent",
         "api_prefix": "touliu",   # /api/touliu/* · pipeline = touliu_pipeline · jsx = factory-touliu-v2
         "page_id": "ad",          # sidebar 沿用旧"投流文案"入口
