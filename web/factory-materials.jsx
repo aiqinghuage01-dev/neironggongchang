@@ -380,10 +380,42 @@ function TopicTab({ list, onReload, onDel, onUse }) {
       )}
 
       {list.length === 0 ? (
-        <div style={{ textAlign: "center", padding: 60, color: T.muted }}>
-          <div style={{ fontSize: 44, marginBottom: 12 }}>💡</div>
-          <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 6, color: T.text }}>选题库为空</div>
-          <div style={{ fontSize: 13 }}>手动加 或 让小华批量生 · 做视频时从这挑一条直接开干</div>
+        // D-062j: 空状态从静态文字 → 内嵌 AI 飞轮 CTA
+        <div style={{ maxWidth: 560, margin: "32px auto", padding: 24, background: "#fff", border: `1px solid ${T.brand}55`, borderRadius: 12, textAlign: "center" }}>
+          <div style={{ fontSize: 44, marginBottom: 8 }}>💡</div>
+          <div style={{ fontSize: 16, fontWeight: 600, color: T.text, marginBottom: 6 }}>选题库为空</div>
+          <div style={{ fontSize: 12.5, color: T.muted, marginBottom: 16, lineHeight: 1.6 }}>
+            告诉小华一个方向, 直接出 5 条选题入库 · 后面做视频从这挑一条开干
+          </div>
+          <input
+            value={genSeed}
+            onChange={e => setGenSeed(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter" && genSeed.trim() && !gening) {
+              setGening(true);
+              api.post("/api/topics/generate", { seed: genSeed.trim(), n: 5, deep: getDeep() })
+                .then(() => { setGenSeed(""); onReload(); })
+                .catch(err => alert(err.message))
+                .finally(() => setGening(false));
+            }}}
+            placeholder="例: 围绕私域复购 / AI 时代中年老板 / 我的业务护城河..."
+            style={{ width: "100%", border: `1px solid ${T.borderSoft}`, borderRadius: 8, padding: "10px 14px", fontSize: 13, fontFamily: "inherit", outline: "none", marginBottom: 10 }}
+          />
+          <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
+            <Btn size="sm" variant="primary" disabled={gening || !genSeed.trim()}
+              onClick={() => {
+                setGening(true);
+                api.post("/api/topics/generate", { seed: genSeed.trim(), n: 5, deep: getDeep() })
+                  .then(() => { setGenSeed(""); onReload(); })
+                  .catch(err => alert(err.message))
+                  .finally(() => setGening(false));
+              }}>
+              {gening ? "AI 生成中..." : "✨ 让小华生 5 条"}
+            </Btn>
+            <Btn size="sm" onClick={() => setAdding(true)}>＋ 手动加</Btn>
+          </div>
+          <div style={{ fontSize: 10.5, color: T.muted2, marginTop: 12 }}>
+            (默认 5 条, 想要 10 条用上面的 ✨ 批量生成 10 条)
+          </div>
         </div>
       ) : (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 10 }}>

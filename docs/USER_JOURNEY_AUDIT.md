@@ -167,7 +167,10 @@
       调用链: seed-defaults → list-jobs 找 凌晨抓热点 → PATCH enabled=true 或 POST /run
       "立即抓"轮询 30 × 3s 看 runs status, 成功调 onTopics 回调刷新
       接入: PageMakeV2 Step 1 + PageMaterials HotTab 两处空状态
-- [ ] **D-062j** topics 空时加"AI 生 5 条"按钮(已有 /api/topics/generate)
+- [x] **D-062j** topics 空时加"AI 生 5 条"按钮(已有 /api/topics/generate)
+      PageMaterials TopicTab list.length === 0 分支重写
+      内嵌 input + "✨ 让小华生 5 条" 主按钮 (默认 n=5, 区别于顶部"批量 10 条")
+      Enter 键也能触发 · 默认 placeholder 给 3 个示例方向引导
 - [ ] **D-062k** works 空时加"现在做第一条"按钮
 - [ ] **D-062l** 各 skill empty state 统一加"启动飞轮"组件 (D-062i 已抽好, 后续按需接)
 
