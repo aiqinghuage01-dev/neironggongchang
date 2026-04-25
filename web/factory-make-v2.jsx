@@ -208,32 +208,218 @@ function ScriptSkillCard({ skill, onClick }) {
   );
 }
 
-// ─── Step 2 声音 + 数字人 (D-061d 接通) ──────────────────────
+// ─── Step 2 声音 + 数字人 (D-061d) ───────────────────────────
+// 业务上"造数字人"是一件事: 选声音 + 选数字人 + 一键 /api/video/submit
+// 默认用上次 (从 localStorage 拉, 用户体验是 "用上次的: X 声音 + Y 形象 [换]")
+const MAKE_V2_LAST_KEY = "make_v2_last";
+
 function MakeV2StepVoiceDh({ voiceId, setVoiceId, avatarId, setAvatarId, dhVideoPath, setDhVideoPath, script, onPrev, onNext }) {
+  const [speakers, setSpeakers] = React.useState(null);
+  const [avatars, setAvatars] = React.useState(null);
+  const [submitting, setSubmitting] = React.useState(false);
+  const [taskInfo, setTaskInfo] = React.useState(null);  // {video_id, work_id} after submit
+  const [pollStatus, setPollStatus] = React.useState(null);
+  const [localErr, setLocalErr] = React.useState("");
+  const [showPickers, setShowPickers] = React.useState(false);
+
+  // 加载 speakers + avatars + 上次默认
+  React.useEffect(() => {
+    api.get("/api/speakers").then(setSpeakers).catch(() => setSpeakers([]));
+    api.get("/api/avatars").then(setAvatars).catch(() => setAvatars([]));
+
+    if (!voiceId && !avatarId) {
+      try {
+        const last = JSON.parse(localStorage.getItem(MAKE_V2_LAST_KEY) || "{}");
+        if (last.voiceId) setVoiceId(last.voiceId);
+        if (last.avatarId) setAvatarId(last.avatarId);
+      } catch (_) {}
+    }
+  }, []);
+
+  function rememberDefault() {
+    try {
+      localStorage.setItem(MAKE_V2_LAST_KEY, JSON.stringify({ voiceId, avatarId }));
+    } catch (_) {}
+  }
+
+  async function startGenerate() {
+    setLocalErr("");
+    if (!script.trim()) { setLocalErr("文案空了, 回 Step 1 填"); return; }
+    if (!voiceId) { setLocalErr("先选一个声音"); return; }
+    if (!avatarId) { setLocalErr("先选一个数字人形象"); return; }
+
+    setSubmitting(true);
+    try {
+      const r = await api.post("/api/video/submit", {
+        text: script,
+        speaker_id: voiceId,
+        avatar_id: avatarId,
+        title: script.slice(0, 24),
+      });
+      setTaskInfo(r);
+      rememberDefault();
+    } catch (e) {
+      setLocalErr(e.message || "提交失败");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  // 轮询合成进度
+  React.useEffect(() => {
+    if (!taskInfo?.video_id) return;
+    let stop = false;
+    async function poll() {
+      try {
+        const r = await api.get(`/api/video/query/${taskInfo.video_id}`);
+        if (stop) return;
+        setPollStatus(r);
+        if (r.status === "ok" || r.status === "done" || r.local_path || r.local_url) {
+          // 完成: 拿 local_path
+          if (r.local_path) {
+            setDhVideoPath(r.local_path);
+          } else if (taskInfo.work_id) {
+            // 通过 work_id 拿绝对路径
+            const wlp = await api.get(`/api/works/${taskInfo.work_id}/local-path`);
+            if (wlp.local_path) setDhVideoPath(wlp.local_path);
+          }
+        } else {
+          setTimeout(poll, 5000);  // 每 5s 轮询
+        }
+      } catch (e) {
+        if (!stop) setLocalErr(e.message);
+      }
+    }
+    poll();
+    return () => { stop = true; };
+  }, [taskInfo]);
+
+  const speaker = speakers?.find(s => s.speaker_id === voiceId);
+  const avatar = avatars?.find(a => a.avatar_id === avatarId);
+  const ready = !!speaker && !!avatar;
+  const generating = !!taskInfo && !dhVideoPath;
+  const done = !!dhVideoPath;
+
   return (
-    <div style={{ background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 12, padding: 20 }}>
-      <div style={{ fontSize: 16, fontWeight: 600, color: T.text, marginBottom: 6 }}>2. 声音 + 数字人</div>
-      <div style={{ fontSize: 12, color: T.muted, marginBottom: 16 }}>
-        默认用上次 · 业务上"造数字人"是一件事 · D-061d 接通
+    <div>
+      {/* 默认快捷区 */}
+      <div style={{ marginBottom: 16, padding: 16, background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 12 }}>
+        <div style={{ fontSize: 14, fontWeight: 600, color: T.text, marginBottom: 10 }}>2. 声音 + 数字人</div>
+        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+          <div style={{ flex: 1, minWidth: 200, padding: "10px 14px", background: T.bg2, borderRadius: 8, fontSize: 13 }}>
+            🎙️ 声音: <b>{speaker ? speaker.title || `#${voiceId}` : "(未选)"}</b>
+          </div>
+          <div style={{ flex: 1, minWidth: 200, padding: "10px 14px", background: T.bg2, borderRadius: 8, fontSize: 13 }}>
+            👤 数字人: <b>{avatar ? avatar.title || `#${avatarId}` : "(未选)"}</b>
+          </div>
+          <Btn size="sm" variant="outline" onClick={() => setShowPickers(!showPickers)}>
+            {showPickers ? "× 收起" : (ready ? "🔄 换" : "📋 选")}
+          </Btn>
+        </div>
+        <div style={{ marginTop: 8, fontSize: 11, color: T.muted2 }}>
+          下次默认用这套 (localStorage 记住) · 不满意点"换"
+        </div>
       </div>
 
-      <div style={{ padding: 20, background: T.bg2, borderRadius: 8, textAlign: "center", color: T.muted2, fontSize: 13 }}>
-        🚧 D-061d 接通: 左侧 voice 选/克隆 · 右侧 avatar 选 · "用上次"快捷 · 调 /api/video/submit 出 mp4
+      {/* 选择 picker (展开时显) */}
+      {showPickers && (
+        <div style={{ marginBottom: 16, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <PickerColumn title="🎙️ 声音 (CosyVoice)" loading={!speakers}
+            items={speakers?.map(s => ({ id: s.speaker_id, label: s.title || `#${s.speaker_id}` })) || []}
+            selectedId={voiceId} onSelect={setVoiceId}
+            emptyTip="还没有克隆声音 · 去 ⚙️ 设置 上传样本克隆" />
+          <PickerColumn title="👤 数字人 (柿榴)" loading={!avatars}
+            items={avatars?.map(a => ({ id: a.avatar_id, label: a.title || `#${a.avatar_id}` })) || []}
+            selectedId={avatarId} onSelect={setAvatarId}
+            emptyTip="柿榴还没数字人 · 去柿榴后台先创建" />
+        </div>
+      )}
+
+      {/* 合成结果区 */}
+      <div style={{ background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 12, padding: 16 }}>
+        {done ? (
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+              <span style={{ fontSize: 18 }}>✅</span>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 13, fontWeight: 600 }}>数字人 mp4 已生成</div>
+                <div style={{ fontSize: 10.5, color: T.muted2, fontFamily: "SF Mono, monospace", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  {dhVideoPath}
+                </div>
+              </div>
+            </div>
+            <button onClick={() => { setTaskInfo(null); setDhVideoPath(""); setPollStatus(null); }}
+              style={{ background: "transparent", border: "none", color: T.muted, cursor: "pointer", fontSize: 11, fontFamily: "inherit", textDecoration: "underline" }}>
+              重新生成
+            </button>
+          </div>
+        ) : generating ? (
+          <div style={{ textAlign: "center", padding: 16 }}>
+            <div style={{ fontSize: 26, marginBottom: 8 }}>⚙️</div>
+            <div style={{ fontSize: 13, fontWeight: 600 }}>柿榴合成中…</div>
+            <div style={{ fontSize: 11, color: T.muted, marginTop: 4 }}>
+              video_id={taskInfo.video_id} · work_id={taskInfo.work_id}
+              {pollStatus && pollStatus.status && ` · status=${pollStatus.status}`}
+            </div>
+            <div style={{ fontSize: 10.5, color: T.muted2, marginTop: 6 }}>通常 30-90s 完成 · 完成后自动进下一步</div>
+          </div>
+        ) : (
+          <Btn variant="primary" size="lg" onClick={startGenerate} disabled={!ready || submitting}
+            style={{ width: "100%" }}>
+            {submitting ? "提交中…" : ready ? "▶ 一键造数字人 (柿榴异步)" : "↑ 先选声音 + 数字人"}
+          </Btn>
+        )}
+
+        {/* 过渡占位: 跳过合成直接填 mp4 路径 */}
+        {!done && !generating && (
+          <details style={{ marginTop: 14 }}>
+            <summary style={{ fontSize: 11, color: T.muted2, cursor: "pointer" }}>· · · 或者跳过合成, 直接填现成 mp4 路径</summary>
+            <input value={dhVideoPath} onChange={e => setDhVideoPath(e.target.value)}
+              placeholder="/Users/.../works/xxx.mp4 (柿榴出过的)"
+              style={{ marginTop: 6, width: "100%", padding: "8px 10px", border: `1px solid ${T.border}`, borderRadius: 6, fontSize: 12, fontFamily: "SF Mono, monospace", outline: "none", background: "#fff" }} />
+          </details>
+        )}
       </div>
 
-      <div style={{ marginTop: 14, padding: 12, background: T.bg2, borderRadius: 6 }}>
-        <div style={{ fontSize: 11, color: T.muted, marginBottom: 6 }}>过渡占位: 直接粘贴现成数字人 mp4 路径</div>
-        <input value={dhVideoPath} onChange={e => setDhVideoPath(e.target.value)}
-          placeholder="/Users/.../works/xxx.mp4"
-          style={{ width: "100%", padding: "8px 10px", border: `1px solid ${T.border}`, borderRadius: 6, fontSize: 12, fontFamily: "SF Mono, monospace", outline: "none", background: "#fff" }} />
-      </div>
+      {localErr && <div style={{ marginTop: 10, padding: 10, background: T.redSoft, color: T.red, borderRadius: 6, fontSize: 12 }}>⚠️ {localErr}</div>}
 
       <div style={{ marginTop: 18, display: "flex", gap: 10, justifyContent: "space-between" }}>
         <Btn variant="outline" onClick={onPrev}>← 改文案</Btn>
         <Btn variant="primary" onClick={onNext} disabled={!dhVideoPath.trim()}>
-          {dhVideoPath.trim() ? "下一步: 选模板 →" : "↑ 先填 mp4 路径"}
+          {dhVideoPath.trim() ? "下一步: 选模板 →" : "↑ 等数字人完成"}
         </Btn>
       </div>
+    </div>
+  );
+}
+
+function PickerColumn({ title, items, selectedId, onSelect, loading, emptyTip }) {
+  return (
+    <div style={{ background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 10, padding: 12 }}>
+      <div style={{ fontSize: 12.5, fontWeight: 600, color: T.text, marginBottom: 8 }}>{title}</div>
+      {loading ? (
+        <div style={{ fontSize: 11, color: T.muted2, textAlign: "center", padding: 16 }}>加载中…</div>
+      ) : items.length === 0 ? (
+        <div style={{ fontSize: 11, color: T.muted2, padding: 12 }}>{emptyTip}</div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: 240, overflow: "auto" }}>
+          {items.map(it => {
+            const on = it.id === selectedId;
+            return (
+              <div key={it.id} onClick={() => onSelect(it.id)}
+                style={{
+                  padding: "6px 10px", borderRadius: 6, cursor: "pointer", fontSize: 12,
+                  background: on ? T.brandSoft : "transparent",
+                  color: on ? T.brand : T.text,
+                  fontWeight: on ? 600 : 500,
+                  display: "flex", alignItems: "center", gap: 6,
+                }}>
+                {on ? "✓" : "○"} <span>{it.label}</span> <span style={{ color: T.muted2, fontFamily: "SF Mono, monospace", fontSize: 10 }}>#{it.id}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
