@@ -246,17 +246,20 @@ function VStepInput({ transcript, setTranscript, onGo, loading, skillInfo }) {
         await new Promise(s => setTimeout(s, 5000));
         try {
           const q = await api.get(`/api/transcribe/query/${batchId}`);
-          if (q.status === "success" && q.text) {
+          // 后端返回 "succeed" (qingdou Status Literal), 不是 "success"
+          const okStatus = ["succeed", "success", "done", "ok"].includes(q.status);
+          if (okStatus && q.text) {
             setTranscript(q.text);
             setUrl("");
             setTranscribeMsg(`✓ ${q.title || "转写完成"} · ${q.text.length} 字 · 已填进下面 textarea`);
+            setTranscribing(false);
             return;
           }
           if (q.status === "failed") {
             setTranscribeMsg(`转写失败: ${q.error || "(无 detail)"}`);
             return;
           }
-          setTranscribeMsg(`等转写... ${q.status} (${i * 5}s)`);
+          setTranscribeMsg(`等转写... ${q.status} (${(i + 1) * 5}s)`);
         } catch (_) {}
       }
       setTranscribeMsg("等了 5 分钟还没出 · 短视频较长? 去 ⚙️ 设置看 transcribe 历史");

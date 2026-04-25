@@ -240,16 +240,19 @@ function MakeV2StepScript({ script, setScript, onNext, onNav, seedFrom, onDismis
         await new Promise(s => setTimeout(s, 5000));
         try {
           const q = await api.get(`/api/transcribe/query/${batchId}`);
-          if (q.status === "success" && q.text) {
+          // 后端返回的是 "succeed" (Status Literal), 不是 "success" — 兼容多种写法
+          const okStatus = ["succeed", "success", "done", "ok"].includes(q.status);
+          if (okStatus && q.text) {
             setScript(q.text);
             setExtractMsg(`✓ 提取了 ${q.text.length} 字 · ${q.title || ""} · 改完点"做数字人"`);
+            setExtracting(false);
             return;
           }
           if (q.status === "failed") {
             setExtractMsg(`提取失败: ${q.error || "(无 detail)"}`);
             return;
           }
-          setExtractMsg(`等转写... ${q.status} (已 ${i * 5}s)`);
+          setExtractMsg(`等转写... ${q.status} (已 ${(i + 1) * 5}s)`);
         } catch (_) {}
       }
       setExtractMsg("等了 5 分钟还没出, 换个链接或去 ⚙️ 设置看 transcribe");
@@ -428,17 +431,47 @@ function MakeV2StepScript({ script, setScript, onNext, onNav, seedFrom, onDismis
             <span style={{ fontSize: 17, fontWeight: 700, color: T.text }}>
               🔥 今天最值得拍的 {Math.min(3, hotTopics.length)} 个
             </span>
+            {/* 数量 < 3 时, 提示去抓更多 (清华哥定的 3 个方案) */}
+            {hotTopics.length < 3 && (
+              <span style={{ fontSize: 11, color: T.amber, padding: "1px 8px", background: T.amberSoft, borderRadius: 100 }}>
+                还差 {3 - hotTopics.length} 条
+              </span>
+            )}
             <div style={{ flex: 1 }} />
-            {hotTopics.length > 3 && (
+            {hotTopics.length >= 3 ? (
               <button onClick={() => onNav("materials")}
                 style={{ background: "transparent", border: "none", color: T.muted2, cursor: "pointer", fontSize: 11.5, fontFamily: "inherit" }}>
                 全部 ({hotTopics.length}) →
+              </button>
+            ) : (
+              <button onClick={() => onNav("nightshift")}
+                style={{ background: "transparent", border: "none", color: T.brand, cursor: "pointer", fontSize: 11.5, fontFamily: "inherit", fontWeight: 500 }}>
+                🌙 启用夜班抓更多 →
               </button>
             )}
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             {hotTopics.slice(0, 3).map((t, idx) => (
               <HotPickCard key={t.id} t={t} idx={idx} onTake={() => takeThisHot(t)} onSeed={() => pickHotTopic(t)} />
+            ))}
+            {/* 占位卡 (告诉用户还有几个空位) */}
+            {hotTopics.length < 3 && Array.from({ length: 3 - hotTopics.length }).map((_, i) => (
+              <div key={`empty-${i}`} style={{
+                padding: "16px 20px", borderRadius: 12,
+                border: `1px dashed ${T.border}`,
+                display: "flex", alignItems: "center", gap: 12,
+                background: T.bg2, opacity: 0.7,
+              }}>
+                <span style={{
+                  minWidth: 26, height: 26, borderRadius: 6,
+                  background: "#fff", color: T.muted2, fontSize: 13, fontWeight: 700,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  border: `1px dashed ${T.muted3}`, flexShrink: 0,
+                }}>{hotTopics.length + i + 1}</span>
+                <span style={{ flex: 1, fontSize: 13, color: T.muted2 }}>
+                  这条空着 · <span style={{ color: T.brand, cursor: "pointer", fontWeight: 500 }} onClick={() => onNav("materials")}>📥 去 维护一条</span> · 或 <span style={{ color: T.brand, cursor: "pointer", fontWeight: 500 }} onClick={() => onNav("nightshift")}>🌙 启用夜班自动抓</span>
+                </span>
+              </div>
             ))}
           </div>
         </div>
