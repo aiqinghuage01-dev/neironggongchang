@@ -21,7 +21,7 @@
 | # | Page | Status | Stage | Last Tick | 备注 |
 |---|---|---|---|---|---|
 | 1 | make-step1 | done | commit | tick 1 | step1-mockup-v2.html 已审过 + 直接实施 + 8 项自审 PASS |
-| 2 | make-step2-3-4 | pending | — | — | 选数字人 / 配音 / 渲染 |
+| 2 | make-step2-3-4 | in_progress | survey | tick 2 | survey done · 4 个 step 痛点都是文案/错误态/技术词暴露, 非 UI 大改 |
 | 3 | home | pending | — | — | 总部看板 |
 | 4 | baokuan | pending | — | — | D-063 刚接, 顺手优化 |
 | 5 | hotrewrite | pending | — | — | |
@@ -42,11 +42,12 @@
 
 ## 当前 in_progress
 
-(空 — 下个 tick 拉 task #2 make-step2-3-4)
+- **task #2 make-step2-3-4-5** · stage `survey` done → 下 tick 进 `plan`
 
 ## 历史 tick 日志
 
 - tick 1 · 2026-04-25 23:55 · task#1 make-step1 · 直接 implement (mockup 已审过) · 8 项自审 PASS · +201 行
+- tick 2 · 2026-04-25 23:55 · task#2 make-step2-3-4-5 · survey · 4 step 痛点是文案/错误态/技术词暴露 (非 UI 大改)
 
 ---
 
