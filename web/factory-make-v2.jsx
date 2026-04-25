@@ -125,44 +125,59 @@ function MakeV2Header({ current, onJump }) {
   );
 }
 
-// ─── Step 1 文案 (D-061c 接通 N 个大按钮) ────────────────────
+// ─── Step 1 文案 — N 个大按钮文案板块 (D-061c) ─────────────
+// 用户拍板: "公众号 / 朋友圈本质都是文案的一部分", Step 1 是大板块,
+// N 个并列大按钮, 每个按钮 = 一个文案 skill.
+const MAKE_V2_SCRIPT_SKILLS = [
+  { id: "hotrewrite",   icon: "🔥", title: "热点改写", desc: "把今日热点改成你视角的口播 · 钩子+反差+金句" },
+  { id: "voicerewrite", icon: "🎙️", title: "录音改写", desc: "录音 → 转写 → 改写成口播 (修语序去口头禅)" },
+  { id: "ad",           icon: "💰", title: "投流文案", desc: "一个卖点 → 5-10 版投流 (痛/对/步/话/创)" },
+  { id: "wechat",       icon: "📄", title: "公众号长文", desc: "方法论长文 (回来后摘金句段做视频)" },
+  { id: "moments",      icon: "📱", title: "朋友圈短句", desc: "金句库衍生 N 条 · 适合做超短视频" },
+  { id: "planner",      icon: "📋", title: "内容策划", desc: "活动策划 → 策划完去录直播 → 录音改写" },
+];
+
 function MakeV2StepScript({ script, setScript, onNext, onNav }) {
   return (
-    <div style={{ background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 12, padding: 20 }}>
-      <div style={{ fontSize: 16, fontWeight: 600, color: T.text, marginBottom: 6 }}>1. 文案</div>
-      <div style={{ fontSize: 12, color: T.muted, marginBottom: 16 }}>
-        粘贴现成文案 / 用 AI 帮你写 / 走专门 skill (D-061c 接通)
-      </div>
-      <textarea
-        value={script}
-        onChange={e => setScript(e.target.value)}
-        placeholder="粘贴一段口播文案 (中文)... · 也可以用下面的快捷按钮调专门 skill 写"
-        rows={10}
-        style={{
-          width: "100%", padding: 14, border: `1px solid ${T.borderSoft}`, borderRadius: 8,
-          fontSize: 13, fontFamily: "inherit", outline: "none", resize: "vertical", lineHeight: 1.7,
-        }} />
-      <div style={{ marginTop: 6, fontSize: 11, color: T.muted2 }}>
-        {script.length} 字 · 中文口播 ~3.5 字/秒 · 估计 {Math.round(script.length / 3.5)} 秒
-      </div>
-
-      <div style={{ marginTop: 18, padding: 14, background: T.bg2, borderRadius: 8 }}>
-        <div style={{ fontSize: 11.5, color: T.muted, marginBottom: 10 }}>📋 D-061c 后这里会变成 N 个大按钮: 投流 / 朋友圈 / 公众号 / 录音 / 热点 / 人设 / AI 写</div>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-          {[
-            { id: "ad", label: "💰 投流" },
-            { id: "moments", label: "📱 朋友圈" },
-            { id: "wechat", label: "📄 公众号" },
-            { id: "voicerewrite", label: "🎙️ 录音" },
-            { id: "hotrewrite", label: "🔥 热点" },
-          ].map(s => (
-            <button key={s.id} onClick={() => onNav(s.id)}
-              style={{
-                padding: "5px 12px", fontSize: 11.5, borderRadius: 100, border: `1px solid ${T.borderSoft}`,
-                background: "#fff", color: T.muted, cursor: "pointer", fontFamily: "inherit",
-              }}>{s.label}</button>
+    <div>
+      {/* 大按钮卡片网格 */}
+      <div style={{ marginBottom: 18 }}>
+        <div style={{ fontSize: 16, fontWeight: 600, color: T.text, marginBottom: 6 }}>1. 文案 — 你想从哪写起?</div>
+        <div style={{ fontSize: 12, color: T.muted, marginBottom: 14 }}>
+          每个按钮跳一个专门 skill · 写完返回这里粘贴成片用 (返回锚机制 D-061h 做)
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 10 }}>
+          {MAKE_V2_SCRIPT_SKILLS.map(s => (
+            <ScriptSkillCard key={s.id} skill={s} onClick={() => onNav(s.id)} />
           ))}
         </div>
+      </div>
+
+      {/* 文案输入区 */}
+      <div style={{ background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 12, padding: 20 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+          <div style={{ fontSize: 14, fontWeight: 600, color: T.text }}>📝 写好了, 粘贴在这里</div>
+          <Tag size="xs" color="gray">{script.length} 字</Tag>
+          {script.length > 0 && (
+            <Tag size="xs" color="blue">~{Math.round(script.length / 3.5)} 秒口播</Tag>
+          )}
+          <div style={{ flex: 1 }} />
+          {script && (
+            <button onClick={() => setScript("")} title="清空"
+              style={{ background: "transparent", border: "none", color: T.muted2, cursor: "pointer", fontSize: 12, fontFamily: "inherit" }}>
+              清空
+            </button>
+          )}
+        </div>
+        <textarea
+          value={script}
+          onChange={e => setScript(e.target.value)}
+          placeholder="粘贴一段口播文案 (中文)... · 或者点上面的大按钮去专门 skill 写完再粘贴回来"
+          rows={10}
+          style={{
+            width: "100%", padding: 14, border: `1px solid ${T.borderSoft}`, borderRadius: 8,
+            fontSize: 13, fontFamily: "inherit", outline: "none", resize: "vertical", lineHeight: 1.7,
+          }} />
       </div>
 
       <div style={{ marginTop: 18, display: "flex", gap: 10, justifyContent: "flex-end" }}>
@@ -170,6 +185,25 @@ function MakeV2StepScript({ script, setScript, onNext, onNav }) {
           {script.trim() ? "下一步: 声音 + 数字人 →" : "↑ 先填文案"}
         </Btn>
       </div>
+    </div>
+  );
+}
+
+function ScriptSkillCard({ skill, onClick }) {
+  return (
+    <div onClick={onClick} style={{
+      padding: 14, background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 10,
+      cursor: "pointer", transition: "all 0.1s",
+    }}
+      onMouseEnter={e => { e.currentTarget.style.borderColor = T.brand; e.currentTarget.style.boxShadow = `0 0 0 3px ${T.brandSoft}`; }}
+      onMouseLeave={e => { e.currentTarget.style.borderColor = T.borderSoft; e.currentTarget.style.boxShadow = "none"; }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+        <span style={{ fontSize: 22 }}>{skill.icon}</span>
+        <span style={{ fontSize: 14, fontWeight: 600, color: T.text }}>{skill.title}</span>
+        <div style={{ flex: 1 }} />
+        <span style={{ fontSize: 11, color: T.brand }}>→</span>
+      </div>
+      <div style={{ fontSize: 11.5, color: T.muted, lineHeight: 1.5 }}>{skill.desc}</div>
     </div>
   );
 }
