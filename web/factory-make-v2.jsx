@@ -1101,8 +1101,9 @@ function PlatformRow({ p, sent, marks, toggle, title, desc, copy }) {
       <span style={{ fontSize: 16 }}>{p.emoji}</span>
       <span style={{ fontSize: 12.5, fontWeight: 600, color: T.text, minWidth: 50 }}>{p.plat}</span>
       <span style={{ fontSize: 10.5, color: T.muted2, flex: 1, minWidth: 140 }}>{p.hint}</span>
-      <Btn size="sm" variant={copied ? "soft" : "outline"} onClick={copyFmt} disabled={!title}>
-        {copied ? "✓ 已复制" : "📋 复制平台版"}
+      <Btn size="sm" variant={copied ? "soft" : "outline"} onClick={copyFmt} disabled={!title}
+        title={!title ? "Step 1 还没填文案 · 没法生成平台版" : `复制 ${p.plat} 优化格式`}>
+        {copied ? "✓ 已复制" : (!title ? "↑ 先填文案" : "📋 复制平台版")}
       </Btn>
       <Btn size="sm" variant={sent ? "soft" : "primary"} onClick={() => toggle(p.plat)}>
         {sent ? `✓ 已发 ${new Date(marks[p.plat]).toLocaleTimeString().slice(0, 5)}` : "标记已发"}

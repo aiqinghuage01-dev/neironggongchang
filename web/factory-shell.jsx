@@ -37,7 +37,9 @@ function NavGroupLabel({ text, expanded }) {
 function Sidebar({ active, onNav }) {
   const [hover, setHover] = React.useState(false);
   const w = hover ? 164 : 60;
-  // D-062dd: 各 skill "今日产出" 计数 (拉一次 + 5 min 刷一次)
+  // D-062dd: 各 skill "今日产出" 计数 (拉一次 + 5 min 刷一次 + api 调用后立刻刷)
+  // D-062-AUDIT-6-todo1: 加 api-call event listener, OK 的 POST 调用后 1.5s 延后刷
+  // (1.5s 等 ai_calls 落库, 避免拉到旧值)
   const [counts, setCounts] = React.useState({});
   React.useEffect(() => {
     function refresh() {
@@ -47,7 +49,16 @@ function Sidebar({ active, onNav }) {
     }
     refresh();
     const t = setInterval(refresh, 5 * 60 * 1000);
-    return () => clearInterval(t);
+
+    // D-062-AUDIT-6-todo1: 监听 api-call event, OK POST 后延后刷
+    const handler = (e) => {
+      const info = e.detail || {};
+      if (info.ok && info.method === "POST" && info.path && /\/api\/(touliu|wechat|moments|hotrewrite|voicerewrite|planner|compliance|dreamina|cover|video)\b/.test(info.path)) {
+        setTimeout(refresh, 1500);
+      }
+    };
+    window.addEventListener("api-call", handler);
+    return () => { clearInterval(t); window.removeEventListener("api-call", handler); };
   }, []);
 
   return (

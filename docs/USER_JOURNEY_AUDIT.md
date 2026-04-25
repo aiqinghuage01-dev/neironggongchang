@@ -265,6 +265,29 @@
           - 展开 (164px): 右侧 brandSoft 圆角徽章显数字
         title 提示 "X · 今日 N 次"
 
+- [x] **D-062-AUDIT-6** 2026-04-25 15:15 复盘 (D-062gg/hh 后第六拍)
+      新发现的真 bug + 1 todo:
+      - **D-062-AUDIT-6-bug1** dhv5 render success 不入 works DB
+        backend/api.py /api/dhv5/render 只返 task_id, 未调 create_work
+        后果: PageWorks 看不见用 Step 4 渲染出的视频
+              PublishMatrix worksByPath join 失败 (graceful degrade 显 "无 work 关联")
+        Fix: dhv5_pipeline.render_async 完成回调里加 create_work + update_work(status="ready", local_path=output_path)
+        TODO 单开 commit (需要看 work schema + dhv5 task 完成 hook)
+      - **D-062-AUDIT-6-todo1** ✅ sidebar count 加 api-call event 监听
+        Sidebar useEffect 加 window.addEventListener("api-call", handler)
+        OK 的 POST + path 匹配 /api/(touliu|wechat|moments|hotrewrite|...)
+        → setTimeout(refresh, 1500) (等 ai_calls 落库, 1.5s)
+        cleanup: removeEventListener
+        效果: 用户跑完投流, sidebar 投流入口的 count 1.5s 后立即 +1
+      - **D-062-AUDIT-6-todo2** Step 4 SceneRow 没看
+        用户进 Step 4 → 点对齐 → 看 N 个 SceneRow → 该展开/编辑啥不清楚
+        建议: SceneRow 默认折叠, 显场景类型 + 字幕/大字 摘要; 点开才能编辑
+        (需要看 Dhv5SceneRow 现状)
+      - **D-062-AUDIT-6-todo3** ✅ PublishPanel 复制按钮 disabled 加解释
+        title 为空时按钮: "📋 复制平台版" → "↑ 先填文案"
+        加 title 属性: "Step 1 还没填文案 · 没法生成平台版"
+        Hover 鼠标看 native tooltip
+
 - [x] **D-062-AUDIT-5** 2026-04-25 15:00 复盘 (清华哥真人反馈触发)
       清华哥发截图: PageMakeV2 Step 2 交互被批 "很奇怪, 应该清晰展示有那些, 默认勾选哪个"
       当前: PickerColumn 默认收起 (showPickers=false), 只在"默认快捷区"显已选, 用户得点"换"才看其他
