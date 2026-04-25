@@ -8,6 +8,36 @@ const VOICE_STEPS = [
   { id: "write",    n: 3, label: "正文+改写说明" },
 ];
 
+// C5: 改写模式 checkbox 卡 (与 hotrewrite ModeCheckCard 同款; 复制独立, 文件不依赖 hotrewrite)
+function VModeCheckCard({ on, onClick, disabled, title, desc, recommend }) {
+  return (
+    <label onClick={onClick} style={{
+      padding: "12px 14px", borderRadius: 8,
+      cursor: disabled ? "not-allowed" : "pointer",
+      background: on ? "#fff" : "transparent",
+      border: `1.5px solid ${on ? T.brand : T.muted3}`,
+      display: "flex", alignItems: "flex-start", gap: 10,
+      opacity: disabled ? 0.85 : 1,
+    }}>
+      <div style={{
+        width: 18, height: 18, borderRadius: 4,
+        border: `1.5px solid ${on ? T.brand : T.muted2}`,
+        background: on ? T.brand : "transparent", flexShrink: 0, marginTop: 1,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        color: "#fff", fontSize: 12, fontWeight: 700,
+      }}>{on && "✓"}</div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 13.5, fontWeight: 600, color: T.text }}>{title}</span>
+          {recommend && <Tag size="xs" color="green">推荐</Tag>}
+          <Tag size="xs" color="brand">+2 篇</Tag>
+        </div>
+        <div style={{ fontSize: 11.5, color: T.muted, lineHeight: 1.5 }}>{desc}</div>
+      </div>
+    </label>
+  );
+}
+
 function PageVoicerewrite({ onNav }) {
   const fm = useFromMake("voicerewrite");  // D-062x
   const [step, setStep] = React.useState("input");
@@ -18,6 +48,13 @@ function PageVoicerewrite({ onNav }) {
   const [analyze, setAnalyze] = React.useState(null);
   const [pickedAngle, setPickedAngle] = React.useState(null);
   const [script, setScript] = React.useState(null);
+
+  // C5: 改写模式 checkbox (默认 ☑ 业务) + 多版累积 (跟 hotrewrite C3-C4 同款)
+  const [withBiz, setWithBiz] = React.useState(true);
+  const [pureRewrite, setPureRewrite] = React.useState(false);
+  const [versions, setVersions] = React.useState([]);
+  const [activeVersionIdx, setActiveVersionIdx] = React.useState(0);
+  const [appendingVersion, setAppendingVersion] = React.useState(false);
 
   const [skillInfo, setSkillInfo] = React.useState(null);
   React.useEffect(() => { api.get("/api/voicerewrite/skill-info").then(setSkillInfo).catch(() => {}); }, []);
@@ -53,24 +90,55 @@ function PageVoicerewrite({ onNav }) {
       },
     });
   }
+  // C5: 抽 callWrite 复用, 加 modes 字段 (backend 暂未读, 不破坏 schema)
+  async function callWrite(angle, modeLabel) {
+    const r = await api.post("/api/voicerewrite/write", {
+      transcript: transcript.trim(),
+      skeleton: analyze?.skeleton || {},
+      angle,
+      modes: { with_biz: withBiz, pure_rewrite: pureRewrite },
+    });
+    return { ...r, angle, mode_label: modeLabel, ts: Date.now() };
+  }
   function pickAngle(angle) {
     setPickedAngle(angle);
+    setVersions([]);
     return runStep({
       nextStep: "write", rollbackStep: "angles", clearSetter: setScript,
       apiCall: async () => {
-        const r = await api.post("/api/voicerewrite/write", {
-          transcript: transcript.trim(),
-          skeleton: analyze?.skeleton || {},
-          angle,
-        });
-        setScript(r);
+        const modeLabel = withBiz ? (pureRewrite ? "结合业务+纯改写" : "结合业务") : "纯改写";
+        const v = await callWrite(angle, modeLabel);
+        setScript(v);
+        setVersions([v]);
+        setActiveVersionIdx(0);
       },
     });
+  }
+  // C5: 同/换角度再写一版 (复用 hotrewrite C4 的 versions[] 模式)
+  async function addAnotherVersion(sameAngle = true, newAngle = null) {
+    const angle = sameAngle ? pickedAngle : newAngle;
+    if (!angle) return;
+    if (!sameAngle) setPickedAngle(newAngle);
+    setAppendingVersion(true); setErr("");
+    try {
+      const modeLabel = withBiz ? (pureRewrite ? "结合业务+纯改写" : "结合业务") : "纯改写";
+      const v = await callWrite(angle, modeLabel + (sameAngle ? " · 再来一版" : " · 换角度"));
+      const nv = [...versions, v];
+      setVersions(nv);
+      setActiveVersionIdx(nv.length - 1);
+      setScript(v);
+    } catch (e) { setErr(e.message); }
+    finally { setAppendingVersion(false); }
+  }
+  function switchVersion(idx) {
+    setActiveVersionIdx(idx);
+    setScript(versions[idx]);
   }
   function reset() {
     setStep("input"); setErr("");
     setTranscript(""); setAnalyze(null);
     setPickedAngle(null); setScript(null);
+    setVersions([]); setActiveVersionIdx(0);
     clearWorkflow("voicerewrite");
   }
 
@@ -102,8 +170,15 @@ function PageVoicerewrite({ onNav }) {
           </div>
         )}
         {step === "input"  && <VStepInput transcript={transcript} setTranscript={setTranscript} onGo={doAnalyze} loading={loading} skillInfo={skillInfo} />}
-        {step === "angles" && <VStepAngles analyze={analyze} loading={loading} onPick={pickAngle} onPrev={() => setStep("input")} onRegen={doAnalyze} />}
-        {step === "write"  && <VStepWrite script={script} angle={pickedAngle} loading={loading} onPrev={() => setStep("angles")} onRewrite={() => pickAngle(pickedAngle)} onReset={reset} onNav={onNav} />}
+        {step === "angles" && <VStepAngles analyze={analyze} loading={loading} onPick={pickAngle} onPrev={() => setStep("input")} onRegen={doAnalyze}
+          withBiz={withBiz} setWithBiz={setWithBiz} pureRewrite={pureRewrite} setPureRewrite={setPureRewrite} />}
+        {step === "write"  && <VStepWrite script={script} angle={pickedAngle} loading={loading} onPrev={() => setStep("angles")} onRewrite={() => pickAngle(pickedAngle)} onReset={reset} onNav={onNav}
+          versions={versions} activeVersionIdx={activeVersionIdx} onSwitchVersion={switchVersion}
+          allAngles={analyze?.angles || []}
+          onAddSameAngle={() => addAnotherVersion(true)}
+          onAddOtherAngle={(a) => addAnotherVersion(false, a)}
+          appendingVersion={appendingVersion}
+        />}
       </div>
     </div>
   );
@@ -248,7 +323,7 @@ function VStepInput({ transcript, setTranscript, onGo, loading, skillInfo }) {
   );
 }
 
-function VStepAngles({ analyze, loading, onPick, onPrev, onRegen }) {
+function VStepAngles({ analyze, loading, onPick, onPrev, onRegen, withBiz, setWithBiz, pureRewrite, setPureRewrite }) {
   const [hoverIdx, setHoverIdx] = React.useState(-1);
   if (loading || !analyze) return <Spinning icon="🔍" phases={[
     { text: "完整读录音", sub: "标 5 类信息:观点/经历/洞察/弱信息/语气锚点" },
@@ -258,11 +333,15 @@ function VStepAngles({ analyze, loading, onPick, onPrev, onRegen }) {
   ]} />;
   const sk = analyze.skeleton || {};
   const angles = analyze.angles || [];
+  // C5: checkbox 模式 (跟 hotrewrite C3 一致, 至少保留 1 个)
+  function toggleBiz() { if (withBiz && !pureRewrite) return; setWithBiz(!withBiz); }
+  function togglePure() { if (pureRewrite && !withBiz) return; setPureRewrite(!pureRewrite); }
+  const totalCount = (withBiz ? 2 : 0) + (pureRewrite ? 2 : 0);
   return (
     <div style={{ padding: "32px 40px 120px", maxWidth: 820, margin: "0 auto" }}>
       <div style={{ marginBottom: 16 }}>
         <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 6 }}>骨架提完 · 挑一个切入角度 🎯</div>
-        <div style={{ fontSize: 13, color: T.muted }}>skill 只给最多 2 个角度(不罗列),选完直接写一条完整文案。</div>
+        <div style={{ fontSize: 13, color: T.muted }}>选 1 个角度, 小华按勾选的模式各写 2 篇.</div>
       </div>
 
       <div style={{ padding: 16, background: T.bg2, border: `1px solid ${T.borderSoft}`, borderRadius: 12, marginBottom: 16 }}>
@@ -281,6 +360,25 @@ function VStepAngles({ analyze, loading, onPick, onPrev, onRegen }) {
           {sk.weak_to_delete?.length > 0 && (
             <div style={{ color: T.muted2, fontSize: 11.5, marginTop: 8 }}>🗑️ 计划删除: {sk.weak_to_delete.join(" / ")}</div>
           )}
+        </div>
+      </div>
+
+      {/* C5: 改写模式 checkbox 卡 (默认 ☑ 业务) */}
+      <div style={{ marginBottom: 16, padding: 14, background: T.brandSoft, borderRadius: 10, border: `1px solid ${T.brand}33` }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+          <span style={{ fontSize: 13, fontWeight: 600, color: T.text }}>改写模式</span>
+          <span style={{ fontSize: 11, color: T.muted }}>· 多选 · 每勾一项加 2 篇</span>
+          <div style={{ flex: 1 }} />
+          <span style={{ fontSize: 12, fontWeight: 700, color: T.brand, padding: "3px 12px", background: "#fff", borderRadius: 100 }}>本次会出 {totalCount} 篇</span>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          <VModeCheckCard on={withBiz} onClick={toggleBiz} disabled={withBiz && !pureRewrite}
+            title="结合业务" recommend desc="保留你原话观点 + 自然引到业务 · 适合做内容获客" />
+          <VModeCheckCard on={pureRewrite} onClick={togglePure} disabled={pureRewrite && !withBiz}
+            title="纯改写" desc="只去口头禅 + 修语序 + 强黄金三秒 · 不带业务" />
+        </div>
+        <div style={{ marginTop: 8, fontSize: 10.5, color: T.muted2, lineHeight: 1.5 }}>
+          💡 默认勾"结合业务"出 2 篇 · 都勾出 4 篇对比 · 至少保留 1 个
         </div>
       </div>
 
@@ -318,7 +416,8 @@ function VStepAngles({ analyze, loading, onPick, onPrev, onRegen }) {
   );
 }
 
-function VStepWrite({ script, angle, loading, onPrev, onRewrite, onReset, onNav }) {
+function VStepWrite({ script, angle, loading, onPrev, onRewrite, onReset, onNav,
+  versions, activeVersionIdx, onSwitchVersion, allAngles, onAddSameAngle, onAddOtherAngle, appendingVersion }) {
   if (loading || !script) return <Spinning icon="✍️" phases={[
     { text: "按你选的角度写黄金三秒", sub: "10-35 字 · 反差/结果/态度句" },
     { text: "轻量重排叙事", sub: "尊重用户原有叙事线,不强行重排" },
@@ -327,6 +426,9 @@ function VStepWrite({ script, angle, loading, onPrev, onRewrite, onReset, onNav 
     { text: "写改写说明", sub: "3-6 条 · 保留了什么 / 删了什么 / 为什么" },
     { text: "7 条自检清单", sub: "观点对齐 / 经历完整 / 真诚感 / 口吻 / 黄金三秒 / 不过删 / 深度" },
   ]} />;
+  // C5: 多版 + 切角度 popover (跟 hotrewrite C4 一致)
+  const [showAngleSwitch, setShowAngleSwitch] = React.useState(false);
+  const otherAngles = (allAngles || []).filter(a => a?.label !== angle?.label);
 
   const sc = script.self_check || {};
   const checks = [
@@ -349,11 +451,32 @@ function VStepWrite({ script, angle, loading, onPrev, onRewrite, onReset, onNav 
 
   return (
     <div style={{ padding: "32px 40px 120px", maxWidth: 1080, margin: "0 auto" }}>
+      {/* C5: 多版 tab 切换 (versions.length > 1 时显) */}
+      {versions && versions.length > 1 && (
+        <div style={{ marginBottom: 14, padding: 10, background: T.bg2, borderRadius: 10, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 12, fontWeight: 600, color: T.text }}>📚 共 {versions.length} 版:</span>
+          {versions.map((v, i) => (
+            <button key={i} onClick={() => onSwitchVersion(i)}
+              title={`角度: ${v.angle?.label || ""} · ${new Date(v.ts).toLocaleTimeString().slice(0, 5)}`}
+              style={{
+                padding: "4px 12px", fontSize: 11.5, fontFamily: "inherit",
+                background: i === activeVersionIdx ? T.brand : "#fff",
+                color: i === activeVersionIdx ? "#fff" : T.muted,
+                border: `1px solid ${i === activeVersionIdx ? T.brand : T.borderSoft}`,
+                borderRadius: 100, cursor: "pointer", fontWeight: i === activeVersionIdx ? 600 : 500,
+              }}>
+              第 {i + 1} 版 · {v.mode_label}
+            </button>
+          ))}
+        </div>
+      )}
+
       <div style={{ marginBottom: 16, display: "flex", alignItems: "flex-start", gap: 16 }}>
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 6 }}>改写完成 · {script.word_count} 字 🎙️</div>
           <div style={{ fontSize: 12, color: T.muted }}>
             角度: <b style={{ color: T.text }}>{angle?.label}</b> · {script.tokens?.total || "?"} tokens
+            {script.mode_label && <> · 模式: <b style={{ color: T.text }}>{script.mode_label}</b></>}
           </div>
         </div>
         <div style={{ padding: 12, background: sc.overall_pass ? T.brandSoft : T.redSoft, border: `1px solid ${sc.overall_pass ? T.brand + "44" : T.red + "44"}`, borderRadius: 10, fontSize: 12, color: sc.overall_pass ? T.brand : T.red, minWidth: 240 }}>
@@ -386,9 +509,34 @@ function VStepWrite({ script, angle, loading, onPrev, onRewrite, onReset, onNav 
         ))}
       </div>
 
-      <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-        <Btn variant="outline" onClick={onPrev}>← 换角度</Btn>
-        <Btn onClick={onRewrite}>🔄 同角度再来一版</Btn>
+      {/* C5: 操作行 — 多版累积 + 切角度 */}
+      <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", position: "relative" }}>
+        <Btn variant="outline" onClick={onPrev}>← 改角度选择</Btn>
+        <Btn onClick={onAddSameAngle || onRewrite} disabled={appendingVersion}>
+          {appendingVersion ? "AI 写中..." : "🔄 再来一版 (同角度)"}
+        </Btn>
+        {otherAngles.length > 0 && (
+          <div style={{ position: "relative" }}>
+            <Btn onClick={() => setShowAngleSwitch(!showAngleSwitch)} disabled={appendingVersion}>🎯 换角度再写 ▾</Btn>
+            {showAngleSwitch && (
+              <div style={{
+                position: "absolute", top: "100%", left: 0, marginTop: 6,
+                background: "#fff", border: `1px solid ${T.border}`, borderRadius: 10,
+                boxShadow: "0 8px 24px rgba(0,0,0,0.12)", padding: 8, zIndex: 10, minWidth: 280,
+              }}>
+                {otherAngles.map((a, i) => (
+                  <div key={i} onClick={() => { setShowAngleSwitch(false); onAddOtherAngle && onAddOtherAngle(a); }} style={{
+                    padding: "8px 10px", borderRadius: 6, cursor: "pointer", fontSize: 12.5, color: T.text, lineHeight: 1.5,
+                  }}
+                    onMouseEnter={e => { e.currentTarget.style.background = T.brandSoft; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}>
+                    <b>{a.label}</b> · <span style={{ color: T.muted }}>{a.why}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
         <div style={{ flex: 1 }} />
         <Btn onClick={copy} variant={copied ? "soft" : "default"}>{copied ? "✓ 已复制" : "📋 复制文案"}</Btn>
         <Btn onClick={onReset}>再来一条录音</Btn>
