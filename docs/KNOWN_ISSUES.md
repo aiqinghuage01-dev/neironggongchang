@@ -38,10 +38,8 @@
 **前端**: NightJobEditor 选 "监听目录" 时已经显示 ⚠️ "watchdog 还没接 · 当前不会真触发".
 **接入条件**: 加 watchdog pip 依赖 + night_scheduler.start_file_watcher() · 等 one-fish-many-meals skill 真要用时一起做.
 
-### 5. NightShiftPage delete 用浏览器原生 confirm()
-**位置**: web/factory-night-v2.jsx PageNightShift.delJob().
-**改进点**: 换成项目内对话框组件, 视觉一致.
-**优先级**: P3 polish.
+<!-- ✅ 已修 D-058: NightShiftPage delete 换非阻塞对话框 (NightDeleteConfirm 组件) -->
+~~### 5. NightShiftPage delete 用浏览器原生 confirm()~~ (D-058 已修)
 
 ---
 

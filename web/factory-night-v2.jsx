@@ -159,12 +159,22 @@ function PageNightShift({ onNav }) {
     } catch (e) { setErr(e.message); }
   }
 
-  async function delJob(job) {
-    if (!confirm(`确认删任务「${job.name}」?\n关联的运行历史也会一起清掉.`)) return;
+  // D-058: 删除走非阻塞模态 (取代浏览器原生 confirm)
+  const [deleteTarget, setDeleteTarget] = React.useState(null);
+  const [deletingId, setDeletingId] = React.useState(null);
+  function delJob(job) { setDeleteTarget(job); }
+  async function confirmDelete() {
+    if (!deleteTarget) return;
+    setDeletingId(deleteTarget.id);
     try {
-      await api.del(`/api/night/jobs/${job.id}`);
+      await api.del(`/api/night/jobs/${deleteTarget.id}`);
+      setDeleteTarget(null);
       refresh();
-    } catch (e) { setErr(e.message); }
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setDeletingId(null);
+    }
   }
 
   const enabledCronJobs = jobs.filter(j => j.enabled && j.trigger_type === "cron");
@@ -327,6 +337,13 @@ function PageNightShift({ onNav }) {
       </div>
 
       {editing && <NightJobEditor job={editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); refresh(); }} />}
+      {deleteTarget && (
+        <NightDeleteConfirm
+          job={deleteTarget}
+          onCancel={() => setDeleteTarget(null)}
+          onConfirm={confirmDelete}
+          deleting={deletingId === deleteTarget.id} />
+      )}
     </div>
   );
 }
@@ -382,6 +399,64 @@ function NightJobCard({ job, runs, onToggle, onRun, onEdit, onDelete }) {
     </div>
   );
 }
+
+// ─── D-058: 删除确认非阻塞模态 ─────────────────────────────
+// 取代浏览器原生 confirm() · iOS 风视觉对齐 NightJobEditor
+function NightDeleteConfirm({ job, onCancel, onConfirm, deleting }) {
+  return (
+    <div onClick={onCancel} style={{
+      position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 200,
+      display: "flex", alignItems: "center", justifyContent: "center", padding: 20,
+    }}>
+      <div onClick={e => e.stopPropagation()} style={{
+        width: 440, maxWidth: "100%",
+        background: "#fff", borderRadius: 14, padding: 24,
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14 }}>
+          <div style={{ fontSize: 30 }}>{job.icon || "🌙"}</div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 16, fontWeight: 700, color: T.text }}>
+              确认删除「{job.name}」?
+            </div>
+            <div style={{ fontSize: 11.5, color: T.muted, marginTop: 3 }}>
+              关联的运行历史会一起清掉, 不可恢复
+            </div>
+          </div>
+        </div>
+
+        <div style={{
+          padding: "10px 12px", marginBottom: 14, borderRadius: 8, fontSize: 12,
+          background: T.bg2, color: T.muted, fontFamily: "SF Mono, Menlo, monospace",
+        }}>
+          <div>id: {job.id}</div>
+          {job.skill_slug && <div>skill_slug: {job.skill_slug}</div>}
+          {job.trigger_type && <div>trigger_type: {job.trigger_type}</div>}
+          {job.enabled === false && <div style={{ color: T.muted2 }}>(当前已禁用)</div>}
+        </div>
+
+        <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+          <button onClick={onCancel} disabled={deleting}
+            style={{
+              padding: "10px 18px", borderRadius: 100, fontSize: 13, cursor: deleting ? "not-allowed" : "pointer",
+              fontFamily: "inherit", background: "transparent",
+              border: `1px solid ${T.border}`, color: T.muted,
+              opacity: deleting ? 0.5 : 1,
+            }}>取消</button>
+          <button onClick={onConfirm} disabled={deleting}
+            style={{
+              padding: "10px 22px", borderRadius: 100, fontSize: 13,
+              cursor: deleting ? "not-allowed" : "pointer", fontFamily: "inherit",
+              background: T.red, border: "none", color: "#fff", fontWeight: 600,
+              opacity: deleting ? 0.6 : 1,
+            }}>
+            {deleting ? "删除中…" : "删除"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 
 function NightJobEditor({ job, onClose, onSaved }) {
   const isNew = !job.id;
