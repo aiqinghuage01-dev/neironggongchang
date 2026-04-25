@@ -187,7 +187,7 @@ function PageHotrewrite({ onNav }) {
       <div style={{ flex: 1, overflow: "auto" }}>
         <div style={{ maxWidth: 820, margin: "16px auto 0" }}>
           <FromMakeBanner fromMake={fm.fromMake} dismiss={fm.dismiss}
-            label="热点改写完, 点完成态'做成视频' CTA 自动带回" />
+            label="改写完点页底「做成视频」就回到做视频流程, 接着合成" />
         </div>
         <WfRestoreBanner show={wf.hasSnapshot} onDismiss={wf.dismissSnapshot}
           onClear={() => { reset(); wf.dismissSnapshot(); }}
@@ -459,7 +459,7 @@ function HotStepWrite({ script, hotspot, angle, loading, onPrev, onRewrite, onRe
     { text: "30 秒画面还原", sub: "人物 + 动作 + 关键话" },
     { text: "底层机制解释", sub: "易记理论词 / 比喻" },
     { text: "连续反转推进", sub: "每 300-500 字一次「你以为/其实」" },
-    { text: "三条建议 · 第 3 条接业务", sub: "80% 价值 + 20% 业务(低压 CTA)" },
+    { text: "三条建议 · 第 3 条接业务", sub: "80% 价值 + 20% 业务 · 轻引导不硬塞" },
     { text: "金句收口", sub: "可传播结论" },
     { text: "六维自检 · 一票否决", sub: "总 ≥ 105 · 单项 ≥ 16" },
   ]} />;

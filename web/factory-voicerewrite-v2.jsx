@@ -162,7 +162,7 @@ function PageVoicerewrite({ onNav }) {
       <div style={{ flex: 1, overflow: "auto" }}>
         <div style={{ maxWidth: 820, margin: "16px auto 0" }}>
           <FromMakeBanner fromMake={fm.fromMake} dismiss={fm.dismiss}
-            label="录音改写完, 点完成态'做成视频' CTA 自动带回" />
+            label="改写完点页底「做成视频」就回到做视频流程, 接着合成" />
         </div>
         <WfRestoreBanner show={wf.hasSnapshot} onDismiss={wf.dismissSnapshot}
           onClear={() => { reset(); wf.dismissSnapshot(); }}
@@ -309,7 +309,7 @@ function VStepInput({ transcript, setTranscript, onGo, loading, skillInfo }) {
           {len > 0 ? (
             <>
               <Tag size="xs" color="gray">{len} 字</Tag>
-              <span style={{ fontSize: 11, color: T.muted2 }}>· skill 严禁把你的话改成广告</span>
+              <span style={{ fontSize: 11, color: T.muted2 }}>· 不会把你的话改成广告 · 删口头禅, 不改观点</span>
             </>
           ) : (
             <span style={{ fontSize: 12, color: T.muted2 }}>✨ 写完点 "提骨架 + 给切入角度"</span>
