@@ -8,3 +8,4 @@ openai>=1.40
 yt-dlp>=2025.1.0
 ffmpeg-python>=0.2
 requests>=2.32
+apscheduler>=3.10

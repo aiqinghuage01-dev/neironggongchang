@@ -205,6 +205,29 @@ def _run_cover_task(task_id: str, prompt: str, size: str):
         COVER_TASKS[task_id].update(status="failed", error=f"{type(e).__name__}: {e}")
 
 
+# --------- 启动钩子: 小华夜班调度器 (D-040c) ----------
+@app.on_event("startup")
+def _start_night_scheduler():
+    """uvicorn boot 时把 enabled+cron 的夜班任务挂上 APScheduler.
+    pytest 不会触发 startup event, 所以测试不会启动真调度."""
+    try:
+        from backend.services import night_scheduler
+        night_scheduler.start()
+    except Exception as e:
+        # 调度器挂了不应影响 API 启动 — 后台静默
+        import logging
+        logging.getLogger("night.scheduler").error(f"startup failed: {e}")
+
+
+@app.on_event("shutdown")
+def _stop_night_scheduler():
+    try:
+        from backend.services import night_scheduler
+        night_scheduler.shutdown()
+    except Exception:
+        pass
+
+
 # --------- Endpoints ----------
 @app.get("/api/health")
 def health():
@@ -530,20 +553,30 @@ def night_jobs_list(enabled_only: bool = False):
     return {"jobs": night_shift.list_jobs(enabled_only=enabled_only)}
 
 
+def _reload_night_scheduler_silent():
+    try:
+        from backend.services import night_scheduler
+        if night_scheduler.is_running():
+            night_scheduler.reload_jobs()
+    except Exception:
+        pass  # 调度器没起 (测试 / 前期) 时静默
+
+
 @app.post("/api/night/jobs", tags=["小华夜班"], summary="新建任务", status_code=201)
 def night_jobs_create(req: NightJobCreate):
-    """新建一条夜班任务. 立即生效 (D-040c 调度器会在下一次 reload 时把它捞起)."""
+    """新建一条夜班任务. 立即写 DB + reload 调度器 (cron 任务下一次 fire 时间立即生效)."""
     from backend.services import night_shift
     try:
         jid = night_shift.create_job(**req.model_dump(exclude_none=True))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    _reload_night_scheduler_silent()
     return night_shift.get_job(jid)
 
 
 @app.patch("/api/night/jobs/{job_id}", tags=["小华夜班"], summary="改/开关任务")
 def night_jobs_update(job_id: int, req: NightJobUpdate):
-    """部分更新. 改 enabled 即开关任务."""
+    """部分更新. 改 enabled 即开关任务. 调度器自动 reload."""
     from backend.services import night_shift
     fields = req.model_dump(exclude_unset=True)
     if not fields:
@@ -554,16 +587,28 @@ def night_jobs_update(job_id: int, req: NightJobUpdate):
         raise HTTPException(status_code=400, detail=str(e))
     if not ok:
         raise HTTPException(status_code=404, detail="job not found")
+    _reload_night_scheduler_silent()
     return night_shift.get_job(job_id)
 
 
 @app.delete("/api/night/jobs/{job_id}", tags=["小华夜班"], summary="删任务")
 def night_jobs_delete(job_id: int):
-    """删任务 (级联删运行历史)."""
+    """删任务 (级联删运行历史). 调度器自动 reload."""
     from backend.services import night_shift
     if not night_shift.delete_job(job_id):
         raise HTTPException(status_code=404, detail="job not found")
+    _reload_night_scheduler_silent()
     return {"ok": True}
+
+
+@app.get("/api/night/scheduler", tags=["小华夜班"], summary="调度器状态")
+def night_scheduler_status():
+    """调度器是否在跑 + 当前挂了哪些 cron 任务 (含 next_run_time). 调试用."""
+    from backend.services import night_scheduler
+    return {
+        "running": night_scheduler.is_running(),
+        "scheduled": night_scheduler.list_scheduled(),
+    }
 
 
 @app.post("/api/night/jobs/{job_id}/run", tags=["小华夜班"], summary="立即跑一次")

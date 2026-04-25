@@ -279,8 +279,18 @@ P0-P10 所有任务落地, 14 个 commit 从 `09faf92` 到今日末 commit。
       14 个分组 (总部/AI/小华夜班/公众号/...); 新 endpoint 全部带 tags=["小华夜班"] +
       summary 中文一句 + Pydantic Field(description=...). 老 endpoint 增量补.
       tests/test_night_executor.py 6/6.
-- [ ] **D-040c 调度器** APScheduler 接入 cron + watchdog file_watch, 启动钩子,
-      执行器走 D-010 范式 (subprocess 调 ~/Desktop/skills/<slug>/scripts), AI 走 ai.py 关卡层
+- [x] **D-040c 调度器 (cron only, file_watch 推迟)**
+      backend/services/night_scheduler.py · APScheduler BackgroundScheduler 单例,
+      启动时把 enabled+trigger_type=cron 的 job 用 CronTrigger.from_crontab 挂上,
+      fire 时调 night_executor.run_job_async. uvicorn boot 由 @app.on_event("startup")
+      唤起 (pytest 不触发 startup, 测试自动走 reload_jobs API).
+      jobs CRUD endpoint 全部接 _reload_night_scheduler_silent() · 改 enabled/cron
+      表达式立即生效不用重启 backend.
+      新 endpoint GET /api/night/scheduler 看调度器状态 + 当前挂的 job + next_run_time.
+      misfire_grace_time=300 / coalesce / max_instances=1 防 misfire 风暴.
+      file_watch 留 D-040f 接 watchdog (一鱼多吃任务真要时再加, 用户说本地用爽优先).
+      uv add apscheduler>=3.10 (3.11.2 + tzlocal 5.3.1).
+      tests/test_night_scheduler.py 8/8.
 - [ ] **D-040d 总控页 + sidebar 改造**
       sidebar: 首页→总部 / 加 "生产部 / 档案部 / 夜班" 分组 / 加 🌙 小华夜班 入口
       NightShiftPage: 状态条 + 任务卡片 (开关/编辑/立即跑) + 历史日志

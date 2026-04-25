@@ -15,4 +15,5 @@ dependencies = [
     "ffmpeg-python>=0.2",
     "requests>=2.32",
     "pytest>=9.0",
+    "apscheduler>=3.10",
 ]
