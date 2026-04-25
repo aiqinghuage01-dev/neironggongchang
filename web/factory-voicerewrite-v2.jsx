@@ -60,12 +60,15 @@ function PageVoicerewrite({ onNav }) {
   React.useEffect(() => { api.get("/api/voicerewrite/skill-info").then(setSkillInfo).catch(() => {}); }, []);
 
   // D-062mm: 检测 make 那边丢过来的 voicerewrite_seed_transcript, 自动填 textarea
+  // ⚠ 关键: 必须同步删 wf snap, 避免 D-016 useWorkflowPersist 的 restore effect
+  // (注册顺序在我们后面, mount 时跑得晚) 把 transcript 覆盖回老的空值
   React.useEffect(() => {
     try {
       const seed = localStorage.getItem("voicerewrite_seed_transcript");
       if (seed && !transcript) {
         setTranscript(seed);
         localStorage.removeItem("voicerewrite_seed_transcript");
+        localStorage.removeItem("wf:voicerewrite");  // 防 wf restore 覆盖
       }
     } catch (_) {}
     // eslint-disable-next-line react-hooks/exhaustive-deps
