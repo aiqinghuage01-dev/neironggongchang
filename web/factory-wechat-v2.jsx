@@ -440,32 +440,43 @@ function WxHeader({ current, onBack, skillInfo, autoMode, onJump }) {
 function WxStepTopic({ topic, setTopic, onGo, onAuto, loading, skillInfo, skipImages, setSkipImages }) {
   const ready = !!topic.trim() && !loading;
   return (
-    <div style={{ padding: "40px 40px 60px", maxWidth: 720, margin: "0 auto" }}>
-      <div style={{ textAlign: "center", marginBottom: 24 }}>
-        <div style={{ fontSize: 28, fontWeight: 700, color: T.text, marginBottom: 8, letterSpacing: "-0.02em" }}>今天想写什么选题? 📄</div>
-        <div style={{ fontSize: 14, color: T.muted }}>用公众号 skill 的完整 5 Phase · 一路到微信草稿箱</div>
-      </div>
-
-      <div style={{ background: "#fff", border: `1.5px solid ${T.brand}`, boxShadow: `0 0 0 5px ${T.brandSoft}`, borderRadius: 16, padding: 18, marginBottom: 14 }}>
-        <textarea rows={5} value={topic} onChange={e => setTopic(e.target.value)}
-          placeholder="例:AI 时代实体老板的真正护城河 · 或贴一段灵感..."
-          style={{ width: "100%", border: "none", outline: "none", background: "transparent", fontSize: 14.5, fontFamily: "inherit", resize: "none", lineHeight: 1.7, color: T.text }}
-        />
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10, paddingTop: 12, borderTop: `1px solid ${T.borderSoft}` }}>
-          <div style={{ fontSize: 11.5, color: T.muted2 }}>✍️ skill 自带完整人设 + 风格圣经 + 方法论</div>
-          <div style={{ flex: 1 }} />
-          <button onClick={onGo} disabled={!ready} style={{
-            padding: "8px 16px", fontSize: 12.5, fontWeight: 500,
-            background: "transparent", color: ready ? T.muted : T.muted3,
-            border: `1px solid ${ready ? T.border : T.borderSoft}`, borderRadius: 100,
-            cursor: ready ? "pointer" : "not-allowed", fontFamily: "inherit",
-          }}>分步 · 先出标题</button>
+    <div style={{ padding: "32px 40px 80px", maxWidth: 720, margin: "0 auto" }}>
+      {/* C7 hero (跟其他 skill 一致) */}
+      <div style={{ textAlign: "center", margin: "8px 0 24px" }}>
+        <div style={{ fontSize: 30, fontWeight: 700, color: T.text, letterSpacing: "-0.02em", marginBottom: 8 }}>
+          今天想写什么选题? 📄
+        </div>
+        <div style={{ fontSize: 14, color: T.muted, lineHeight: 1.6 }}>
+          一句话讲选题 · 小华出 3 标题 → 大纲 → 2000+ 字长文 → 段间配图 → 微信草稿箱
         </div>
       </div>
 
-      {/* 🚀 全自动入口(P0) - 主推 */}
+      {/* 选题输入大对话框 */}
+      <div style={{ background: "#fff", border: `1.5px solid ${T.brand}`, boxShadow: `0 0 0 5px ${T.brandSoft}`, borderRadius: 16, padding: 18, marginBottom: 16 }}>
+        <textarea rows={5} value={topic} onChange={e => setTopic(e.target.value)}
+          placeholder="例:AI 时代实体老板的真正护城河 · 或直接贴一段灵感..."
+          style={{ width: "100%", padding: 12, border: "none", outline: "none", background: "transparent", fontSize: 14.5, fontFamily: "inherit", resize: "none", lineHeight: 1.7, color: T.text, minHeight: 120 }}
+        />
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 12, paddingTop: 14, borderTop: `1px solid ${T.borderSoft}` }}>
+          {topic.trim() ? (
+            <Tag size="xs" color="gray">{topic.trim().length} 字</Tag>
+          ) : (
+            <span style={{ fontSize: 12, color: T.muted2 }}>✨ 写完点下面 "🚀 全自动" 或 "分步出标题"</span>
+          )}
+          <div style={{ flex: 1 }} />
+          <button onClick={onGo} disabled={!ready} style={{
+            padding: "9px 18px", fontSize: 13, fontWeight: 500,
+            background: "#fff", color: T.muted,
+            border: `1px solid ${T.border}`, borderRadius: 100,
+            cursor: ready ? "pointer" : "not-allowed", fontFamily: "inherit",
+            opacity: ready ? 1 : 0.5,
+          }}>分步 · 先出 3 个标题</button>
+        </div>
+      </div>
+
+      {/* 🚀 全自动 (主推) */}
       <button onClick={onAuto} disabled={!ready} style={{
-        width: "100%", padding: "14px 20px", marginBottom: 14,
+        width: "100%", padding: "16px 22px", marginBottom: 14,
         background: ready ? `linear-gradient(135deg, ${T.brand}, #1f5638)` : T.muted3,
         color: "#fff", border: "none", borderRadius: 14,
         cursor: ready ? "pointer" : "not-allowed", fontFamily: "inherit",
@@ -474,8 +485,8 @@ function WxStepTopic({ topic, setTopic, onGo, onAuto, loading, skillInfo, skipIm
         boxShadow: ready ? `0 4px 16px ${T.brand}44` : "none",
         transition: "all 0.15s",
       }}>
-        <span style={{ fontSize: 20 }}>🚀</span>
-        <span>全自动到封面 — 一路跑到最后一步让你确认推送</span>
+        <span style={{ fontSize: 22 }}>🚀</span>
+        <span>全自动到封面 — 跑到最后让你确认推送</span>
       </button>
 
       <label style={{
@@ -486,18 +497,19 @@ function WxStepTopic({ topic, setTopic, onGo, onAuto, loading, skillInfo, skipIm
       }}>
         <input type="checkbox" checked={skipImages} onChange={e => setSkipImages(e.target.checked)}
           style={{ margin: 0, accentColor: T.brand, cursor: "pointer" }} />
-        <span>跳过段间配图(省 3 分钟 · 但文章无中段插图,推给老板视觉会平)</span>
+        <span>跳过段间配图 (省 3 分钟 · 但文章会缺中段插图)</span>
       </label>
 
       {skillInfo && (
-        <div style={{ padding: 14, background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 10, fontSize: 12, color: T.muted, lineHeight: 1.8 }}>
-          <div style={{ fontWeight: 600, color: T.text, marginBottom: 6 }}>skill 资源(事实源)</div>
-          <div>SKILL.md · {skillInfo.skill_md_chars} 字符</div>
-          {Object.entries(skillInfo.references || {}).map(([k, v]) => (
-            <div key={k}>references/{k}.md · {v} 字符</div>
-          ))}
-          <div style={{ marginTop: 6, color: T.muted2 }}>你在 Obsidian 外的 {skillInfo.root} 改什么,下次调用自动同步。</div>
-        </div>
+        <details style={{ padding: "10px 14px", background: T.bg2, borderRadius: 8, fontSize: 11.5, color: T.muted2, cursor: "pointer" }}>
+          <summary>skill 资源 (开发用 · 默认折叠)</summary>
+          <div style={{ marginTop: 8, lineHeight: 1.6 }}>
+            <div>SKILL.md · {skillInfo.skill_md_chars} 字符</div>
+            {Object.entries(skillInfo.references || {}).map(([k, v]) => (
+              <div key={k}>references/{k}.md · {v} 字符</div>
+            ))}
+          </div>
+        </details>
       )}
     </div>
   );

@@ -122,6 +122,7 @@
 
 - C5 PageVoicerewrite 升级 — checkbox 模式 + 多版累积 + 改写完成态加 tab/再来一版/换角度
 - C6 PageTouliu Step 1 升级 — hero + 大输入框 + ParamRow 抽组件 + skill 资源默认折叠
+- C7 PageWechat WxStepTopic 升级 — hero + 大输入框 + 副标改人话 + skill 资源默认折叠
 
 ## 卡住记录
 
