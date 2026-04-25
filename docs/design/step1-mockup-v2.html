@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>Step 1 v2 — 按内容来源分流 (待清华哥确认)</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; padding: 30px 20px 60px;
+      font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", sans-serif;
+      background: #faf8f4;
+      color: #1f2937;
+    }
+    button:disabled { cursor: not-allowed !important; }
+    textarea:focus { outline: none; }
+    .container { max-width: 760px; margin: 0 auto; }
+  </style>
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js"></script>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const T = {
+      brand: "#2f7a52", brandSoft: "#e6f0eb",
+      text: "#1f2937", muted: "#6b7280", muted2: "#9ca3af", muted3: "#d1d5db",
+      bg: "#faf8f4", bg2: "#f5f1ea", border: "#e7e2d8", borderSoft: "#ece8df",
+      amber: "#b45309", amberSoft: "#fef3c7",
+      red: "#b91c1c", redSoft: "#fee2e2",
+      blue: "#1e40af", blueSoft: "#dbeafe",
+      green: "#166534", greenSoft: "#dcfce7",
+    };
+
+    function Tag({ children, color = "gray", size = "xs" }) {
+      const palette = {
+        green: { bg: T.greenSoft, fg: T.green },
+        blue: { bg: T.blueSoft, fg: T.blue },
+        amber: { bg: T.amberSoft, fg: T.amber },
+        red: { bg: T.redSoft, fg: T.red },
+        gray: { bg: T.bg2, fg: T.muted },
+        brand: { bg: T.brandSoft, fg: T.brand },
+      }[color] || { bg: T.bg2, fg: T.muted };
+      const fz = size === "xs" ? 10.5 : 12;
+      return (
+        <span style={{
+          display: "inline-block", padding: "2px 8px", borderRadius: 100,
+          fontSize: fz, fontWeight: 600,
+          background: palette.bg, color: palette.fg, whiteSpace: "nowrap",
+        }}>{children}</span>
+      );
+    }
+
+    // ────── 按钮样式 ──────
+    const btnPrimary = {
+      padding: "10px 22px", fontSize: 14, fontWeight: 600,
+      background: T.brand, color: "#fff",
+      border: "none", borderRadius: 100,
+      cursor: "pointer", fontFamily: "inherit",
+    };
+    const btnGhost = {
+      padding: "9px 18px", fontSize: 13, fontWeight: 500,
+      background: "#fff", color: T.muted,
+      border: `1px solid ${T.border}`, borderRadius: 100,
+      cursor: "pointer", fontFamily: "inherit",
+    };
+    const btnDisabled = {
+      padding: "10px 24px", fontSize: 14, fontWeight: 600,
+      background: T.muted3, color: "#fff",
+      border: "none", borderRadius: 100,
+      cursor: "not-allowed", fontFamily: "inherit",
+    };
+
+    // ────── 大圆角绿边 hero (textarea 容器, 沿用 D-062ll) ──────
+    const heroBox = {
+      background: "#fff",
+      border: `1.5px solid ${T.brand}`,
+      boxShadow: `0 0 0 5px ${T.brandSoft}`,
+      borderRadius: 16, padding: 18, marginBottom: 16,
+    };
+
+    // ────── Tab Bar (segmented) ──────
+    function TabBar({ tabs, active, onChange }) {
+      return (
+        <div style={{
+          display: "flex", gap: 4, padding: 4,
+          background: T.bg2, borderRadius: 100,
+          border: `1px solid ${T.borderSoft}`,
+          marginBottom: 18,
+        }}>
+          {tabs.map(t => (
+            <button
+              key={t.id}
+              onClick={() => onChange(t.id)}
+              style={{
+                flex: 1, padding: "10px 14px", fontSize: 13.5, fontWeight: 600,
+                background: active === t.id ? "#fff" : "transparent",
+                color: active === t.id ? T.brand : T.muted,
+                border: "none", borderRadius: 100,
+                boxShadow: active === t.id ? "0 1px 3px rgba(0,0,0,0.08)" : "none",
+                cursor: "pointer", fontFamily: "inherit",
+                display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6,
+                whiteSpace: "nowrap",
+              }}>
+              <span>{t.icon}</span>{t.label}
+            </button>
+          ))}
+        </div>
+      );
+    }
+
+    // ────── 提取 banner (Tab 1 提完跳到 Tab 4 时显) ──────
+    function ExtractedBanner({ url, charCount, onDismiss }) {
+      return (
+        <div style={{
+          marginBottom: 16, padding: 12, background: T.brandSoft,
+          border: `1px solid ${T.brand}66`, borderRadius: 8,
+          display: "flex", alignItems: "center", gap: 10, fontSize: 13,
+        }}>
+          <span style={{ fontSize: 16 }}>✓</span>
+          <span style={{ flex: 1 }}>
+            从 <span style={{ fontFamily: "SF Mono, monospace", color: T.muted }}>{url}</span> 提取了 <b>{charCount} 字</b> · 已切到 ✏️ tab, 你可以直接做或先洗一遍
+          </span>
+          <button onClick={onDismiss}
+            style={{ background: "transparent", border: "none", color: T.muted2, cursor: "pointer", fontSize: 12, fontFamily: "inherit" }}>×</button>
+        </div>
+      );
+    }
+
+    // ─────────────────────────────────────────────────
+    // Tab 1: 📹 别人的视频 (爆款改写场景)
+    // ─────────────────────────────────────────────────
+    function TabVideoLink({ onExtractAndWash, onExtractOnly }) {
+      const [text, setText] = React.useState("");
+      const trimmed = text.trim();
+      const URL_PATTERN = /https?:\/\/[^\s]+|v\.douyin\.com\/[a-zA-Z0-9]+|xhslink\.com\/[a-zA-Z0-9]+|b23\.tv\/[a-zA-Z0-9]+/;
+      const urlMatch = trimmed.match(URL_PATTERN);
+      const extractedUrl = urlMatch ? urlMatch[0] : null;
+      const isUrlLike = trimmed.length > 0 && trimmed.length < 200 && !!extractedUrl;
+      const isMixedMode = trimmed.length >= 200 && !!extractedUrl;
+      const isInvalidContent = trimmed.length > 0 && !extractedUrl;
+
+      function platformOf(url) {
+        if (!url) return null;
+        if (/douyin/i.test(url)) return "抖音";
+        if (/xhslink|xiaohongshu/i.test(url)) return "小红书";
+        if (/b23\.tv|bilibili/i.test(url)) return "B 站";
+        return null;
+      }
+      const platform = platformOf(extractedUrl);
+
+      return (
+        <div>
+          <div style={{ marginBottom: 12, fontSize: 13.5, color: T.muted, lineHeight: 1.6 }}>
+            你刷到的那条爆款, 贴链接 (或抖音转发文) 给我 — 提取后默认洗成你的版本
+          </div>
+
+          <div style={heroBox}>
+            <textarea
+              value={text}
+              onChange={e => setText(e.target.value)}
+              placeholder="粘抖音/小红书/B 站链接, 或者抖音转发文 (我会自动找链接)..."
+              rows={6}
+              style={{
+                width: "100%", padding: 12, border: "none",
+                fontSize: 14.5, fontFamily: "inherit", outline: "none",
+                resize: "vertical", lineHeight: 1.75, background: "transparent",
+                color: T.text, minHeight: 120,
+              }} />
+
+            <div style={{ marginTop: 10, paddingTop: 12, borderTop: `1px solid ${T.borderSoft}`,
+                          display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", minHeight: 28 }}>
+              {trimmed.length === 0 ? (
+                <span style={{ fontSize: 12, color: T.muted2 }}>↑ 把链接粘上面</span>
+              ) : isUrlLike ? (
+                <>
+                  <Tag color="blue">🔗 看起来是短视频链接</Tag>
+                  {platform && <Tag color="gray">来源: {platform}</Tag>}
+                </>
+              ) : isMixedMode ? (
+                <>
+                  <Tag color="blue">🔗 转发文里有链接</Tag>
+                  {platform && <Tag color="gray">来源: {platform}</Tag>}
+                  <span style={{ fontSize: 11, color: T.muted2, fontFamily: "SF Mono, monospace" }}>
+                    {extractedUrl.slice(0, 50)}{extractedUrl.length > 50 ? "..." : ""}
+                  </span>
+                </>
+              ) : (
+                <Tag color="amber">⚠ 没找到链接 — 文案请切到 ✏️ 已写好的文案</Tag>
+              )}
+            </div>
+
+            <div style={{ marginTop: 14, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+              {trimmed.length === 0 ? (
+                <button disabled style={btnDisabled}>↑ 先粘链接</button>
+              ) : isInvalidContent ? (
+                <button disabled style={btnDisabled}>↑ 这里只接链接</button>
+              ) : (
+                <>
+                  <button onClick={() => onExtractAndWash(extractedUrl)} style={btnPrimary}>
+                    📎 提取并洗成我的爆款 →
+                  </button>
+                  <button onClick={() => onExtractOnly(extractedUrl)} style={btnGhost}>
+                    📎 只提取不洗
+                  </button>
+                  <span style={{ fontSize: 11, color: T.muted2, flex: 1 }}>
+                    走轻抖 ASR · 通常 1-3 分钟
+                  </span>
+                </>
+              )}
+            </div>
+          </div>
+
+          <div style={{ fontSize: 12, color: T.muted2, marginTop: -6, padding: "0 4px", lineHeight: 1.6 }}>
+            <b style={{ color: T.muted }}>主按钮:</b> 提取 → 自动跳爆款改写 (自动 analyze + 出 DNA + V1/V2/V3) → 选版本做视频<br/>
+            <b style={{ color: T.muted }}>次按钮:</b> 只提取文案到下面 ✏️ tab, 你自己决定要不要再洗
+          </div>
+        </div>
+      );
+    }
+
+    // ─────────────────────────────────────────────────
+    // Tab 2: 🎙️ 我自己录的 (录音改写场景)
+    // ─────────────────────────────────────────────────
+    function TabMyRecord({ onRewrite }) {
+      const [text, setText] = React.useState("");
+      const len = text.trim().length;
+
+      return (
+        <div>
+          <div style={{ marginBottom: 12, fontSize: 13.5, color: T.muted, lineHeight: 1.6 }}>
+            你录的那段音, 贴 <b>转写后的文字</b> 给我 — 我帮你删口头禅、加结构、不改观点
+          </div>
+
+          <div style={heroBox}>
+            <textarea
+              value={text}
+              onChange={e => setText(e.target.value)}
+              placeholder="把录音转写后的文字贴这里, 至少 50 字, 200-1500 字效果最好..."
+              rows={8}
+              style={{
+                width: "100%", padding: 12, border: "none",
+                fontSize: 14.5, fontFamily: "inherit", outline: "none",
+                resize: "vertical", lineHeight: 1.75, background: "transparent",
+                color: T.text, minHeight: 160,
+              }} />
+
+            <div style={{ marginTop: 10, paddingTop: 12, borderTop: `1px solid ${T.borderSoft}`,
+                          display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", minHeight: 28 }}>
+              {len === 0 ? (
+                <span style={{ fontSize: 12, color: T.muted2 }}>↑ 把转写文字粘上面</span>
+              ) : (
+                <>
+                  <Tag color="gray">{len} 字</Tag>
+                  <Tag color={len > 1500 ? "amber" : "blue"}>~{Math.round(len / 3.5)} 秒口播</Tag>
+                  {len < 50 && <Tag color="amber">⚠ 太短, 抓不到结构</Tag>}
+                  {len > 2000 && <Tag color="amber">⚠ 偏长, 建议拆段</Tag>}
+                </>
+              )}
+            </div>
+
+            <div style={{ marginTop: 14, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+              {len === 0 ? (
+                <button disabled style={btnDisabled}>↑ 先填转写</button>
+              ) : (
+                <>
+                  <button onClick={() => onRewrite(text)} style={btnPrimary}>
+                    ✏️ 帮我整理这段口播 →
+                  </button>
+                  <span style={{ fontSize: 11, color: T.muted2, flex: 1 }}>
+                    跳录音改写 → 出整理稿 → 一键带回做数字人
+                  </span>
+                </>
+              )}
+            </div>
+          </div>
+
+          <div style={{
+            padding: 12, background: T.bg2, border: `1px solid ${T.borderSoft}`,
+            borderRadius: 8, fontSize: 12.5, color: T.muted, lineHeight: 1.7,
+          }}>
+            <span style={{ fontSize: 14 }}>💡</span> <b style={{ color: T.text }}>还没转写?</b> 推荐去 <span style={{ color: T.brand }}>飞书妙记</span> / <span style={{ color: T.brand }}>讯飞听见</span> 转一下再贴回来 (录音文件直传暂不支持, 单独 backlog)
+          </div>
+        </div>
+      );
+    }
+
+    // ─────────────────────────────────────────────────
+    // Tab 3: 🔥 今天的热点 (热点改写场景)
+    // ─────────────────────────────────────────────────
+    function HotPickCard({ idx, t, onTake }) {
+      return (
+        <div style={{
+          padding: "16px 20px", borderRadius: 12,
+          background: "#fff", border: `1px solid ${idx === 0 ? T.brand : T.border}`,
+          display: "flex", gap: 14, alignItems: "flex-start",
+          boxShadow: idx === 0 ? `0 0 0 4px ${T.brandSoft}` : "none",
+        }}>
+          <div style={{
+            minWidth: 32, height: 32, borderRadius: 8,
+            background: idx === 0 ? T.brand : T.bg2,
+            color: idx === 0 ? "#fff" : T.muted,
+            fontSize: 15, fontWeight: 700,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            flexShrink: 0,
+          }}>{idx + 1}</div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 8 }}>
+              <span style={{ fontSize: 15, fontWeight: 600, color: T.text, flex: 1, lineHeight: 1.5 }}>
+                {t.title}
+              </span>
+              <Tag color="brand">匹配 {t.match}%</Tag>
+            </div>
+            <div style={{ fontSize: 12.5, color: T.muted, lineHeight: 1.7, marginBottom: 6, paddingLeft: 4, borderLeft: `2px solid ${T.borderSoft}` }}>
+              <div style={{ paddingLeft: 8 }}>{t.match_reason}</div>
+            </div>
+            <div style={{ fontSize: 12, color: T.muted2, marginBottom: 10, paddingLeft: 12 }}>
+              建议渠道: {t.platforms.map(p => <Tag key={p} color="gray">{p}</Tag>).reduce((a, b) => [a, " ", b])}
+            </div>
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <button style={{ ...btnGhost, padding: "6px 14px", fontSize: 12 }}>只塞文案</button>
+              <button onClick={() => onTake(t)} style={{ ...btnPrimary, padding: "7px 16px", fontSize: 12.5 }}>
+                📸 拍这条 →
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    function TabHotPicks({ onTake, onSelfPaste }) {
+      const [selfText, setSelfText] = React.useState("");
+      const hots = [
+        { id: 1, title: "AI 客服集体下岗?一线从业者发声: 这背后真正的赢家不是 AI", match: 98,
+          match_reason: "你擅长 AI 落地 + 个人视角, 一线经验更有说服力",
+          platforms: ["抖音", "视频号", "公众号"] },
+        { id: 2, title: "30+ 创业者: 我把自己 1 个人活成了一支队伍", match: 92,
+          match_reason: "你做个人 IP + AI 工厂, 这条本来就是你日常",
+          platforms: ["视频号", "朋友圈"] },
+        { id: 3, title: "黄仁勋最新演讲: AI 不会取代你, 会用 AI 的人才会", match: 89,
+          match_reason: "热度高 + 跟你 AI 切入角度同频",
+          platforms: ["抖音", "视频号"] },
+      ];
+
+      return (
+        <div>
+          <div style={{ marginBottom: 12, fontSize: 13.5, color: T.muted, lineHeight: 1.6 }}>
+            小华今天给你选的 3 个值得拍的 — 拍这条直接进改写流
+          </div>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 18 }}>
+            {hots.map((t, i) => <HotPickCard key={t.id} idx={i} t={t} onTake={onTake} />)}
+          </div>
+
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18, padding: "0 4px" }}>
+            <button style={{ background: "transparent", border: "none", color: T.muted, cursor: "pointer", fontSize: 12.5, fontFamily: "inherit" }}>
+              全部 (8) →
+            </button>
+            <button style={{ background: "transparent", border: "none", color: T.brand, cursor: "pointer", fontSize: 12.5, fontFamily: "inherit", fontWeight: 500 }}>
+              🌙 启用夜班抓更多
+            </button>
+          </div>
+
+          <div style={{ marginTop: 18, paddingTop: 18, borderTop: `1px dashed ${T.border}` }}>
+            <div style={{ marginBottom: 10, fontSize: 13, color: T.muted, fontWeight: 500 }}>
+              或: 自己粘一条热点新闻
+            </div>
+            <div style={heroBox}>
+              <textarea
+                value={selfText}
+                onChange={e => setSelfText(e.target.value)}
+                placeholder="贴新闻链接 / 标题 / 概要, 我帮你拆多角度..."
+                rows={3}
+                style={{
+                  width: "100%", padding: 12, border: "none",
+                  fontSize: 14, fontFamily: "inherit", outline: "none",
+                  resize: "vertical", lineHeight: 1.75, background: "transparent",
+                  color: T.text, minHeight: 60,
+                }} />
+              <div style={{ marginTop: 12 }}>
+                {selfText.trim().length === 0 ? (
+                  <button disabled style={btnDisabled}>↑ 先粘热点</button>
+                ) : (
+                  <button onClick={() => onSelfPaste(selfText)} style={btnPrimary}>
+                    🔥 改成我的角度 →
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ─────────────────────────────────────────────────
+    // Tab 4: ✏️ 已写好的文案
+    // ─────────────────────────────────────────────────
+    function TabPlainText({ initial = "", onMakeVideo, onWashWithBaokuan }) {
+      const [text, setText] = React.useState(initial);
+      React.useEffect(() => { if (initial) setText(initial); }, [initial]);
+      const len = text.trim().length;
+
+      return (
+        <div>
+          <div style={{ marginBottom: 12, fontSize: 13.5, color: T.muted, lineHeight: 1.6 }}>
+            你自己写好的稿, 贴这里 — 直接做数字人, 或先用爆款公式洗一遍
+          </div>
+
+          <div style={heroBox}>
+            <textarea
+              value={text}
+              onChange={e => setText(e.target.value)}
+              placeholder="把已经写好的口播文案贴这里..."
+              rows={8}
+              style={{
+                width: "100%", padding: 12, border: "none",
+                fontSize: 14.5, fontFamily: "inherit", outline: "none",
+                resize: "vertical", lineHeight: 1.75, background: "transparent",
+                color: T.text, minHeight: 160,
+              }} />
+
+            <div style={{ marginTop: 10, paddingTop: 12, borderTop: `1px solid ${T.borderSoft}`,
+                          display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", minHeight: 28 }}>
+              {len === 0 ? (
+                <span style={{ fontSize: 12, color: T.muted2 }}>↑ 把草稿粘上面</span>
+              ) : (
+                <>
+                  <Tag color="gray">{len} 字</Tag>
+                  <Tag color={len > 600 ? "amber" : "blue"}>~{Math.round(len / 3.5)} 秒口播</Tag>
+                  {len > 600 && <Tag color="amber">⚠ 偏长 · 建议精简 300-500</Tag>}
+                </>
+              )}
+            </div>
+
+            <div style={{ marginTop: 14, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+              {len === 0 ? (
+                <button disabled style={btnDisabled}>↑ 先粘文案</button>
+              ) : (
+                <>
+                  <button onClick={() => onMakeVideo(text)} style={btnPrimary}>
+                    🎬 做数字人 →
+                  </button>
+                  <button onClick={() => onWashWithBaokuan(text)} style={btnGhost}>
+                    ✍️ 爆款改写洗一下
+                  </button>
+                  <span style={{ fontSize: 11, color: T.muted2, flex: 1 }}>
+                    直接做 / 或者套爆款公式重组
+                  </span>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ─────────────────────────────────────────────────
+    // 主页 (Step 1)
+    // ─────────────────────────────────────────────────
+    function Step1V2() {
+      const [activeTab, setActiveTab] = React.useState("videoLink");
+      const [extractedBanner, setExtractedBanner] = React.useState(null);
+      const [tab4Initial, setTab4Initial] = React.useState("");
+
+      const tabs = [
+        { id: "videoLink", icon: "📹", label: "别人的视频" },
+        { id: "myRecord",  icon: "🎙️", label: "我自己录的" },
+        { id: "hotPicks",  icon: "🔥", label: "今天的热点" },
+        { id: "plainText", icon: "✏️", label: "已写好的文案" },
+      ];
+
+      // ───── 模拟动作 (mockup 不真调 API) ─────
+      function fakeExtract(url, simulatedText) {
+        alert(`[mockup] 模拟 ASR 提取: ${url}\n\n实际会走 /api/transcribe → 1-3 分钟\n\n下一步: ${simulatedText}`);
+      }
+      function onExtractAndWash(url) {
+        fakeExtract(url, "提取完自动跳爆款改写页 (auto analyze + 出 DNA + V1/V2/V3)");
+      }
+      function onExtractOnly(url) {
+        const fakeText = "(此处是提取出来的文案 ~280 字, 模拟数据 ...)";
+        setExtractedBanner({ url, charCount: 280 });
+        setTab4Initial(fakeText);
+        setActiveTab("plainText");
+      }
+      function onRewriteVoice(text) {
+        alert(`[mockup] 跳录音改写, seed = "${text.slice(0, 30)}..."`);
+      }
+      function onTakeHot(t) {
+        alert(`[mockup] 拍这条: ${t.title}\n→ 跳热点改写 (auto analyze + 出 3 角度)`);
+      }
+      function onSelfPasteHot(text) {
+        alert(`[mockup] 自粘热点改写: ${text.slice(0, 30)}...`);
+      }
+      function onMakeVideo(text) {
+        alert(`[mockup] → Step 2 (数字人 + 配音) · 文案 ${text.length} 字`);
+      }
+      function onWashWithBaokuan(text) {
+        alert(`[mockup] 爆款改写洗一下: ${text.slice(0, 30)}...`);
+      }
+
+      // ───── 切 tab 时如果有 extractedBanner 就清掉 ─────
+      function handleTabChange(newTab) {
+        if (newTab !== "plainText") setExtractedBanner(null);
+        setActiveTab(newTab);
+      }
+
+      return (
+        <div className="container">
+          {/* 顶部 hero (沿用 D-062ll, 但文案重写) */}
+          <div style={{ textAlign: "center", margin: "8px 0 24px" }}>
+            <div style={{ fontSize: 28, fontWeight: 700, color: T.text, letterSpacing: "-0.02em", marginBottom: 8 }}>
+              你要做的视频从哪来? 👇
+            </div>
+            <div style={{ fontSize: 14, color: T.muted, lineHeight: 1.6 }}>
+              选一个起点 · 4 条路最后都汇到做数字人
+            </div>
+          </div>
+
+          <TabBar tabs={tabs} active={activeTab} onChange={handleTabChange} />
+
+          {extractedBanner && activeTab === "plainText" && (
+            <ExtractedBanner
+              url={extractedBanner.url}
+              charCount={extractedBanner.charCount}
+              onDismiss={() => setExtractedBanner(null)} />
+          )}
+
+          {activeTab === "videoLink" && <TabVideoLink onExtractAndWash={onExtractAndWash} onExtractOnly={onExtractOnly} />}
+          {activeTab === "myRecord"  && <TabMyRecord onRewrite={onRewriteVoice} />}
+          {activeTab === "hotPicks"  && <TabHotPicks onTake={onTakeHot} onSelfPaste={onSelfPasteHot} />}
+          {activeTab === "plainText" && <TabPlainText initial={tab4Initial} onMakeVideo={onMakeVideo} onWashWithBaokuan={onWashWithBaokuan} />}
+
+          {/* 底部说明 (mockup 专用 — 真实代码不要) */}
+          <div style={{
+            marginTop: 40, padding: "16px 18px",
+            background: "#fff", border: `1px dashed ${T.border}`, borderRadius: 12,
+            fontSize: 12, color: T.muted, lineHeight: 1.7,
+          }}>
+            <div style={{ fontWeight: 600, color: T.text, marginBottom: 8 }}>📝 mockup 说明 (代码版会去掉)</div>
+            <div>· 4 个 tab 切换看下交互</div>
+            <div>· tab 1 点 "📎 提取并洗" → 实际跳爆款改写页 (这里只 alert 模拟)</div>
+            <div>· tab 1 点 "📎 只提取" → 模拟提取后自动切到 tab 4 + 显 banner</div>
+            <div>· tab 3 的热点卡完全复用现有 HotPickCard 逻辑</div>
+            <div>· tab 4 的"爆款改写洗一下"次按钮是给"已写好"用户的 power user 入口</div>
+          </div>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<Step1V2 />);
+  </script>
+</body>
+</html>
