@@ -133,10 +133,15 @@ function MChatBar({ prompt, chips }) {
 // Step 1 · 选题
 function MStepTopic({ topic, setTopic, onGo, loading }) {
   return (
-    <div style={{ padding: "40px 40px 120px", maxWidth: 720, margin: "0 auto" }}>
-      <div style={{ textAlign: "center", marginBottom: 24 }}>
-        <div style={{ fontSize: 28, fontWeight: 700, color: T.text, marginBottom: 8, letterSpacing: "-0.02em" }}>发一组朋友圈吧 📱</div>
-        <div style={{ fontSize: 14, color: T.muted }}>一个话题 · 小华从金句库衍生 3-5 条不同角度 · 配图一键复制</div>
+    <div style={{ padding: "32px 40px 120px", maxWidth: 720, margin: "0 auto" }}>
+      {/* C8 hero (与 hot/voice/touliu/wechat 一致) */}
+      <div style={{ textAlign: "center", margin: "8px 0 24px" }}>
+        <div style={{ fontSize: 30, fontWeight: 700, color: T.text, letterSpacing: "-0.02em", marginBottom: 8 }}>
+          发一组朋友圈吧 📱
+        </div>
+        <div style={{ fontSize: 14, color: T.muted, lineHeight: 1.6 }}>
+          一个话题 · 小华衍生 3-5 条不同角度 · 自动配图 · 一键复制
+        </div>
         <div style={{ marginTop: 12, display: "flex", justifyContent: "center" }}>
           <DeepToggle />
         </div>
@@ -148,17 +153,21 @@ function MStepTopic({ topic, setTopic, onGo, loading }) {
           value={topic}
           onChange={e => setTopic(e.target.value)}
           placeholder="例:今天想发「老板心法 · 私域复购」相关 · 或直接贴一句话..."
-          style={{ width: "100%", border: "none", outline: "none", background: "transparent", fontSize: 14.5, fontFamily: "inherit", resize: "none", lineHeight: 1.7, color: T.text }}
+          style={{ width: "100%", padding: 12, border: "none", outline: "none", background: "transparent", fontSize: 14.5, fontFamily: "inherit", resize: "none", lineHeight: 1.7, color: T.text, minHeight: 100 }}
         />
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10, paddingTop: 12, borderTop: `1px solid ${T.borderSoft}` }}>
-          <div style={{ fontSize: 11.5, color: T.muted2 }}>📚 小华自动从「钩子库 + 认知金句 + 朋友圈风格 DNA」里取素材</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 12, paddingTop: 14, borderTop: `1px solid ${T.borderSoft}` }}>
+          {topic.trim() ? (
+            <Tag size="xs" color="gray">{topic.trim().length} 字</Tag>
+          ) : (
+            <span style={{ fontSize: 12, color: T.muted2 }}>✨ 写完点 "衍生 5 条" · 小华从你金句库取素材</span>
+          )}
           <div style={{ flex: 1 }} />
           <button onClick={onGo} disabled={!topic.trim() || loading} style={{
-            padding: "8px 20px", fontSize: 13, fontWeight: 600,
+            padding: "10px 22px", fontSize: 14, fontWeight: 600,
             background: (!topic.trim() || loading) ? T.muted3 : T.brand,
             color: "#fff", border: "none", borderRadius: 100,
             cursor: (!topic.trim() || loading) ? "not-allowed" : "pointer", fontFamily: "inherit",
-          }}>{loading ? "生成中..." : "衍生 5 条 →"}</button>
+          }}>{loading ? "生成中..." : "🚀 衍生 5 条 →"}</button>
         </div>
       </div>
 
