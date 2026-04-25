@@ -242,6 +242,23 @@ def assemble_html(
     raw_path = PREVIEW_DIR / "wechat_article_raw.html"
     raw_path.write_text(html, encoding="utf-8")
 
+    # D-043: 诊断落盘 — 段间图丢失的话至少能看到这条记录定位到底是前端没发还是后端丢
+    _images_in = section_images or []
+    _images_with_url = [x for x in _images_in if x.get("mmbiz_url")]
+    (PREVIEW_DIR / "last_assemble_request.json").write_text(
+        json.dumps({
+            "title": title,
+            "template": template,
+            "content_md_chars": len(content_md or ""),
+            "section_images_received": len(_images_in),
+            "section_images_with_mmbiz_url": len(_images_with_url),
+            "section_images_urls": [x.get("mmbiz_url", "") for x in _images_in[:8]],
+            "img_in_raw_html": len(re.findall(r"<img\b", html)),
+            "paragraphs_count": len([p for p in (content_md or "").split("\n\n") if p.strip()]),
+        }, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
     wechat_path = PREVIEW_DIR / "wechat_article.html"
     meta_path = PREVIEW_DIR / "article_meta.json"
 
@@ -519,30 +536,54 @@ _ALLOWED_LINK_PREFIXES = (
 _ALLOWED_IMG_RE = re.compile(r'^https?://(?:[a-z0-9-]+\.)*(mmbiz\.qpic\.cn|wx\.qlogo\.cn)/', re.IGNORECASE)
 
 
+def _clean_img_url(url: str) -> tuple[str, list[str]]:
+    """规整 mmbiz 图 URL, 不剥图. 返回 (新 url, 修改记录)."""
+    changes: list[str] = []
+    new = url
+    # http→https (mmbiz/qlogo 都支持 https, 微信草稿要求)
+    if new.startswith("http://"):
+        new = "https://" + new[len("http://"):]
+        changes.append("http→https")
+    # 剥 from=appmsg 来源标记 (经验上 errcode 45166 嫌疑标记)
+    new = re.sub(r"\?from=appmsg(&|$)", lambda m: "" if m.group(1) == "" else "?", new)
+    new = re.sub(r"&from=appmsg", "", new)
+    if new != url and "from=appmsg" in url:
+        changes.append("strip ?from=appmsg")
+    # 收尾: 末尾 ? 单独留时清掉
+    if new.endswith("?"):
+        new = new[:-1]
+    return new, changes
+
+
 def sanitize_for_push(html: str) -> dict[str, Any]:
     """推送前清理 HTML, 降低 errcode 45166 风险.
 
-    返回 {clean: str, removed: dict[str, int]} — 让调用方知道删了啥, 便于诊断.
+    返回 {clean: str, removed: dict[str, int], rewritten: dict[str, int]}.
 
-    清理规则 (从最常见到最防御性):
-      1. 干掉硬编码的非本草稿 mmbiz 头像 (template 里 ?from=appmsg 那种)
-      2. 干掉 http:// 的图 (微信草稿要求 https)
-      3. 干掉非 mmbiz/qlogo 域名的图 (apimart / 外链)
-      4. <a> 指向非 mp.weixin.qq.com 的, 解 <a> 但保留内文
-      5. <script> / <iframe> / <form> / <input> / <embed> / <object> /
-         <video> / <audio> / <link> / <meta> 整条剥
+    设计原则 (D-043 修正 D-042 误伤):
+      D-042 把 ?from=appmsg / http:// 的图整张剥掉, 误杀了模板头像和段间图.
+      D-043 改成: 能修就修 URL, 不能修(域名外链 / 危险 tag)才剥.
+
+    清理规则:
+      1. <img>:
+         · http://mmbiz/qlogo → https://      (改 url, 保 img)
+         · ?from=appmsg / &from=appmsg → strip (改 url, 保 img)
+         · 域名不在 mmbiz/qlogo 白名单 → 整剥 (apimart / 外链, 推不上)
+      2. <a> 指向非 mp.weixin.qq.com → 解 <a> 留内文
+      3. <script>/<iframe>/<form>/<input>/<embed>/<object>/<video>/<audio>/
+         <link>/<meta> → 整剥
     """
     if not html:
-        return {"clean": "", "removed": {}}
+        return {"clean": "", "removed": {}, "rewritten": {}}
 
     removed: dict[str, int] = {}
+    rewritten: dict[str, int] = {}
     out = html
 
-    # 5) 整段 strip 的 tag (含内容). re.S = . 匹配换行
+    # 3) 整段 strip 的 tag
     DROP_TAGS = ("script", "iframe", "form", "input", "embed", "object",
                  "video", "audio", "link", "meta")
     for tag in DROP_TAGS:
-        # 自闭合 + 配对都吃掉
         pat_pair = re.compile(rf"<{tag}\b[^>]*>.*?</{tag}>", re.IGNORECASE | re.S)
         n_pair = len(pat_pair.findall(out))
         if n_pair:
@@ -554,36 +595,45 @@ def sanitize_for_push(html: str) -> dict[str, Any]:
             out = pat_self.sub("", out)
             removed[f"<{tag}>"] = removed.get(f"<{tag}>", 0) + n_self
 
-    # 1+2+3) 处理 <img>: 看 src 决定保留还是剥
-    img_re = re.compile(r"<img\b[^>]*\bsrc=([\"'])([^\"']*)\1[^>]*/?>", re.IGNORECASE)
+    # 1) 处理 <img>: 一次扫整个 img 标签, 决定保留(可能改 src) 还是整剥
+    img_re = re.compile(r"<img\b[^>]*?/?>", re.IGNORECASE)
     def _img_sub(m: re.Match) -> str:
-        url = m.group(2)
-        if "?from=appmsg" in url or "&from=appmsg" in url:
-            removed["img_from_appmsg"] = removed.get("img_from_appmsg", 0) + 1
+        full = m.group(0)
+        src_m = re.search(r'\bsrc=(["\'])([^"\']*)\1', full, re.IGNORECASE)
+        if not src_m:
+            # 没 src 的 img 标签, 直接剥
+            removed["img_no_src"] = removed.get("img_no_src", 0) + 1
             return ""
-        if url.startswith("http://"):
-            removed["img_http_only"] = removed.get("img_http_only", 0) + 1
-            return ""
-        if not _ALLOWED_IMG_RE.match(url):
+        url = src_m.group(2)
+        # 先把 http→https 试探一下再判白名单, 否则 http://mmbiz 会误判外链
+        probe = "https://" + url[len("http://"):] if url.startswith("http://") else url
+        if not _ALLOWED_IMG_RE.match(probe):
             removed["img_external"] = removed.get("img_external", 0) + 1
             return ""
-        return m.group(0)
+        # 域名 OK, 规整 URL
+        new_url, changes = _clean_img_url(url)
+        if changes:
+            for c in changes:
+                rewritten[c] = rewritten.get(c, 0) + 1
+            # 把 src 替换回去, 其它 attrs 原样保留
+            return full.replace(src_m.group(0), f'src={src_m.group(1)}{new_url}{src_m.group(1)}', 1)
+        return full
     out = img_re.sub(_img_sub, out)
 
-    # 1b) <a href><img></a> 整段头像块: 上面 img 走了之后 <a> 里就空了, 顺手清掉
+    # 1b) <img> 整段被外链规则剥之后, <a><img></a> 里的 <a> 空了, 清掉
     out = re.sub(r"<a\b[^>]*>\s*</a>", "", out, flags=re.IGNORECASE | re.S)
 
-    # 4) 非 mp.weixin.qq.com 的 <a>: 解 <a> 标签, 内文保留
+    # 2) 非 mp.weixin.qq.com 的 <a>: 解 <a> 留内文
     a_re = re.compile(r"<a\b[^>]*\bhref=([\"'])([^\"']*)\1[^>]*>(.*?)</a>", re.IGNORECASE | re.S)
     def _a_sub(m: re.Match) -> str:
         href = m.group(2)
         if any(href.startswith(p) for p in _ALLOWED_LINK_PREFIXES):
             return m.group(0)
         removed["a_external"] = removed.get("a_external", 0) + 1
-        return m.group(3)  # 保留内文
+        return m.group(3)
     out = a_re.sub(_a_sub, out)
 
-    return {"clean": out, "removed": removed}
+    return {"clean": out, "removed": removed, "rewritten": rewritten}
 
 
 # 落盘诊断目录, 失败时用户可以把这里的文件发给我精确定位
@@ -621,7 +671,7 @@ def push_to_wechat(
     sanitized_path = _DIAG_DIR / "last_push_request.html"
     sanitized_path.write_text(sanitized_html, encoding="utf-8")
 
-    # 诊断 dump
+    # 诊断 dump (D-043: 加 rewritten 字段)
     diag = {
         "title": title,
         "digest": digest,
@@ -631,7 +681,10 @@ def push_to_wechat(
         "sanitized_html_path": str(sanitized_path),
         "original_chars": len(original_html),
         "sanitized_chars": len(sanitized_html),
+        "img_count_original": len(re.findall(r"<img\b", original_html)),
+        "img_count_sanitized": len(re.findall(r"<img\b", sanitized_html)),
         "removed": clean_result["removed"],
+        "rewritten": clean_result.get("rewritten", {}),
     }
     (_DIAG_DIR / "last_push_request.json").write_text(
         json.dumps(diag, ensure_ascii=False, indent=2), encoding="utf-8",
@@ -649,5 +702,6 @@ def push_to_wechat(
         "stdout_tail": tail,
         "elapsed_sec": round(time.time() - t0, 1),
         "sanitize_removed": clean_result["removed"],
+        "sanitize_rewritten": clean_result.get("rewritten", {}),
         "sanitized_html_path": str(sanitized_path),
     }
