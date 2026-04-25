@@ -193,9 +193,9 @@
       - **D-062v** Step 2 emptyTip 无行动按钮
         声音空 → 应该一键跳 ⚙️ 设置·克隆样本上传 (现在只是文字)
         数字人空 → 应该一键跳 柿榴后台 + 加 "去柿榴 →" 按钮 (没"按钮")
-      - **D-062w** Step 3 模板空提示是开发者向, 用户根本看不懂
-        现 line 602: "到 ~/Desktop/skills/digital-human-video-v5/templates/ 加 .yaml"
-        改: "用朴素无模板模式继续 (直接出数字人 mp4)" → 一键跳过 Step 3
+      - **D-062w** ✅ Step 3 模板空提示用户化 + 一键朴素 CTA
+        模板空时显 brandSoft 提示卡 + "👆 用朴素模式继续" 按钮 (setTemplateId(null))
+        筛选无匹配但有模板时改成 "换筛选条件 或 用朴素模式" (无 CTA, 让用户改 chip)
       - **D-062x** ✅ 反向 anchor 实现 (web/factory-flywheel.jsx + 各 skill page 入口)
         setFromMake(skill_id) 在 PageMakeV2 Step 1 ScriptSkillCard 跳前调用
         useFromMake(currentSkill) hook 在每个 PageX 入口 (hot/voice/touliu/wechat/moments) 检测

@@ -604,11 +604,23 @@ function MakeV2StepTemplate({ templateId, setTemplateId, onPrev, onNext }) {
       {!templates ? (
         <div style={{ padding: 30, textAlign: "center", color: T.muted2 }}>加载模板…</div>
       ) : filtered.length === 0 ? (
-        <div style={{ padding: 30, background: "#fff", border: `1px dashed ${T.border}`, borderRadius: 10, textAlign: "center", color: T.muted, fontSize: 13 }}>
-          {templates.length === 0
-            ? "还没有模板 · 到 ~/Desktop/skills/digital-human-video-v5/templates/ 加 .yaml"
-            : "当前筛选下没匹配的模板"}
-        </div>
+        // D-062w: 模板空 → 引导朴素模式直接出片 (而非开发者向路径)
+        templates.length === 0 ? (
+          <div style={{ padding: 20, background: T.brandSoft, border: `1px solid ${T.brand}55`, borderRadius: 10, textAlign: "center" }}>
+            <div style={{ fontSize: 28, marginBottom: 8 }}>📦</div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: T.text, marginBottom: 4 }}>暂无模板可选</div>
+            <div style={{ fontSize: 12, color: T.muted, marginBottom: 12, lineHeight: 1.6 }}>
+              选上面的「朴素无模板 · 直接出片」继续 (数字人 mp4 直接发, 不剪辑)
+              <br />
+              <span style={{ color: T.muted2, fontSize: 11 }}>(后续: 由编导维护 v5 模板包后, 这里会自动出现可选模板)</span>
+            </div>
+            <Btn size="sm" variant="primary" onClick={() => setTemplateId(null)}>👆 用朴素模式继续</Btn>
+          </div>
+        ) : (
+          <div style={{ padding: 30, background: "#fff", border: `1px dashed ${T.border}`, borderRadius: 10, textAlign: "center", color: T.muted, fontSize: 13 }}>
+            当前筛选下没匹配的模板 · 换筛选条件 或 用朴素模式
+          </div>
+        )
       ) : (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 12 }}>
           {filtered.map(t => (
