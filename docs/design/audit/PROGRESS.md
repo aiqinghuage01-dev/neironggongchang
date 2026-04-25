@@ -37,8 +37,8 @@
 | 15 | knowledge | done | commit | tick 8 | 扫无明显技术词暴露 |
 | 16 | nightshift | done | commit | tick 8 | 扫无明显技术词暴露 |
 | 17 | settings | done | commit | tick 8 | 删 speaker_id={id} / avatar_id={id} mono ID 暴露 |
-| 18 | cross-page-consistency | pending | — | — | 跨 page 视觉/命名一致性 |
-| 19 | summary | pending | — | — | 全站汇总报告 |
+| 18 | cross-page-consistency | done | commit | tick 9 | 全站 grep 残留 + 27 jsx 全部 @babel/parser PASS + flow.jsx 同步删 video_id 暴露 |
+| 19 | summary | done | commit | tick 9 | SUMMARY.md 写完 |
 
 ## 当前 in_progress
 
@@ -54,6 +54,7 @@
 - tick 6 · 2026-04-26 00:40 · task#4 baokuan implement+verify · 模式名人话化 + auto_analyze flag 接通 (task#1 留的) + FromMake banner 友好化, 8 项 PASS
 - tick 7 · 2026-04-26 00:45 · task#5 hotrewrite + task#6 voicerewrite · 各 banner + 技术词清理, 同时落 (改动小)
 - tick 8 · 2026-04-26 00:55 · task#7-#17 批量扫改 · ad/wechat/dreamina/works/settings/planner 改文案 + 删 ID 暴露; moments/compliance/materials/knowledge/nightshift 扫无问题
+- tick 9 · 2026-04-26 01:00 · task#18+#19 跨 page 一致性 + SUMMARY · flow.jsx 删残留 video_id 暴露; 27 jsx 全部 parse PASS; SUMMARY.md 写完, **24h 全站审计 1.5 小时完成**
 
 ---
 

@@ -813,7 +813,7 @@ function StepWaiting({ workId, videoId, onDone, onError }) {
           </div>
           <div style={{ textAlign: "center" }}>
             <div style={{ fontSize: 20, fontWeight: 700, color: T.text, marginBottom: 6 }}>小华正在把你说的话装进数字人里</div>
-            <div style={{ fontSize: 13, color: T.muted }}>通常 60-90 秒 · video_id={videoId} · work={workId}</div>
+            <div style={{ fontSize: 13, color: T.muted }}>通常 60-90 秒 · 完成会自动跳下一步</div>
           </div>
           <div style={{ padding: 12, background: T.brandSoft, borderRadius: 10, fontSize: 12.5, color: T.brand, lineHeight: 1.55, maxWidth: 560 }}>
             ⏳ 生成完自动跳到发布页,会有 4 张 AI 封面已备好。
