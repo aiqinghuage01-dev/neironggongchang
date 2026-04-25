@@ -316,8 +316,25 @@ P0-P10 所有任务落地, 14 个 commit 从 `09faf92` 到今日末 commit。
       理由: D-040f 4 条预设 runner 还没接, output_refs 永远空, N 永远 0 按"0 隐藏"
       规则永远不显示, 纯死代码. 留 D-040f 跟真 runner 一起.
       端到端 smoke: 3 场景 (有 success 显白天 / 有 enabled cron 显夜班 / 全空隐藏).
-- [ ] **D-040f 4 条预设任务实装** 抓热点 / 一鱼多吃 / 知识库整理 / 昨日复盘
-      各自 seed 对应 skill_slug 和 trigger_config
+- [x] **D-040f 4 条预设 seed + 1 个真 runner**
+      backend/services/night_runners.py · DEFAULT_NIGHT_JOBS 4 条种子 + seed_defaults() 幂等创建.
+      registered_runners 4 个: 1 真 + 3 占位.
+        ✓ daily-recap (真): 抓昨日 ai_usage / 写小华工作日志.md / 摘要 "AI 调 N 次 / X tokens / ¥Y"
+        ⏸ content-planner / one-fish-many-meals / kb-compiler (占位): 写明 "未接入" 不崩
+      app startup 钩子 import night_runners 触发 register_all() · 调度器 fire 时找得到 runner.
+      新 endpoint POST /api/night/seed-defaults (幂等). 默认 enabled=False (用户审一遍再开).
+      前端: NightShiftPage 空状态加 "📋 加 4 条预设任务" 按钮 + "+ 自己加一条".
+      tests/test_night_runners.py 9/9. 端到端 smoke: seed → list 4 → 跑 daily-recap (真) →
+      跑 content-planner (占位) → 二次 seed 幂等, 全跑通.
+
+      未做 (诚实):
+      - one-fish-many-meals / kb-compiler 这俩 skill 不存在于 ~/Desktop/skills/, 真接入要等
+        清华哥写完 skill 再补 runner.
+      - file_watch 监听 data/inbox/audio/ 仍未接 watchdog (D-040c 推迟决定保留)
+      - content-planner 真 runner: D-022 已接 planner_pipeline,
+        本轮没把 planner.analyze + write 接进来 + 写 materials 表 — 留下一轮
+      - 散落标签 ("🌙 来自夜班 (N)" 过滤): output_refs 暂只有 daily-recap 写一条
+        work_log ref, materials/works/knowledge 没数据 → 标签按"0 隐藏"规则不显示, 跳过
 
 命名 (用户可见 / 代码内部):
   整个系统  小华夜班                  night_shift

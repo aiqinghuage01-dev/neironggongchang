@@ -152,7 +152,21 @@ function PageNightShift({ onNav }) {
               <div style={{ fontSize: 12, color: T.muted, marginBottom: 18 }}>
                 加一条试试 · 例: 23:00 抓对标账号热点 / 02:00 整理知识库 / 06:00 复盘昨日数据
               </div>
-              <Btn variant="primary" onClick={() => setEditing({})}>+ 加第一条任务</Btn>
+              <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
+                <Btn variant="primary" onClick={async () => {
+                  try {
+                    const r = await api.post("/api/night/seed-defaults", {});
+                    refresh();
+                    if (r.created.length === 0 && r.skipped.length > 0) {
+                      setErr("4 条预设已存在 · 没新加");
+                    }
+                  } catch (e) { setErr(e.message); }
+                }}>📋 加 4 条预设任务</Btn>
+                <Btn variant="outline" onClick={() => setEditing({})}>+ 自己加一条</Btn>
+              </div>
+              <div style={{ fontSize: 10.5, color: T.muted2, marginTop: 14 }}>
+                4 条预设默认禁用 · 点开关启用后才会按 cron 跑
+              </div>
             </div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>

@@ -211,6 +211,9 @@ def _start_night_scheduler():
     """uvicorn boot 时把 enabled+cron 的夜班任务挂上 APScheduler.
     pytest 不会触发 startup event, 所以测试不会启动真调度."""
     try:
+        # D-040f: 先 import night_runners 触发 register_all() 把 4 个 runner 注册到 executor.
+        # 不然 cron fire 时找不到 runner 走 _placeholder_runner 兜底.
+        from backend.services import night_runners  # noqa: F401
         from backend.services import night_scheduler
         night_scheduler.start()
     except Exception as e:
@@ -609,6 +612,17 @@ def night_scheduler_status():
         "running": night_scheduler.is_running(),
         "scheduled": night_scheduler.list_scheduled(),
     }
+
+
+@app.post("/api/night/seed-defaults", tags=["小华夜班"], summary="一键加 4 条预设任务")
+def night_seed_defaults():
+    """幂等: 创建 4 条预设 (凌晨抓热点 / 一鱼多吃 / 知识库整理 / 昨日复盘).
+    已存在 (按 name 匹配) 跳过. 默认 enabled=False, 用户审一遍再开."""
+    from backend.services import night_runners
+    result = night_runners.seed_defaults()
+    # 触发调度器重读 (新增的若 enabled=True 立即生效)
+    _reload_night_scheduler_silent()
+    return result
 
 
 @app.post("/api/night/jobs/{job_id}/run", tags=["小华夜班"], summary="立即跑一次")
