@@ -52,7 +52,8 @@
 **状态**:
 - ✓ 小华夜班 7 + 公众号头像 3 (D-040b/D-051): 已规范
 - ✓ **公众号 8 步 11 个 endpoint (D-053): 已规范** (skill-info / titles / outline / write / rewrite-section / plan-images / section-image / html / templates / cover / push)
-- ⏸ 还没补的: 投流 / 录音改写 / 内容策划 / 违规审查 / 即梦 / hot-topics / topics / works / kb / settings 等 ~50 个
+- ✓ **投流 + 热点改写 + 录音改写 + 内容策划 12 个 endpoint (D-054): 已规范**
+- ⏸ 还没补的: 违规审查 4 / 即梦 5 / hot-topics 3 / topics 3 / works ~5 / kb ~5 / settings ~3 / ai 4 / tasks 3 / 总部首页 stats / shiliu / cosyvoice 等 ~40 个
 **做法**: 一段一段补 (一次一个 skill 全部 endpoints). 不阻塞功能, 但学员版 poju.ai 部署前要补完.
 
 ---

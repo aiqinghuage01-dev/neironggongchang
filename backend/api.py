@@ -1756,7 +1756,7 @@ def wechat_avatar_clear():
 HOTREWRITE_SKILL_SLUG = "热点文案改写V2"
 
 
-@app.get("/api/hotrewrite/skill-info")
+@app.get("/api/hotrewrite/skill-info", tags=["热点改写"], summary="skill 元信息")
 def hotrewrite_skill_info():
     try:
         return skill_loader.skill_info(HOTREWRITE_SKILL_SLUG)
@@ -1765,22 +1765,24 @@ def hotrewrite_skill_info():
 
 
 class HotrewriteAnalyzeReq(BaseModel):
-    hotspot: str
+    hotspot: str = Field(..., description="热点事件描述, 例 'OpenAI 发布 Sora 2'")
 
 
-@app.post("/api/hotrewrite/analyze")
+@app.post("/api/hotrewrite/analyze", tags=["热点改写"], summary="Step 1 拆解热点 + 出 3 角度")
 def hotrewrite_analyze(req: HotrewriteAnalyzeReq):
+    """走 deepseek 7s 出 JSON: breakdown (5W2H 拆解) + 3 个切入角度建议."""
     return hotrewrite_pipeline.analyze_hotspot(req.hotspot)
 
 
 class HotrewriteWriteReq(BaseModel):
-    hotspot: str
-    breakdown: dict[str, Any] = Field(default_factory=dict)
-    angle: dict[str, Any] = Field(default_factory=dict)
+    hotspot: str = Field(..., description="热点事件描述")
+    breakdown: dict[str, Any] = Field(default_factory=dict, description="Step 1 输出的拆解 JSON")
+    angle: dict[str, Any] = Field(default_factory=dict, description="挑定的切入角度 JSON")
 
 
-@app.post("/api/hotrewrite/write")
+@app.post("/api/hotrewrite/write", tags=["热点改写"], summary="Step 2 写口播文案 1800-2600 字")
 def hotrewrite_write(req: HotrewriteWriteReq):
+    """走 opus 出长口播 + 六维自检 (开头钩子/数据/反差/金句/Call to action/字数)."""
     return hotrewrite_pipeline.write_script(req.hotspot, req.breakdown, req.angle)
 
 
@@ -1793,7 +1795,7 @@ def hotrewrite_write(req: HotrewriteWriteReq):
 VOICEREWRITE_SKILL_SLUG = "录音文案改写"
 
 
-@app.get("/api/voicerewrite/skill-info")
+@app.get("/api/voicerewrite/skill-info", tags=["录音改写"], summary="skill 元信息")
 def voicerewrite_skill_info():
     try:
         return skill_loader.skill_info(VOICEREWRITE_SKILL_SLUG)
@@ -1802,22 +1804,24 @@ def voicerewrite_skill_info():
 
 
 class VoicerewriteAnalyzeReq(BaseModel):
-    transcript: str
+    transcript: str = Field(..., description="录音逐字稿 (CosyVoice / 飞书会议自动转写都行)")
 
 
-@app.post("/api/voicerewrite/analyze")
+@app.post("/api/voicerewrite/analyze", tags=["录音改写"], summary="Step 1 提骨架 + 出 2 角度")
 def voicerewrite_analyze(req: VoicerewriteAnalyzeReq):
+    """走 deepseek 7-8s. 输出 skeleton (核心论点 + 论据排序) + 2 个语气锚点."""
     return voicerewrite_pipeline.analyze_recording(req.transcript)
 
 
 class VoicerewriteWriteReq(BaseModel):
-    transcript: str
-    skeleton: dict[str, Any] = Field(default_factory=dict)
-    angle: dict[str, Any] = Field(default_factory=dict)
+    transcript: str = Field(..., description="原录音逐字稿")
+    skeleton: dict[str, Any] = Field(default_factory=dict, description="Step 1 提的骨架")
+    angle: dict[str, Any] = Field(default_factory=dict, description="挑定的语气锚点")
 
 
-@app.post("/api/voicerewrite/write")
+@app.post("/api/voicerewrite/write", tags=["录音改写"], summary="Step 2 改写 + 自检一次性")
 def voicerewrite_write(req: VoicerewriteWriteReq):
+    """走 opus, 改写 + 自检一次出. 保留口播感, 修语序去口头禅, 不删核心观点."""
     return voicerewrite_pipeline.write_script(req.transcript, req.skeleton, req.angle)
 
 
@@ -1831,7 +1835,7 @@ def voicerewrite_write(req: VoicerewriteWriteReq):
 TOULIU_SKILL_SLUG = "touliu-agent"
 
 
-@app.get("/api/touliu/skill-info")
+@app.get("/api/touliu/skill-info", tags=["投流"], summary="skill 元信息")
 def touliu_skill_info():
     try:
         return skill_loader.skill_info(TOULIU_SKILL_SLUG)
@@ -1840,16 +1844,19 @@ def touliu_skill_info():
 
 
 class TouliuGenerateReq(BaseModel):
-    pitch: str
-    industry: str = "通用老板"
-    target_action: str = "点头像进直播间"
-    n: int = 10
-    channel: str = "直播间"
-    run_lint: bool = True
+    pitch: str = Field(..., description="一个卖点, 例 '我有 8000 个老板私域'")
+    industry: str = Field("通用老板", description="行业 (大健康/美业/教育/金融/医美/通用老板)")
+    target_action: str = Field("点头像进直播间",
+        description="转化目标: 点头像进直播间 / 留资 / 加私域 / 到店")
+    n: int = Field(10, ge=3, le=15, description="出几条, 默认 10. 后端按结构自动分配 (痛/对/步/话/创)")
+    channel: str = Field("直播间", description="发布渠道, 例 '直播间' / '抖音正片' / '私信首条'")
+    run_lint: bool = Field(True, description="是否顺手跑 lint 终检 (6 维: 字数/钩子/数据/Call/口语/禁忌)")
 
 
-@app.post("/api/touliu/generate")
+@app.post("/api/touliu/generate", tags=["投流"], summary="一次出 n 条投流文案 (批量)")
 def touliu_generate(req: TouliuGenerateReq):
+    """走 opus 一次大批量出, 含 6K token system. 首跑 2-3 分钟, 缓存命中后快.
+    返回 {batch: [...], lint: {...}} (lint 是 run_lint=True 时附)."""
     result = touliu_pipeline.generate_batch(
         pitch=req.pitch,
         industry=req.industry,
@@ -1866,12 +1873,13 @@ def touliu_generate(req: TouliuGenerateReq):
 
 
 class TouliuLintReq(BaseModel):
-    batch: list[dict[str, Any]] = Field(default_factory=list)
-    target_action: str = "live"
+    batch: list[dict[str, Any]] = Field(default_factory=list, description="待 lint 的文案数组")
+    target_action: str = Field("live", description="转化目标 (live/reserve/private/visit)")
 
 
-@app.post("/api/touliu/lint")
+@app.post("/api/touliu/lint", tags=["投流"], summary="lint 终检 6 维")
 def touliu_lint(req: TouliuLintReq):
+    """本地 subprocess 调 lint_copy_batch.py · 不打 AI · 1-2s 出结果."""
     return touliu_pipeline.lint_batch(req.batch, target_action=req.target_action)
 
 
@@ -1885,7 +1893,7 @@ def touliu_lint(req: TouliuLintReq):
 PLANNER_SKILL_SLUG = "content-planner"
 
 
-@app.get("/api/planner/skill-info")
+@app.get("/api/planner/skill-info", tags=["内容策划"], summary="skill 元信息")
 def planner_skill_info():
     try:
         return skill_loader.skill_info(PLANNER_SKILL_SLUG)
@@ -1894,22 +1902,26 @@ def planner_skill_info():
 
 
 class PlannerAnalyzeReq(BaseModel):
-    brief: str   # 活动描述: "下周三给 200 个老板讲 AI 内容获客,有 1 个助理"
+    brief: str = Field(..., description="活动描述, 例 '下周三给 200 个老板讲 AI 内容获客, 有 1 个助理'")
 
 
-@app.post("/api/planner/analyze")
+@app.post("/api/planner/analyze", tags=["内容策划"], summary="Step 1 分析活动 + 三档目标")
 def planner_analyze(req: PlannerAnalyzeReq):
+    """走 deepseek. 收集活动信息 + 给三档目标 (保底 / 标准 / 最大化产出 N 条素材).
+    🔴 红线: 不提产品价格 / 不让参会者现场动手搭建."""
     return planner_pipeline.analyze_event(req.brief)
 
 
 class PlannerWriteReq(BaseModel):
-    brief: str
-    detected: dict[str, Any] = Field(default_factory=dict)
-    level: dict[str, Any] = Field(default_factory=dict)
+    brief: str = Field(..., description="活动描述")
+    detected: dict[str, Any] = Field(default_factory=dict, description="Step 1 检测出的活动信息")
+    level: dict[str, Any] = Field(default_factory=dict, description="挑定的目标档次 (保底/标准/最大化)")
 
 
-@app.post("/api/planner/write")
+@app.post("/api/planner/write", tags=["内容策划"], summary="Step 2 出 6 模块完整方案")
 def planner_write(req: PlannerWriteReq):
+    """走 opus. 输出 6 模块: 准备清单 / 现场动作 / 稀缺素材机会 / 角色分工 /
+    发布节奏 / 总产出预估."""
     return planner_pipeline.write_plan(req.brief, req.detected, req.level)
 
 
