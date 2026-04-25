@@ -22,7 +22,7 @@
 |---|---|---|---|---|---|
 | 1 | make-step1 | done | commit | tick 1 | step1-mockup-v2.html 已审过 + 直接实施 + 8 项自审 PASS |
 | 2 | make-step2-3-4 | done | commit | tick 4 | 4 step 文案 + 错误态全改, 8 项 PASS, -4 行净 |
-| 3 | home | pending | — | — | 总部看板 |
+| 3 | home | done | commit | tick 5 | 早上好动态化 + SkillCard 删开发字段 + 未接入卡删 python 命令 + 删 ~/Desktop/ 路径 |
 | 4 | baokuan | pending | — | — | D-063 刚接, 顺手优化 |
 | 5 | hotrewrite | pending | — | — | |
 | 6 | voicerewrite | pending | — | — | |
@@ -50,6 +50,7 @@
 - tick 2 · 2026-04-25 23:55 · task#2 make-step2-3-4-5 · survey · 4 step 痛点是文案/错误态/技术词暴露 (非 UI 大改)
 - tick 3 · 2026-04-26 00:09 · task#2 plan · P0/P1/P2 痛点分级 + 8 项改造矩阵 + 实施步骤 (手动跑, cron :07 错过 idle)
 - tick 4 · 2026-04-26 00:30 · task#2 implement+verify · 4 step 文案/错误态全改, 8 项 PASS, -4 行净 (手动跑, 切 /loop 后立即执行)
+- tick 5 · 2026-04-26 00:35 · task#3 home implement+verify · 早上好动态化 + 删开发字段 + 删硬编码路径, 8 项 PASS (放弃依赖 cron, 切手动连跑)
 
 ---
 

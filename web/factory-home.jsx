@@ -23,7 +23,7 @@ function PageHome({ onNav }) {
           <div style={{ marginBottom: 50 }}>
             <div style={{ fontSize: 13, color: T.muted, marginBottom: 10, fontWeight: 500 }}>{formatToday()}</div>
             <div style={{ fontSize: 44, fontWeight: 700, color: T.text, letterSpacing: "-0.02em", marginBottom: 14, lineHeight: 1.15 }}>
-              早上好,清华哥 👋
+              {greetingByHour()},清华哥 👋
             </div>
             <div style={{ fontSize: 17, color: T.muted, lineHeight: 1.6 }}>
               今天想做点什么?从下面挑一个开始就行。
@@ -119,7 +119,7 @@ function SkillCenter({ catalog, onNav }) {
       <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 14 }}>
         <div style={{ fontSize: 18, fontWeight: 700, color: T.text }}>🛠️ 我的技能</div>
         <div style={{ fontSize: 12, color: T.muted }}>
-          已接入 {installed.length} · 桌面还有 {unregistered.length} 个可接入
+          已接入 {installed.length} 个{unregistered.length > 0 ? ` · 还有 ${unregistered.length} 个可接入` : ""}
         </div>
       </div>
 
@@ -136,22 +136,21 @@ function SkillCenter({ catalog, onNav }) {
             border: `1px dashed ${T.border}`, borderRadius: 8,
             color: T.muted, fontSize: 12, cursor: "pointer", fontFamily: "inherit",
           }}>
-            {showUnreg ? "↑ 收起" : "↓ 展开"} 桌面 ~/Desktop/skills/ 里还没接入的 {unregistered.length} 个 skill
+            {showUnreg ? "↑ 收起" : "↓ 展开"} 还有 {unregistered.length} 个技能没接入
           </button>
           {showUnreg && (
             <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
               {unregistered.map(s => (
                 <div key={s.slug} style={{
-                  padding: "10px 12px", background: T.bg2,
+                  padding: "12px", background: T.bg2,
                   border: `1px dashed ${T.borderSoft}`, borderRadius: 8,
-                  fontSize: 12, color: T.muted, opacity: 0.7,
+                  fontSize: 12, color: T.muted, opacity: 0.85,
                 }}>
-                  <div style={{ fontSize: 13, color: T.muted, marginBottom: 2 }}>
+                  <div style={{ fontSize: 13, color: T.muted, marginBottom: 4 }}>
                     {s.icon} {s.label}
                   </div>
-                  <div style={{ fontSize: 10.5, color: T.muted2, fontFamily: "SF Mono, monospace" }}>
-                    python3 scripts/add_skill.py<br/>
-                    --slug "{s.slug}" --key &lt;py_id&gt;
+                  <div style={{ fontSize: 11, color: T.muted2 }}>
+                    去 ⚙️ 设置接入这个技能
                   </div>
                 </div>
               ))}
@@ -165,8 +164,6 @@ function SkillCenter({ catalog, onNav }) {
 
 function SkillCard({ skill, onNav }) {
   const [hover, setHover] = React.useState(false);
-  const mtime = skill.skill_md_mtime;
-  const ago = mtime ? timeAgo(mtime) : "";
   return (
     <div
       onClick={() => skill.page_id && onNav(skill.page_id)}
@@ -181,15 +178,10 @@ function SkillCard({ skill, onNav }) {
       }}>
       <div style={{ fontSize: 24, lineHeight: 1, flexShrink: 0 }}>{skill.icon}</div>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
           <div style={{ fontSize: 14.5, fontWeight: 600, color: T.text }}>{skill.label}</div>
-          <span style={{ fontSize: 10, color: T.muted2, fontFamily: "SF Mono, monospace" }}>{skill.steps} 步</span>
-          {skill.has_scripts && <Tag size="xs" color="green">含脚本</Tag>}
         </div>
-        <div style={{ fontSize: 11.5, color: T.muted, lineHeight: 1.55, marginBottom: 4 }}>{skill.subtitle}</div>
-        <div style={{ fontSize: 10, color: T.muted2, fontFamily: "SF Mono, monospace" }}>
-          {skill.slug} · SKILL.md {ago}
-        </div>
+        <div style={{ fontSize: 11.5, color: T.muted, lineHeight: 1.55 }}>{skill.subtitle}</div>
       </div>
     </div>
   );
@@ -290,6 +282,16 @@ function formatToday() {
   const d = new Date();
   const week = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"][d.getDay()];
   return `${d.getMonth() + 1} 月 ${d.getDate()} 日 · ${week}`;
+}
+
+function greetingByHour() {
+  const h = new Date().getHours();
+  if (h < 5)  return "夜深了"; // 0-4 凌晨
+  if (h < 11) return "早上好";  // 5-10
+  if (h < 14) return "中午好";  // 11-13
+  if (h < 18) return "下午好";  // 14-17
+  if (h < 23) return "晚上好";  // 18-22
+  return "夜深了";              // 23
 }
 
 // ─── 🌙 小华夜班播报卡 (D-040e) ────────────────────────────
