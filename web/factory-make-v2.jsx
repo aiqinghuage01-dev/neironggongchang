@@ -811,30 +811,39 @@ function MakeV2StepEdit({ templateId, script, dhVideoPath, alignedScenes, setAli
         </div>
       </div>
 
-      {/* mode + 对齐触发 */}
+      {/* D-062gg: 对齐模式从 chip 升级成卡片(带说明) */}
       <div style={{ background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 12, padding: 16, marginBottom: 16 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
           <div style={{ fontSize: 13, fontWeight: 600 }}>对齐模式</div>
-          <div style={{ display: "flex", gap: 6 }}>
-            {[
-              { id: "auto", label: "AI 自动切" },
-              { id: "placeholder", label: "用模板原字段" },
-              { id: "manual", label: "手动填" },
-            ].map(m => (
-              <button key={m.id} onClick={() => setAlignMode(m.id)}
-                style={{
-                  padding: "5px 12px", fontSize: 11.5, borderRadius: 100, border: "none",
-                  fontFamily: "inherit", cursor: "pointer",
-                  background: alignMode === m.id ? T.text : T.bg2,
-                  color: alignMode === m.id ? "#fff" : T.muted,
-                  fontWeight: alignMode === m.id ? 600 : 500,
-                }}>{m.label}</button>
-            ))}
-          </div>
+          <span style={{ fontSize: 11.5, color: T.muted2 }}>· 选一个再点对齐</span>
           <div style={{ flex: 1 }} />
           <Btn variant="primary" onClick={runAlign} disabled={aligning}>
             {aligning ? "对齐中…" : (alignedScenes ? "🔄 重新对齐" : "▶ 开始对齐")}
           </Btn>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
+          {[
+            { id: "auto",        label: "AI 自动切",      desc: "把你的文案智能切到 A/B/C 字幕段, 默认推荐", icon: "🤖" },
+            { id: "placeholder", label: "用模板原字段",   desc: "保留模板自带 demo 字幕, 不带你的文案", icon: "📋" },
+            { id: "manual",      label: "手动填",         desc: "对齐后逐场景手填, 适合精控", icon: "✏️" },
+          ].map(m => {
+            const on = alignMode === m.id;
+            return (
+              <div key={m.id} onClick={() => setAlignMode(m.id)} style={{
+                padding: "10px 12px", borderRadius: 8, cursor: "pointer",
+                background: on ? T.brandSoft : "#fff",
+                border: `1px solid ${on ? T.brand : T.borderSoft}`,
+                transition: "all 0.1s",
+              }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                  <span style={{ fontSize: 16 }}>{m.icon}</span>
+                  <span style={{ fontSize: 12.5, fontWeight: 600, color: T.text }}>{m.label}</span>
+                  {on && <Tag size="xs" color="green">已选</Tag>}
+                </div>
+                <div style={{ fontSize: 11, color: T.muted, lineHeight: 1.5 }}>{m.desc}</div>
+              </div>
+            );
+          })}
         </div>
       </div>
 

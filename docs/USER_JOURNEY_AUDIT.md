@@ -276,6 +276,10 @@
         每项: radio dot 风格 (与 Settings 一致), 选中→brandSoft 背景 + brand border + 绿"默认"tag
         新加 #ID 显示, 视觉与 Settings 我的声音/数字人 section 1:1 对齐
       → **D-062ee** ✅ Settings 我的声音/数字人 empty 给柿榴指引 (顺手修)
+      → **D-062gg** ✅ Step 4 alignMode 同款重构 (chip → 卡片 + 图标 + 描述)
+        清华哥不会知道 "auto / placeholder / manual" 各是啥
+        改成: 🤖 AI 自动切 / 📋 用模板原字段 / ✏️ 手动填, 每个 1-2 行说明
+        与 Step 2 / Step 3 朴素卡 视觉一致 (brandSoft 高亮 + 已选 tag)
 
 - [x] **D-062-AUDIT-4** 2026-04-25 14:50 复盘 (D-062cc/z 后第四拍)
       新发现的真 bug + 2 修:
