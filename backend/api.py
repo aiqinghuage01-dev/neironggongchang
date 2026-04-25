@@ -84,7 +84,37 @@ COVER_DIR = DATA_DIR / "covers"
 for d in (UPLOAD_DIR, COVER_DIR):
     d.mkdir(parents=True, exist_ok=True)
 
-app = FastAPI(title="内容工厂", version="0.3.0")
+# OpenAPI 分组 — 新 endpoint 写 tags=["小华夜班"] 这类中文 tag 即可在 /docs 自动归到这组
+TAGS_METADATA = [
+    {"name": "总部", "description": "首页 widget / 健康检查 / 技能目录"},
+    {"name": "AI", "description": "AI 引擎元信息 / 路由 / 用量统计"},
+    {"name": "全局任务", "description": "异步任务清单 (D-037)"},
+    {"name": "小华夜班", "description": "夜间自动化任务 (D-040)"},
+    {"name": "公众号", "description": "公众号 8 步流水线 (D-010)"},
+    {"name": "热点改写", "description": "热点文案改写V2 skill (D-012)"},
+    {"name": "录音改写", "description": "录音文案改写 skill (D-013)"},
+    {"name": "投流", "description": "touliu-agent skill (D-014)"},
+    {"name": "内容策划", "description": "content-planner skill (D-022)"},
+    {"name": "违规审查", "description": "违禁违规审查 skill (D-026)"},
+    {"name": "即梦 AIGC", "description": "Dreamina CLI 接入 (D-028)"},
+    {"name": "短视频", "description": "做视频流水线"},
+    {"name": "档案部", "description": "素材库 / 作品库 / 知识库"},
+    {"name": "设置", "description": "全局配置"},
+]
+
+app = FastAPI(
+    title="内容工厂 API",
+    version="0.4.0",
+    description=(
+        "清华哥个人内容生产工具的 HTTP API. "
+        "前端 (factory-*.jsx 套件) 全部走这里, 浏览器直接 `/docs` 试调.\n\n"
+        "**约定**\n"
+        "- 媒体文件全部走 `/media/<相对 data/ 路径>` 暴露\n"
+        "- 慢 endpoint (>5s) 优先走异步 + task_id 轮询模式 (D-037)\n"
+        "- skill_slug 见 `/api/skills/catalog`, AI 引擎路由见 `/api/ai/routes`"
+    ),
+    openapi_tags=TAGS_METADATA,
+)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -460,6 +490,116 @@ def tasks_cancel(task_id: str):
     if not ok:
         raise HTTPException(status_code=409, detail="task not cancellable (already finished?)")
     return {"ok": True, "task": tasks_service.get_task(task_id)}
+
+
+# ─── 小华夜班 (D-040) ─────────────────────────────────────
+# 用户睡觉的 23:00-6:00 跑预设流水线 (抓选题 / 拆素材 / 维护知识库 / 复盘).
+# 早上打开总部直接看 NightDigestCard 播报.
+# 命名规范: 用户可见 "小华夜班 / 任务 / 上次跑了…" · 代码内 night_shift / night_job / night_job_run.
+# 本轮 (D-040b) 7 个 endpoint, run-now 走 night_executor 占位, D-040c 接真 skill.
+
+class NightJobCreate(BaseModel):
+    name: str = Field(..., max_length=100, description="任务名 (用户可见, 例 '凌晨抓热点')")
+    trigger_type: str = Field(..., description="触发器类型: cron | file_watch | manual")
+    icon: Optional[str] = Field(None, max_length=8, description="emoji 图标")
+    skill_slug: Optional[str] = Field(None, max_length=64, description="对应 ~/Desktop/skills/<slug>/")
+    trigger_config: Optional[dict[str, Any]] = Field(
+        None,
+        description="cron: {cron:'0 23 * * *', timezone:'Asia/Shanghai'} · file_watch: {path:'data/inbox/audio/', patterns:['*.m4a']}",
+    )
+    output_target: Optional[str] = Field(None, description="产出去向: materials | works | knowledge | home")
+    ai_route: Optional[str] = Field(None, description="覆盖默认引擎路由, 如 'opus' / 'deepseek'")
+    enabled: bool = Field(True, description="是否启用 (false 则调度器跳过)")
+
+
+class NightJobUpdate(BaseModel):
+    name: Optional[str] = None
+    icon: Optional[str] = None
+    skill_slug: Optional[str] = None
+    trigger_type: Optional[str] = None
+    trigger_config: Optional[dict[str, Any]] = None
+    output_target: Optional[str] = None
+    ai_route: Optional[str] = None
+    enabled: Optional[bool] = None
+
+
+@app.get("/api/night/jobs", tags=["小华夜班"], summary="列任务")
+def night_jobs_list(enabled_only: bool = False):
+    """列所有夜班任务 (默认含禁用的). 总控页 NightShiftPage 用."""
+    from backend.services import night_shift
+    return {"jobs": night_shift.list_jobs(enabled_only=enabled_only)}
+
+
+@app.post("/api/night/jobs", tags=["小华夜班"], summary="新建任务", status_code=201)
+def night_jobs_create(req: NightJobCreate):
+    """新建一条夜班任务. 立即生效 (D-040c 调度器会在下一次 reload 时把它捞起)."""
+    from backend.services import night_shift
+    try:
+        jid = night_shift.create_job(**req.model_dump(exclude_none=True))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return night_shift.get_job(jid)
+
+
+@app.patch("/api/night/jobs/{job_id}", tags=["小华夜班"], summary="改/开关任务")
+def night_jobs_update(job_id: int, req: NightJobUpdate):
+    """部分更新. 改 enabled 即开关任务."""
+    from backend.services import night_shift
+    fields = req.model_dump(exclude_unset=True)
+    if not fields:
+        raise HTTPException(status_code=400, detail="no fields to update")
+    try:
+        ok = night_shift.update_job(job_id, **fields)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    if not ok:
+        raise HTTPException(status_code=404, detail="job not found")
+    return night_shift.get_job(job_id)
+
+
+@app.delete("/api/night/jobs/{job_id}", tags=["小华夜班"], summary="删任务")
+def night_jobs_delete(job_id: int):
+    """删任务 (级联删运行历史)."""
+    from backend.services import night_shift
+    if not night_shift.delete_job(job_id):
+        raise HTTPException(status_code=404, detail="job not found")
+    return {"ok": True}
+
+
+@app.post("/api/night/jobs/{job_id}/run", tags=["小华夜班"], summary="立即跑一次")
+def night_jobs_run(job_id: int):
+    """手动触发. 立即返回 run_id, 后台 thread 跑实际任务.
+    轮询 GET /api/night/runs?job_id=... 看结果."""
+    from backend.services import night_executor
+    try:
+        run_id = night_executor.run_job_async(job_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    return {"run_id": run_id, "job_id": job_id}
+
+
+@app.get("/api/night/runs", tags=["小华夜班"], summary="运行历史")
+def night_runs_list(
+    job_id: Optional[int] = None,
+    status: Optional[str] = None,
+    since_ts: Optional[int] = None,
+    limit: int = 50,
+):
+    """运行历史. 按 started_at DESC 排.
+    `status`: running | success | failed · `since_ts`: unix 秒, 只列之后的."""
+    from backend.services import night_shift
+    return {
+        "runs": night_shift.list_runs(
+            job_id=job_id, status=status, since_ts=since_ts, limit=limit
+        )
+    }
+
+
+@app.get("/api/night/digest", tags=["小华夜班"], summary="总部播报区数据")
+def night_digest(since_hours: int = 24):
+    """总部 NightDigestCard 用. 默认最近 24h, 只挑 success runs, 带 job_name/icon/output_target."""
+    from backend.services import night_shift
+    return night_shift.get_digest(since_hours=max(1, min(int(since_hours), 24 * 7)))
 
 
 # ─── 小华自由对话 dock (D-027) ────────────────────────────

@@ -270,8 +270,15 @@ P0-P10 所有任务落地, 14 个 commit 从 `09faf92` 到今日末 commit。
 - [x] **D-040a 数据层** night_jobs + night_job_runs 表 + night_shift.py
       CRUD service (create/list/update/delete/set_enabled · start_run/finish_run/list_runs/
       latest_run_for_job · get_digest 24h success 滚动汇总) · tests/test_night_shift.py 22/22
-- [ ] **D-040b API** 7 个 /api/night/* endpoints (jobs CRUD / run-now / runs / digest)
-      jobs/{id}/run 复用 tasks_runner 走 tasks 池
+- [x] **D-040b API + OpenAPI 规范化** 7 个 /api/night/* endpoints
+      GET/POST  /api/night/jobs · PATCH/DELETE /api/night/jobs/{id} ·
+      POST /api/night/jobs/{id}/run · GET /api/night/runs · GET /api/night/digest
+      run-now 走 night_executor.run_job_async (thread + placeholder runner,
+      D-040c 注册真 subprocess runner). 立即返回 run_id, 调用方轮询 /runs.
+      **顺手立 OpenAPI 注释规范** (用户选 B): app `description` + `openapi_tags`
+      14 个分组 (总部/AI/小华夜班/公众号/...); 新 endpoint 全部带 tags=["小华夜班"] +
+      summary 中文一句 + Pydantic Field(description=...). 老 endpoint 增量补.
+      tests/test_night_executor.py 6/6.
 - [ ] **D-040c 调度器** APScheduler 接入 cron + watchdog file_watch, 启动钩子,
       执行器走 D-010 范式 (subprocess 调 ~/Desktop/skills/<slug>/scripts), AI 走 ai.py 关卡层
 - [ ] **D-040d 总控页 + sidebar 改造**
