@@ -504,6 +504,91 @@ def gen_cover(title: str, label: str = "清华哥说", output_path: str | None =
 
 
 # ─── Phase 5 · 推送到微信草稿箱 ────────────────────────────────
+# 已知坑 (D-042):
+#   WeChat draft/add 接口 errcode 45166 "invalid content hint" 触发条件难定位,
+#   常见原因: <img http://...>、外站 <a>、<script>/<iframe>、from=appmsg URL 等.
+#   sanitize_for_push() 推送前清理一道; 同时把请求 payload 落盘 /tmp/preview/
+#   last_push_request.{html,json}, 再失败时方便用户把它发回来精确定位.
+
+# 允许保留的 <a href> 域名前缀
+_ALLOWED_LINK_PREFIXES = (
+    "https://mp.weixin.qq.com",
+    "http://mp.weixin.qq.com",
+)
+# 允许的 <img src> scheme + host
+_ALLOWED_IMG_RE = re.compile(r'^https?://(?:[a-z0-9-]+\.)*(mmbiz\.qpic\.cn|wx\.qlogo\.cn)/', re.IGNORECASE)
+
+
+def sanitize_for_push(html: str) -> dict[str, Any]:
+    """推送前清理 HTML, 降低 errcode 45166 风险.
+
+    返回 {clean: str, removed: dict[str, int]} — 让调用方知道删了啥, 便于诊断.
+
+    清理规则 (从最常见到最防御性):
+      1. 干掉硬编码的非本草稿 mmbiz 头像 (template 里 ?from=appmsg 那种)
+      2. 干掉 http:// 的图 (微信草稿要求 https)
+      3. 干掉非 mmbiz/qlogo 域名的图 (apimart / 外链)
+      4. <a> 指向非 mp.weixin.qq.com 的, 解 <a> 但保留内文
+      5. <script> / <iframe> / <form> / <input> / <embed> / <object> /
+         <video> / <audio> / <link> / <meta> 整条剥
+    """
+    if not html:
+        return {"clean": "", "removed": {}}
+
+    removed: dict[str, int] = {}
+    out = html
+
+    # 5) 整段 strip 的 tag (含内容). re.S = . 匹配换行
+    DROP_TAGS = ("script", "iframe", "form", "input", "embed", "object",
+                 "video", "audio", "link", "meta")
+    for tag in DROP_TAGS:
+        # 自闭合 + 配对都吃掉
+        pat_pair = re.compile(rf"<{tag}\b[^>]*>.*?</{tag}>", re.IGNORECASE | re.S)
+        n_pair = len(pat_pair.findall(out))
+        if n_pair:
+            out = pat_pair.sub("", out)
+            removed[f"<{tag}>"] = removed.get(f"<{tag}>", 0) + n_pair
+        pat_self = re.compile(rf"<{tag}\b[^>]*/?>", re.IGNORECASE)
+        n_self = len(pat_self.findall(out))
+        if n_self:
+            out = pat_self.sub("", out)
+            removed[f"<{tag}>"] = removed.get(f"<{tag}>", 0) + n_self
+
+    # 1+2+3) 处理 <img>: 看 src 决定保留还是剥
+    img_re = re.compile(r"<img\b[^>]*\bsrc=([\"'])([^\"']*)\1[^>]*/?>", re.IGNORECASE)
+    def _img_sub(m: re.Match) -> str:
+        url = m.group(2)
+        if "?from=appmsg" in url or "&from=appmsg" in url:
+            removed["img_from_appmsg"] = removed.get("img_from_appmsg", 0) + 1
+            return ""
+        if url.startswith("http://"):
+            removed["img_http_only"] = removed.get("img_http_only", 0) + 1
+            return ""
+        if not _ALLOWED_IMG_RE.match(url):
+            removed["img_external"] = removed.get("img_external", 0) + 1
+            return ""
+        return m.group(0)
+    out = img_re.sub(_img_sub, out)
+
+    # 1b) <a href><img></a> 整段头像块: 上面 img 走了之后 <a> 里就空了, 顺手清掉
+    out = re.sub(r"<a\b[^>]*>\s*</a>", "", out, flags=re.IGNORECASE | re.S)
+
+    # 4) 非 mp.weixin.qq.com 的 <a>: 解 <a> 标签, 内文保留
+    a_re = re.compile(r"<a\b[^>]*\bhref=([\"'])([^\"']*)\1[^>]*>(.*?)</a>", re.IGNORECASE | re.S)
+    def _a_sub(m: re.Match) -> str:
+        href = m.group(2)
+        if any(href.startswith(p) for p in _ALLOWED_LINK_PREFIXES):
+            return m.group(0)
+        removed["a_external"] = removed.get("a_external", 0) + 1
+        return m.group(3)  # 保留内文
+    out = a_re.sub(_a_sub, out)
+
+    return {"clean": out, "removed": removed}
+
+
+# 落盘诊断目录, 失败时用户可以把这里的文件发给我精确定位
+_DIAG_DIR = PREVIEW_DIR
+
 
 def push_to_wechat(
     title: str,
@@ -512,7 +597,12 @@ def push_to_wechat(
     cover_path: str,
     author: str = "清华哥",
 ) -> dict[str, Any]:
-    """调 push_to_wechat.sh 推送到草稿箱。需要 ~/.wechat-article-config 已配。"""
+    """调 push_to_wechat.sh 推送到草稿箱。需要 ~/.wechat-article-config 已配。
+
+    D-042: 推送前 sanitize_for_push 清一道, 把清理后的 HTML 写到
+    /tmp/preview/last_push_request.html 给脚本; 同时落 last_push_request.json
+    含原 / 清理后字符数和被剥的元素统计, 失败时方便定位 errcode 45166 原因.
+    """
     scripts_dir = skill_loader.load_skill(SKILL_SLUG)["scripts_dir"]
     script = scripts_dir / "push_to_wechat.sh"
     if not script.exists():
@@ -522,10 +612,35 @@ def push_to_wechat(
         if not Path(p).exists():
             raise WechatScriptError(f"文件不存在: {p}")
 
+    # ── D-042 推送前 sanitize ──
+    original_html = Path(html_path).read_text(encoding="utf-8")
+    clean_result = sanitize_for_push(original_html)
+    sanitized_html = clean_result["clean"]
+
+    # 落盘清理后的 html, 让脚本读这个 (而不是 raw 那个)
+    sanitized_path = _DIAG_DIR / "last_push_request.html"
+    sanitized_path.write_text(sanitized_html, encoding="utf-8")
+
+    # 诊断 dump
+    diag = {
+        "title": title,
+        "digest": digest,
+        "author": author,
+        "cover_path": cover_path,
+        "original_html_path": str(html_path),
+        "sanitized_html_path": str(sanitized_path),
+        "original_chars": len(original_html),
+        "sanitized_chars": len(sanitized_html),
+        "removed": clean_result["removed"],
+    }
+    (_DIAG_DIR / "last_push_request.json").write_text(
+        json.dumps(diag, ensure_ascii=False, indent=2), encoding="utf-8",
+    )
+
     t0 = time.time()
     r = _run([
         "bash", str(script),
-        title, author, digest, html_path, cover_path,
+        title, author, digest, str(sanitized_path), cover_path,
     ], timeout=90, cwd=str(scripts_dir))
 
     tail = r.stdout.strip().splitlines()[-20:]
@@ -533,4 +648,6 @@ def push_to_wechat(
         "ok": True,
         "stdout_tail": tail,
         "elapsed_sec": round(time.time() - t0, 1),
+        "sanitize_removed": clean_result["removed"],
+        "sanitized_html_path": str(sanitized_path),
     }
