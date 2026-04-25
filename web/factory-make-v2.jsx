@@ -198,23 +198,28 @@ function MakeV2StepScript({ script, setScript, onNext, onNav, seedFrom, onDismis
     onNav("hotrewrite");
   }
 
-  // D-062mm (清华哥反馈 #18): 智能识别 URL / 文案, 显不同的下一步按钮
-  // - URL → "📎 提取文案" 主 (走轻抖 ASR), "🎬 直接做(不提)" 次
-  // - 文案 → "🎬 做数字人 →" 主, "✍️ 改写优化一下" 次 (跳 voicerewrite)
-  // - 空 → "↑ 先填文案" 灰
+  // D-062mm (清华哥反馈 #18 / #21 截图): 智能识别 URL / 混合 / 文案
+  // - 纯 URL: trim 后 URL 开头, length < 200
+  // - 混合: 整体长但里面含 URL (典型: 抖音"5.87 ... 复制此链接打开 Dou音搜索" 转发文)
+  // - 纯文案: 上面都不是, length ≥ 10
   const trimmed = script.trim();
-  const isUrlLike = trimmed.length > 0 && trimmed.length < 200 &&
-    (/^https?:\/\//.test(trimmed) ||
-     /v\.douyin\.com|xhslink|weibo\.com|kuaishou\.com|b23\.tv|youtu\.be|youtube\.com/.test(trimmed));
-  const isContentLike = trimmed.length >= 10 && !isUrlLike;
+  const URL_PATTERN = /https?:\/\/[^\s]+|v\.douyin\.com\/[a-zA-Z0-9]+|xhslink\.com\/[a-zA-Z0-9]+|b23\.tv\/[a-zA-Z0-9]+/;
+  const urlMatch = trimmed.match(URL_PATTERN);
+  const extractedUrl = urlMatch ? urlMatch[0] : null;
+  const isUrlLike = trimmed.length > 0 && trimmed.length < 200 && !!extractedUrl;
+  const isMixedMode = trimmed.length >= 200 && !!extractedUrl;
+  const isContentLike = trimmed.length >= 10 && !isUrlLike && !isMixedMode;
 
   const [extracting, setExtracting] = React.useState(false);
   const [extractMsg, setExtractMsg] = React.useState("");
   async function extractFromUrl() {
     if (!trimmed || extracting) return;
-    setExtracting(true); setExtractMsg("已提交轻抖 ASR · 通常 1-3 分钟...");
+    // 混合模式: 用 extractedUrl 而不是整段 trimmed
+    const urlToSubmit = isMixedMode ? extractedUrl : trimmed;
+    setExtracting(true);
+    setExtractMsg(`已提交 ${isMixedMode ? "(从转发文里抓的链接) " : ""}轻抖 ASR · 通常 1-3 分钟...`);
     try {
-      const sub = await api.post("/api/transcribe/submit", { url: trimmed });
+      const sub = await api.post("/api/transcribe/submit", { url: urlToSubmit });
       const batchId = sub.batch_id;
       for (let i = 0; i < 60; i++) {
         await new Promise(s => setTimeout(s, 5000));
@@ -301,6 +306,12 @@ function MakeV2StepScript({ script, setScript, onNext, onNav, seedFrom, onDismis
               <Tag size="xs" color="blue">🔗 像短视频链接</Tag>
               <span style={{ fontSize: 11, color: T.muted2 }}>下面"提取文案"走轻抖 ASR (1-3 分钟)</span>
             </>
+          ) : isMixedMode ? (
+            <>
+              <Tag size="xs" color="blue">🔗 转发文里有链接</Tag>
+              <span style={{ fontSize: 11, color: T.muted2, fontFamily: "SF Mono, monospace" }}>{extractedUrl.slice(0, 50)}{extractedUrl.length > 50 ? "..." : ""}</span>
+              <span style={{ fontSize: 11, color: T.muted2 }}>· 提的是这条链接里的文案 (不是你贴的转发文)</span>
+            </>
           ) : (
             <>
               <Tag size="xs" color="gray">{trimmed.length} 字</Tag>
@@ -344,6 +355,25 @@ function MakeV2StepScript({ script, setScript, onNext, onNav, seedFrom, onDismis
               }}>{extracting ? "提取中..." : "📎 提取文案 →"}</button>
               <span style={{ fontSize: 11, color: T.muted2, flex: 1 }}>
                 提完会自动填回, 你看看要不要改写, 再做数字人
+              </span>
+            </>
+          ) : isMixedMode ? (
+            // 混合模式 (转发文 + 含 URL): 主走"提取链接里的文案", 次"用我贴的文字直接做"
+            <>
+              <button onClick={extractFromUrl} disabled={extracting} style={{
+                padding: "10px 22px", fontSize: 14, fontWeight: 600,
+                background: extracting ? T.muted3 : T.brand, color: "#fff",
+                border: "none", borderRadius: 100,
+                cursor: extracting ? "not-allowed" : "pointer", fontFamily: "inherit",
+              }}>{extracting ? "提取中..." : "📎 提取链接里的文案 →"}</button>
+              <button onClick={onNext} disabled={extracting} style={{
+                padding: "9px 18px", fontSize: 13, fontWeight: 500,
+                background: "#fff", color: T.muted,
+                border: `1px solid ${T.border}`, borderRadius: 100,
+                cursor: extracting ? "not-allowed" : "pointer", fontFamily: "inherit",
+              }}>🎬 用我贴的文字直接做</button>
+              <span style={{ fontSize: 11, color: T.muted2, flex: 1 }}>
+                提取的是 douyin/xhs 视频里的口播 · 不要就直接做
               </span>
             </>
           ) : (
