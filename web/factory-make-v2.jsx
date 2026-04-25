@@ -332,19 +332,35 @@ function MakeV2StepVoiceDh({ voiceId, setVoiceId, avatarId, setAvatarId, dhVideo
   const [localErr, setLocalErr] = React.useState("");
   // D-062ff: showPickers 删了 — picker 默认就展开 (清华哥反馈: 不应该藏起来)
 
-  // 加载 speakers + avatars + 上次默认
+  // 加载 speakers + avatars
   React.useEffect(() => {
     api.get("/api/speakers").then(setSpeakers).catch(() => setSpeakers([]));
     api.get("/api/avatars").then(setAvatars).catch(() => setAvatars([]));
-
-    if (!voiceId && !avatarId) {
-      try {
-        const last = JSON.parse(localStorage.getItem(MAKE_V2_LAST_KEY) || "{}");
-        if (last.voiceId) setVoiceId(last.voiceId);
-        if (last.avatarId) setAvatarId(last.avatarId);
-      } catch (_) {}
-    }
   }, []);
+
+  // D-062kk: 自动默认勾选 (清华哥反馈: 默认就是勾选的, 不用每次手点)
+  // 优先级: 已有 state > localStorage 上次 (在列表里) > 第 1 个
+  React.useEffect(() => {
+    if (!speakers || voiceId) return;
+    let target = null;
+    try {
+      const last = JSON.parse(localStorage.getItem(MAKE_V2_LAST_KEY) || "{}");
+      if (last.voiceId && speakers.some(s => s.id === last.voiceId)) target = last.voiceId;
+    } catch (_) {}
+    if (!target && speakers.length > 0) target = speakers[0].id;
+    if (target) setVoiceId(target);
+  }, [speakers]);
+
+  React.useEffect(() => {
+    if (!avatars || avatarId) return;
+    let target = null;
+    try {
+      const last = JSON.parse(localStorage.getItem(MAKE_V2_LAST_KEY) || "{}");
+      if (last.avatarId && avatars.some(a => a.id === last.avatarId)) target = last.avatarId;
+    } catch (_) {}
+    if (!target && avatars.length > 0) target = avatars[0].id;
+    if (target) setAvatarId(target);
+  }, [avatars]);
 
   function rememberDefault() {
     try {
@@ -413,28 +429,27 @@ function MakeV2StepVoiceDh({ voiceId, setVoiceId, avatarId, setAvatarId, dhVideo
 
   return (
     <div>
-      {/* D-062ff: 标题 + 默认提示 (无 toggle, picker 始终展开) */}
-      <div style={{ marginBottom: 14, padding: "14px 16px", background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 12 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ fontSize: 14, fontWeight: 600, color: T.text }}>2. 声音 + 数字人</div>
-          <span style={{ fontSize: 11.5, color: T.muted }}>· 选中即默认 · localStorage 记住</span>
-          <div style={{ flex: 1 }} />
-          <span style={{ fontSize: 11, color: T.muted2 }}>
-            {ready ? `当前: ${speaker?.title || ""} × ${avatar?.title || ""}` : "↓ 选一对开始"}
-          </span>
+      {/* D-062kk: 大卡片 hero (参照清华哥图16 风格) — 声音 / 数字人 各一区, 上下堆叠 */}
+      <div style={{ marginBottom: 24 }}>
+        <div style={{ fontSize: 24, fontWeight: 700, color: T.text, marginBottom: 4 }}>用什么声音念? 🎙️</div>
+        <div style={{ fontSize: 13, color: T.muted, marginBottom: 16 }}>
+          {voiceId ? "已默认勾选, 不喜欢点别的换" : "下面挑一个 · 默认推荐第一个"}
         </div>
-      </div>
-
-      {/* D-062ff: 全部声音 + 全部数字人 默认展开, 选中明显高亮 */}
-      <div style={{ marginBottom: 16, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-        <PickerColumn title="🎙️ 声音 (CosyVoice)" loading={!speakers}
-          items={speakers?.map(s => ({ id: s.id, label: s.title || `#${s.id}` })) || []}
-          selectedId={voiceId} onSelect={setVoiceId}
+        <BigPickerColumn loading={!speakers}
+          items={speakers || []} idKey="id" titleKey="title" iconDefault="🎙️"
+          selectedId={voiceId} onSelect={setVoiceId} kind="voice"
           emptyTip="还没有克隆声音 · 上传 1 段你的录音 (≥ 10s) 克隆专属音色"
           emptyAction={onNav ? { label: "去 ⚙️ 设置 · 克隆样本上传", onClick: () => onNav("settings") } : null} />
-        <PickerColumn title="👤 数字人 (柿榴)" loading={!avatars}
-          items={avatars?.map(a => ({ id: a.id, label: a.title || `#${a.id}` })) || []}
-          selectedId={avatarId} onSelect={setAvatarId}
+      </div>
+
+      <div style={{ marginBottom: 24 }}>
+        <div style={{ fontSize: 24, fontWeight: 700, color: T.text, marginBottom: 4 }}>用哪个数字人形象? 👤</div>
+        <div style={{ fontSize: 13, color: T.muted, marginBottom: 16 }}>
+          {avatarId ? "已默认勾选, 不喜欢点别的换" : "下面挑一个 · 默认推荐第一个"}
+        </div>
+        <BigPickerColumn loading={!avatars}
+          items={avatars || []} idKey="id" titleKey="title" iconDefault="👤"
+          selectedId={avatarId} onSelect={setAvatarId} kind="avatar"
           emptyTip="柿榴账号下还没数字人形象 · 去柿榴 Web 后台创建一个 (3-5 分钟 trained)"
           emptyAction={{ label: "📋 复制柿榴操作", onClick: () => {
             navigator.clipboard?.writeText("登录柿榴后台 → 数字人管理 → 创建 → 上传 30s 自拍视频 → 训练");
@@ -505,60 +520,110 @@ function MakeV2StepVoiceDh({ voiceId, setVoiceId, avatarId, setAvatarId, dhVideo
   );
 }
 
-function PickerColumn({ title, items, selectedId, onSelect, loading, emptyTip, emptyAction }) {
-  // D-062ff: header 显数量 + 当前选中 (与 Settings 风格一致)
-  const selectedItem = items?.find(it => it.id === selectedId);
-  return (
-    <div style={{ background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 10, padding: 14 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: T.text }}>{title}</div>
-        {!loading && items.length > 0 && (
-          <Tag size="xs" color="gray">{items.length}</Tag>
-        )}
-        <div style={{ flex: 1 }} />
-        {selectedItem && (
-          <span style={{ fontSize: 10.5, color: T.brand, fontWeight: 500 }}>当前: {selectedItem.label}</span>
+// D-062kk: 大卡片 picker (参照清华哥图16 风格)
+// 每张卡: 圆点 + 大标题 + 推荐/已保存/默认 tag + 描述行 + 试听按钮
+// kind: "voice" | "avatar" — 决定试听按钮文案 + 描述生成
+function BigPickerColumn({ items, selectedId, onSelect, loading, emptyTip, emptyAction, idKey, titleKey, iconDefault, kind }) {
+  if (loading) {
+    return <div style={{ padding: 30, textAlign: "center", color: T.muted2, background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 12 }}>加载中…</div>;
+  }
+  if (!items || items.length === 0) {
+    return (
+      <div style={{ padding: 20, background: T.bg2, borderRadius: 12, border: `1px dashed ${T.border}` }}>
+        <div style={{ fontSize: 13, color: T.muted, marginBottom: emptyAction ? 12 : 0, lineHeight: 1.7 }}>{emptyTip}</div>
+        {emptyAction && (
+          <Btn size="sm" variant="primary" onClick={emptyAction.onClick}>{emptyAction.label}</Btn>
         )}
       </div>
-      {loading ? (
-        <div style={{ fontSize: 11, color: T.muted2, textAlign: "center", padding: 16 }}>加载中…</div>
-      ) : items.length === 0 ? (
-        // D-062v: empty 加 actionable CTA
-        <div style={{ padding: 12, background: T.bg2, borderRadius: 8 }}>
-          <div style={{ fontSize: 12, color: T.muted2, marginBottom: emptyAction ? 10 : 0, lineHeight: 1.6 }}>{emptyTip}</div>
-          {emptyAction && (
-            <Btn size="sm" variant="primary" onClick={emptyAction.onClick}>{emptyAction.label}</Btn>
-          )}
-        </div>
-      ) : (
-        // D-062ff: 选中明显高亮 (brandSoft + brand border + ✓ + "默认" tag), 其他 hover-able 卡
-        <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 320, overflow: "auto" }}>
-          {items.map(it => {
-            const on = it.id === selectedId;
-            return (
-              <div key={it.id} onClick={() => onSelect(it.id)}
-                style={{
-                  display: "flex", alignItems: "center", gap: 10,
-                  padding: "10px 12px", borderRadius: 8, cursor: "pointer",
-                  background: on ? T.brandSoft : "#fff",
-                  border: `1px solid ${on ? T.brand : T.borderSoft}`,
-                  transition: "all 0.1s",
-                }}>
-                {/* radio dot 风格 (与 Settings 一致) */}
-                <div style={{
-                  width: 16, height: 16, borderRadius: "50%",
-                  border: `1.5px solid ${on ? T.brand : T.muted2}`,
-                  background: on ? T.brand : "transparent", flexShrink: 0,
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                }}>{on && <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#fff" }} />}</div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: on ? 600 : 500, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.label}</div>
-                  <div style={{ fontSize: 10.5, color: T.muted2, fontFamily: "SF Mono, monospace" }}>#{it.id}</div>
-                </div>
-                {on && <Tag size="xs" color="green">默认</Tag>}
+    );
+  }
+
+  function describe(item, idx) {
+    if (kind === "voice") {
+      if (idx === 0) return "30 秒样本 · 音色自然, 保留你原来的语气";
+      return `备用音色 · #${item[idKey]}`;
+    }
+    if (kind === "avatar") {
+      if (idx === 0) return "常用形象 · 室内自然光, 上半身 · 适合多数场景";
+      return `备用形象 · #${item[idKey]}`;
+    }
+    return `#${item[idKey]}`;
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      {items.map((it, idx) => {
+        const id = it[idKey];
+        const on = id === selectedId;
+        const isFirst = idx === 0;
+        const title = it[titleKey] || `#${id}`;
+        const desc = describe(it, idx);
+        return (
+          <div key={id} onClick={() => onSelect(id)}
+            style={{
+              display: "flex", alignItems: "center", gap: 16,
+              padding: "16px 20px", borderRadius: 12, cursor: "pointer",
+              background: on ? T.brandSoft : "#fff",
+              border: `${on ? 2 : 1}px solid ${on ? T.brand : T.borderSoft}`,
+              transition: "all 0.1s",
+              boxShadow: on ? `0 0 0 4px ${T.brandSoft}66` : "none",
+            }}>
+            {/* radio dot 大版 */}
+            <div style={{
+              width: 22, height: 22, borderRadius: "50%",
+              border: `2px solid ${on ? T.brand : T.muted2}`,
+              background: on ? T.brand : "transparent", flexShrink: 0,
+              display: "flex", alignItems: "center", justifyContent: "center",
+            }}>{on && <div style={{ width: 9, height: 9, borderRadius: "50%", background: "#fff" }} />}</div>
+
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4, flexWrap: "wrap" }}>
+                <span style={{ fontSize: 16, fontWeight: 700, color: T.text }}>{title}</span>
+                {isFirst && <Tag size="xs" color="green">推荐</Tag>}
+                {on && <Tag size="xs" color="amber">已保存</Tag>}
               </div>
-            );
-          })}
+              <div style={{ fontSize: 12.5, color: T.muted, lineHeight: 1.6 }}>{desc}</div>
+            </div>
+
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                alert(kind === "voice"
+                  ? `🔊 试听 #${id} · 后端 CosyVoice 合成接入待 D-062kk-ext\n(可去 ⚙️ 设置 看 speaker 列表)`
+                  : `📷 预览 #${id} · 柿榴 avatar 预览图待 D-062kk-ext\n(可去柿榴后台看)`);
+              }}
+              style={{
+                padding: "7px 16px", borderRadius: 100, fontSize: 12,
+                background: "#fff", color: T.muted, fontFamily: "inherit",
+                border: `1px solid ${T.border}`, cursor: "pointer", flexShrink: 0,
+              }}>
+              {kind === "voice" ? "▶ 试听" : "▶ 预览"}
+            </button>
+          </div>
+        );
+      })}
+
+      {/* 引导加更多 */}
+      {items.length < 3 && emptyAction && (
+        <div onClick={emptyAction.onClick}
+          style={{
+            display: "flex", alignItems: "center", gap: 12,
+            padding: "14px 20px", borderRadius: 12, cursor: "pointer",
+            background: "#fff", border: `1px dashed ${T.border}`,
+            color: T.muted2,
+          }}>
+          <div style={{
+            width: 22, height: 22, borderRadius: "50%",
+            border: `1.5px dashed ${T.muted3}`, flexShrink: 0,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: 13, color: T.muted2,
+          }}>+</div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 13.5, fontWeight: 500, color: T.muted, marginBottom: 2 }}>
+              想要更多 {kind === "voice" ? "音色" : "形象"}?
+            </div>
+            <div style={{ fontSize: 11.5, color: T.muted2 }}>{emptyAction.label}</div>
+          </div>
         </div>
       )}
     </div>
