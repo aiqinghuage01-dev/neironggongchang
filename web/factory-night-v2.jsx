@@ -2,34 +2,107 @@
 // 用户可见命名: 小华夜班 / 任务 / 上次跑了…
 // 后端: 7 个 /api/night/* (D-040b) + 调度器 (D-040c)
 
-const NIGHT_TRIGGER_TYPES = [
-  { id: "cron",       label: "定时", desc: "按 cron 表达式定时跑 (默认 23:00)" },
-  { id: "file_watch", label: "监听目录", desc: "目录里出现新文件就触发 · D-040f 接 watchdog" },
-  { id: "manual",     label: "只手动", desc: "不自动跑, 用户从这里点立即跑" },
+// D-044: 编辑器不直接选 trigger_type, 改用 4 个语义化 mode, 前端合成 cron
+// 后端仍只有 cron / file_watch / manual 三种 trigger_type, mode → trigger_type 映射:
+//   daily / interval → cron     (cron 表达式由 mode 配置合成)
+//   file_watch       → file_watch
+//   manual           → manual
+const NIGHT_EDITOR_MODES = [
+  { id: "daily",      label: "每天",     desc: "按时间 + 周几跑" },
+  { id: "interval",   label: "按间隔",   desc: "每 N 分钟/小时" },
+  { id: "file_watch", label: "监听目录", desc: "目录里出现新文件就触发 · 等 watchdog 接入" },
+  { id: "manual",     label: "只手动",   desc: "不自动跑, 用户点立即跑" },
 ];
+
+const WEEKDAY_LABELS = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"];
+// cron day-of-week: 0=Sun, 1=Mon, ..., 6=Sat. 我们 UI 上从周一开始排, 内部转换.
+const UI_TO_CRON_DOW = [1, 2, 3, 4, 5, 6, 0];
+
+// 合成 cron 表达式
+function composeCronDaily(hour, minute, daysUiIdx) {
+  // daysUiIdx: 7-bool 数组 (周一..周日选中?)
+  const cronDow = daysUiIdx
+    .map((sel, i) => (sel ? UI_TO_CRON_DOW[i] : null))
+    .filter(x => x !== null);
+  if (cronDow.length === 0) return null;
+  if (cronDow.length === 7) return `${minute} ${hour} * * *`;
+  return `${minute} ${hour} * * ${cronDow.join(",")}`;
+}
+
+function composeCronInterval(n, unit) {
+  n = Math.max(1, parseInt(n) || 1);
+  if (unit === "min") {
+    if (n >= 60) return null;       // 60 以上转用"按小时"
+    return `*/${n} * * * *`;
+  }
+  if (unit === "hour") {
+    if (n >= 24) return null;
+    return `0 */${n} * * *`;
+  }
+  return null;
+}
+
+// 反向解析: 现有 job 的 cron / trigger_type → 推 UI mode 和参数
+function inferEditorState(job) {
+  const tt = job.trigger_type;
+  if (tt === "manual") return { mode: "manual" };
+  if (tt === "file_watch") return { mode: "file_watch", watchPath: job.trigger_config?.path || "data/inbox/audio/" };
+  // cron
+  const expr = job.trigger_config?.cron || "0 23 * * *";
+  const m = expr.match(/^(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)$/);
+  if (!m) return { mode: "daily", hour: 23, minute: 0, days: [true,true,true,true,true,true,true] };
+  const [, mi, h, dom, mon, dow] = m;
+  // 按间隔 */N
+  if (mi.startsWith("*/") && /^\d+$/.test(mi.slice(2)) && h === "*" && dom === "*" && mon === "*" && dow === "*") {
+    return { mode: "interval", intervalN: parseInt(mi.slice(2)), intervalUnit: "min" };
+  }
+  if (h.startsWith("*/") && /^\d+$/.test(h.slice(2)) && mi === "0" && dom === "*" && mon === "*" && dow === "*") {
+    return { mode: "interval", intervalN: parseInt(h.slice(2)), intervalUnit: "hour" };
+  }
+  // 每天
+  const hour = /^\d+$/.test(h) ? parseInt(h) : 23;
+  const minute = /^\d+$/.test(mi) ? parseInt(mi) : 0;
+  let days = [true,true,true,true,true,true,true];
+  if (dow !== "*" && dom === "*" && mon === "*") {
+    const cronDows = dow.split(",").map(s => parseInt(s.trim())).filter(n => !isNaN(n));
+    days = WEEKDAY_LABELS.map((_, ui_i) => cronDows.includes(UI_TO_CRON_DOW[ui_i]));
+  }
+  return { mode: "daily", hour, minute, days };
+}
 const NIGHT_OUTPUT_TARGETS = [
   { id: "materials", label: "📥 素材库" },
   { id: "works",     label: "🗂️ 作品库" },
   { id: "knowledge", label: "📚 知识库" },
   { id: "home",      label: "🏠 总部播报" },
 ];
-const CRON_PRESETS = [
-  { label: "每晚 23:00", expr: "0 23 * * *" },
-  { label: "凌晨 2 点",  expr: "0 2 * * *" },
-  { label: "每早 6:00",  expr: "0 6 * * *" },
-  { label: "每 30 分钟", expr: "*/30 * * * *" },
-];
-
-// 把 cron 表达式翻成人话 (粗糙能用即可)
+// 把 cron 表达式翻成人话 (D-044 加 day-of-week 渲染 + */N 小时)
 function humanizeCron(expr) {
   if (!expr) return "(未设置)";
   const m = String(expr).match(/^(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)$/);
   if (!m) return expr;
-  const [_, mi, h, dom, mon, dow] = m;
-  if (dom === "*" && mon === "*" && dow === "*" && /^\d+$/.test(mi) && /^\d+$/.test(h)) {
-    return `每天 ${String(h).padStart(2, "0")}:${String(mi).padStart(2, "0")}`;
+  const [, mi, h, dom, mon, dow] = m;
+  // 按间隔: */N * * * *  (分钟)
+  if (mi.startsWith("*/") && h === "*" && dom === "*" && mon === "*" && dow === "*") {
+    return `每 ${mi.slice(2)} 分钟`;
   }
-  if (mi.startsWith("*/")) return `每 ${mi.slice(2)} 分钟`;
+  // 按间隔: 0 */N * * *  (小时)
+  if (mi === "0" && h.startsWith("*/") && dom === "*" && mon === "*" && dow === "*") {
+    return `每 ${h.slice(2)} 小时`;
+  }
+  // 按时间: M H * * dow
+  if (dom === "*" && mon === "*" && /^\d+$/.test(mi) && /^\d+$/.test(h)) {
+    const tStr = `${String(h).padStart(2, "0")}:${String(mi).padStart(2, "0")}`;
+    if (dow === "*") return `每天 ${tStr}`;
+    if (dow === "1-5") return `工作日 ${tStr}`;
+    if (dow === "0,6" || dow === "6,0") return `周末 ${tStr}`;
+    // 列出周几名字
+    const dowNames = { "0": "日", "1": "一", "2": "二", "3": "三", "4": "四", "5": "五", "6": "六" };
+    const cronDows = dow.split(",").map(s => s.trim());
+    if (cronDows.every(d => dowNames[d])) {
+      const labels = cronDows.map(d => "周" + dowNames[d]).join("/");
+      return `${labels} ${tStr}`;
+    }
+  }
   return expr;
 }
 
@@ -217,7 +290,6 @@ function PageNightShift({ onNav }) {
 
 function NightJobCard({ job, runs, onToggle, onRun, onEdit, onDelete }) {
   const latest = runs[0];
-  const trigger = NIGHT_TRIGGER_TYPES.find(t => t.id === job.trigger_type);
   const target = NIGHT_OUTPUT_TARGETS.find(t => t.id === job.output_target);
   const triggerLabel = job.trigger_type === "cron"
     ? humanizeCron(job.trigger_config?.cron)
@@ -270,45 +342,82 @@ function NightJobCard({ job, runs, onToggle, onRun, onEdit, onDelete }) {
 
 function NightJobEditor({ job, onClose, onSaved }) {
   const isNew = !job.id;
-  const [form, setForm] = React.useState(() => ({
-    name: job.name || "",
-    icon: job.icon || "🌙",
-    skill_slug: job.skill_slug || "",
-    trigger_type: job.trigger_type || "cron",
-    cron: (job.trigger_config && job.trigger_config.cron) || "0 23 * * *",
-    watch_path: (job.trigger_config && job.trigger_config.path) || "data/inbox/audio/",
-    output_target: job.output_target || "materials",
-    enabled: job.enabled !== false,
-  }));
+  const inferred = isNew ? { mode: "daily", hour: 23, minute: 0, days: [true,true,true,true,true,true,true] } : inferEditorState(job);
+
+  const [name, setName] = React.useState(job.name || "");
+  const [icon, setIcon] = React.useState(job.icon || "🌙");
+  const [skillSlug, setSkillSlug] = React.useState(job.skill_slug || "");
+  const [outputTarget, setOutputTarget] = React.useState(job.output_target || "materials");
+  const [enabled, setEnabled] = React.useState(job.enabled !== false);
+
+  // 频率相关
+  const [mode, setMode] = React.useState(inferred.mode);
+  const [hour, setHour] = React.useState(inferred.hour ?? 23);
+  const [minute, setMinute] = React.useState(inferred.minute ?? 0);
+  const [days, setDays] = React.useState(inferred.days ?? [true,true,true,true,true,true,true]);
+  const [intervalN, setIntervalN] = React.useState(inferred.intervalN ?? 30);
+  const [intervalUnit, setIntervalUnit] = React.useState(inferred.intervalUnit ?? "min");
+  const [watchPath, setWatchPath] = React.useState(inferred.watchPath ?? "data/inbox/audio/");
+
   const [saving, setSaving] = React.useState(false);
   const [err, setErr] = React.useState("");
 
-  function up(k, v) { setForm(prev => ({ ...prev, [k]: v })); }
+  // 实时预览
+  const previewCron = mode === "daily"
+    ? composeCronDaily(hour, minute, days)
+    : mode === "interval"
+      ? composeCronInterval(intervalN, intervalUnit)
+      : null;
+
+  const previewLabel = (() => {
+    if (mode === "manual") return "不自动跑 · 用户点立即跑才会执行";
+    if (mode === "file_watch") return `监听 ${watchPath} 出现新文件触发`;
+    if (!previewCron) {
+      if (mode === "daily") return "⚠️ 至少选一天";
+      if (mode === "interval" && intervalUnit === "min" && intervalN >= 60) return "⚠️ 分钟值 ≥60, 改用按小时";
+      if (mode === "interval" && intervalUnit === "hour" && intervalN >= 24) return "⚠️ 小时值 ≥24, 用按天";
+      return "⚠️ 频率参数不合法";
+    }
+    return `cron: ${previewCron} · ${humanizeCron(previewCron)}`;
+  })();
+
+  function toggleDay(i) {
+    setDays(prev => prev.map((v, j) => j === i ? !v : v));
+  }
+  function selectDayPreset(preset) {
+    if (preset === "weekday") setDays([true,true,true,true,true,false,false]);
+    if (preset === "weekend") setDays([false,false,false,false,false,true,true]);
+    if (preset === "all")     setDays([true,true,true,true,true,true,true]);
+  }
 
   async function save() {
-    if (!form.name.trim()) { setErr("名字不能空"); return; }
-    setSaving(true);
-    setErr("");
-    const trigger_config = form.trigger_type === "cron"
-      ? { cron: form.cron, timezone: "Asia/Shanghai" }
-      : form.trigger_type === "file_watch"
-        ? { path: form.watch_path }
-        : {};
+    if (!name.trim()) { setErr("名字不能空"); return; }
+    let trigger_type, trigger_config;
+    if (mode === "daily" || mode === "interval") {
+      if (!previewCron) { setErr("频率参数不合法, 看上方红字提示"); return; }
+      trigger_type = "cron";
+      trigger_config = { cron: previewCron, timezone: "Asia/Shanghai" };
+    } else if (mode === "file_watch") {
+      trigger_type = "file_watch";
+      trigger_config = { path: watchPath.trim() || "data/inbox/audio/" };
+    } else {
+      trigger_type = "manual";
+      trigger_config = {};
+    }
+
     const body = {
-      name: form.name.trim(),
-      icon: form.icon || null,
-      skill_slug: form.skill_slug.trim() || null,
-      trigger_type: form.trigger_type,
+      name: name.trim(),
+      icon: icon || null,
+      skill_slug: skillSlug.trim() || null,
+      trigger_type,
       trigger_config,
-      output_target: form.output_target || null,
-      enabled: form.enabled,
+      output_target: outputTarget || null,
+      enabled,
     };
+    setSaving(true); setErr("");
     try {
-      if (isNew) {
-        await api.post("/api/night/jobs", body);
-      } else {
-        await api.patch(`/api/night/jobs/${job.id}`, body);
-      }
+      if (isNew) await api.post("/api/night/jobs", body);
+      else       await api.patch(`/api/night/jobs/${job.id}`, body);
       onSaved();
     } catch (e) {
       setErr(e.message || "保存失败");
@@ -323,70 +432,125 @@ function NightJobEditor({ job, onClose, onSaved }) {
       display: "flex", alignItems: "center", justifyContent: "center", padding: 20,
     }}>
       <div onClick={e => e.stopPropagation()} style={{
-        width: 520, maxWidth: "100%", maxHeight: "90vh", overflow: "auto",
+        width: 540, maxWidth: "100%", maxHeight: "90vh", overflow: "auto",
         background: "#fff", borderRadius: 14, padding: 24,
       }}>
         <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 14 }}>
           {isNew ? "🌙 加一条夜班任务" : `编辑「${job.name}」`}
         </div>
 
-        <Field label="名字 (用户可见)">
-          <input value={form.name} onChange={e => up("name", e.target.value)} placeholder="例: 凌晨抓热点" style={inp} />
+        <Field label="名字">
+          <input value={name} onChange={e => setName(e.target.value)} placeholder="例: 凌晨抓热点" style={inp} />
         </Field>
 
         <div style={{ display: "flex", gap: 10 }}>
           <Field label="图标" style={{ width: 100 }}>
-            <input value={form.icon} onChange={e => up("icon", e.target.value)} placeholder="🌙" style={inp} />
+            <input value={icon} onChange={e => setIcon(e.target.value)} placeholder="🌙" style={inp} />
           </Field>
-          <Field label="对应 skill (~/Desktop/skills/<slug>/)" style={{ flex: 1 }}>
-            <input value={form.skill_slug} onChange={e => up("skill_slug", e.target.value)}
-              placeholder="例: content-planner · 留空走占位 runner" style={inp} />
+          <Field label="对应 skill" style={{ flex: 1 }}>
+            <input value={skillSlug} onChange={e => setSkillSlug(e.target.value)}
+              placeholder="content-planner / daily-recap · 留空走占位" style={inp} />
           </Field>
         </div>
 
-        <Field label="触发方式">
-          <div style={{ display: "flex", gap: 8 }}>
-            {NIGHT_TRIGGER_TYPES.map(t => (
-              <button key={t.id} onClick={() => up("trigger_type", t.id)}
-                title={t.desc}
+        <Field label="频率">
+          <div style={{ display: "flex", gap: 6 }}>
+            {NIGHT_EDITOR_MODES.map(m => (
+              <button key={m.id} onClick={() => setMode(m.id)} title={m.desc}
                 style={{
-                  flex: 1, padding: "8px 10px", borderRadius: 8, fontSize: 12, fontFamily: "inherit", cursor: "pointer",
-                  border: form.trigger_type === t.id ? `2px solid ${T.brand}` : `1px solid ${T.border}`,
-                  background: form.trigger_type === t.id ? T.brandSoft : "#fff",
-                  color: form.trigger_type === t.id ? T.brand : T.text,
-                  fontWeight: form.trigger_type === t.id ? 600 : 500,
+                  flex: 1, padding: "8px 6px", borderRadius: 100, fontSize: 12, fontFamily: "inherit", cursor: "pointer",
+                  border: "none",
+                  background: mode === m.id ? T.text : T.bg2,
+                  color: mode === m.id ? "#fff" : T.muted,
+                  fontWeight: mode === m.id ? 600 : 500,
+                  transition: "all 0.15s",
                 }}>
-                {t.label}
+                {m.label}
               </button>
             ))}
           </div>
         </Field>
 
-        {form.trigger_type === "cron" && (
-          <Field label={`Cron 表达式 · ${humanizeCron(form.cron)}`}>
-            <input value={form.cron} onChange={e => up("cron", e.target.value)}
-              placeholder="0 23 * * *" style={{ ...inp, fontFamily: "SF Mono, monospace" }} />
-            <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
-              {CRON_PRESETS.map(p => (
-                <button key={p.expr} onClick={() => up("cron", p.expr)}
-                  style={{ padding: "3px 8px", fontSize: 10.5, borderRadius: 100, background: T.bg2, border: `1px solid ${T.borderSoft}`, color: T.muted, cursor: "pointer", fontFamily: "inherit" }}>
-                  {p.label}
-                </button>
-              ))}
+        {mode === "daily" && (
+          <>
+            <Field label="时间">
+              <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                <input type="number" min="0" max="23" value={hour}
+                  onChange={e => setHour(Math.max(0, Math.min(23, parseInt(e.target.value) || 0)))}
+                  style={{ ...inp, width: 70, fontFamily: "SF Mono, monospace", textAlign: "center" }} />
+                <span style={{ fontSize: 16, fontWeight: 600 }}>:</span>
+                <input type="number" min="0" max="59" value={minute}
+                  onChange={e => setMinute(Math.max(0, Math.min(59, parseInt(e.target.value) || 0)))}
+                  style={{ ...inp, width: 70, fontFamily: "SF Mono, monospace", textAlign: "center" }} />
+                <div style={{ flex: 1 }} />
+                {[
+                  { id: "weekday", label: "工作日" },
+                  { id: "weekend", label: "周末" },
+                  { id: "all",     label: "每天" },
+                ].map(p => (
+                  <button key={p.id} onClick={() => selectDayPreset(p.id)}
+                    style={{ padding: "4px 10px", fontSize: 11, borderRadius: 100, background: T.bg2, border: `1px solid ${T.borderSoft}`, color: T.muted, cursor: "pointer", fontFamily: "inherit" }}>
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+            </Field>
+            <Field label="">
+              <div style={{ display: "flex", gap: 6 }}>
+                {WEEKDAY_LABELS.map((d, i) => (
+                  <button key={i} onClick={() => toggleDay(i)}
+                    style={{
+                      flex: 1, padding: "8px 0", borderRadius: 100, fontSize: 12, fontFamily: "inherit", cursor: "pointer",
+                      border: "none",
+                      background: days[i] ? T.text : T.bg2,
+                      color: days[i] ? "#fff" : T.muted,
+                      fontWeight: days[i] ? 600 : 500,
+                      transition: "all 0.1s",
+                    }}>
+                    {d}
+                  </button>
+                ))}
+              </div>
+            </Field>
+          </>
+        )}
+
+        {mode === "interval" && (
+          <Field label="每">
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <input type="number" min="1" max="59" value={intervalN}
+                onChange={e => setIntervalN(parseInt(e.target.value) || 1)}
+                style={{ ...inp, width: 90, fontFamily: "SF Mono, monospace", textAlign: "center" }} />
+              <select value={intervalUnit} onChange={e => setIntervalUnit(e.target.value)}
+                style={{ ...inp, width: 100 }}>
+                <option value="min">分钟</option>
+                <option value="hour">小时</option>
+              </select>
+              <span style={{ fontSize: 12, color: T.muted2 }}>跑一次</span>
             </div>
           </Field>
         )}
 
-        {form.trigger_type === "file_watch" && (
+        {mode === "file_watch" && (
           <Field label="监听目录 (相对项目根)">
-            <input value={form.watch_path} onChange={e => up("watch_path", e.target.value)}
+            <input value={watchPath} onChange={e => setWatchPath(e.target.value)}
               placeholder="data/inbox/audio/" style={{ ...inp, fontFamily: "SF Mono, monospace" }} />
-            <div style={{ fontSize: 10.5, color: T.muted2, marginTop: 4 }}>⚠️ D-040f 才接 watchdog · 当前不会真触发</div>
+            <div style={{ fontSize: 10.5, color: T.muted2, marginTop: 4 }}>⚠️ watchdog 还没接 · 当前不会真触发, 等下个 commit</div>
           </Field>
         )}
 
+        {/* 频率预览 / 错误提示 */}
+        <div style={{
+          padding: "8px 12px", marginBottom: 14, borderRadius: 8, fontSize: 11.5,
+          background: previewLabel.startsWith("⚠️") ? T.redSoft : T.bg2,
+          color: previewLabel.startsWith("⚠️") ? T.red : T.muted,
+          fontFamily: "SF Mono, Menlo, monospace",
+        }}>
+          {previewLabel}
+        </div>
+
         <Field label="产出去向">
-          <select value={form.output_target} onChange={e => up("output_target", e.target.value)} style={inp}>
+          <select value={outputTarget} onChange={e => setOutputTarget(e.target.value)} style={inp}>
             <option value="">不指定</option>
             {NIGHT_OUTPUT_TARGETS.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
           </select>
@@ -394,16 +558,27 @@ function NightJobEditor({ job, onClose, onSaved }) {
 
         <Field label="">
           <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer" }}>
-            <input type="checkbox" checked={form.enabled} onChange={e => up("enabled", e.target.checked)} />
-            <span>启用 (取消勾选 = 调度器不挂)</span>
+            <input type="checkbox" checked={enabled} onChange={e => setEnabled(e.target.checked)} />
+            <span>启用 (取消勾选 = 调度器不挂, 任务保留可手动跑)</span>
           </label>
         </Field>
 
         {err && <div style={{ padding: 10, background: T.redSoft, color: T.red, borderRadius: 8, fontSize: 12, marginBottom: 10 }}>{err}</div>}
 
         <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 8 }}>
-          <Btn variant="outline" onClick={onClose}>取消</Btn>
-          <Btn variant="primary" onClick={save} disabled={saving}>{saving ? "保存中…" : (isNew ? "加上" : "保存")}</Btn>
+          <button onClick={onClose}
+            style={{
+              padding: "10px 18px", borderRadius: 100, fontSize: 13, cursor: "pointer", fontFamily: "inherit",
+              background: "transparent", border: `1px solid ${T.border}`, color: T.muted,
+            }}>取消</button>
+          <button onClick={save} disabled={saving}
+            style={{
+              padding: "10px 22px", borderRadius: 100, fontSize: 13, cursor: saving ? "not-allowed" : "pointer", fontFamily: "inherit",
+              background: T.text, border: "none", color: "#fff", fontWeight: 600,
+              opacity: saving ? 0.5 : 1,
+            }}>
+            {saving ? "保存中…" : (isNew ? "添加" : "保存")}
+          </button>
         </div>
       </div>
     </div>

@@ -316,6 +316,27 @@ P0-P10 所有任务落地, 14 个 commit 从 `09faf92` 到今日末 commit。
       理由: D-040f 4 条预设 runner 还没接, output_refs 永远空, N 永远 0 按"0 隐藏"
       规则永远不显示, 纯死代码. 留 D-040f 跟真 runner 一起.
       端到端 smoke: 3 场景 (有 success 显白天 / 有 enabled cron 显夜班 / 全空隐藏).
+- [x] **D-044 NightJobEditor UX 重做** (借鉴 WorkBuddy)
+      用户上轮 [Image #9] 给我看 WorkBuddy "添加自动化任务" 设计后, 重做夜班编辑器:
+      频率从"输 cron 表达式"改为 4 个语义化 mode tab:
+        每天 / 按间隔 / 监听目录 / 只手动
+      "每天" 模式: hour:minute 数字输入 + 7 个圆 pill (周一...周日) 多选 +
+        3 个快捷预设 (工作日 / 周末 / 每天)
+      "按间隔" 模式: 数字 + 单位下拉 (分钟/小时), <60 分钟或 <24 小时.
+      "监听目录" / "只手动": 跟前一致.
+      新增 composeCronDaily / composeCronInterval / inferEditorState 三个辅助函数:
+        compose 把 UI state → cron 字符串
+        infer 把现有 job → UI state (反向解析, 编辑老 job 用)
+      humanizeCron 同步增强: 识别 "0 */N * * *" 每 N 小时 / 工作日 / 周末 /
+        cron 周几名字 (周一/三/五).
+      预览栏实时显示 "cron: 0 22 * * 1,3,5 · 周一/三/五 22:00" 给用户确认.
+      iOS 风按钮: 黑色丸 [添加] / 浅描边 [取消]. mode pill 黑底白字 active.
+      后端不改 — 仍存 trigger_type + trigger_config.cron, 前端纯抽象层.
+      验证: 6 种生成的 cron 串过 APScheduler.CronTrigger.from_crontab 全过.
+      JSX parse OK · 全量 pytest 204/204.
+      跳过的: WorkBuddy 的"单次"模式 — APScheduler cron 没真"一次性"语义,
+      要做需后端加 expires_at 字段, 超本轮 scope. 用户需要单次时可以 enabled=False
+      手动跑.
 - [x] **D-040f 4 条预设 seed + 1 个真 runner**
       backend/services/night_runners.py · DEFAULT_NIGHT_JOBS 4 条种子 + seed_defaults() 幂等创建.
       registered_runners 4 个: 1 真 + 3 占位.
