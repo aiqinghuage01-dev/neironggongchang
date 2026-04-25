@@ -136,6 +136,7 @@
 - C15 PageMaterials ViralCard/HotRow/TopicRow polish — 抽 HotRow + TopicRow 组件, 加 hover ring (跟 WorkCard 一致)
 - C16 PageKnowledge SectionCard polish — 加 hover ring (按 accent 色) + 数字 mono 32px + "看 →" hover 提示
 - C17 PageHome BigAction polish — hot 卡 brand ring + hover ring + 大字 19px 700 + 删 "Phase 2 已通" dev 文案 → 用真实 hint 文案 (今日还没出过投流 等)
+- C18 PageHome 其他卡一致化 — AiUsageCard 14px radius / NightDigestDay amber tint / NightDigestNight blue tint / 今日最热 amber gradient 升级 (padding 16x20 → 18x22, radius 12 → 14, 加色调 33 border + 阴影)
 
 ## 卡住记录
 

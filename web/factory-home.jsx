@@ -59,10 +59,12 @@ function PageHome({ onNav }) {
           {/* 今日最热一条:接 /api/hot-topics 第一条 */}
           {hot ? (
             <div style={{
-              display: "flex", alignItems: "center", gap: 14, padding: "16px 20px",
-              background: "#fff", borderRadius: 12, border: `1px solid ${T.borderSoft}`,
+              display: "flex", alignItems: "center", gap: 14, padding: "18px 22px",
+              background: "linear-gradient(135deg, #fffaf0 0%, #fff 60%)",
+              borderRadius: 14, border: `1px solid ${T.amber}33`,
+              boxShadow: "0 1px 3px rgba(180,88,9,0.05)",
             }}>
-              <div style={{ fontSize: 20, fontWeight: 700, color: T.amber, minWidth: 52 }}>🔥{hot.heat_score || 0}</div>
+              <div style={{ fontSize: 22, fontWeight: 700, color: T.amber, minWidth: 56 }}>🔥{hot.heat_score || 0}</div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
                   <Tag size="xs" color="pink">{hot.platform || "?"}</Tag>
@@ -207,9 +209,10 @@ function AiUsageCard({ usage }) {
   const engines = usage.by_engine || [];
   return (
     <div style={{
-      marginTop: 16, padding: "14px 18px", background: "#fff",
-      borderRadius: 12, border: `1px solid ${T.borderSoft}`,
-      display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap",
+      marginTop: 16, padding: "16px 20px", background: "#fff",
+      borderRadius: 14, border: `1px solid ${T.borderSoft}`,
+      boxShadow: "0 1px 2px rgba(0,0,0,0.03)",
+      display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap",
     }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
         <span style={{ fontSize: 16 }}>📊</span>
@@ -333,9 +336,10 @@ function NightDigestCard({ onNav }) {
 function NightDigestDay({ items, onNav }) {
   return (
     <div style={{
-      padding: "16px 20px", marginBottom: 16,
+      padding: "18px 22px", marginBottom: 16,
       background: "linear-gradient(135deg, #fff8ec, #fff)",
-      border: `1px solid ${T.borderSoft}`, borderRadius: 12,
+      border: `1px solid ${T.amber}33`, borderRadius: 14,
+      boxShadow: "0 1px 3px rgba(180,88,9,0.06)",
     }}>
       <div style={{ display: "flex", alignItems: "center", marginBottom: 10 }}>
         <span style={{ fontSize: 14, fontWeight: 600, color: T.text }}>
@@ -389,9 +393,10 @@ function NightDigestNight({ jobs, onNav }) {
 
   return (
     <div style={{
-      padding: "16px 20px", marginBottom: 16,
+      padding: "18px 22px", marginBottom: 16,
       background: "linear-gradient(135deg, #f0f3ff, #fff)",
-      border: `1px solid ${T.borderSoft}`, borderRadius: 12,
+      border: `1px solid ${T.blue}22`, borderRadius: 14,
+      boxShadow: "0 1px 3px rgba(30,64,175,0.05)",
     }}>
       <div style={{ display: "flex", alignItems: "center", marginBottom: 8 }}>
         <span style={{ fontSize: 14, fontWeight: 600, color: T.text }}>
