@@ -1042,6 +1042,23 @@ def works_delete(work_id: int, remove_file: bool = False):
     return {"ok": True}
 
 
+@app.get("/api/works/{work_id}/local-path", tags=["档案部"], summary="作品本地绝对路径 (D-059c 给 v5 视频用)")
+def works_local_path(work_id: int):
+    """v5 视频流程需要数字人 mp4 的绝对路径 (不是 /media URL).
+    返回 {work_id, local_path, exists}."""
+    items = list_works(limit=500)
+    w = next((x for x in items if x.id == work_id), None)
+    if not w:
+        raise HTTPException(404, f"work {work_id} not found")
+    p = w.local_path
+    return {
+        "work_id": work_id,
+        "local_path": p,
+        "exists": Path(p).exists() if p else False,
+        "title": w.title,
+    }
+
+
 # ---- 数据指标:手动录入 + 查询 + 排行 ----
 class MetricUpsertReq(BaseModel):
     platform: str = Field(..., description="平台: douyin / shipinhao / xiaohongshu / wechat / kuaishou / weibo")
@@ -2028,6 +2045,27 @@ class Dhv5RenderReq(BaseModel):
         None,
         description="覆盖模板默认 scenes (D-059c 文案对齐结果走这里). 无则用 YAML 原 scenes.",
     )
+
+
+class Dhv5AlignReq(BaseModel):
+    template_id: str = Field(..., description="模板 id")
+    transcript: str = Field("", description="数字人念的全文 (mode=auto 时必填)")
+    mode: str = Field("auto", description="auto (AI 切) / placeholder (用模板原字段) / manual (留空让前端拖)")
+
+
+@app.post("/api/dhv5/align", tags=["v5 视频"], summary="文案↔scenes 智能对齐")
+def dhv5_align(req: Dhv5AlignReq):
+    """三种 mode:
+    - auto: 走 deepseek 把 transcript 切到每个 scene 字段 (A/C subtitle / B big_text)
+    - placeholder: 模板原字段直接返 (给用户填空)
+    - manual: 字段留空, 前端拖
+    返回 {scenes: [...], mode, template_id, transcript_chars} — scenes 跟模板严格一一对应,
+    用户可以前端再编辑后传给 /api/dhv5/render 的 scenes_override."""
+    from backend.services import dhv5_pipeline
+    try:
+        return dhv5_pipeline.align_script(req.template_id, req.transcript, mode=req.mode)
+    except dhv5_pipeline.Dhv5Error as e:
+        raise HTTPException(400, str(e))
 
 
 @app.post("/api/dhv5/render", tags=["v5 视频"], summary="触发渲染 → 立即返 task_id")

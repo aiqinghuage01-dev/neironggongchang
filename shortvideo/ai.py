@@ -172,6 +172,7 @@ DEFAULT_ENGINE_ROUTES = {
     "article.outline":    "deepseek",
     "article.expand":     "opus",       # 长文
     "topics.generate":    "deepseek",   # 选题列表,短 JSON
+    "dhv5.align":         "deepseek",   # 文案↔scenes 对齐, JSON 输出, 结构化短任务
     # content-planner skill (D-017 骨架)
     "planner.analyze":    "deepseek",
     "planner.write":      "opus",

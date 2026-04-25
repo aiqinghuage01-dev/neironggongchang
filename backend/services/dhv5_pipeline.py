@@ -129,6 +129,125 @@ def load_template_full(template_id: str) -> dict[str, Any]:
     }
 
 
+# ─── D-059c-1 文案对齐 ───────────────────────────────────────
+# 把整段口播文案切到模板的 N 个 scenes (A 字幕 / B 大字 / C 字幕)
+# 走 ai 关卡层 (人设注入 deep=True 不需要, 这是结构化任务).
+
+_ALIGN_SYSTEM_TPL = """你在执行 v5 模板成片的"文案对齐"任务.
+
+规则:
+1. 输入是一段中文口播 transcript + 一个模板的 scenes 节奏骨架 (A/B/C 三态)
+2. 你要把 transcript 智能切到每个 scene 的字段:
+   · A 型 scene → subtitle (字幕, 8-18 字)
+   · B 型 scene → big_text (大字金句, 4-10 字, 比 subtitle 短)
+   · C 型 scene → subtitle (字幕, 8-18 字)
+3. 严格按 scenes 顺序对应 transcript 的时间流, 不要乱序
+4. 每个 scene 的字段是"屏上显示"文本, 不是数字人念的全文 — 数字人念的是
+   transcript 全文, 字段是给观众看的精炼提示 (像短视频 SRT 字幕的关键词版)
+5. 字段尽量从 transcript 抽词, 也可适当浓缩 (但不要发明新词)
+6. 不允许字段为空 — 实在没合适内容也要抽 4-8 字过去
+
+输出 JSON 格式 (顶层 array, 跟输入 scenes 严格对齐):
+[{"type":"A","subtitle":"..."}, {"type":"B","big_text":"..."}, ...]
+"""
+
+
+def align_script(
+    template_id: str,
+    transcript: str,
+    mode: str = "auto",
+) -> dict[str, Any]:
+    """文案↔scenes 智能对齐. 三种 mode:
+
+    auto         走 ai 关卡层智能切, 推荐
+    placeholder  直接用模板原 scenes 字段 (不调 AI, 给用户填空模式)
+    manual       返空字段, 让前端拖
+
+    返回 {scenes: [...], mode, template_id, transcript_chars}.
+    scenes 数组跟模板 scenes 一一对应, 加了 subtitle/big_text 字段.
+    """
+    full = load_template_full(template_id)
+    raw_scenes = full.get("scenes") or []
+    if not raw_scenes:
+        raise Dhv5Error(f"模板 {template_id} 无 scenes")
+
+    if mode == "manual":
+        out_scenes = [
+            {**s, "subtitle": "", "big_text": ""} for s in raw_scenes
+        ]
+        return {"template_id": template_id, "mode": mode, "transcript_chars": len(transcript), "scenes": out_scenes}
+
+    if mode == "placeholder":
+        return {
+            "template_id": template_id, "mode": mode, "transcript_chars": len(transcript),
+            "scenes": raw_scenes,  # 模板原字段直接返
+        }
+
+    # auto: 走 AI
+    if not transcript or not transcript.strip():
+        raise Dhv5Error("transcript 不能为空 (mode=auto)")
+
+    # 准备给 AI 的简化 scenes (只给 type + 顺序)
+    simplified = [
+        {"idx": i, "type": s.get("type"), "duration_sec": round(float(s.get("end", 0)) - float(s.get("start", 0)), 1)}
+        for i, s in enumerate(raw_scenes)
+    ]
+
+    prompt = (
+        f"模板共 {len(raw_scenes)} 个 scenes:\n"
+        f"{simplified}\n\n"
+        f"Transcript ({len(transcript)} 字):\n{transcript}\n\n"
+        f"请按规则对齐, 直接返 JSON array, 不要任何前言."
+    )
+
+    from shortvideo.ai import get_ai_client
+    import json
+    import re as _re
+
+    try:
+        ai = get_ai_client(route_key="dhv5.align")
+        r = ai.chat(
+            prompt=prompt,
+            system=_ALIGN_SYSTEM_TPL,
+            deep=False,           # 结构化任务, 不需要全人设
+            temperature=0.4,
+            max_tokens=2000,
+        )
+    except Exception as e:
+        raise Dhv5Error(f"AI 调用失败: {type(e).__name__}: {e}") from e
+
+    text = r.text or ""
+    m = _re.search(r"\[[\s\S]*\]", text)
+    if not m:
+        raise Dhv5Error(f"AI 返回非 JSON: {text[-300:]}")
+    try:
+        ai_scenes = json.loads(m.group(0))
+        if not isinstance(ai_scenes, list):
+            raise ValueError("not a list")
+    except Exception as e:
+        raise Dhv5Error(f"AI JSON 解析失败: {e}") from e
+
+    # 把 AI 切的字段拼回模板原 scenes (保留 start/end/top_image_prompt 等)
+    out_scenes = []
+    for i, raw in enumerate(raw_scenes):
+        merged = {**raw}
+        if i < len(ai_scenes) and isinstance(ai_scenes[i], dict):
+            ai_field = ai_scenes[i]
+            t = (raw.get("type") or "").upper()
+            if t == "B":
+                merged["big_text"] = (ai_field.get("big_text") or "").strip() or merged.get("big_text", "")
+            else:  # A/C
+                merged["subtitle"] = (ai_field.get("subtitle") or "").strip() or merged.get("subtitle", "")
+        out_scenes.append(merged)
+
+    return {
+        "template_id": template_id,
+        "mode": mode,
+        "transcript_chars": len(transcript),
+        "scenes": out_scenes,
+    }
+
+
 def render_async(
     template_id: str,
     digital_human_video: str,
