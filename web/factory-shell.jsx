@@ -5,7 +5,8 @@
 const NAV_TOP = [{ id: "home", icon: "🏠", label: "总部" }];
 const NAV_MAIN = [
   { id: "make", icon: "🎬", label: "做视频" },
-  { id: "dhv5", icon: "🎞️", label: "v5 模板成片" },
+  // D-061a: 移除独立 v5 入口 — 模板剪辑应是"做视频"流程 Step 4 子选项, 不是 sidebar skill.
+  // route "dhv5" 保留供 PageMake 内部跳转 (D-061f 复用 PageDhv5 组件).
   { id: "ad", icon: "💰", label: "投流文案" },
   { id: "wechat", icon: "📄", label: "公众号" },
   { id: "moments", icon: "📱", label: "朋友圈" },
