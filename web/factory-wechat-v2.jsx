@@ -363,7 +363,7 @@ function PageWechat({ onNav }) {
         {step === "topic"   && <WxStepTopic topic={topic} setTopic={setTopic} onGo={genTitles} onAuto={startAuto} loading={loading} skillInfo={skillInfo} skipImages={skipImages} setSkipImages={setSkipImages} />}
         {step === "titles"  && <WxStepTitles titles={titles} loading={loading} onPick={genOutline} onPrev={() => setStep("topic")} onRegen={genTitles} autoMode={autoMode} />}
         {step === "outline" && <WxStepOutline outline={outline} setOutline={setOutline} title={pickedTitle} topic={topic} loading={loading} onPrev={() => setStep("titles")} onNext={writeArticle} onRegen={() => genOutline(pickedTitle)} />}
-        {step === "write"   && <WxStepWrite article={article} loading={loading} onPrev={() => setStep("outline")} onNext={planImages} onRewrite={writeArticle} onRewriteSelection={rewriteSelection} />}
+        {step === "write"   && <WxStepWrite article={article} loading={loading} onPrev={() => setStep("outline")} onNext={planImages} onRewrite={writeArticle} onRewriteSelection={rewriteSelection} onNav={onNav} pickedTitle={pickedTitle} topic={topic} />}
         {step === "images"  && <WxStepImages plans={imagePlans} setPlans={setImagePlans} onGen={generateOneImage} loading={loading} onPrev={() => setStep("write")} onNext={() => assembleHtml()} onRegen={planImages} />}
         {step === "html"    && <WxStepHtml result={htmlResult} loading={loading} onPrev={() => setStep("images")} onNext={genCover} onSwitchTemplate={assembleHtml} />}
         {step === "cover"   && <WxStepCover cover={coverResult} title={pickedTitle} loading={loading} onPrev={() => setStep("html")} onNext={push} onRegen={genCover} onSelect={selectCover} />}
@@ -607,7 +607,7 @@ function OutlineField({ label, value, onChange, multi }) {
 }
 
 // ─── Step 4 · 长文 + 三层自检 ───────────────────────────────
-function WxStepWrite({ article, loading, onPrev, onNext, onRewrite, onRewriteSelection }) {
+function WxStepWrite({ article, loading, onPrev, onNext, onRewrite, onRewriteSelection, onNav, pickedTitle, topic }) {
   if (loading || !article) return <Spinning icon="✍️" phases={[
     { text: "读完整人设 + 方法论 + 风格圣经", sub: "who-is-qinghuage + writing-methodology + style-bible · ~7200 token" },
     { text: "铺开场判断", sub: "原则① 先定性再解释 · 避免「不此地无银」" },
@@ -744,6 +744,38 @@ function WxStepWrite({ article, loading, onPrev, onNext, onRewrite, onRewriteSel
         <div style={{ flex: 1 }} />
         <Btn variant="primary" onClick={onNext}>下一步 · 段间配图 →</Btn>
       </div>
+
+      {/* D-062f 双 CTA: 摘金句段做视频 / 推送草稿(下一步即推送) */}
+      {onNav && (
+        <div style={{
+          marginTop: 16, padding: 14,
+          background: `linear-gradient(135deg, ${T.brandSoft} 0%, #fff 100%)`,
+          border: `1px solid ${T.brandSoft}`, borderRadius: 12,
+        }}>
+          <div style={{ fontSize: 12.5, color: T.muted, marginBottom: 10, fontWeight: 500 }}>
+            ✨ 这篇长文还能干啥
+          </div>
+          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+            <Btn size="sm" variant="primary" onClick={() => {
+              const seed = (hasSel ? selectedText : (editing || article.content || "")).trim().slice(0, 1200);
+              try {
+                localStorage.setItem("make_v2_seed_script", seed);
+                localStorage.setItem("make_v2_seed_from", JSON.stringify({
+                  skill: "wechat",
+                  title: `公众号 · ${(pickedTitle || topic || "金句段").slice(0, 24)}${hasSel ? " · 选段" : ""}`,
+                  ts: Date.now(),
+                }));
+              } catch (_) {}
+              onNav("make");
+            }}>🎬 {hasSel ? "把选中段做成视频" : "摘段做数字人视频"} →</Btn>
+            <span style={{ fontSize: 11, color: T.muted2 }}>
+              {hasSel ? `已选 ${selectedText.length} 字 · 跳到「做视频」自动带入` : "未选段则带全文,到「做视频」再裁;或先选段再点这里"}
+            </span>
+            <div style={{ flex: 1 }} />
+            <span style={{ fontSize: 11, color: T.muted2 }}>📮 推送草稿箱 → 走完段间配图 + HTML 后即推</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
