@@ -215,7 +215,9 @@ function PageWechat({ onNav }) {
     }
   }
 
-  function assembleHtml() {
+  function assembleHtml(templateName) {
+    // D-034: 接受 template 参数 · undefined 走默认 v3-clean
+    const tpl = templateName || htmlResult?.template || "v3-clean";
     const section_images = imagePlans.filter(p => p.mmbiz_url).map(p => ({ mmbiz_url: p.mmbiz_url }));
     return runStep({
       nextStep: "html", rollbackStep: "images", clearSetter: setHtmlResult,
@@ -225,8 +227,9 @@ function PageWechat({ onNav }) {
           content_md: article.content,
           section_images,
           hero_highlight: pickedTitle.slice(0, 6),
+          template: tpl,
         });
-        setHtmlResult(r);
+        setHtmlResult({ ...r, template: tpl });
       },
     });
   }
@@ -310,7 +313,7 @@ function PageWechat({ onNav }) {
         {step === "outline" && <WxStepOutline outline={outline} setOutline={setOutline} title={pickedTitle} topic={topic} loading={loading} onPrev={() => setStep("titles")} onNext={writeArticle} onRegen={() => genOutline(pickedTitle)} />}
         {step === "write"   && <WxStepWrite article={article} loading={loading} onPrev={() => setStep("outline")} onNext={planImages} onRewrite={writeArticle} />}
         {step === "images"  && <WxStepImages plans={imagePlans} setPlans={setImagePlans} onGen={generateOneImage} loading={loading} onPrev={() => setStep("write")} onNext={assembleHtml} onRegen={planImages} />}
-        {step === "html"    && <WxStepHtml result={htmlResult} loading={loading} onPrev={() => setStep("images")} onNext={genCover} />}
+        {step === "html"    && <WxStepHtml result={htmlResult} loading={loading} onPrev={() => setStep("images")} onNext={genCover} onSwitchTemplate={assembleHtml} />}
         {step === "cover"   && <WxStepCover cover={coverResult} title={pickedTitle} loading={loading} onPrev={() => setStep("html")} onNext={push} onRegen={genCover} />}
         {step === "push"    && <WxStepPush result={pushResult} loading={loading} onPrev={() => setStep("cover")} onReset={reset} onNav={onNav} />}
       </div>
@@ -721,21 +724,51 @@ function WxStepImages({ plans, setPlans, onGen, loading, onPrev, onNext, onRegen
 }
 
 // ─── Step 6 · HTML ─────────────────────────────────────────
-function WxStepHtml({ result, loading, onPrev, onNext }) {
+// D-034 ② HTML 模板可切换
+const HTML_TEMPLATES = [
+  { id: "v3-clean",    label: "V3 Clean",    sub: "干净有呼吸 · 默认" },
+  { id: "v2-magazine", label: "V2 Magazine", sub: "杂志感 · 适合长文方法论" },
+  { id: "v1-dark",     label: "V1 Dark",     sub: "深色高对比 · 适合犀利观点" },
+];
+
+function WxStepHtml({ result, loading, onPrev, onNext, onSwitchTemplate }) {
   if (loading || !result) return <Spinning icon="🧩" phases={[
-    { text: "读 V3 Clean 模板", sub: "assets/template-v3-clean.html" },
+    { text: "读模板", sub: "assets/template-*.html" },
     { text: "简易 MD → HTML", sub: "H2 转 section-title · 段间按比例插图" },
     { text: "注入 hero + 正文 + footer-fixed", sub: "保留头像 mmbiz URL 和 CTA 区" },
     { text: "premailer 内联所有 CSS", sub: "class 删除 · style 属性合入" },
     { text: "转微信 markup", sub: "div → section · 文本包 span leaf · 末尾 mp-style-type" },
   ]} />;
   if (!result) return null;
+  const currentTpl = result.template || "v3-clean";
   return (
     <div style={{ padding: "32px 40px 120px", maxWidth: 1080, margin: "0 auto" }}>
-      <div style={{ marginBottom: 16 }}>
-        <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 6 }}>HTML 拼好了 🧩</div>
-        <div style={{ fontSize: 13, color: T.muted }}>下面是带完整样式的浏览器预览(接近微信渲染效果)。推送时会自动用转换后的微信 markup 格式。</div>
+      <div style={{ marginBottom: 16, display: "flex", alignItems: "flex-start", gap: 16 }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 6 }}>HTML 拼好了 🧩</div>
+          <div style={{ fontSize: 13, color: T.muted }}>带样式预览(接近微信渲染) · 推送时自动用微信 markup 格式</div>
+        </div>
       </div>
+
+      {/* D-034 模板切换 tab */}
+      <div style={{ display: "flex", gap: 6, marginBottom: 12, background: T.bg2, padding: 4, borderRadius: 100, width: "fit-content" }}>
+        {HTML_TEMPLATES.map(tpl => (
+          <button key={tpl.id} title={tpl.sub}
+            onClick={() => tpl.id !== currentTpl && onSwitchTemplate?.(tpl.id)}
+            disabled={tpl.id === currentTpl}
+            style={{
+              padding: "6px 14px", fontSize: 12, borderRadius: 100, border: "none", cursor: tpl.id === currentTpl ? "default" : "pointer", fontFamily: "inherit",
+              background: tpl.id === currentTpl ? "#fff" : "transparent",
+              color: tpl.id === currentTpl ? T.text : T.muted,
+              fontWeight: tpl.id === currentTpl ? 600 : 500,
+              boxShadow: tpl.id === currentTpl ? "0 1px 3px rgba(0,0,0,0.06)" : "none",
+            }}>
+            {tpl.label}
+            <span style={{ fontSize: 10, marginLeft: 6, color: tpl.id === currentTpl ? T.muted2 : T.muted3, fontWeight: 400 }}>{tpl.sub}</span>
+          </button>
+        ))}
+      </div>
+
       <div style={{ background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 12, padding: 2, marginBottom: 14, height: 640, overflow: "hidden" }}>
         <iframe srcDoc={result.raw_html || result.wechat_html} style={{ width: "100%", height: "100%", border: "none", borderRadius: 10, background: "#fff" }} title="wechat preview" />
       </div>

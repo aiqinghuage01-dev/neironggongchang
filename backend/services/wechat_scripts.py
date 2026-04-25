@@ -132,10 +132,30 @@ def plan_section_images(content: str, title: str, n: int = 4) -> list[dict[str, 
 
 # ─── Phase 3 · HTML 拼装 + 微信 markup 转换 ───────────────────
 
-def _load_template() -> str:
-    p = skill_loader.asset_path(SKILL_SLUG, "template-v3-clean.html")
+TEMPLATE_FILES = {
+    "v3-clean":   "template-v3-clean.html",
+    "v2-magazine": "template-v2-magazine.html",
+    "v1-dark":    "template-v1-dark.html",
+}
+
+
+def list_templates() -> list[dict[str, Any]]:
+    """返回可用模板列表 + 文件存在性。"""
+    out = []
+    for name, fn in TEMPLATE_FILES.items():
+        p = skill_loader.asset_path(SKILL_SLUG, fn)
+        out.append({"name": name, "filename": fn, "exists": p.exists()})
+    return out
+
+
+def _load_template(name: str = "v3-clean") -> str:
+    fn = TEMPLATE_FILES.get(name) or TEMPLATE_FILES["v3-clean"]
+    p = skill_loader.asset_path(SKILL_SLUG, fn)
     if not p.exists():
-        raise WechatScriptError(f"模板不存在: {p}")
+        # 回退到 v3-clean
+        p = skill_loader.asset_path(SKILL_SLUG, TEMPLATE_FILES["v3-clean"])
+        if not p.exists():
+            raise WechatScriptError(f"模板不存在: {p}")
     return p.read_text(encoding="utf-8")
 
 
@@ -146,6 +166,7 @@ def assemble_html(
     hero_badge: str = "老板必看",
     hero_highlight: str = "",
     hero_subtitle: str = "",
+    template: str = "v3-clean",
 ) -> dict[str, Any]:
     """把长文 Markdown + 段间图 URL 拼成可贴的 V3 Clean HTML,
     再调 convert_to_wechat_markup.py 转成微信 markup。
@@ -156,7 +177,7 @@ def assemble_html(
       meta_path: /tmp/preview/article_meta.json
       wechat_html: 转换后 HTML 字符串(给前端预览)
     """
-    template = _load_template()
+    template_html = _load_template(template)
 
     # hero 默认值:取标题前 10 字,副标题从正文抽 3 个关键词占位
     if not hero_highlight:
@@ -175,7 +196,7 @@ def assemble_html(
     # template-v3-clean.html 本身是完整 HTML,我们做字符串替换
     hero_title_html = f'{title[:6]}<span class="hero-highlight">{hero_highlight}</span>'
     html = _inject_into_template(
-        template,
+        template_html,
         title=title,
         hero_badge=hero_badge,
         hero_title_html=hero_title_html,

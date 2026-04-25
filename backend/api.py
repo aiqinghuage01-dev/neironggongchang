@@ -1324,6 +1324,7 @@ class WechatHtmlReq(BaseModel):
     hero_badge: str = "老板必看"
     hero_highlight: str = ""
     hero_subtitle: str = ""
+    template: str = "v3-clean"  # v3-clean / v2-magazine / v1-dark (D-034)
 
 
 @app.post("/api/wechat/html")
@@ -1336,9 +1337,16 @@ def wechat_html(req: WechatHtmlReq):
             hero_badge=req.hero_badge,
             hero_highlight=req.hero_highlight,
             hero_subtitle=req.hero_subtitle,
+            template=req.template,
         )
     except wechat_scripts.WechatScriptError as e:
         raise HTTPException(500, str(e))
+
+
+@app.get("/api/wechat/templates")
+def wechat_templates():
+    """返回可用的 HTML 模板列表 (D-034)。"""
+    return {"templates": wechat_scripts.list_templates()}
 
 
 # ─── Phase 4 · 封面 ──────────────────────────────────────────
