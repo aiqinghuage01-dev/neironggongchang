@@ -9,9 +9,9 @@ const BK_STEPS = [
 
 // 模式定义 (跟 baokuan_pipeline.py 的 _mode_versions 完全对齐)
 const BK_MODES = [
-  { id: "pure",     icon: "📝", label: "纯改写 (V1+V2)",    desc: "换皮版 + 狠劲版 · 不植入业务", recommend: true },
-  { id: "business", icon: "🎯", label: "业务钩子 (V3+V4)",  desc: "翻转版 + 圈人版 · 自然带业务", needsProfile: true },
-  { id: "all",      icon: "🔥", label: "全都要 (4 版)",     desc: "纯+业务都要, 一次出 4 版", needsProfile: true },
+  { id: "pure",     icon: "📝", label: "纯改写 · 2 版",    desc: "换皮版 + 狠劲版 · 不植入业务", recommend: true },
+  { id: "business", icon: "🎯", label: "业务钩子 · 2 版",  desc: "翻转版 + 圈人版 · 自然带业务", needsProfile: true },
+  { id: "all",      icon: "🔥", label: "全都要 · 4 版",    desc: "纯+业务都要, 一次出 4 版", needsProfile: true },
 ];
 
 function PageBaokuan({ onNav }) {
@@ -34,6 +34,8 @@ function PageBaokuan({ onNav }) {
 
   // 检测 make 那边丢的 baokuan_seed_text, 自动填 textarea
   // ⚠ 同 voicerewrite/hotrewrite: 必须同步删 wf snap, 防 D-016 restore 覆盖
+  // task #1 留: 如果 baokuan_seed_auto_analyze=1, 自动触发 analyze (一键到 V1/V2)
+  const autoAnalyzeRef = React.useRef(false);
   React.useEffect(() => {
     try {
       const seed = localStorage.getItem("baokuan_seed_text");
@@ -41,10 +43,23 @@ function PageBaokuan({ onNav }) {
         setText(seed);
         localStorage.removeItem("baokuan_seed_text");
         localStorage.removeItem("wf:baokuan");
+        if (localStorage.getItem("baokuan_seed_auto_analyze") === "1") {
+          localStorage.removeItem("baokuan_seed_auto_analyze");
+          autoAnalyzeRef.current = true;
+        }
       }
     } catch (_) {}
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // text 从 seed 设入后, 如果 autoAnalyzeRef = true, 自动跑 analyze (默认 pure 模式不需要画像)
+  React.useEffect(() => {
+    if (autoAnalyzeRef.current && text && step === "input" && !loading) {
+      autoAnalyzeRef.current = false;
+      doRewrite();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [text]);
 
   async function doRewrite() {
     if (!text.trim()) return;
@@ -105,7 +120,7 @@ function PageBaokuan({ onNav }) {
       <div style={{ flex: 1, overflow: "auto" }}>
         <div style={{ maxWidth: 820, margin: "16px auto 0" }}>
           <FromMakeBanner fromMake={fm.fromMake} dismiss={fm.dismiss}
-            label="爆款改写完, 点完成态'做成视频' CTA 自动带回" />
+            label="改写完点页底「做成视频」就回到做视频流程, 接着合成" />
         </div>
         <WfRestoreBanner show={wf.hasSnapshot} onDismiss={wf.dismissSnapshot}
           onClear={() => { reset(); wf.dismissSnapshot(); }}
@@ -206,7 +221,7 @@ function BkStepInput({ text, setText, mode, setMode, industry, setIndustry, targ
             <>
               <Tag size="xs" color="gray">{len} 字</Tag>
               {len < 100 && <span style={{ fontSize: 11, color: T.amber }}>偏短 · skill 提示 100+ 字效果更好</span>}
-              {len >= 100 && <span style={{ fontSize: 11, color: T.muted2 }}>· skill 严禁前 5 秒改动 / 严禁加广告 (纯改写) / 严禁 AI 味</span>}
+              {len >= 100 && <span style={{ fontSize: 11, color: T.muted2 }}>· 前 5 秒不动 · 不加广告 (纯改写) · 不带 AI 味</span>}
             </>
           ) : (
             <span style={{ fontSize: 12, color: T.muted2 }}>✨ 贴完选下面模式, 一键出版本</span>
