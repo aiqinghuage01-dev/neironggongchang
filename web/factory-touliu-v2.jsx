@@ -16,7 +16,7 @@ function PageTouliu({ onNav }) {
   const [pitch, setPitch] = React.useState("");
   const [industry, setIndustry] = React.useState("通用老板");
   const [targetAction, setTargetAction] = React.useState("点头像进直播间");
-  const [n, setN] = React.useState(10);
+  const [n, setN] = React.useState(1);  // D-062e: 默认 1 (5 太多生成慢)
   const [channel, setChannel] = React.useState("直播间");
 
   const [result, setResult] = React.useState(null);
@@ -78,7 +78,7 @@ function PageTouliu({ onNav }) {
         {step === "input"  && <TLStepInput pitch={pitch} setPitch={setPitch} industry={industry} setIndustry={setIndustry}
           targetAction={targetAction} setTargetAction={setTargetAction} n={n} setN={setN} channel={channel} setChannel={setChannel}
           loading={loading} onGo={generate} skillInfo={skillInfo} />}
-        {step === "result" && <TLStepResult result={result} n={n} loading={loading} onPrev={() => setStep("input")} onRegen={generate} onReset={reset} />}
+        {step === "result" && <TLStepResult result={result} n={n} loading={loading} onPrev={() => setStep("input")} onRegen={generate} onReset={reset} onNav={onNav} pitch={pitch} />}
       </div>
     </div>
   );
@@ -196,7 +196,7 @@ function TLStepInput({ pitch, setPitch, industry, setIndustry, targetAction, set
           <div>
             <div style={{ fontSize: 11, color: T.muted, marginBottom: 5 }}>本批数量</div>
             <div style={{ display: "flex", gap: 6 }}>
-              {[5, 10, 15].map(x => (
+              {[1, 3, 5, 10].map(x => (
                 <div key={x} onClick={() => setN(x)} style={{
                   padding: "4px 14px", borderRadius: 100, fontSize: 11.5, cursor: "pointer",
                   background: n === x ? T.brandSoft : T.bg2,
@@ -238,7 +238,7 @@ function TLStepInput({ pitch, setPitch, industry, setIndustry, targetAction, set
   );
 }
 
-function TLStepResult({ result, n, loading, onPrev, onRegen, onReset }) {
+function TLStepResult({ result, n, loading, onPrev, onRegen, onReset, onNav, pitch }) {
   if (loading || !result) return <Spinning icon="💰" phases={[
     { text: "读 skill 方法论", sub: "SKILL.md + style_rules + winning_patterns + industry_templates" },
     { text: "写《风格对齐摘要》", sub: "开场 · 纠偏 · AI 动作链 · 机制转折 · CTA 回扣" },
@@ -292,7 +292,7 @@ function TLStepResult({ result, n, loading, onPrev, onRegen, onReset }) {
 
       {/* 批量文案卡片 */}
       <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-        {batch.map((item, i) => <TLBatchCard key={i} item={item} />)}
+        {batch.map((item, i) => <TLBatchCard key={i} item={item} onNav={onNav} pitch={pitch} />)}
       </div>
 
       <div style={{ display: "flex", gap: 10, marginTop: 18, alignItems: "center" }}>
@@ -305,7 +305,7 @@ function TLStepResult({ result, n, loading, onPrev, onRegen, onReset }) {
   );
 }
 
-function TLBatchCard({ item }) {
+function TLBatchCard({ item, onNav, pitch }) {
   const [copied, setCopied] = React.useState(false);
   const [expand, setExpand] = React.useState(false);
   const dc = item.director_check || {};
@@ -316,6 +316,20 @@ function TLBatchCard({ item }) {
     navigator.clipboard?.writeText(full);
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
+  }
+
+  function makeVideo() {
+    if (!onNav) return;
+    const full = `${item.first_line}\n\n${item.body}\n\n${item.cta}`;
+    try {
+      localStorage.setItem("make_v2_seed_script", full);
+      localStorage.setItem("make_v2_seed_from", JSON.stringify({
+        skill: "touliu",
+        title: `${item.structure} · ${(pitch || item.title || "").slice(0, 24)}`,
+        ts: Date.now(),
+      }));
+    } catch (_) {}
+    onNav("make");
   }
 
   const structColors = { "痛点型": "red", "对比型": "blue", "步骤型": "amber", "对话型": "purple", "创新型": "green" };
@@ -362,6 +376,14 @@ function TLBatchCard({ item }) {
           {["人味", "场景完成度", "业务过渡自然度", "AI机制密度", "说服层数", "收口自然度"].map(k => dc[k] != null && (
             <span key={k}>{k} {dc[k]}/5</span>
           ))}
+        </div>
+      )}
+
+      {onNav && (
+        <div style={{ marginTop: 12, paddingTop: 10, borderTop: `1px dashed ${T.borderSoft}`, display: "flex", alignItems: "center", gap: 10 }}>
+          <span style={{ fontSize: 11, color: T.muted2 }}>下一步:</span>
+          <Btn size="sm" variant="primary" onClick={makeVideo}>🎬 用这条做视频 →</Btn>
+          <span style={{ fontSize: 10.5, color: T.muted2 }}>跳到「做视频」 Step 1,文案自动带入</span>
         </div>
       )}
     </div>
