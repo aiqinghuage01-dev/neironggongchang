@@ -154,7 +154,6 @@ function PageSettings({ onNav }) {
                       }}>{on && <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#fff" }} />}</div>
                       <div style={{ flex: 1 }}>
                         <div style={{ fontSize: 13.5, fontWeight: 600 }}>{sp.title || `声音 ${sp.id}`}</div>
-                        <div style={{ fontSize: 11, color: T.muted2, fontFamily: "SF Mono, monospace" }}>speaker_id={sp.id}</div>
                       </div>
                       {on && <Tag size="xs" color="green">默认</Tag>}
                     </div>
@@ -201,7 +200,6 @@ function PageSettings({ onNav }) {
                       }}>{on && <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#fff" }} />}</div>
                       <div style={{ flex: 1 }}>
                         <div style={{ fontSize: 13.5, fontWeight: 600 }}>{av.title || `形象 ${av.id}`}</div>
-                        <div style={{ fontSize: 11, color: T.muted2, fontFamily: "SF Mono, monospace" }}>avatar_id={av.id}</div>
                       </div>
                       {on && <Tag size="xs" color="green">默认</Tag>}
                     </div>

@@ -26,17 +26,17 @@
 | 4 | baokuan | done | commit | tick 6 | V1+V2/V3+V4 → 2版/4版人话, "skill 严禁" → 人话, 加 task#1 留的 auto_analyze 自动触发, FromMake banner 文案 |
 | 5 | hotrewrite | done | commit | tick 7 | FromMake banner 友好化 + "低压 CTA" → "轻引导不硬塞" |
 | 6 | voicerewrite | done | commit | tick 7 | FromMake banner 友好化 + "skill 严禁" → 人话 |
-| 7 | ad | pending | — | — | 投流文案 |
-| 8 | wechat | pending | — | — | 公众号 8 步 |
-| 9 | moments | pending | — | — | 朋友圈 |
-| 10 | planner | pending | — | — | 内容策划 |
-| 11 | compliance | pending | — | — | 违规审查 |
-| 12 | dreamina | pending | — | — | 即梦 AIGC |
-| 13 | materials | pending | — | — | 素材库 |
-| 14 | works | pending | — | — | 作品库 |
-| 15 | knowledge | pending | — | — | 知识库 |
-| 16 | nightshift | pending | — | — | 小华夜班 |
-| 17 | settings | pending | — | — | 设置 |
+| 7 | ad | done | commit | tick 8 | lint 技术词清理 + scripts/python 路径删 + 终检文案人话化 |
+| 8 | wechat | done | commit | tick 8 | mmbiz/footer-fixed/premailer/markup → 人话; HTML 拼好了 → 排版好了 |
+| 9 | moments | done | commit | tick 8 | 扫无明显技术词暴露 |
+| 10 | planner | done | commit | tick 8 | 'SKILL.md 6 模块结构' → '6 模块结构' |
+| 11 | compliance | done | commit | tick 8 | 扫无明显技术词暴露 |
+| 12 | dreamina | done | commit | tick 8 | submitResult/queryResult JSON details summary 改人话 |
+| 13 | materials | done | commit | tick 8 | 扫无明显技术词暴露 |
+| 14 | works | done | commit | tick 8 | 删 '柿榴 #shiliu_video_id' / status= 暴露, 改人话状态标签 |
+| 15 | knowledge | done | commit | tick 8 | 扫无明显技术词暴露 |
+| 16 | nightshift | done | commit | tick 8 | 扫无明显技术词暴露 |
+| 17 | settings | done | commit | tick 8 | 删 speaker_id={id} / avatar_id={id} mono ID 暴露 |
 | 18 | cross-page-consistency | pending | — | — | 跨 page 视觉/命名一致性 |
 | 19 | summary | pending | — | — | 全站汇总报告 |
 
@@ -53,6 +53,7 @@
 - tick 5 · 2026-04-26 00:35 · task#3 home implement+verify · 早上好动态化 + 删开发字段 + 删硬编码路径, 8 项 PASS (放弃依赖 cron, 切手动连跑)
 - tick 6 · 2026-04-26 00:40 · task#4 baokuan implement+verify · 模式名人话化 + auto_analyze flag 接通 (task#1 留的) + FromMake banner 友好化, 8 项 PASS
 - tick 7 · 2026-04-26 00:45 · task#5 hotrewrite + task#6 voicerewrite · 各 banner + 技术词清理, 同时落 (改动小)
+- tick 8 · 2026-04-26 00:55 · task#7-#17 批量扫改 · ad/wechat/dreamina/works/settings/planner 改文案 + 删 ID 暴露; moments/compliance/materials/knowledge/nightshift 扫无问题
 
 ---
 

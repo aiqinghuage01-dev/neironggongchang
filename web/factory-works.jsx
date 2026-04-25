@@ -205,7 +205,6 @@ function WorkCard({ w, onPick }) {
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 10.5, color: T.muted2 }}>
           <span>📅 {new Date(w.created_at * 1000).toLocaleDateString("zh-CN", { month: "2-digit", day: "2-digit" })}</span>
-          {w.shiliu_video_id && <span>· 柿榴 #{w.shiliu_video_id}</span>}
           <div style={{ flex: 1 }} />
           {hover && <span style={{ color: T.brand, fontWeight: 500 }}>看详情 →</span>}
         </div>
@@ -285,10 +284,9 @@ function WorkInfoPanel({ work, onDel, onRemake }) {
       )}
       <div style={{ marginTop: 18 }}>
         <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 4 }}>{work.title || "(无标题)"}</div>
-        <div style={{ fontSize: 11.5, color: T.muted2, fontFamily: "SF Mono, monospace" }}>
+        <div style={{ fontSize: 11.5, color: T.muted2 }}>
           {new Date(work.created_at * 1000).toLocaleString("zh-CN")} ·
-          status=<Tag size="xs" color={work.status === "published" ? "green" : work.status === "ready" ? "blue" : "gray"}>{work.status}</Tag>
-          {work.shiliu_video_id ? ` · shiliu=${work.shiliu_video_id}` : ""}
+          状态: <Tag size="xs" color={work.status === "published" ? "green" : work.status === "ready" ? "blue" : "gray"}>{work.status === "published" ? "已发" : work.status === "ready" ? "待发" : work.status === "generating" ? "合成中" : work.status}</Tag>
         </div>
       </div>
       {work.final_text && (

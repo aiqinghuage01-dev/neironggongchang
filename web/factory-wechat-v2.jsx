@@ -929,11 +929,11 @@ const HTML_TEMPLATES = [
 
 function WxStepHtml({ result, loading, onPrev, onNext, onSwitchTemplate }) {
   if (loading || !result) return <Spinning icon="🧩" phases={[
-    { text: "读模板", sub: "assets/template-*.html" },
-    { text: "简易 MD → HTML", sub: "H2 转 section-title · 段间按比例插图" },
-    { text: "注入 hero + 正文 + footer-fixed", sub: "保留头像 mmbiz URL 和 CTA 区" },
-    { text: "premailer 内联所有 CSS", sub: "class 删除 · style 属性合入" },
-    { text: "转微信 markup", sub: "div → section · 文本包 span leaf · 末尾 mp-style-type" },
+    { text: "读模板", sub: "排版样式 + 视觉规范" },
+    { text: "Markdown 转 HTML", sub: "H2 标题 + 段间配图" },
+    { text: "注入头部正文尾部", sub: "保留作者头像和文末作者区" },
+    { text: "样式内联", sub: "微信只认 inline style, class 都展平" },
+    { text: "转微信内部格式", sub: "适配微信编辑器 markup" },
   ]} />;
   if (!result) return null;
   const currentTpl = result.template || "v3-clean";
@@ -941,8 +941,8 @@ function WxStepHtml({ result, loading, onPrev, onNext, onSwitchTemplate }) {
     <div style={{ padding: "32px 40px 120px", maxWidth: 1080, margin: "0 auto" }}>
       <div style={{ marginBottom: 16, display: "flex", alignItems: "flex-start", gap: 16 }}>
         <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 6 }}>HTML 拼好了 🧩</div>
-          <div style={{ fontSize: 13, color: T.muted }}>带样式预览(接近微信渲染) · 推送时自动用微信 markup 格式</div>
+          <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 6 }}>排版好了 🧩</div>
+          <div style={{ fontSize: 13, color: T.muted }}>下面是接近微信效果的预览, 推送时会自动转成微信识别的格式</div>
         </div>
       </div>
 

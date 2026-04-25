@@ -194,7 +194,7 @@ function PStepLevels({ analysis, loading, onPick, onPrev, onRegen }) {
 
 function PStepPlan({ plan, level, loading, onPrev, onReset, onNav, brief }) {
   if (loading || !plan) return <Spinning icon="📋" phases={[
-    { text: "拉 SKILL.md 6 模块结构", sub: "前/中/后 + 团队 + 清单 + 知识沉淀" },
+    { text: "拉 6 模块结构", sub: "前/中/后 + 团队 + 清单 + 知识沉淀" },
     { text: "活动前: 设备 + 人员 + 前置素材", sub: "" },
     { text: "活动中: 时间线 + 稀缺素材抓拍", sub: "" },
     { text: "活动后: 内容生产计划 + 节奏", sub: "" },

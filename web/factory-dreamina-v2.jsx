@@ -231,9 +231,9 @@ function DStepResult({ mode, submitResult, queryResult, loading, polling, onPoll
         </div>
       </div>
 
-      {/* 提交时返回的原始信息 */}
+      {/* 提交时返回的原始信息 (折叠, 用户一般不需要) */}
       <details style={{ padding: 12, background: T.bg2, borderRadius: 8, marginBottom: 14 }}>
-        <summary style={{ fontSize: 12, color: T.muted, cursor: "pointer", fontWeight: 600 }}>📋 提交输出 (raw)</summary>
+        <summary style={{ fontSize: 12, color: T.muted, cursor: "pointer", fontWeight: 600 }}>📋 看提交细节 (一般不用看)</summary>
         <pre style={{ fontSize: 11, color: T.muted, lineHeight: 1.6, marginTop: 8, whiteSpace: "pre-wrap", maxHeight: 200, overflow: "auto" }}>
           {JSON.stringify(submitResult.result || {}, null, 2)}
         </pre>
@@ -271,7 +271,7 @@ function DStepResult({ mode, submitResult, queryResult, loading, polling, onPoll
 
         {queryResult && !media.length && (
           <details style={{ padding: 10, background: T.bg2, borderRadius: 8, marginTop: 8 }}>
-            <summary style={{ fontSize: 11.5, color: T.muted, cursor: "pointer" }}>查询输出 raw</summary>
+            <summary style={{ fontSize: 11.5, color: T.muted, cursor: "pointer" }}>没找到媒体, 看下技术细节</summary>
             <pre style={{ fontSize: 11, color: T.muted, marginTop: 6, whiteSpace: "pre-wrap", maxHeight: 240, overflow: "auto" }}>{JSON.stringify(queryResult, null, 2)}</pre>
           </details>
         )}
