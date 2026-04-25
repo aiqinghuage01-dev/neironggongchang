@@ -141,6 +141,7 @@
 - C20 PageNight NightJobCard polish — icon 28px → 24px 但加 44x44 brandSoft 圆角底 (与 SettingsSection 一致) + hover ring (enabled 时) + radius 12 → 14
 - C21 跨页 banner 风格统一 — FromMakeBanner / WfRestoreBanner / ErrorBanner 都 padding 12x16 / radius 10 / border 44 透明度 / icon 18 flexShrink
 - AUDIT-8 + A8-todo5 — 写第 8 次复盘 (5 个 P3 todo) + moments DerivedItemCard hover ring
+- A8-todo3 TLBatchCard polish — 序号 #N 升级成 28x28 圆角徽章 + 评分 30/30 加 brandSoft pill 背景 + 卡 radius 12 → 14
 
 ## 卡住记录
 

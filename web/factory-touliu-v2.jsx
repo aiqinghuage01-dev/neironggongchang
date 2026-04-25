@@ -327,13 +327,24 @@ function TLBatchCard({ item, onNav, pitch }) {
   const structColors = { "痛点型": "red", "对比型": "blue", "步骤型": "amber", "对话型": "purple", "创新型": "green" };
 
   return (
-    <div style={{ padding: 16, background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 12 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-        <span style={{ fontSize: 11, color: T.muted2, fontFamily: "SF Mono, monospace", width: 26 }}>#{item.no}</span>
+    <div style={{
+      padding: 18, background: "#fff",
+      border: `1px solid ${T.borderSoft}`, borderRadius: 14,
+      boxShadow: "0 1px 2px rgba(0,0,0,0.03)",
+    }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+        <span style={{
+          fontSize: 11, color: T.muted2, fontFamily: "SF Mono, monospace",
+          width: 28, height: 28, background: T.bg2, borderRadius: 6,
+          display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700,
+        }}>{item.no}</span>
         <Tag size="xs" color={structColors[item.structure] || "blue"}>{item.structure}</Tag>
         <span style={{ fontSize: 15, fontWeight: 600, color: T.text, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.title}</span>
         {total > 0 && (
-          <span style={{ fontSize: 11, color: total >= 24 ? T.brand : T.amber, fontWeight: 600, fontFamily: "SF Mono, monospace" }}>
+          <span style={{
+            fontSize: 11, color: total >= 24 ? T.brand : T.amber, fontWeight: 600, fontFamily: "SF Mono, monospace",
+            padding: "2px 8px", background: total >= 24 ? T.brandSoft : T.amberSoft, borderRadius: 100,
+          }}>
             {total}/30 {total >= 24 ? "✓" : "⚠️"}
           </span>
         )}
