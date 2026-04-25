@@ -260,13 +260,34 @@ function MakeV2StepScript({ script, setScript, onNext, onNav, seedFrom, onDismis
     finally { setExtracting(false); }
   }
 
-  function rewriteThis() {
-    // 把当前文案塞 voicerewrite (它有"改写"能力)
+  // 改写 popover 状态 (清华哥拍板的方案 B)
+  const [showRewritePopover, setShowRewritePopover] = React.useState(false);
+  React.useEffect(() => {
+    if (!showRewritePopover) return;
+    const onDocClick = (e) => {
+      // 点 popover 外关闭 (popover 内 stopPropagation)
+      if (!e.target.closest("[data-rewrite-popover]")) setShowRewritePopover(false);
+    };
+    setTimeout(() => document.addEventListener("click", onDocClick), 0);
+    return () => document.removeEventListener("click", onDocClick);
+  }, [showRewritePopover]);
+
+  function rewriteVia(skill) {
+    // 三种 skill 改写: 录音改写 (轻量重排) / 爆款改写 (待接入, 暂走 voicerewrite) / 热点改写 (按角度)
+    setShowRewritePopover(false);
     try {
-      localStorage.setItem("voicerewrite_seed_transcript", trimmed);
-      setFromMake("voicerewrite");  // 设 anchor, voicerewrite 完成后会带回来
+      if (skill === "voicerewrite" || skill === "baokuan") {
+        // baokuan backend 还没接, 先用 voicerewrite 兜底 (都是改写性质)
+        localStorage.setItem("voicerewrite_seed_transcript", trimmed);
+        setFromMake("voicerewrite");
+        onNav("voicerewrite");
+      } else if (skill === "hotrewrite") {
+        // 把当前文案当 hotspot 喂给 hotrewrite (按新角度重写)
+        localStorage.setItem("hotrewrite_seed_hotspot", trimmed);
+        setFromMake("hotrewrite");
+        onNav("hotrewrite");
+      }
     } catch (_) {}
-    onNav("voicerewrite");
   }
 
   return (
@@ -395,7 +416,7 @@ function MakeV2StepScript({ script, setScript, onNext, onNav, seedFrom, onDismis
               </span>
             </>
           ) : (
-            // 文案模式
+            // 文案模式 (清华哥方案 B: 改写按钮 + popover 选 skill)
             <>
               <button onClick={onNext} style={{
                 padding: "10px 22px", fontSize: 14, fontWeight: 600,
@@ -403,14 +424,51 @@ function MakeV2StepScript({ script, setScript, onNext, onNav, seedFrom, onDismis
                 border: "none", borderRadius: 100,
                 cursor: "pointer", fontFamily: "inherit",
               }}>🎬 做数字人 →</button>
-              <button onClick={rewriteThis} style={{
-                padding: "9px 18px", fontSize: 13, fontWeight: 500,
-                background: "#fff", color: T.muted,
-                border: `1px solid ${T.border}`, borderRadius: 100,
-                cursor: "pointer", fontFamily: "inherit",
-              }}>✍️ 先改写优化</button>
+              <div data-rewrite-popover style={{ position: "relative" }}>
+                <button onClick={(e) => { e.stopPropagation(); setShowRewritePopover(!showRewritePopover); }}
+                  style={{
+                    padding: "9px 18px", fontSize: 13, fontWeight: 500,
+                    background: showRewritePopover ? T.brandSoft : "#fff",
+                    color: showRewritePopover ? T.brand : T.muted,
+                    border: `1px solid ${showRewritePopover ? T.brand : T.border}`, borderRadius: 100,
+                    cursor: "pointer", fontFamily: "inherit",
+                    display: "inline-flex", alignItems: "center", gap: 4,
+                  }}>✍️ 改写优化 ▾</button>
+                {showRewritePopover && (
+                  <div data-rewrite-popover style={{
+                    position: "absolute", top: "calc(100% + 6px)", left: 0,
+                    background: "#fff", border: `1px solid ${T.border}`, borderRadius: 12,
+                    boxShadow: "0 8px 24px rgba(0,0,0,0.12)",
+                    padding: 8, zIndex: 10, minWidth: 320,
+                  }}>
+                    <div style={{ padding: "6px 10px 4px", fontSize: 11, color: T.muted2, fontWeight: 600 }}>
+                      你想用哪种 skill 改写?
+                    </div>
+                    {[
+                      { id: "voicerewrite", icon: "🎙️", title: "录音改写", desc: "轻量重排, 删口头禅, 黄金三秒", recommend: true },
+                      { id: "baokuan", icon: "✍️", title: "爆款改写", desc: "换说法 + 去重, 适合洗别人爆款", note: "暂走录音改写 (backend 待接)" },
+                      { id: "hotrewrite", icon: "🔥", title: "热点改写", desc: "把这段当题材, 按新角度重写 (1800+ 字)" },
+                    ].map(s => (
+                      <div key={s.id} onClick={() => rewriteVia(s.id)}
+                        style={{ padding: "10px 12px", borderRadius: 8, cursor: "pointer", display: "flex", alignItems: "flex-start", gap: 10 }}
+                        onMouseEnter={e => { e.currentTarget.style.background = T.brandSoft; }}
+                        onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}>
+                        <span style={{ fontSize: 18, flexShrink: 0 }}>{s.icon}</span>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 2 }}>
+                            <span style={{ fontSize: 13, fontWeight: 600, color: T.text }}>{s.title}</span>
+                            {s.recommend && <Tag size="xs" color="green">推荐</Tag>}
+                          </div>
+                          <div style={{ fontSize: 11.5, color: T.muted, lineHeight: 1.5 }}>{s.desc}</div>
+                          {s.note && <div style={{ fontSize: 10.5, color: T.muted2, marginTop: 2 }}>💡 {s.note}</div>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
               <span style={{ fontSize: 11, color: T.muted2, flex: 1 }}>
-                先改写: 跳 🎙️ 录音改写 (人味重排), 完成自动带回这里
+                选 skill → 跳过去自动填文案 → 改完一键带回继续做数字人
               </span>
             </>
           )}
