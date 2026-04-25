@@ -72,16 +72,26 @@ function PageHome({ onNav }) {
                 <div style={{ fontSize: 14, fontWeight: 600, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{hot.title}</div>
                 {hot.match_reason && <div style={{ fontSize: 12, color: T.muted, marginTop: 3 }}>{hot.match_reason}</div>}
               </div>
-              <Btn variant="primary" size="md" onClick={() => onNav("make")}>做成视频 →</Btn>
+              {/* D-062-AUDIT-4 fix: 之前 onNav("make") 不带 seed, 用户白点 */}
+              <Btn variant="primary" size="md" onClick={() => {
+                try {
+                  const seed = `# 今日最热 (${hot.platform || "?"} · 热度 ${hot.heat_score || 0})\n${hot.title}\n${hot.match_reason ? "\n匹配原因: " + hot.match_reason : ""}\n\n---\n\n口播正文:\n`;
+                  localStorage.setItem("make_v2_seed_script", seed);
+                  localStorage.setItem("make_v2_seed_from", JSON.stringify({
+                    skill: "hot-topic", title: (hot.title || "").slice(0, 30), ts: Date.now(),
+                  }));
+                } catch (_) {}
+                onNav("make");
+              }}>做成视频 →</Btn>
             </div>
           ) : (
-            <div style={{
-              display: "flex", alignItems: "center", gap: 14, padding: "16px 20px",
-              background: T.bg2, borderRadius: 12, border: `1px dashed ${T.borderSoft}`,
-              fontSize: 13, color: T.muted,
-            }}>
-              <span style={{ fontSize: 20 }}>🔥</span>
-              <span>今天还没维护热点 · 去 <span style={{ color: T.brand, cursor: "pointer", fontWeight: 600 }} onClick={() => onNav("materials")}>📥 素材库 · 热点 Tab</span> 粘一条当日最热的</span>
+            // D-062-AUDIT-4: 首页 hot 空, 给 NightHotFlywheel CTA (与 PageMakeV2 / Materials 一致)
+            <div style={{ background: "#fff", borderRadius: 12, border: `1px dashed ${T.borderSoft}`, padding: 14 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+                <span style={{ fontSize: 18 }}>🔥</span>
+                <span style={{ fontSize: 13, color: T.muted }}>今天还没维护热点 · 启动飞轮让小华夜里抓 ↓</span>
+              </div>
+              <NightHotFlywheel onTopics={() => api.get("/api/stats/home").then(setStats).catch(() => {})} compact />
             </div>
           )}
 

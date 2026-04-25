@@ -260,6 +260,21 @@
         用户进 sidebar 不知道 "我今天做了几条投流", 缺即时反馈
         优先级 P3, 可加 dot 计数 (近 24h 该 skill 调用数 / works.created_today 等)
 
+- [x] **D-062-AUDIT-4** 2026-04-25 14:50 复盘 (D-062cc/z 后第四拍)
+      新发现的真 bug + 2 修:
+      - **D-062-AUDIT-4-fix1** ✅ 首页 "今日最热做成视频" 不带 seed
+        web/factory-home.jsx line 75 onClick 直接 onNav("make"), 与 AUDIT-2-fix1 同类问题
+        Fix: 拼"# 今日最热 (...)"模板写 seed + 标 skill: hot-topic
+      - **D-062-AUDIT-4-fix2** ✅ 首页 hot 空状态用静态文字
+        改用 NightHotFlywheel 共享组件 (与 PageMakeV2 / Materials / Hotrewrite 一致)
+        飞轮成功后回调刷 stats/home
+      - **D-062-AUDIT-4-todo1** factory-entries.jsx 是死代码
+        PageAd/Wechat/Moments 都被 v2 文件覆盖, line 199 onNav("make") 不带 seed
+        但代码 unreachable, 优先级低 · 建议后续整体删 factory-entries.jsx
+      - **D-062-AUDIT-4-todo2** factory-flywheel.jsx 文件名不准确了
+        现在含: 飞轮 (NightHotFlywheel) + anchor (useFromMake) + 错误友好化 (humanizeError)
+        建议: 重命名 factory-journey.jsx 或拆 3 个文件 (P3)
+
 ---
 
 ## 文档维护规则
