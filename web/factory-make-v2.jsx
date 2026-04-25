@@ -78,7 +78,8 @@ function PageMakeV2({ onNav }) {
                                     dhVideoPath={dhVideoPath} setDhVideoPath={setDhVideoPath}
                                     script={script}
                                     onPrev={() => gotoStep("script")}
-                                    onNext={() => gotoStep("template")} />}
+                                    onNext={() => gotoStep("template")}
+                                    onNav={onNav} />}
           {step === "template" && <MakeV2StepTemplate
                                     templateId={templateId} setTemplateId={setTemplateId}
                                     onPrev={() => gotoStep("voice-dh")}
@@ -318,7 +319,7 @@ function ScriptSkillCard({ skill, onClick }) {
 // 默认用上次 (从 localStorage 拉, 用户体验是 "用上次的: X 声音 + Y 形象 [换]")
 const MAKE_V2_LAST_KEY = "make_v2_last";
 
-function MakeV2StepVoiceDh({ voiceId, setVoiceId, avatarId, setAvatarId, dhVideoPath, setDhVideoPath, script, onPrev, onNext }) {
+function MakeV2StepVoiceDh({ voiceId, setVoiceId, avatarId, setAvatarId, dhVideoPath, setDhVideoPath, script, onPrev, onNext, onNav }) {
   const [speakers, setSpeakers] = React.useState(null);
   const [avatars, setAvatars] = React.useState(null);
   const [submitting, setSubmitting] = React.useState(false);
@@ -429,14 +430,19 @@ function MakeV2StepVoiceDh({ voiceId, setVoiceId, avatarId, setAvatarId, dhVideo
       {/* 选择 picker (展开时显) */}
       {showPickers && (
         <div style={{ marginBottom: 16, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          {/* D-062v: empty 状态加可点 CTA */}
           <PickerColumn title="🎙️ 声音 (CosyVoice)" loading={!speakers}
             items={speakers?.map(s => ({ id: s.speaker_id, label: s.title || `#${s.speaker_id}` })) || []}
             selectedId={voiceId} onSelect={setVoiceId}
-            emptyTip="还没有克隆声音 · 去 ⚙️ 设置 上传样本克隆" />
+            emptyTip="还没有克隆声音 · 上传 1 段你的录音 (≥ 10s) 克隆专属音色"
+            emptyAction={onNav ? { label: "去 ⚙️ 设置 · 克隆样本上传", onClick: () => onNav("settings") } : null} />
           <PickerColumn title="👤 数字人 (柿榴)" loading={!avatars}
             items={avatars?.map(a => ({ id: a.avatar_id, label: a.title || `#${a.avatar_id}` })) || []}
             selectedId={avatarId} onSelect={setAvatarId}
-            emptyTip="柿榴还没数字人 · 去柿榴后台先创建" />
+            emptyTip="柿榴账号下还没数字人形象 · 去柿榴 Web 后台创建一个 (3-5 分钟 trained)"
+            emptyAction={{ label: "📋 复制柿榴说明 (待补)", onClick: () => {
+              navigator.clipboard?.writeText("登录柿榴后台 → 数字人管理 → 创建 → 上传 30s 自拍视频 → 训练");
+            }}} />
         </div>
       )}
 
@@ -498,14 +504,20 @@ function MakeV2StepVoiceDh({ voiceId, setVoiceId, avatarId, setAvatarId, dhVideo
   );
 }
 
-function PickerColumn({ title, items, selectedId, onSelect, loading, emptyTip }) {
+function PickerColumn({ title, items, selectedId, onSelect, loading, emptyTip, emptyAction }) {
   return (
     <div style={{ background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 10, padding: 12 }}>
       <div style={{ fontSize: 12.5, fontWeight: 600, color: T.text, marginBottom: 8 }}>{title}</div>
       {loading ? (
         <div style={{ fontSize: 11, color: T.muted2, textAlign: "center", padding: 16 }}>加载中…</div>
       ) : items.length === 0 ? (
-        <div style={{ fontSize: 11, color: T.muted2, padding: 12 }}>{emptyTip}</div>
+        // D-062v: empty 加 actionable CTA
+        <div style={{ padding: 12 }}>
+          <div style={{ fontSize: 11.5, color: T.muted2, marginBottom: emptyAction ? 10 : 0, lineHeight: 1.6 }}>{emptyTip}</div>
+          {emptyAction && (
+            <Btn size="sm" variant="primary" onClick={emptyAction.onClick}>{emptyAction.label}</Btn>
+          )}
+        </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: 240, overflow: "auto" }}>
           {items.map(it => {

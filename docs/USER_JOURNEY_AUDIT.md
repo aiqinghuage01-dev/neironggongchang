@@ -193,9 +193,10 @@
       新发现的断点 (写进 backlog 7-9 期):
       - **D-062u** ✅ PageMakeV2 Step 1 6-skill cards desc 提示已过时
         改成: "✨ 写完点 skill 完成态的'做成视频' CTA, 文案自动带回这里 (跨页 state 已通)"
-      - **D-062v** Step 2 emptyTip 无行动按钮
-        声音空 → 应该一键跳 ⚙️ 设置·克隆样本上传 (现在只是文字)
-        数字人空 → 应该一键跳 柿榴后台 + 加 "去柿榴 →" 按钮 (没"按钮")
+      - **D-062v** ✅ Step 2 PickerColumn empty 加 actionable CTA
+        PickerColumn 加 emptyAction prop ({label, onClick}), 无 action 退化原文字
+        声音空 → "去 ⚙️ 设置·克隆样本上传" (onNav("settings"), 透 onNav 进 step 2)
+        数字人空 → "📋 复制柿榴说明" (柿榴外部, 写到剪贴板让用户对照操作)
       - **D-062w** ✅ Step 3 模板空提示用户化 + 一键朴素 CTA
         模板空时显 brandSoft 提示卡 + "👆 用朴素模式继续" 按钮 (setTemplateId(null))
         筛选无匹配但有模板时改成 "换筛选条件 或 用朴素模式" (无 CTA, 让用户改 chip)
