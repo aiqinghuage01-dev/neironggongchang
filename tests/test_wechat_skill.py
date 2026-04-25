@@ -91,9 +91,69 @@ def test_auto_digest_cuts_80_chars():
     assert digest.startswith("这是正文")
 
 
-def test_auto_subtitle_picks_keywords():
-    md = "今天说说护城河这事,老板们必看的三样底牌"
+def test_hero_title_no_duplication_on_default():
+    """D-048 真实 bug: 默认 hero_highlight 是 title[:8], 旧逻辑 prefix title[:6] 再
+    高亮 hero_highlight, 用户文章看到 '一个餐饮老板一个餐饮老板花3' 重复显示.
+    """
+    title = "一个餐饮老板花3万学建站，我用AI免费搞定了"
+    # 用户传的 hero_highlight = title[:8] (默认 frontend 这么干)
+    h = wechat_scripts._compose_hero_title_html(title, title[:8])
+    # 不应该重复显示前缀
+    assert h.count("一个餐饮老板") <= 2  # 一次在前缀, 一次在 span 里
+    # 但绝不能有 "一个餐饮老板一个餐饮老板" 这种连续重复
+    assert "一个餐饮老板一个餐饮老板" not in h.replace('<span class="hero-highlight">', '').replace('</span>', '')
+
+
+def test_hero_title_highlight_when_substring():
+    title = "AI 时代, 老板的护城河变了"
+    h = wechat_scripts._compose_hero_title_html(title, "护城河")
+    assert '<span class="hero-highlight">护城河</span>' in h
+    # 全文一次完整出现 (高亮替换 1 次)
+    assert h.count("护城河") == 1
+    assert "AI 时代" in h
+
+
+def test_hero_title_no_highlight_when_not_substring():
+    title = "AI 时代, 老板的护城河变了"
+    # hero_highlight 不在 title 里 → 不该硬塞 span
+    h = wechat_scripts._compose_hero_title_html(title, "外站不存在文字")
+    assert h == title
+    assert "<span" not in h
+
+
+def test_hero_title_empty_highlight():
+    title = "纯标题"
+    h = wechat_scripts._compose_hero_title_html(title, "")
+    assert h == "纯标题"
+    assert "<span" not in h
+
+
+def test_auto_subtitle_picks_phrases_by_punctuation():
+    """D-048: 按标点切短语, 不再贪婪切 6 字大段."""
+    md = "今天说说护城河, 老板必看, AI 时代底牌"
     sub = wechat_scripts._auto_subtitle(md)
     parts = sub.split(" · ")
     assert len(parts) == 3
-    assert all(len(p) >= 2 for p in parts)
+    assert all(2 <= len(p) <= 14 for p in parts)
+
+
+def test_auto_subtitle_long_continuous_chinese_falls_back_to_first_30():
+    """D-048 真实 bug 场景: 用户文章首段连续中文无标点, 旧逻辑切 6 字段不可读."""
+    md = "上周一个开火锅店的老板给我看他的品牌官网我当场愣住了"
+    sub = wechat_scripts._auto_subtitle(md)
+    # 新行为: 整句太长 (>14) 被 phrase filter 滤掉, 退化到首段前 30 字 (连贯, 而非 3 段切割).
+    # 不应出现旧 bug 的 "上周一个开火 · 锅店的老板给 · 我看他的品牌" 三段切分.
+    assert sub.count(" · ") == 0, f"不该有 ' · ' 切分, 实际: {sub!r}"
+    # 应是连贯文本前缀 (允许末尾 ……)
+    assert sub.startswith("上周一个")
+    assert len(sub) <= 31  # 30 字 + 末尾 …
+
+
+def test_auto_subtitle_with_punctuation_in_real_article():
+    """实战场景: 首段有标点, 应抽 3 个语义完整的短语."""
+    md = "上周一个开火锅店的老板给我看他的品牌官网, 我当场愣住了。"
+    sub = wechat_scripts._auto_subtitle(md)
+    parts = sub.split(" · ")
+    # 应该 1-3 段, 每段都是完整短语
+    assert all(2 <= len(p) <= 14 for p in parts)
+    assert "锅店" not in " ".join(parts) or "我看他的品牌" not in " ".join(parts) or any(len(p) >= 8 for p in parts)

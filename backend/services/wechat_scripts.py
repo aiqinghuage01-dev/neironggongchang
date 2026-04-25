@@ -228,7 +228,7 @@ def assemble_html(
 
     # 把 body 塞进 template 里 .article-body > .content 的位置
     # template-v3-clean.html 本身是完整 HTML,我们做字符串替换
-    hero_title_html = f'{title[:6]}<span class="hero-highlight">{hero_highlight}</span>'
+    hero_title_html = _compose_hero_title_html(title, hero_highlight)
     html = _inject_into_template(
         template_html,
         title=title,
@@ -388,17 +388,47 @@ def _inject_into_template(template: str, *, title: str, hero_badge: str,
     return t
 
 
+def _compose_hero_title_html(title: str, hero_highlight: str) -> str:
+    """合成 hero 区标题 HTML (D-048 修).
+
+    之前: f'{title[:6]}<span>{hero_highlight}</span>', 默认 hero_highlight=title[:8]
+          导致前 6/8 字重复显示 ("一个餐饮老板一个餐饮老板花3").
+    现在: 全文 title 为底, 若 hero_highlight 是 title 的子串就高亮一次, 否则不高亮.
+    """
+    if hero_highlight and hero_highlight in title and hero_highlight != title:
+        return title.replace(
+            hero_highlight,
+            f'<span class="hero-highlight">{hero_highlight}</span>',
+            1,
+        )
+    return title
+
+
 def _auto_subtitle(md: str) -> str:
-    """从正文首段抽 3 个短关键词做副标题占位。"""
+    """从正文首段抽副标题占位。
+
+    D-048 修: 之前 re.findall("[一-龥]{2,6}", ...) 贪婪把连续中文切 6 字一段,
+    用户看到 "上周一个开火 · 锅店的老板给 · 我看他的品牌" 不可读.
+    改: 按中英文标点切短语, 取前 3 个 2-14 字的合法短语. 不行就退化到首段前 30 字.
+    """
     first = ""
     for ln in md.splitlines():
         s = ln.strip()
         if s and not s.startswith("#") and not s.startswith("---"):
             first = s
             break
-    words = re.findall(r"[一-龥]{2,6}", first)
-    picks = words[:3] if len(words) >= 3 else (words + ["老板必看", "实体", "AI"])[:3]
-    return " · ".join(picks)
+    if not first:
+        return ""
+    plain = re.sub(r"[#*_`>\[\]()【】]", "", first)
+    # 按标点切短语 (中英文 + 空格)
+    phrases = re.split(r"[，。！？；、,.!?;\s]+", plain)
+    phrases = [p.strip() for p in phrases if 2 <= len(p.strip()) <= 14]
+    if len(phrases) >= 3:
+        return " · ".join(phrases[:3])
+    if phrases:
+        return " · ".join(phrases)
+    # 退化: 首段前 30 字
+    return plain[:30] + ("…" if len(plain) > 30 else "")
 
 
 def _auto_digest(md: str) -> str:
