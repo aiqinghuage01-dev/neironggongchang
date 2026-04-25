@@ -63,6 +63,8 @@ function PageHotrewrite({ onNav }) {
 
   // D-062nn-C3: 检测 make 那边丢的 hotrewrite_seed_hotspot, 自动填 + 自动 doAnalyze
   // (跳过 input step, 直接进 angles step)
+  // ⚠ 同 voicerewrite: 必须同步删 wf:hotrewrite snap, 防 D-016 useWorkflowPersist 的
+  // restore effect (跑得晚) 把 hotspot 覆盖回老的空值
   const seedConsumedRef = React.useRef(false);
   React.useEffect(() => {
     if (seedConsumedRef.current) return;
@@ -72,6 +74,7 @@ function PageHotrewrite({ onNav }) {
         seedConsumedRef.current = true;
         setHotspot(seed);
         localStorage.removeItem("hotrewrite_seed_hotspot");
+        localStorage.removeItem("wf:hotrewrite");  // 防 wf restore 覆盖
         // 等 setHotspot flush 后再 doAnalyze
       }
     } catch (_) {}
