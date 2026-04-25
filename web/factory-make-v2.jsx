@@ -496,7 +496,13 @@ function MakeV2StepVoiceDh({ voiceId, setVoiceId, avatarId, setAvatarId, dhVideo
         )}
       </div>
 
-      {localErr && <div style={{ marginTop: 10, padding: 10, background: T.redSoft, color: T.red, borderRadius: 6, fontSize: 12 }}>⚠️ {localErr}</div>}
+      {/* D-062cc: 友好化错误 */}
+      <div style={{ marginTop: 10 }}>
+        <ErrorBanner err={localErr} actions={localErr ? [
+          { label: "🔄 重试合成", onClick: () => { setLocalErr(""); startGenerate(); } },
+          { label: "× 关闭", onClick: () => setLocalErr("") },
+        ] : null} />
+      </div>
 
       <div style={{ marginTop: 18, display: "flex", gap: 10, justifyContent: "space-between" }}>
         <Btn variant="outline" onClick={onPrev}>← 改文案</Btn>
@@ -618,7 +624,16 @@ function MakeV2StepTemplate({ templateId, setTemplateId, onPrev, onNext }) {
         ))}
       </div>
 
-      {localErr && <div style={{ padding: 10, background: T.redSoft, color: T.red, borderRadius: 8, fontSize: 12, marginBottom: 14 }}>⚠️ {localErr}</div>}
+      {/* D-062cc: 友好化错误 */}
+      <ErrorBanner err={localErr} actions={localErr ? [
+        { label: "🔄 重试加载", onClick: () => {
+          setLocalErr("");
+          api.get("/api/dhv5/templates")
+            .then(r => setTemplates(r.templates || []))
+            .catch(e => { setTemplates([]); setLocalErr(e.message); });
+        } },
+        { label: "× 关闭", onClick: () => setLocalErr("") },
+      ] : null} />
 
       {/* 模板网格 (复用 PageDhv5 的 DhvTemplateCard) */}
       {!templates ? (
@@ -810,7 +825,11 @@ function MakeV2StepEdit({ templateId, script, dhVideoPath, alignedScenes, setAli
         </div>
       </div>
 
-      {localErr && <div style={{ padding: 10, background: T.redSoft, color: T.red, borderRadius: 8, fontSize: 12, marginBottom: 14 }}>⚠️ {localErr}</div>}
+      {/* D-062cc: 友好化错误 + 重试 CTA */}
+      <ErrorBanner err={localErr} actions={localErr ? [
+        { label: "🔄 重试", onClick: () => { setLocalErr(""); runAlign(); } },
+        { label: "× 关闭", onClick: () => setLocalErr("") },
+      ] : null} />
 
       {alignedScenes && (
         <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 18 }}>

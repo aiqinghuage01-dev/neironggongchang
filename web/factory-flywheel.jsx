@@ -152,4 +152,94 @@ function FromMakeBanner({ fromMake, dismiss, label }) {
   );
 }
 
-Object.assign(window, { NightHotFlywheel, setFromMake, clearFromMake, readFromMake, useFromMake, FromMakeBanner });
+// ─── D-062cc · 错误信息友好化 ──────────────────────────────────
+// 把 backend 抛出来的英文/技术错误翻译成"为啥 + 怎么办" 给用户看
+// 用法: const { icon, title, suggestion, severity } = humanizeError(rawMsg);
+//      <ErrorBanner err={rawMsg} actions={[{ label: "重试", onClick }]} />
+
+const ERROR_PATTERNS = [
+  { match: /模板不存在|模板.*不存在|template.*not.*found/i,
+    icon: "📦", title: "模板不见了",
+    suggestion: "回 Step 3 换一个模板, 或选朴素模式直接出片" },
+  { match: /数字人.*mp4.*不存在|mp4.*不存在|file not found.*mp4/i,
+    icon: "🎬", title: "数字人 mp4 文件丢了",
+    suggestion: "回 Step 2 重新合成数字人 (柿榴文件可能被清理)" },
+  { match: /transcript.*不能为空|文案空了/i,
+    icon: "📝", title: "文案是空的",
+    suggestion: "回 Step 1 写一段口播文案 (≥ 30 字)" },
+  { match: /生图超时|timeout.*120/i,
+    icon: "⏰", title: "B-roll 生图超时 (apimart 120s)",
+    suggestion: "apimart 当前慢, 等 30s 重试 / 或换 prompt 简短点" },
+  { match: /quota|429|rate.?limit/i,
+    icon: "🚧", title: "AI quota 满了",
+    suggestion: "今日 apimart/deepseek 配额用完了, 等明天 / 或去 ⚙️ 设置切别的 key" },
+  { match: /AI.*失败|AI 调用失败|deepseek.*error|apimart.*error/i,
+    icon: "🤖", title: "AI 调用失败",
+    suggestion: "网络抖一下? 等 10s 重试 · 老不好去 ⚙️ 设置看 AI 健康检查" },
+  { match: /AI.*非.*JSON|JSON.*parse|JSON.*解析/i,
+    icon: "🤖", title: "AI 返回了乱七八糟的内容",
+    suggestion: "重试一次 (AI 偶尔抽风) · 多次失败考虑改文案再试" },
+  { match: /scene_idx.*超界|out.?of.?range/i,
+    icon: "🔀", title: "场景索引对不上模板",
+    suggestion: "回 Step 3 重新选模板 → 重新对齐 (alignedScenes 跟新模板对不齐)" },
+  { match: /只.*B.?C.?scene.*broll|only.*B.?C.*broll/i,
+    icon: "🖼️", title: "这个场景不需要配图",
+    suggestion: "A 场 (口播) 没 broll, 只 B/C 场要 · 检查你点的 scene 类型" },
+  { match: /缺.*prompt|没法生图.*prompt/i,
+    icon: "✏️", title: "B-roll prompt 是空的",
+    suggestion: "在场景卡里填一行 prompt (≥ 5 字) 再点生图" },
+  { match: /柿榴|qingdou|cosyvoice/i,
+    icon: "🛠️", title: "外部服务异常",
+    suggestion: "去 ⚙️ 设置 看一下 health, 大概率服务/key 配置问题" },
+  { match: /HTTP 5\d\d|server error|internal/i,
+    icon: "💥", title: "服务器内部错误",
+    suggestion: "后端崩了一下, 等 10s 重试 · 重复出现去看 server log" },
+  { match: /HTTP 4\d\d|bad request|invalid/i,
+    icon: "🚫", title: "请求参数有问题",
+    suggestion: "可能少填东西? 检查上一步是否完整 · 或看 message 后半段细节" },
+];
+
+function humanizeError(rawMsg) {
+  const msg = String(rawMsg || "").trim();
+  if (!msg) return { icon: "⚠️", title: "未知错误", suggestion: "", raw: msg };
+  for (const p of ERROR_PATTERNS) {
+    if (p.match.test(msg)) {
+      return { icon: p.icon, title: p.title, suggestion: p.suggestion, raw: msg };
+    }
+  }
+  return { icon: "⚠️", title: "出错了", suggestion: "看下面 message 找线索 · 大多重试一次能过", raw: msg };
+}
+
+function ErrorBanner({ err, actions }) {
+  if (!err) return null;
+  const h = humanizeError(err);
+  return (
+    <div style={{
+      padding: 12, background: T.redSoft, border: `1px solid ${T.red}33`,
+      borderRadius: 8, marginBottom: 12,
+    }}>
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+        <span style={{ fontSize: 20, flexShrink: 0 }}>{h.icon}</span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: T.red }}>{h.title}</div>
+          {h.suggestion && (
+            <div style={{ fontSize: 12, color: T.red, marginTop: 2, opacity: 0.85 }}>{h.suggestion}</div>
+          )}
+          <details style={{ marginTop: 6 }}>
+            <summary style={{ fontSize: 10.5, color: T.red, cursor: "pointer", opacity: 0.7 }}>看原始错误</summary>
+            <pre style={{ fontSize: 10, fontFamily: "SF Mono, monospace", color: T.red, whiteSpace: "pre-wrap", margin: "4px 0 0", lineHeight: 1.5, opacity: 0.7 }}>{h.raw}</pre>
+          </details>
+        </div>
+        {actions && actions.length > 0 && (
+          <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+            {actions.map((a, i) => (
+              <Btn key={i} size="sm" variant={i === 0 ? "primary" : "outline"} onClick={a.onClick}>{a.label}</Btn>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+Object.assign(window, { NightHotFlywheel, setFromMake, clearFromMake, readFromMake, useFromMake, FromMakeBanner, humanizeError, ErrorBanner });

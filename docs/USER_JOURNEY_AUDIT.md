@@ -245,9 +245,12 @@
         URL 输入 + Enter / 主按钮 → /api/transcribe/submit + 60×5s poll
         success 自动塞 transcript + 显字数 + 标题; failed 显 error
         本地 m4a/mp3 上传留 ext (D-062bb-ext) 待后端 ASR 接入
-      - **D-062cc** Step 4 align/render 失败时 errorMsg 只在 localErr 里
-        错误又长又难懂时 (e.g. broll 生图 quota), 用户只看到 "⚠️ ..." 一长串
-        建议: 加常见错误码映射表 + "重试" / "改 prompt" 按钮
+      - **D-062cc** ✅ 错误信息友好化 + 重试 CTA
+        web/factory-flywheel.jsx 加 humanizeError + ErrorBanner
+        13 条 ERROR_PATTERNS 覆盖: 模板缺失/mp4 丢/文案空/生图超时/quota/AI 抽风/索引超界 等
+        每条返回 {icon, title, suggestion}, 原始 msg 默认折叠
+        actions 槽支持 "重试" + "关闭" 双按钮
+        接入 PageMakeV2 Step 2/3/4 三处 localErr 显示
       - **D-062dd** sidebar 各 skill 入口没"今日产出"小数字
         用户进 sidebar 不知道 "我今天做了几条投流", 缺即时反馈
         优先级 P3, 可加 dot 计数 (近 24h 该 skill 调用数 / works.created_today 等)
