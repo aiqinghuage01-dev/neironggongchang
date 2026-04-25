@@ -119,7 +119,23 @@ function PageSettings({ onNav }) {
           {/* 我的声音 */}
           <SettingsSection icon="🎙️" title="我的声音" desc={`已有 ${speakers.length} 个 · 做视频默认会用 ${s.voice_default_speaker_id ? "下面选中的这个" : "第一个"}`}>
             {speakers.length === 0 ? (
-              <div style={{ fontSize: 13, color: T.muted }}>加载中或暂无</div>
+              // D-062ee (AUDIT-5): 之前 "加载中或暂无" 死胡同, 给操作指引 + 复制按钮
+              <div style={{ padding: 16, background: T.bg2, borderRadius: 8, fontSize: 13, color: T.muted, lineHeight: 1.7 }}>
+                <div style={{ fontSize: 14, fontWeight: 600, color: T.text, marginBottom: 8 }}>📭 还没克隆过声音</div>
+                <div style={{ marginBottom: 10 }}>
+                  声音管理走 <b style={{ color: T.text }}>柿榴 Web 后台</b> (与数字人形象同):
+                </div>
+                <ol style={{ margin: "6px 0 10px 22px", padding: 0, fontSize: 12.5 }}>
+                  <li>登录柿榴后台 · 进"声音管理" · 创建</li>
+                  <li>录 ≥ 10s 你的清晰口播 (安静环境, 普通话标准)</li>
+                  <li>训练 3-5 分钟, 完成后回这里 ↻ 刷新</li>
+                </ol>
+                <Btn size="sm" onClick={() => {
+                  navigator.clipboard?.writeText("登录柿榴后台 → 声音管理 → 创建 → 上传 ≥10s 清晰口播 → 训练 3-5 分钟");
+                  alert("操作步骤已复制");
+                }}>📋 复制步骤</Btn>
+                <span style={{ fontSize: 11, color: T.muted2, marginLeft: 8 }}>(柿榴是外部系统, 暂无 SSO 直跳)</span>
+              </div>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 {speakers.map(sp => {
@@ -151,7 +167,22 @@ function PageSettings({ onNav }) {
           {/* 数字人形象 */}
           <SettingsSection icon="👤" title="数字人形象" desc={`已有 ${avatars.length} 个 · 做视频默认用这个`}>
             {avatars.length === 0 ? (
-              <div style={{ fontSize: 13, color: T.muted }}>加载中或暂无</div>
+              // D-062ee: 同声音, empty 状态加可操作指引
+              <div style={{ padding: 16, background: T.bg2, borderRadius: 8, fontSize: 13, color: T.muted, lineHeight: 1.7 }}>
+                <div style={{ fontSize: 14, fontWeight: 600, color: T.text, marginBottom: 8 }}>📭 还没创建数字人形象</div>
+                <div style={{ marginBottom: 10 }}>
+                  数字人管理走 <b style={{ color: T.text }}>柿榴 Web 后台</b>:
+                </div>
+                <ol style={{ margin: "6px 0 10px 22px", padding: 0, fontSize: 12.5 }}>
+                  <li>登录柿榴后台 · 进"数字人管理" · 创建</li>
+                  <li>上传 30s 自拍视频 (头肩, 表情自然, 光线均匀)</li>
+                  <li>训练 3-5 分钟, 完成后回这里 ↻ 刷新</li>
+                </ol>
+                <Btn size="sm" onClick={() => {
+                  navigator.clipboard?.writeText("登录柿榴后台 → 数字人管理 → 创建 → 上传 30s 自拍视频 → 训练 3-5 分钟");
+                  alert("操作步骤已复制");
+                }}>📋 复制步骤</Btn>
+              </div>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 {avatars.map(av => {
