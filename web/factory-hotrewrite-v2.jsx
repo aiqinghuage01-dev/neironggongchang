@@ -8,6 +8,36 @@ const HOT_STEPS = [
   { id: "write",   n: 3, label: "正文+自检" },
 ];
 
+// D-062nn-C3: 改写模式 checkbox 卡 (Step 2 用)
+function ModeCheckCard({ on, onClick, disabled, title, desc, recommend }) {
+  return (
+    <label onClick={onClick} style={{
+      padding: "12px 14px", borderRadius: 8,
+      cursor: disabled ? "not-allowed" : "pointer",
+      background: on ? "#fff" : "transparent",
+      border: `1.5px solid ${on ? T.brand : T.muted3}`,
+      display: "flex", alignItems: "flex-start", gap: 10,
+      opacity: disabled ? 0.85 : 1,
+    }}>
+      <div style={{
+        width: 18, height: 18, borderRadius: 4,
+        border: `1.5px solid ${on ? T.brand : T.muted2}`,
+        background: on ? T.brand : "transparent", flexShrink: 0, marginTop: 1,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        color: "#fff", fontSize: 12, fontWeight: 700,
+      }}>{on && "✓"}</div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 13.5, fontWeight: 600, color: T.text }}>{title}</span>
+          {recommend && <Tag size="xs" color="green">推荐</Tag>}
+          <Tag size="xs" color="brand">+2 篇</Tag>
+        </div>
+        <div style={{ fontSize: 11.5, color: T.muted, lineHeight: 1.5 }}>{desc}</div>
+      </div>
+    </label>
+  );
+}
+
 function PageHotrewrite({ onNav }) {
   // D-062x: 反向 anchor — 检测从 PageMakeV2 跳来
   const fm = useFromMake("hotrewrite");
@@ -20,8 +50,37 @@ function PageHotrewrite({ onNav }) {
   const [pickedAngle, setPickedAngle] = React.useState(null);
   const [script, setScript] = React.useState(null);     // {content, word_count, self_check, tokens}
 
+  // D-062nn-C3: 改写模式 (checkbox 制, 默认 ☑ 业务)
+  const [withBiz, setWithBiz] = React.useState(true);
+  const [pureRewrite, setPureRewrite] = React.useState(false);
+
   const [skillInfo, setSkillInfo] = React.useState(null);
   React.useEffect(() => { api.get("/api/hotrewrite/skill-info").then(setSkillInfo).catch(() => {}); }, []);
+
+  // D-062nn-C3: 检测 make 那边丢的 hotrewrite_seed_hotspot, 自动填 + 自动 doAnalyze
+  // (跳过 input step, 直接进 angles step)
+  const seedConsumedRef = React.useRef(false);
+  React.useEffect(() => {
+    if (seedConsumedRef.current) return;
+    try {
+      const seed = localStorage.getItem("hotrewrite_seed_hotspot");
+      if (seed && !hotspot) {
+        seedConsumedRef.current = true;
+        setHotspot(seed);
+        localStorage.removeItem("hotrewrite_seed_hotspot");
+        // 等 setHotspot flush 后再 doAnalyze
+      }
+    } catch (_) {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // 当 hotspot 是从 seed 来的, 自动触发 doAnalyze
+  React.useEffect(() => {
+    if (seedConsumedRef.current && hotspot && !analyze && step === "input" && !loading) {
+      doAnalyze();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hotspot]);
 
   async function runStep({ nextStep, rollbackStep, clearSetter, apiCall }) {
     if (clearSetter) clearSetter(null);
@@ -53,10 +112,12 @@ function PageHotrewrite({ onNav }) {
     return runStep({
       nextStep: "write", rollbackStep: "angles", clearSetter: setScript,
       apiCall: async () => {
+        // D-062nn-C3: 把 modes 一起传给后端 (backend 暂未读, 后续接, 不破坏现有 schema)
         const r = await api.post("/api/hotrewrite/write", {
           hotspot: hotspot.trim(),
           breakdown: analyze?.breakdown || {},
           angle,
+          modes: { with_biz: withBiz, pure_rewrite: pureRewrite },
         });
         setScript(r);
       },
@@ -98,7 +159,8 @@ function PageHotrewrite({ onNav }) {
           </div>
         )}
         {step === "input"  && <HotStepInput hotspot={hotspot} setHotspot={setHotspot} onGo={doAnalyze} loading={loading} skillInfo={skillInfo} />}
-        {step === "angles" && <HotStepAngles analyze={analyze} loading={loading} onPick={pickAngle} onPrev={() => setStep("input")} onRegen={doAnalyze} />}
+        {step === "angles" && <HotStepAngles analyze={analyze} loading={loading} onPick={pickAngle} onPrev={() => setStep("input")} onRegen={doAnalyze}
+          withBiz={withBiz} setWithBiz={setWithBiz} pureRewrite={pureRewrite} setPureRewrite={setPureRewrite} />}
         {step === "write"  && <HotStepWrite script={script} hotspot={hotspot} angle={pickedAngle} loading={loading} onPrev={() => setStep("angles")} onRewrite={() => pickAngle(pickedAngle)} onReset={reset} onNav={onNav} />}
       </div>
     </div>
@@ -232,8 +294,8 @@ function HotStepInput({ hotspot, setHotspot, onGo, loading, skillInfo }) {
   );
 }
 
-// ─── Step 2 · 拆解 + 挑角度 ──────────────────────────────
-function HotStepAngles({ analyze, loading, onPick, onPrev, onRegen }) {
+// ─── Step 2 · 拆解 + 挑角度 (D-062nn-C3 加 checkbox 改写模式) ─────────
+function HotStepAngles({ analyze, loading, onPick, onPrev, onRegen, withBiz, setWithBiz, pureRewrite, setPureRewrite }) {
   const [hoverIdx, setHoverIdx] = React.useState(-1);
   if (loading || !analyze) return <Spinning icon="🔍" phases={[
     { text: "拆解事件核心", sub: "事实核查 · 起因后果" },
@@ -243,11 +305,23 @@ function HotStepAngles({ analyze, loading, onPick, onPrev, onRegen }) {
   ]} />;
   const b = analyze.breakdown || {};
   const angles = analyze.angles || [];
+
+  // D-062nn-C3: 至少保留 1 个 checkbox 不能取消
+  function toggleBiz() {
+    if (withBiz && !pureRewrite) return;  // 只剩 biz 时不让取消
+    setWithBiz(!withBiz);
+  }
+  function togglePure() {
+    if (pureRewrite && !withBiz) return;
+    setPureRewrite(!pureRewrite);
+  }
+  const totalCount = (withBiz ? 2 : 0) + (pureRewrite ? 2 : 0);
+
   return (
     <div style={{ padding: "32px 40px 120px", maxWidth: 820, margin: "0 auto" }}>
       <div style={{ marginBottom: 16 }}>
         <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 6 }}>拆解完毕 · 挑个切入角度 🎯</div>
-        <div style={{ fontSize: 13, color: T.muted }}>点一个角度,小华按这个写 1800-2600 字口播正文。</div>
+        <div style={{ fontSize: 13, color: T.muted }}>选下面 1 个角度, 小华按勾选的模式各写 2 篇.</div>
       </div>
 
       <div style={{ padding: 16, background: T.bg2, border: `1px solid ${T.borderSoft}`, borderRadius: 12, marginBottom: 16 }}>
@@ -256,6 +330,34 @@ function HotStepAngles({ analyze, loading, onPick, onPrev, onRegen }) {
           <div><b style={{ color: T.text }}>事件核心</b> · <span style={{ color: T.muted }}>{b.event_core}</span></div>
           <div><b style={{ color: T.text }}>冲突点</b> · <span style={{ color: T.muted }}>{b.conflict}</span></div>
           <div><b style={{ color: T.text }}>情绪入口</b> · <span style={{ color: T.muted }}>{b.emotion}</span></div>
+        </div>
+      </div>
+
+      {/* D-062nn-C3: 改写模式 checkbox 卡 (默认 ☑ 业务 · 至少保留 1 个) */}
+      <div style={{ marginBottom: 16, padding: 14, background: T.brandSoft, borderRadius: 10, border: `1px solid ${T.brand}33` }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+          <span style={{ fontSize: 13, fontWeight: 600, color: T.text }}>改写模式</span>
+          <span style={{ fontSize: 11, color: T.muted }}>· 多选 · 每勾一项加 2 篇</span>
+          <div style={{ flex: 1 }} />
+          <span style={{
+            fontSize: 12, fontWeight: 700, color: T.brand,
+            padding: "3px 12px", background: "#fff", borderRadius: 100,
+          }}>本次会出 {totalCount} 篇</span>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          <ModeCheckCard
+            on={withBiz} onClick={toggleBiz}
+            disabled={withBiz && !pureRewrite}
+            title="结合业务" recommend
+            desc="80% 价值 + 20% 业务植入 · V3 翻转版 + V4 圈人版" />
+          <ModeCheckCard
+            on={pureRewrite} onClick={togglePure}
+            disabled={pureRewrite && !withBiz}
+            title="纯改写"
+            desc="不带业务植入 · V1 换皮版 + V2 狠劲版" />
+        </div>
+        <div style={{ marginTop: 8, fontSize: 10.5, color: T.muted2, lineHeight: 1.5 }}>
+          💡 默认勾"结合业务"出 2 篇 · 都勾出 4 篇对比 · 至少保留 1 个
         </div>
       </div>
 
