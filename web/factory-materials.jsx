@@ -188,6 +188,7 @@ function EmptyTabHint({ tip, onAdd }) {
 function HotTab({ list, onReload, onDel, onUse }) {
   const [adding, setAdding] = React.useState(false);
   const [form, setForm] = React.useState({ title: "", platform: "douyin", heat_score: 80, match_persona: true, match_reason: "", source_url: "" });
+  const [nightFilter, setNightFilter] = React.useState(false);  // D-050: 散落标签 来自夜班
 
   async function submitAdd() {
     if (!form.title.trim()) return;
@@ -197,10 +198,28 @@ function HotTab({ list, onReload, onDel, onUse }) {
     onReload();
   }
 
+  // D-050: 过滤来自夜班的 (fetched_from == "night-shift")
+  const nightCount = list.filter(h => h.fetched_from === "night-shift").length;
+  const visibleList = nightFilter ? list.filter(h => h.fetched_from === "night-shift") : list;
+
   return (
     <>
-      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14, flexWrap: "wrap" }}>
         <div style={{ fontSize: 13, color: T.muted }}>共 <b style={{ color: T.text }}>{list.length}</b> 条热点 · 手动维护(Phase 3 接 tavily 自动)</div>
+        {/* D-050: 0 产出整块隐藏 (per spec) */}
+        {nightCount > 0 && (
+          <button onClick={() => setNightFilter(!nightFilter)}
+            title={nightFilter ? "点击退出过滤" : "只看 🌙 小华夜班 跑出来的"}
+            style={{
+              padding: "4px 10px", fontSize: 11.5, borderRadius: 100, fontFamily: "inherit", cursor: "pointer",
+              border: nightFilter ? `1px solid ${T.brand}` : `1px solid ${T.borderSoft}`,
+              background: nightFilter ? T.brandSoft : T.bg2,
+              color: nightFilter ? T.brand : T.muted,
+              fontWeight: nightFilter ? 600 : 500,
+            }}>
+            🌙 来自夜班 {nightCount}
+          </button>
+        )}
         <div style={{ flex: 1 }} />
         <Btn size="sm" variant="primary" onClick={() => setAdding(!adding)}>{adding ? "× 取消" : "＋ 加一条热点"}</Btn>
         <Btn size="sm" onClick={onReload}>↻ 刷新</Btn>
@@ -246,31 +265,42 @@ function HotTab({ list, onReload, onDel, onUse }) {
         </div>
       )}
 
-      {list.length === 0 ? (
+      {visibleList.length === 0 ? (
         <div style={{ textAlign: "center", padding: 60, color: T.muted }}>
-          <div style={{ fontSize: 44, marginBottom: 12 }}>🔥</div>
-          <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 6, color: T.text }}>还没维护热点</div>
-          <div style={{ fontSize: 13 }}>点「＋ 加一条热点」手动录入当日热点 · Phase 3 会自动从 tavily 抓</div>
+          <div style={{ fontSize: 44, marginBottom: 12 }}>{nightFilter ? "🌙" : "🔥"}</div>
+          <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 6, color: T.text }}>
+            {nightFilter ? "暂无夜班产出的热点" : "还没维护热点"}
+          </div>
+          <div style={{ fontSize: 13 }}>
+            {nightFilter
+              ? "去 🌙 小华夜班 启用「凌晨抓热点」, 23:00 自动 AI 出选题"
+              : "点「＋ 加一条热点」手动录入当日热点 · Phase 3 会自动从 tavily 抓"}
+          </div>
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          {list.map(h => (
-            <div key={h.id} style={{
-              display: "flex", alignItems: "center", gap: 14, padding: "14px 18px",
-              background: "#fff", border: `1px solid ${h.match_persona ? T.brand + "55" : T.borderSoft}`,
-              borderRadius: 10,
-            }}>
-              <div style={{ fontSize: 17, fontWeight: 700, color: T.amber, minWidth: 50 }}>🔥{h.heat_score}</div>
-              <Tag size="xs" color="pink">{h.platform || "-"}</Tag>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13.5, color: T.text, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{h.title}</div>
-                {h.match_reason && <div style={{ fontSize: 11, color: T.muted, marginTop: 2 }}>{h.match_reason}</div>}
+          {visibleList.map(h => {
+            const fromNight = h.fetched_from === "night-shift";
+            return (
+              <div key={h.id} style={{
+                display: "flex", alignItems: "center", gap: 14, padding: "14px 18px",
+                background: fromNight ? "linear-gradient(135deg, #fff8ec, #fff)" : "#fff",
+                border: `1px solid ${h.match_persona ? T.brand + "55" : T.borderSoft}`,
+                borderRadius: 10,
+              }}>
+                <div style={{ fontSize: 17, fontWeight: 700, color: T.amber, minWidth: 50 }}>🔥{h.heat_score}</div>
+                <Tag size="xs" color="pink">{h.platform || "-"}</Tag>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13.5, color: T.text, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{h.title}</div>
+                  {h.match_reason && <div style={{ fontSize: 11, color: T.muted, marginTop: 2 }}>{h.match_reason}</div>}
+                </div>
+                {fromNight && <Tag size="xs" color="amber">🌙 夜班</Tag>}
+                {h.match_persona ? <Tag size="xs" color="green">✨ 匹配</Tag> : null}
+                <Btn size="sm" variant="primary" onClick={() => onUse(h)}>做成视频</Btn>
+                <Btn size="sm" onClick={() => onDel(h.id)}>🗑</Btn>
               </div>
-              {h.match_persona ? <Tag size="xs" color="green">✨ 匹配</Tag> : null}
-              <Btn size="sm" variant="primary" onClick={() => onUse(h)}>做成视频</Btn>
-              <Btn size="sm" onClick={() => onDel(h.id)}>🗑</Btn>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </>
