@@ -182,6 +182,29 @@ function MStepTopic({ topic, setTopic, onGo, loading }) {
 }
 
 // Step 2 · 衍生中 + 列表
+// A8-todo5: 衍生条目卡 (加 hover ring 一致化)
+function DerivedItemCard({ m, i }) {
+  const [hover, setHover] = React.useState(false);
+  return (
+    <div
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        padding: 16, background: "#fff",
+        border: `1px solid ${hover ? T.brand : T.borderSoft}`,
+        boxShadow: hover ? `0 4px 12px rgba(47,122,82,0.10)` : "0 1px 2px rgba(0,0,0,0.03)",
+        borderRadius: 12, transition: "all 0.15s",
+      }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+        <span style={{ fontSize: 20 }}>{m.emoji}</span>
+        <Tag size="xs" color={["pink", "purple", "amber", "blue", "green"][i % 5]}>{m.type}</Tag>
+        <span style={{ fontSize: 11, color: T.muted2 }}>· {(m.text || "").length} 字</span>
+      </div>
+      <div style={{ fontSize: 14, lineHeight: 1.85, color: T.text, whiteSpace: "pre-wrap" }}>{m.text}</div>
+    </div>
+  );
+}
+
 function MStepDeriving({ topic, items, loading, onPrev, onNext }) {
   if (loading || items.length === 0) {
     return (
@@ -206,14 +229,7 @@ function MStepDeriving({ topic, items, loading, onPrev, onNext }) {
 
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
         {items.map((m, i) => (
-          <div key={i} style={{ padding: 16, background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 12 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-              <span style={{ fontSize: 20 }}>{m.emoji}</span>
-              <Tag size="xs" color={["pink", "purple", "amber", "blue", "green"][i % 5]}>{m.type}</Tag>
-              <span style={{ fontSize: 11, color: T.muted2 }}>· {(m.text || "").length} 字</span>
-            </div>
-            <div style={{ fontSize: 14, lineHeight: 1.85, color: T.text, whiteSpace: "pre-wrap" }}>{m.text}</div>
-          </div>
+          <DerivedItemCard key={i} m={m} i={i} />
         ))}
       </div>
 

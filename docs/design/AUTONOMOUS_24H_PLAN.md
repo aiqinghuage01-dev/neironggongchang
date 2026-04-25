@@ -140,6 +140,7 @@
 - C19 PageSettings SettingsSection polish — icon 升 40px brandSoft 底圆角 / 加 divider 分隔头部和内容 / radius 12 → 14 + 1px subtle shadow
 - C20 PageNight NightJobCard polish — icon 28px → 24px 但加 44x44 brandSoft 圆角底 (与 SettingsSection 一致) + hover ring (enabled 时) + radius 12 → 14
 - C21 跨页 banner 风格统一 — FromMakeBanner / WfRestoreBanner / ErrorBanner 都 padding 12x16 / radius 10 / border 44 透明度 / icon 18 flexShrink
+- AUDIT-8 + A8-todo5 — 写第 8 次复盘 (5 个 P3 todo) + moments DerivedItemCard hover ring
 
 ## 卡住记录
 

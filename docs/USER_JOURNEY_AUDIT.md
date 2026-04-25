@@ -329,6 +329,25 @@
         现在含: 飞轮 (NightHotFlywheel) + anchor (useFromMake) + 错误友好化 (humanizeError)
         建议: 重命名 factory-journey.jsx 或拆 3 个文件 (P3)
 
+- [x] **D-062-AUDIT-8** 2026-04-25 19:20 复盘 (Phase 2-6 全部完成后)
+      已完成 Phase 1-6 共 16 个 C 项 (C5-C8, C9, C10-C13, C14-C16, C17-C18, C19-C20, C21).
+      新发现 (后续可选 polish, 优先级 P3):
+      - **D-062nn-A8-todo1** WxStepWrite/WxStepOutline/WxStepImages/WxStepCover/WxStepPush 后 5 步没 polish
+        Step 1-3 (Topic/Titles/Outline) 已 hero 一致 + hover ring, 后 5 步还是 D-062 之前样式
+        优先级: 用户使用频率 — 如果常走"全自动"路径 (一键到草稿箱), 中间步用户看不到
+        建议: 用户回来反馈 "wechat 全自动有问题" 再针对性修
+      - **D-062nn-A8-todo2** MStepCover/MStepCopy 视觉没动 (moments Step 3-4)
+        当前 Step 1 (MStepTopic) hero 已 polish, Step 4 (MStepCopy) D-062g 加了做视频 CTA
+        中间 Cover 步可能视觉不一致, 优先级低
+      - **D-062nn-A8-todo3** TLStepResult (touliu Step 2 结果) 视觉没系统 audit
+        D-062e 加了"用这条做视频"按钮 (per item), 但卡片本体视觉是早期版本
+        建议: 用户做完投流批量看到结果时反馈再优化
+      - **D-062nn-A8-todo4** Dhv5SceneRow 编辑展开面板内 textarea 视觉
+        C12 polish 了主行 + broll 按钮, 但展开后 textarea + "重生" 按钮还是早期样式
+        优先级 P3
+      - **D-062nn-A8-todo5** MStepDeriving 行卡缺 hover ring (与 WorkCard 不一致)
+        Phase 3 处理 archives, moments deriving 不算 archives 没动. 可加 hover.
+
 - [x] **D-062-AUDIT-7** 2026-04-25 18:00 复盘 (Phase 1 C5-C9 完成后)
       新发现 (后续 cron 拍来修):
       - **D-062nn-A7-todo1** 各 skill Step 2/3 (angles/write) 标题字号 22px 不大
