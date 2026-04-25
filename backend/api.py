@@ -1656,6 +1656,87 @@ def wechat_push(req: WechatPushReq):
         raise HTTPException(500, str(e))
 
 
+# ─── D-051 公众号头像配置 (D-046 启用 UI) ───────────────────
+# 用户在 Settings 页上传一张本地头像图 → 后端存到 data/wechat-avatar/ +
+# 写 author_avatar_path 进 ~/.wechat-article-config. push 流程自动用.
+
+WECHAT_AVATAR_DIR = DATA_DIR / "wechat-avatar"
+
+
+@app.get("/api/wechat/avatar", tags=["公众号"], summary="头像配置状态")
+def wechat_avatar_status():
+    """读 ~/.wechat-article-config 看 author_avatar_path 是否配 + 文件是否存在.
+    返回 {configured: bool, path: str | null, exists: bool, size_bytes: int | null}"""
+    cfg = wechat_scripts._read_wechat_config()
+    raw = (cfg.get("author_avatar_path") or "").strip()
+    if not raw:
+        return {"configured": False, "path": None, "exists": False, "size_bytes": None}
+    p = Path(raw).expanduser()
+    return {
+        "configured": True,
+        "path": str(p),
+        "exists": p.exists(),
+        "size_bytes": p.stat().st_size if p.exists() else None,
+    }
+
+
+@app.post("/api/wechat/avatar", tags=["公众号"], summary="上传头像")
+async def wechat_avatar_upload(file: UploadFile = File(...)):
+    """上传本地头像图 → 存 data/wechat-avatar/avatar.<ext> + 写
+    ~/.wechat-article-config 的 author_avatar_path 字段.
+
+    单张 ≤1MB (微信 uploadimg 上限). 立即生效, 下次 push 自动用.
+    """
+    data = await file.read()
+    if len(data) > 1024 * 1024:
+        raise HTTPException(400, f"图太大 {len(data)//1024} KB · 微信 uploadimg 上限 1024 KB")
+    if not data:
+        raise HTTPException(400, "空文件")
+
+    ext = (Path(file.filename or "avatar.jpg").suffix or ".jpg").lower()
+    if ext not in {".jpg", ".jpeg", ".png"}:
+        raise HTTPException(400, f"只支持 jpg/png · 收到 {ext}")
+
+    WECHAT_AVATAR_DIR.mkdir(parents=True, exist_ok=True)
+    # 用固定名 avatar.<ext>, 覆盖式存储 (不要囤旧版头像)
+    target = WECHAT_AVATAR_DIR / f"avatar{ext}"
+    # 删旧扩展名残留 (之前上传 png 又上传 jpg)
+    for old in WECHAT_AVATAR_DIR.glob("avatar.*"):
+        if old != target:
+            try:
+                old.unlink()
+            except Exception:
+                pass
+    target.write_bytes(data)
+
+    # 写 ~/.wechat-article-config 的 author_avatar_path
+    cfg_path = wechat_scripts._WECHAT_CONFIG_PATH
+    cfg = wechat_scripts._read_wechat_config()
+    cfg["author_avatar_path"] = str(target)
+    try:
+        cfg_path.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception as e:
+        raise HTTPException(500, f"写配置文件失败: {e}")
+
+    return {
+        "ok": True,
+        "path": str(target),
+        "size_bytes": len(data),
+        "config_updated": str(cfg_path),
+    }
+
+
+@app.delete("/api/wechat/avatar", tags=["公众号"], summary="移除头像配置")
+def wechat_avatar_clear():
+    """从 config 中删 author_avatar_path 字段, 物理文件保留 (避免误删)."""
+    cfg_path = wechat_scripts._WECHAT_CONFIG_PATH
+    cfg = wechat_scripts._read_wechat_config()
+    had = "author_avatar_path" in cfg
+    cfg.pop("author_avatar_path", None)
+    cfg_path.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
+    return {"ok": True, "had_config": had}
+
+
 # ═══════════════════════════════════════════════════════════════════
 # 热点文案改写V2 skill 接入 (D-012)
 # Skill 源: ~/Desktop/skills/热点文案改写V2/SKILL.md

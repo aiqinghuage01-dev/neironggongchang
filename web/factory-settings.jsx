@@ -195,6 +195,9 @@ function PageSettings({ onNav }) {
             </div>
           </SettingsSection>
 
+          {/* 公众号草稿 (D-051: 头像配置) */}
+          <WechatDraftSection />
+
           {/* 品牌 */}
           <SettingsSection icon="🎨" title="品牌 · 字体 · 配色" desc="封面/海报自动套用">
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
@@ -286,6 +289,102 @@ function TextRowInline({ value, placeholder, onSave }) {
       placeholder={placeholder}
       style={{ flex: 1, padding: "7px 12px", fontSize: 13, border: `1px solid ${T.borderSoft}`, borderRadius: 8, outline: "none", fontFamily: "inherit" }}
     />
+  );
+}
+
+// ─── 公众号草稿配置 (D-051) ─────────────────────────────
+// 让用户上传一张头像图, 后端存到 data/wechat-avatar/ + 写
+// ~/.wechat-article-config 的 author_avatar_path. push 流程 (D-046) 自动用.
+
+function WechatDraftSection() {
+  const [status, setStatus] = React.useState(null);
+  const [uploading, setUploading] = React.useState(false);
+  const [err, setErr] = React.useState("");
+  const fileRef = React.useRef(null);
+
+  async function refresh() {
+    try {
+      const r = await api.get("/api/wechat/avatar");
+      setStatus(r);
+      setErr("");
+    } catch (e) { setErr(e.message); }
+  }
+  React.useEffect(() => { refresh(); }, []);
+
+  async function onFile(e) {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    if (f.size > 1024 * 1024) {
+      setErr(`图太大 ${(f.size/1024).toFixed(0)} KB · 上限 1024 KB`);
+      e.target.value = "";
+      return;
+    }
+    setUploading(true); setErr("");
+    try {
+      await api.upload("/api/wechat/avatar", f, "file");
+      await refresh();
+    } catch (ex) {
+      setErr(ex.message || "上传失败");
+    } finally {
+      setUploading(false);
+      e.target.value = "";
+    }
+  }
+
+  async function clearConfig() {
+    if (!confirm("移除头像配置 · 下次 push 头像会被剥掉. 确认?")) return;
+    try {
+      await api.del("/api/wechat/avatar");
+      await refresh();
+    } catch (e) { setErr(e.message); }
+  }
+
+  return (
+    <SettingsSection icon="📄" title="公众号草稿头像"
+      desc="push 时模板硬编码头像会被微信拒收 (errcode 45166), 上传一张你自己的头像, 自动替换">
+      {!status ? (
+        <div style={{ fontSize: 12, color: T.muted2 }}>加载中…</div>
+      ) : status.configured && status.exists ? (
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <img src={api.media(`/media/wechat-avatar/${status.path.split('/').pop()}`)}
+            alt="头像" style={{ width: 48, height: 48, borderRadius: "50%", objectFit: "cover", border: `1px solid ${T.borderSoft}` }} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 12.5, color: T.text, fontWeight: 500 }}>已配头像</div>
+            <div style={{ fontSize: 10.5, color: T.muted2, fontFamily: "SF Mono, monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {status.path} · {(status.size_bytes/1024).toFixed(0)} KB
+            </div>
+          </div>
+          <Btn size="sm" onClick={() => fileRef.current?.click()} disabled={uploading}>{uploading ? "上传中…" : "🔄 换一张"}</Btn>
+          <Btn size="sm" variant="outline" onClick={clearConfig}>移除</Btn>
+        </div>
+      ) : status.configured && !status.exists ? (
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{ width: 48, height: 48, borderRadius: "50%", background: T.redSoft, color: T.red, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14 }}>⚠</div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 12.5, color: T.red, fontWeight: 500 }}>头像配置存在但文件丢了</div>
+            <div style={{ fontSize: 10.5, color: T.muted2, fontFamily: "SF Mono, monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {status.path}
+            </div>
+          </div>
+          <Btn size="sm" onClick={() => fileRef.current?.click()} disabled={uploading}>{uploading ? "上传中…" : "重新上传"}</Btn>
+        </div>
+      ) : (
+        <div>
+          <div style={{ fontSize: 12, color: T.muted, marginBottom: 10 }}>
+            ⚠️ 还没配头像 · push 出去的草稿头像会被剥掉
+          </div>
+          <Btn variant="primary" size="sm" onClick={() => fileRef.current?.click()} disabled={uploading}>
+            {uploading ? "上传中…" : "+ 上传头像图 (≤1MB · jpg/png)"}
+          </Btn>
+        </div>
+      )}
+      <input ref={fileRef} type="file" accept="image/jpeg,image/png" onChange={onFile} style={{ display: "none" }} />
+      {err && (
+        <div style={{ marginTop: 10, padding: "8px 10px", background: T.redSoft, color: T.red, borderRadius: 6, fontSize: 11.5 }}>
+          ⚠️ {err}
+        </div>
+      )}
+    </SettingsSection>
   );
 }
 
