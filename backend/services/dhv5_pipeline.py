@@ -339,6 +339,7 @@ def render_async(
             task_id,
             result={
                 "output_path": str(actual_path),
+                "output_url": f"/skills/dhv5/outputs/{Path(actual_path).name}",  # D-059d 前端 video 播
                 "size_bytes": Path(actual_path).stat().st_size if Path(actual_path).exists() else 0,
                 "template_id": template_id,
             },

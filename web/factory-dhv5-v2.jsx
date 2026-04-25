@@ -103,7 +103,66 @@ function PageDhv5({ onNav }) {
     setStep("select");
   }
 
+  // D-059d: 渲染 + 轮询
+  const [renderTaskId, setRenderTaskId] = React.useState(null);
+  const [renderTask, setRenderTask] = React.useState(null);  // 整个 task 对象
+  const [rendering, setRendering] = React.useState(false);
+
+  async function startRender() {
+    if (!alignedScenes || alignedScenes.length === 0) {
+      setErr("没有 aligned scenes 可渲染"); return;
+    }
+    setRendering(true); setErr("");
+    try {
+      const r = await api.post("/api/dhv5/render", {
+        template_id: selectedTemplateId,
+        digital_human_video: dhVideoPath,
+        scenes_override: alignedScenes,
+      });
+      setRenderTaskId(r.task_id);
+      setRenderTask(null);
+      setStep("review");
+    } catch (e) {
+      setErr(e.message || "触发渲染失败");
+    } finally {
+      setRendering(false);
+    }
+  }
+
+  // step=review 时轮询 task 状态
+  React.useEffect(() => {
+    if (step !== "review" || !renderTaskId) return;
+    let stop = false;
+    async function poll() {
+      try {
+        const t = await api.get(`/api/tasks/${renderTaskId}`);
+        if (stop) return;
+        setRenderTask(t);
+        if (t.status === "running") {
+          setTimeout(poll, 3000);
+        }
+      } catch (e) {
+        if (!stop) setErr(e.message);
+      }
+    }
+    poll();
+    return () => { stop = true; };
+  }, [step, renderTaskId]);
+
+  // 用同 mp4 再套一个模板 (用户拍板的核心价值)
+  function reuseDhAndSwitchTemplate() {
+    setStep("select");
+    setSelectedTemplateId(null);
+    setTranscript("");
+    setAlignedScenes(null);
+    setRenderTaskId(null);
+    setRenderTask(null);
+    setErr("");
+    // dhVideoPath 保留 — 这就是"复用"
+  }
+
   // STEP 路由
+  if (step === "review") return renderReview();
   if (step === "align") return renderAlign();
 
   const filtered = !templates ? [] : templates.filter(t => {
@@ -299,11 +358,93 @@ function PageDhv5({ onNav }) {
                     </div>
                   </div>
                   <Btn variant="outline" onClick={backToSelect}>← 改模板</Btn>
-                  <Btn variant="primary" disabled
-                    onClick={() => alert("D-059d 渲染调用尚未接入")}>
-                    渲染 (D-059d 待接)
+                  <Btn variant="primary" onClick={startRender} disabled={rendering}>
+                    {rendering ? "提交中…" : "▶ 开始渲染 (3-10 分钟)"}
                   </Btn>
                 </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  function renderReview() {
+    const status = renderTask?.status || "running";
+    const result = renderTask?.result || null;
+    const errLog = renderTask?.error;
+    const elapsed = renderTask?.elapsed_sec || 0;
+    const progress = renderTask?.progress_text || "排队中…";
+    const isDone = status === "success";
+    const isFailed = status === "failed" || status === "cancelled";
+
+    return (
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", background: T.bg, position: "relative", overflow: "hidden" }}>
+        <Dhv5Header step="review" template={selectedTemplate} dhVideoPath={dhVideoPath}
+          onBack={status === "running" ? null : () => setStep("align")} />
+        <div style={{ flex: 1, overflow: "auto", padding: "24px 32px 80px" }}>
+          <div style={{ maxWidth: 720, margin: "0 auto" }}>
+            {err && <div style={{ padding: 12, background: T.redSoft, color: T.red, borderRadius: 10, fontSize: 13, marginBottom: 14 }}>⚠️ {err}</div>}
+
+            {/* 状态卡片 */}
+            <div style={{ padding: 24, background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 12, marginBottom: 16 }}>
+              {!renderTask ? (
+                <div style={{ textAlign: "center", color: T.muted2 }}>
+                  <div style={{ fontSize: 32, marginBottom: 10 }}>⏳</div>
+                  <div style={{ fontSize: 14 }}>提交中…</div>
+                </div>
+              ) : status === "running" ? (
+                <div style={{ textAlign: "center" }}>
+                  <div style={{ fontSize: 36, marginBottom: 10, animation: "qlspin 2s linear infinite", display: "inline-block" }}>⚙️</div>
+                  <div style={{ fontSize: 15, fontWeight: 600, color: T.text, marginBottom: 6 }}>渲染中… 已 {elapsed}s</div>
+                  <div style={{ fontSize: 12, color: T.muted, marginBottom: 12 }}>{progress}</div>
+                  <div style={{ fontSize: 11, color: T.muted2 }}>
+                    PIL plate + ffmpeg 合成 · 通常 3-10 分钟 · 可以离开页面, 走 task 池后台跑
+                  </div>
+                </div>
+              ) : isFailed ? (
+                <div>
+                  <div style={{ textAlign: "center", marginBottom: 16 }}>
+                    <div style={{ fontSize: 36, marginBottom: 8 }}>❌</div>
+                    <div style={{ fontSize: 15, fontWeight: 600, color: T.red }}>渲染失败</div>
+                  </div>
+                  <div style={{ padding: 12, background: T.redSoft, color: T.red, borderRadius: 8, fontSize: 11.5, fontFamily: "SF Mono, monospace", whiteSpace: "pre-wrap", maxHeight: 240, overflow: "auto" }}>
+                    {errLog || "(无错误信息)"}
+                  </div>
+                </div>
+              ) : isDone ? (
+                <div>
+                  <div style={{ textAlign: "center", marginBottom: 16 }}>
+                    <div style={{ fontSize: 36, marginBottom: 8 }}>✅</div>
+                    <div style={{ fontSize: 15, fontWeight: 600, color: T.brand }}>渲染完成 · 耗时 {elapsed}s</div>
+                  </div>
+                  {result?.output_url && (
+                    <video src={api.media(result.output_url)} controls
+                      style={{ width: "100%", maxHeight: 540, borderRadius: 8, background: "#000", display: "block" }} />
+                  )}
+                  <div style={{ marginTop: 10, fontSize: 11, color: T.muted2, fontFamily: "SF Mono, monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    📁 {result?.output_path || ""}
+                    {result?.size_bytes ? ` · ${(result.size_bytes / 1024 / 1024).toFixed(1)} MB` : ""}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+
+            {/* CTA: 用同 mp4 再套一个模板 (复用闭环 — 用户拍板核心价值) */}
+            {(isDone || isFailed) && (
+              <div style={{ padding: 16, background: "#fff", border: `1.5px solid ${T.brand}`, boxShadow: `0 0 0 4px ${T.brandSoft}`, borderRadius: 12, display: "flex", alignItems: "center", gap: 14 }}>
+                <div style={{ fontSize: 26 }}>♻️</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: T.text }}>用同一段数字人 mp4 再套一个模板?</div>
+                  <div style={{ fontSize: 12, color: T.muted, marginTop: 3 }}>
+                    数字人投入一次, 套不同模板出 N 版 — v5 的核心价值
+                  </div>
+                </div>
+                <Btn variant="outline" onClick={() => setStep("align")}>← 回对齐</Btn>
+                <Btn variant="primary" onClick={reuseDhAndSwitchTemplate}>
+                  ↻ 再套一个模板
+                </Btn>
               </div>
             )}
           </div>

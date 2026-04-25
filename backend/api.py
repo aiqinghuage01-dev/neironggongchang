@@ -127,6 +127,11 @@ app.add_middleware(
 # 静态资源 — 让前端拿到本地生成的图/音频/视频
 app.mount("/media", StaticFiles(directory=str(DATA_DIR)), name="media")
 
+# D-059d: 暴露 dhv5 skill outputs 给前端播放渲染产物
+_DHV5_OUTPUTS = Path.home() / "Desktop/skills/digital-human-video-v5/outputs"
+if _DHV5_OUTPUTS.exists():
+    app.mount("/skills/dhv5/outputs", StaticFiles(directory=str(_DHV5_OUTPUTS)), name="dhv5-outputs")
+
 init_db()
 
 # --------- 模型 ----------
