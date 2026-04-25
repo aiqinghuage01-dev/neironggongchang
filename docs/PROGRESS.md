@@ -267,6 +267,20 @@ P0-P10 所有任务落地, 14 个 commit 从 `09faf92` 到今日末 commit。
 - [x] ④ Step 7 封面 4 选 1 + 再来一批 (D-035 `c75d5d2`)
 - [x] ③ Step 4 长文局部重写 + 7 快捷指令 (D-036 `4ccd0ca`)
 
+## 公众号 8 步走查 BUG 修复(D-038)
+
+用户走完 8 步发现 4 个 BUG, 一次性收口:
+
+- [x] **wfRestore 旧 coverResult 兼容性** — 旧版本(D-035 之前)持久化的封面没有 `covers` 数组,
+      `local_path` 文件已被清理或迁移导致 broken image. 修复: wfRestore 时直接丢弃旧格式
+      (`Array.isArray(s.coverResult.covers)` 才恢复)
+- [x] **push() 422 cover_path Field required** — 旧 wfState 残留的 coverResult fallback 不到任何
+      合法 path, push 直接 422. 修复: push() 强校验 `coverPath` 和 `htmlResult.wechat_html_path`,
+      空时 setErr + 自动 setStep("cover") 跳回封面页
+- [x] **顶栏 step dot 不能往回点** — 用户没法回看之前的 step. 修复: factory-ui.jsx StepDots 加
+      `onJump` prop, 已完成的 step 可点跳回; WxHeader 同步加 onJump 透传(autoMode/loading 时禁用)
+- [x] **WxStepCover 旧数据明示提示** — 单张模式下展示一条 amber 横幅, 引导点 "🔄 升级到 4 选 1"
+
 ## Bonus 任务(P10 之后,cron 继续干活时做的)
 
 - [x] **即梦(Dreamina) AIGC 接入 (D-028)** — CLI 工具型技能(非 SKILL.md 范式)

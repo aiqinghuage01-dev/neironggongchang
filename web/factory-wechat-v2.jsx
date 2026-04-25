@@ -271,16 +271,24 @@ function PageWechat({ onNav }) {
   }
 
   function push() {
-    if (!htmlResult || !coverResult) { setErr("HTML 或封面缺失"); return; }
+    if (!htmlResult) { setErr("HTML 还没生成,先回去拼一下"); return; }
+    if (!coverResult) { setErr("封面还没生成,回去先生 4 张"); return; }
     // 从 covers 数组挑选中的那张
     let coverPath = "";
-    if (coverResult.covers) {
+    if (Array.isArray(coverResult.covers)) {
       const selected = coverResult.covers[coverResult.selected_index ?? 0];
       coverPath = selected?.local_path || "";
     } else {
       coverPath = coverResult.local_path_served || coverResult.local_path || "";
     }
-    if (!coverPath) { setErr("没有可推送的封面 (4 张都失败,重生一批)"); return; }
+    if (!coverPath) {
+      setErr("没有可推送的封面文件 (旧版数据不可信),点 🔄 再来 4 张重生");
+      setStep("cover");  // 自动跳回封面页给用户重生
+      return;
+    }
+    if (!htmlResult.wechat_html_path) {
+      setErr("HTML 路径丢失,回去重新拼 HTML"); setStep("html"); return;
+    }
     return runStep({
       nextStep: "push", rollbackStep: "cover", clearSetter: setPushResult,
       apiCall: async () => {
@@ -317,7 +325,11 @@ function PageWechat({ onNav }) {
     if (s.article) setArticle(s.article);
     if (s.imagePlans) setImagePlans(s.imagePlans);
     if (s.htmlResult) setHtmlResult(s.htmlResult);
-    if (s.coverResult) setCoverResult(s.coverResult);
+    // D-038 修复: 旧版 coverResult(无 covers 数组,Chrome 单张模板)的字段已不可信
+    // (local_path 文件可能已删/迁移),恢复时直接丢掉,让用户重生 4 张
+    if (s.coverResult && Array.isArray(s.coverResult.covers)) {
+      setCoverResult(s.coverResult);
+    }
     if (s.pushResult) setPushResult(s.pushResult);
     // autoMode/autoSteps 不恢复 · pipeline 不能续跑
     if (s.skipImages != null) setSkipImages(s.skipImages);
@@ -332,7 +344,8 @@ function PageWechat({ onNav }) {
 
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", background: T.bg, position: "relative", overflow: "hidden" }}>
-      <WxHeader current={step} onBack={() => onNav("home")} skillInfo={skillInfo} autoMode={autoMode} />
+      <WxHeader current={step} onBack={() => onNav("home")} skillInfo={skillInfo} autoMode={autoMode}
+        onJump={(stepId) => { if (!loading && !autoMode) { setErr(""); setStep(stepId); } }} />
       <div style={{ flex: 1, overflow: "auto" }}>
         <WfRestoreBanner show={wf.hasSnapshot} onDismiss={wf.dismissSnapshot}
           onClear={() => { reset(); wf.dismissSnapshot(); }}
@@ -357,7 +370,7 @@ function PageWechat({ onNav }) {
 }
 
 // ─── 顶栏 ────────────────────────────────────────────────────
-function WxHeader({ current, onBack, skillInfo, autoMode }) {
+function WxHeader({ current, onBack, skillInfo, autoMode, onJump }) {
   return (
     <div style={{ padding: "12px 24px", background: "#fff", borderBottom: `1px solid ${T.border}`, display: "flex", alignItems: "center", gap: 14, flexShrink: 0 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -378,15 +391,23 @@ function WxHeader({ current, onBack, skillInfo, autoMode }) {
       <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 4, marginLeft: 8, overflowX: "auto" }}>
         {WX_STEPS.map((s, i) => {
           const active = s.id === current;
-          const done = WX_STEPS.findIndex(x => x.id === current) > i;
+          const currentIdx = WX_STEPS.findIndex(x => x.id === current);
+          const done = currentIdx > i;
+          // D-038: 已完成的 step 可点击跳回(autoMode 不让点 · loading 不让点)
+          const clickable = !!onJump && done;
           return (
             <React.Fragment key={s.id}>
-              <div style={{
-                display: "flex", alignItems: "center", gap: 4, padding: "3px 8px 3px 4px", borderRadius: 100, fontSize: 11, fontWeight: 500,
-                background: active ? T.text : "transparent",
-                color: active ? "#fff" : done ? T.brand : T.muted,
-                whiteSpace: "nowrap", flexShrink: 0,
-              }}>
+              <div
+                onClick={clickable ? () => onJump(s.id) : undefined}
+                title={clickable ? `跳回「${s.label}」(可改后再往后走)` : undefined}
+                style={{
+                  display: "flex", alignItems: "center", gap: 4, padding: "3px 8px 3px 4px", borderRadius: 100, fontSize: 11, fontWeight: 500,
+                  background: active ? T.text : "transparent",
+                  color: active ? "#fff" : done ? T.brand : T.muted,
+                  whiteSpace: "nowrap", flexShrink: 0,
+                  cursor: clickable ? "pointer" : "default",
+                  transition: "all 0.1s",
+                }}>
                 <div style={{
                   width: 16, height: 16, borderRadius: "50%",
                   background: active ? "#fff" : done ? T.brandSoft : T.bg2,
@@ -928,14 +949,19 @@ function WxStepCover({ cover, title, loading, onPrev, onNext, onRegen, onSelect 
             封面 {isBatch ? `4 选 1 (${successCount}/${covers.length} 成功)` : ""} 🖼️
           </div>
           <div style={{ fontSize: 13, color: T.muted }}>
-            {isBatch ? "点选一张作为正式封面 · 不满意整批重来" : "V2 模板单张 · Chrome 截图"}
+            {isBatch ? "点选一张作为正式封面 · 不满意整批重来" : "旧版单张 · 文件可能已丢失,建议重生"}
             {cover.total_elapsed_sec && ` · 总耗时 ${cover.total_elapsed_sec}s`}
           </div>
         </div>
-        {isBatch && (
-          <Btn onClick={onRegen}>🔄 再来 4 张</Btn>
-        )}
+        <Btn onClick={onRegen}>🔄 {isBatch ? "再来 4 张" : "升级到 4 选 1"}</Btn>
       </div>
+
+      {!isBatch && (
+        <div style={{ padding: 12, background: T.amberSoft, color: "#92400e", borderRadius: 10, fontSize: 13, marginBottom: 14, lineHeight: 1.6 }}>
+          ⚠️ 检测到旧版数据(单张 Chrome 模板封面)· 文件路径可能已失效,推送很可能 422.
+          建议点上方 <b>🔄 升级到 4 选 1</b> 重新生 4 张候选封面,再选一张推送.
+        </div>
+      )}
 
       {/* grid · 4 选 1 */}
       <div style={{ display: "grid", gridTemplateColumns: isBatch ? "repeat(2, 1fr)" : "1fr", gap: 14, marginBottom: 14 }}>

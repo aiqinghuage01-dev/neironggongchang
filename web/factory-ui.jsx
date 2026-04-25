@@ -114,21 +114,29 @@ function SkillBadge({ skillInfo }) {
   );
 }
 
-// ─── StepDots (顶部圆圈 step 进度) ─────────────────────────
-function StepDots({ steps, currentStep }) {
+// ─── StepDots (顶部圆圈 step 进度 · D-038 加 onClick 支持往回点) ─────
+function StepDots({ steps, currentStep, onJump }) {
   return (
     <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 4, marginLeft: 8, overflowX: "auto" }}>
       {steps.map((s, i) => {
         const active = s.id === currentStep;
-        const done = steps.findIndex(x => x.id === currentStep) > i;
+        const currentIdx = steps.findIndex(x => x.id === currentStep);
+        const done = currentIdx > i;
+        // 已完成的 step 可点击跳回 · 当前 step 不响应 · 未来 step 不能跳
+        const clickable = !!onJump && done;
         return (
           <React.Fragment key={s.id}>
-            <div style={{
-              display: "flex", alignItems: "center", gap: 5, padding: "4px 10px 4px 5px", borderRadius: 100, fontSize: 11.5, fontWeight: 500,
-              background: active ? T.text : "transparent",
-              color: active ? "#fff" : done ? T.brand : T.muted,
-              whiteSpace: "nowrap", flexShrink: 0,
-            }}>
+            <div
+              onClick={clickable ? () => onJump(s.id) : undefined}
+              title={clickable ? `跳回「${s.label}」(可改后再往后走)` : undefined}
+              style={{
+                display: "flex", alignItems: "center", gap: 5, padding: "4px 10px 4px 5px", borderRadius: 100, fontSize: 11.5, fontWeight: 500,
+                background: active ? T.text : "transparent",
+                color: active ? "#fff" : done ? T.brand : T.muted,
+                whiteSpace: "nowrap", flexShrink: 0,
+                cursor: clickable ? "pointer" : "default",
+                transition: "all 0.1s",
+              }}>
               <div style={{
                 width: 18, height: 18, borderRadius: "50%",
                 background: active ? "#fff" : done ? T.brandSoft : T.bg2,
