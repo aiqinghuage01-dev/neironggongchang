@@ -188,19 +188,20 @@
 ### Phase 6 — 自我复盘(每 3 拍做一次)
 - [x] **D-062-AUDIT-1** 2026-04-25 14:10 复盘 (D-062c-h 后第一拍)
       新发现的断点 (写进 backlog 7-9 期):
-      - **D-062u** PageMakeV2 Step 1 6-skill cards desc 提示已过时
-        line 274 仍写 "写完返回这里粘贴" — 实际 D-062c-g 已自动 seed
-        改: 文案换成 "写完一键带回 (跨页 state 已通)" + 加图标
+      - **D-062u** ✅ PageMakeV2 Step 1 6-skill cards desc 提示已过时
+        改成: "✨ 写完点 skill 完成态的'做成视频' CTA, 文案自动带回这里 (跨页 state 已通)"
       - **D-062v** Step 2 emptyTip 无行动按钮
         声音空 → 应该一键跳 ⚙️ 设置·克隆样本上传 (现在只是文字)
         数字人空 → 应该一键跳 柿榴后台 + 加 "去柿榴 →" 按钮 (没"按钮")
       - **D-062w** Step 3 模板空提示是开发者向, 用户根本看不懂
         现 line 602: "到 ~/Desktop/skills/digital-human-video-v5/templates/ 加 .yaml"
         改: "用朴素无模板模式继续 (直接出数字人 mp4)" → 一键跳过 Step 3
-      - **D-062x** D-062o 反向 anchor 还没做
-        从 PageMakeV2 跳到 hotrewrite 等, 完成后 onNav("make") 不带"反向 anchor"
-        各 skill 应检测 from_make=true → 完成态显 "🎬 返回做视频继续" 主按钮
-        否则用户得自己去 sidebar 点回去
+      - **D-062x** ✅ 反向 anchor 实现 (web/factory-flywheel.jsx + 各 skill page 入口)
+        setFromMake(skill_id) 在 PageMakeV2 Step 1 ScriptSkillCard 跳前调用
+        useFromMake(currentSkill) hook 在每个 PageX 入口 (hot/voice/touliu/wechat/moments) 检测
+        FromMakeBanner 在 skill 顶部显眼 banner: "你从🎬做视频来 · 完成后点 X CTA 自动带回"
+        TTL 30 分钟避免长尾误显; PageMakeV2 收 seed 后 clearFromMake 双向收尾
+        Planner skip (无文案产出 CTA) — 留给后续 D-062x2
       - **D-062y** WxStepWrite 选段 ≥10 字才显 toolbar, 用户不知道
         建议: 即使没选段, CTA 卡也加 "未选段则带全文" 提示 (已有, 但要更显眼)
         OR: 在 textarea 上方先加固定 "选段 ≥ 10 字解锁选段 CTA"

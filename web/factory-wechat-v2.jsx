@@ -16,6 +16,7 @@ const WX_STEPS = [
 ];
 
 function PageWechat({ onNav }) {
+  const fm = useFromMake("wechat");  // D-062x
   const [step, setStep] = React.useState("topic");
   const [loading, setLoading] = React.useState(false);
   const [err, setErr] = React.useState("");
@@ -351,6 +352,10 @@ function PageWechat({ onNav }) {
       <WxHeader current={step} onBack={() => onNav("home")} skillInfo={skillInfo} autoMode={autoMode}
         onJump={(stepId) => { if (!loading && !autoMode) { setErr(""); setStep(stepId); } }} />
       <div style={{ flex: 1, overflow: "auto" }}>
+        <div style={{ maxWidth: 820, margin: "16px auto 0" }}>
+          <FromMakeBanner fromMake={fm.fromMake} dismiss={fm.dismiss}
+            label="长文写完, 选段后点'摘金句段做视频'自动带回" />
+        </div>
         <WfRestoreBanner show={wf.hasSnapshot} onDismiss={wf.dismissSnapshot}
           onClear={() => { reset(); wf.dismissSnapshot(); }}
           label="公众号工作流" />

@@ -9,6 +9,7 @@ const VOICE_STEPS = [
 ];
 
 function PageVoicerewrite({ onNav }) {
+  const fm = useFromMake("voicerewrite");  // D-062x
   const [step, setStep] = React.useState("input");
   const [loading, setLoading] = React.useState(false);
   const [err, setErr] = React.useState("");
@@ -76,6 +77,10 @@ function PageVoicerewrite({ onNav }) {
     <div style={{ flex: 1, display: "flex", flexDirection: "column", background: T.bg, position: "relative", overflow: "hidden" }}>
       <VoiceHeader current={step} onBack={() => onNav("home")} skillInfo={skillInfo} />
       <div style={{ flex: 1, overflow: "auto" }}>
+        <div style={{ maxWidth: 820, margin: "16px auto 0" }}>
+          <FromMakeBanner fromMake={fm.fromMake} dismiss={fm.dismiss}
+            label="录音改写完, 点完成态'做成视频' CTA 自动带回" />
+        </div>
         <WfRestoreBanner show={wf.hasSnapshot} onDismiss={wf.dismissSnapshot}
           onClear={() => { reset(); wf.dismissSnapshot(); }}
           label="录音改写工作流" />

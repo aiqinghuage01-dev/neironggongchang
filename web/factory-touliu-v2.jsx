@@ -9,6 +9,8 @@ const TL_STEPS = [
 ];
 
 function PageTouliu({ onNav }) {
+  // D-062x: anchor — 注意 PageMakeV2 用 skill id "ad", 这里是 PageTouliu (route="ad")
+  const fm = useFromMake("ad");
   const [step, setStep] = React.useState("input");
   const [loading, setLoading] = React.useState(false);
   const [err, setErr] = React.useState("");
@@ -67,6 +69,10 @@ function PageTouliu({ onNav }) {
     <div style={{ flex: 1, display: "flex", flexDirection: "column", background: T.bg, position: "relative", overflow: "hidden" }}>
       <TLHeader current={step} onBack={() => onNav("home")} skillInfo={skillInfo} />
       <div style={{ flex: 1, overflow: "auto" }}>
+        <div style={{ maxWidth: 1040, margin: "16px auto 0" }}>
+          <FromMakeBanner fromMake={fm.fromMake} dismiss={fm.dismiss}
+            label="挑一条最炸的, 点'用这条做视频'自动带回" />
+        </div>
         <WfRestoreBanner show={wf.hasSnapshot} onDismiss={wf.dismissSnapshot}
           onClear={() => { reset(); wf.dismissSnapshot(); }}
           label="投流文案工作流" />

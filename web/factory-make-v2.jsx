@@ -47,6 +47,8 @@ function PageMakeV2({ onNav }) {
         // 用完清掉 (避免下次还自动填)
         localStorage.removeItem("make_v2_seed_script");
         localStorage.removeItem("make_v2_seed_from");
+        // D-062x: 既然已经带回来了, anchor 也清掉
+        clearFromMake();
       }
     } catch (_) {}
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -268,15 +270,19 @@ function MakeV2StepScript({ script, setScript, onNext, onNav, seedFrom, onDismis
         )}
       </div>
 
-      {/* === 6 大文案 skill 按钮 (D-062a 下移) === */}
+      {/* === 6 大文案 skill 按钮 (D-062a 下移 · D-062u/x 锚机制) === */}
       <div style={{ background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 12, padding: 16 }}>
         <div style={{ fontSize: 13, fontWeight: 600, color: T.text, marginBottom: 4 }}>📋 或者用专门的文案 skill 写</div>
         <div style={{ fontSize: 11, color: T.muted, marginBottom: 10 }}>
-          每个按钮跳 sidebar 对应 skill · 写完返回这里粘贴
+          ✨ 写完点 skill 完成态的"做成视频" CTA, 文案自动带回这里 (跨页 state 已通)
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 10 }}>
           {MAKE_V2_SCRIPT_SKILLS.map(s => (
-            <ScriptSkillCard key={s.id} skill={s} onClick={() => onNav(s.id)} />
+            <ScriptSkillCard key={s.id} skill={s} onClick={() => {
+              // D-062x: 跳出去前留 anchor, skill 内显 banner + CTA 改文案
+              setFromMake(s.id);
+              onNav(s.id);
+            }} />
           ))}
         </div>
       </div>

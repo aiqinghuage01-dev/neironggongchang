@@ -9,6 +9,8 @@ const HOT_STEPS = [
 ];
 
 function PageHotrewrite({ onNav }) {
+  // D-062x: 反向 anchor — 检测从 PageMakeV2 跳来
+  const fm = useFromMake("hotrewrite");
   const [step, setStep] = React.useState("input");
   const [loading, setLoading] = React.useState(false);
   const [err, setErr] = React.useState("");
@@ -83,6 +85,10 @@ function PageHotrewrite({ onNav }) {
     <div style={{ flex: 1, display: "flex", flexDirection: "column", background: T.bg, position: "relative", overflow: "hidden" }}>
       <HotHeader current={step} onBack={() => onNav("home")} skillInfo={skillInfo} />
       <div style={{ flex: 1, overflow: "auto" }}>
+        <div style={{ maxWidth: 820, margin: "16px auto 0" }}>
+          <FromMakeBanner fromMake={fm.fromMake} dismiss={fm.dismiss}
+            label="热点改写完, 点完成态'做成视频' CTA 自动带回" />
+        </div>
         <WfRestoreBanner show={wf.hasSnapshot} onDismiss={wf.dismissSnapshot}
           onClear={() => { reset(); wf.dismissSnapshot(); }}
           label="热点改写工作流" />

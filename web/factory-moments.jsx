@@ -8,6 +8,7 @@ const MOMENTS_STEPS = [
 ];
 
 function PageMoments({ onNav }) {
+  const fm = useFromMake("moments");  // D-062x
   const [step, setStep] = React.useState("topic");
   const [topic, setTopic] = React.useState("");
   const [loading, setLoading] = React.useState(false);
@@ -55,6 +56,10 @@ function PageMoments({ onNav }) {
     <div style={{ flex: 1, display: "flex", flexDirection: "column", background: T.bg, position: "relative", overflow: "hidden" }}>
       <MomentsHeader current={step} onBack={() => onNav("home")} />
       <div style={{ flex: 1, overflow: "auto" }}>
+        <div style={{ maxWidth: 820, margin: "16px auto 0", padding: "0 40px" }}>
+          <FromMakeBanner fromMake={fm.fromMake} dismiss={fm.dismiss}
+            label="衍生几条 → 挑最炸的, 点'做视频'自动带回" />
+        </div>
         {step === "topic" && <MStepTopic topic={topic} setTopic={setTopic} onGo={derive} loading={loading} />}
         {step === "derive" && <MStepDeriving topic={topic} items={items} loading={loading} onPrev={() => setStep("topic")} onNext={() => setStep("cover")} />}
         {step === "cover" && <MStepCover items={items} coversMap={coversMap} onGenCover={genCoverFor} onPrev={() => setStep("derive")} onNext={() => setStep("copy")} />}

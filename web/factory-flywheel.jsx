@@ -93,4 +93,63 @@ function NightHotFlywheel({ onTopics, compact }) {
   );
 }
 
-Object.assign(window, { NightHotFlywheel });
+// ─── D-062x · 反向 anchor: 从 PageMakeV2 跳到 skill, 完成后明显带回 ─────
+// PageMakeV2 跳出去前 setFromMake(skill_id), skill 内 useFromMake 拿到 → 显 banner + CTA 改文案
+
+const FROM_MAKE_KEY = "from_make_anchor";
+const FROM_MAKE_TTL_MS = 30 * 60 * 1000;  // 30 分钟内有效, 超时不显 banner
+
+function setFromMake(skillId) {
+  try {
+    localStorage.setItem(FROM_MAKE_KEY, JSON.stringify({ skill: skillId, ts: Date.now() }));
+  } catch (_) {}
+}
+function clearFromMake() {
+  try { localStorage.removeItem(FROM_MAKE_KEY); } catch (_) {}
+}
+function readFromMake() {
+  try {
+    const raw = localStorage.getItem(FROM_MAKE_KEY);
+    if (!raw) return null;
+    const a = JSON.parse(raw);
+    if (!a || !a.ts || Date.now() - a.ts > FROM_MAKE_TTL_MS) {
+      clearFromMake();
+      return null;
+    }
+    return a;
+  } catch (_) { return null; }
+}
+
+function useFromMake(currentSkill) {
+  const [anchor, setAnchor] = React.useState(() => readFromMake());
+  React.useEffect(() => {
+    // currentSkill 必须匹配 anchor.skill 才显 banner (避免跨技能误显)
+    if (anchor && anchor.skill !== currentSkill) setAnchor(null);
+  }, [anchor, currentSkill]);
+  return {
+    fromMake: !!anchor,
+    dismiss: () => { clearFromMake(); setAnchor(null); },
+  };
+}
+
+// 顶部 banner — skill 入口处用
+function FromMakeBanner({ fromMake, dismiss, label }) {
+  if (!fromMake) return null;
+  return (
+    <div style={{
+      padding: "10px 14px", background: T.brandSoft,
+      border: `1px solid ${T.brand}55`, borderRadius: 8,
+      display: "flex", alignItems: "center", gap: 10, fontSize: 12.5,
+      marginBottom: 12,
+    }}>
+      <span style={{ fontSize: 16 }}>🎬</span>
+      <span style={{ flex: 1, color: T.text }}>
+        你从 <b>做视频</b> 来 · {label || "完成后点下面 CTA 自动带文案回去继续"}
+      </span>
+      <button onClick={dismiss} title="不带回, 在这继续"
+        style={{ background: "transparent", border: "none", color: T.muted2, cursor: "pointer", fontSize: 12, fontFamily: "inherit" }}>×</button>
+    </div>
+  );
+}
+
+Object.assign(window, { NightHotFlywheel, setFromMake, clearFromMake, readFromMake, useFromMake, FromMakeBanner });
