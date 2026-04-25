@@ -130,7 +130,7 @@ function PageWechat({ onNav }) {
             const imgR = await runStep_(key, async () => {
               return await api.post("/api/wechat/section-image", { prompt: finalPlans[i].image_prompt, size: "16:9" });
             });
-            finalPlans[i] = { ...finalPlans[i], status: "done", mmbiz_url: imgR.mmbiz_url, elapsed_sec: imgR.elapsed_sec };
+            finalPlans[i] = { ...finalPlans[i], status: "done", mmbiz_url: imgR.mmbiz_url, media_url: imgR.media_url, elapsed_sec: imgR.elapsed_sec };
             setImagePlans([...finalPlans]);
           } catch (_) {
             // 单张失败不中断整个流程,继续下一张
@@ -228,7 +228,7 @@ function PageWechat({ onNav }) {
     setImagePlans(prev => prev.map((p, i) => i === idx ? { ...p, status: "running" } : p));
     try {
       const r = await api.post("/api/wechat/section-image", { prompt: plan.image_prompt, size: "16:9" });
-      setImagePlans(prev => prev.map((p, i) => i === idx ? { ...p, status: "done", mmbiz_url: r.mmbiz_url, elapsed_sec: r.elapsed_sec } : p));
+      setImagePlans(prev => prev.map((p, i) => i === idx ? { ...p, status: "done", mmbiz_url: r.mmbiz_url, media_url: r.media_url, elapsed_sec: r.elapsed_sec } : p));
     } catch (e) {
       setImagePlans(prev => prev.map((p, i) => i === idx ? { ...p, status: "failed", error: e.message } : p));
     }
@@ -827,7 +827,11 @@ function WxStepImages({ plans, setPlans, onGen, loading, onPrev, onNext, onRegen
               ))}
             </div>
             {p.mmbiz_url ? (
-              <div style={{ aspectRatio: "16/9", borderRadius: 8, overflow: "hidden", background: `url(${p.mmbiz_url}) center/cover`, border: `1px solid ${T.borderSoft}` }} />
+              // D-039: 用 media_url 走本地 /media/ 避开 mmbiz.qpic.cn 防盗链;
+              // 旧数据没有 media_url 时降级到 mmbiz_url (会显示"未经允许不可引用"占位)
+              <div style={{ aspectRatio: "16/9", borderRadius: 8, overflow: "hidden",
+                background: `url(${p.media_url ? api.media(p.media_url) : p.mmbiz_url}) center/cover`,
+                border: `1px solid ${T.borderSoft}` }} />
             ) : (
               <div style={{
                 minHeight: 110, maxHeight: 140, borderRadius: 8,

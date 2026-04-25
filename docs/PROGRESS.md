@@ -250,22 +250,53 @@ Obsidian 知识库 / 00 AI清华哥 /
 P0-P10 所有任务落地, 14 个 commit 从 `09faf92` 到今日末 commit。
 完整变更见 CHANGELOG.md · 接入新 skill 参见 docs/NEW-SKILL-PLAYBOOK.md
 
-## 下一阶段进行中 (⑤ 任务管理 · 用户主诉痛点)
+## 下一阶段进行中 (🌙 小华夜班 · 用户最高优先级 D-040)
 
-用户痛点: "写长文/配图时切到别的页面回来工作流被吃了一截"
-分 3 个子 commit 做, 每段可独立回滚:
+用户最新规划 (2026-04-25): 用户睡觉的 23:00–6:00, 让 Mac 跑预设任务,
+早上打开"总部"看到一批可消费的产出, 把每天工作起跑线前移 1-2h.
+**对外全部用「小华夜班」**, 禁用「自动化任务」「cron」「agent」等技术词.
 
-- [x] **D-037a 后端 tasks 基建**
-      backend/services/tasks.py — SQLite `tasks` 表 +
-      create/update_progress/finish/cancel/list/counts/cleanup_old + is_cancelled 软取消轮询点
-      /api/tasks (list + count) · /api/tasks/{id} · POST /api/tasks/{id}/cancel
-      tests/test_tasks.py 12/12 · 纯新增不改既有 endpoint
-- [ ] **D-037b 慢 endpoint 异步化**
-      /api/wechat/write / /api/wechat/cover / /api/wechat/plan-images 改为立即返回 task_id,
-      后台 thread 跑实际任务并通过 tasks_service.update_progress / finish_task 写回状态
+4 条预设任务:
+1. 凌晨抓热点 → 早上挑选题 (content-planner 抓对标账号 24h 爆款)
+2. 一鱼多吃 → 直播录音变 5 件素材 (file_watch data/inbox/audio/)
+3. 知识库整理 → kb-compiler + kb-lint
+4. 昨日复盘 → 抓发布数据 + 写小华工作日志.md (D-005)
+
+对接现有体系: 三层记忆 (D-005) / 人设 (D-008) / skill 范式 (D-010) /
+引擎路由 (D-011) / tasks 池 (D-037a) / works.db / settings.json
+
+按可独立回滚切 6 个子 commit, 每轮一个:
+
+- [ ] **D-040a 数据层** night_jobs + night_job_runs 表 +
+      backend/services/night_shift.py CRUD service + tests (纯加, 无 UI/scheduler)
+- [ ] **D-040b API** 7 个 /api/night/* endpoints (jobs CRUD / run-now / runs / digest)
+      jobs/{id}/run 复用 tasks_runner 走 tasks 池
+- [ ] **D-040c 调度器** APScheduler 接入 cron + watchdog file_watch, 启动钩子,
+      执行器走 D-010 范式 (subprocess 调 ~/Desktop/skills/<slug>/scripts), AI 走 ai.py 关卡层
+- [ ] **D-040d 总控页 + sidebar 改造**
+      sidebar: 首页→总部 / 加 "生产部 / 档案部 / 夜班" 分组 / 加 🌙 小华夜班 入口
+      NightShiftPage: 状态条 + 任务卡片 (开关/编辑/立即跑) + 历史日志
+- [ ] **D-040e 总部播报 NightDigestCard + 散落标签**
+      4 大方块下方 + 🔥98 热点条上方; 时间联动 (6-22h "昨晚做了 X" / 22-6h "今晚 N 件");
+      0 产出整块隐藏不要"暂无"; 素材库/作品库/知识库加 "🌙 来自夜班 (N)" 过滤标签
+- [ ] **D-040f 4 条预设任务实装** 抓热点 / 一鱼多吃 / 知识库整理 / 昨日复盘
+      各自 seed 对应 skill_slug 和 trigger_config
+
+命名 (用户可见 / 代码内部):
+  整个系统  小华夜班                  night_shift
+  单条任务  任务 ("凌晨抓热点")        night_job
+  单次运行  上次跑了…                  night_job_run
+  总控页    小华夜班                  NightShiftPage
+  总部播报区 昨晚小华帮你做了 X 件事    NightDigestCard
+
+
+## ⏸️ 暂缓: ⑤ 任务管理 (D-037)
+
+D-040 用户拍板优先, D-037 后续再续. D-037a 已落地的 tasks 基建会被 D-040 直接复用 (执行器/历史)
+
+- [x] **D-037a 后端 tasks 基建** (`5bf15da`) — D-040c 调度器会复用
+- [ ] **D-037b 慢 endpoint 异步化** (write/cover/plan-images 改 task_id)
 - [ ] **D-037c 前端顶栏 TaskBar + 任务详情抽屉**
-      factory-shell.jsx 顶栏常驻 TaskBar (active 数 + 最近进度),
-      点开抽屉列任务,点任务跳回原 page + step 恢复 state (payload 里的工作流状态)
 
 ## 公众号 8 步打磨完成(D-033 ~ D-036)
 
@@ -287,6 +318,18 @@ P0-P10 所有任务落地, 14 个 commit 从 `09faf92` 到今日末 commit。
 - [x] **顶栏 step dot 不能往回点** — 用户没法回看之前的 step. 修复: factory-ui.jsx StepDots 加
       `onJump` prop, 已完成的 step 可点跳回; WxHeader 同步加 onJump 透传(autoMode/loading 时禁用)
 - [x] **WxStepCover 旧数据明示提示** — 单张模式下展示一条 amber 横幅, 引导点 "🔄 升级到 4 选 1"
+
+## 公众号 8 步走查 BUG 第二轮(D-039)
+
+用户在 Step 5 段间配图遇到第 2 轮问题:
+
+- [x] **段间配图防盗链显示占位图** — `gen_section_image` 只返回 `mmbiz_url`, 浏览器 `<img src=mmbiz>`
+      被微信图床 referer 防盗链拦截显示 "未经允许不可引用". 修复: 后端从脚本 stderr 解析
+      `LOCAL_PATH` 拷贝到 `data/wechat-images/` 暴露给 `/media/`, 返回 `media_url`; 前端用
+      `media_url || mmbiz_url`. mmbiz_url 仍用于 HTML 拼装/草稿推送.
+- [x] **/api/wechat/push 500 stderr 空** — `push_to_wechat.sh` 把错误用 `echo "❌ ..."` 写到 stdout,
+      原 `_run` 错误信息只展示 stderr 导致前端看到 `stderr: ` 空字符串无从定位. 修复: `_run` 失败时
+      stderr 空就 fallback 附 stdout 尾部.
 
 ## Bonus 任务(P10 之后,cron 继续干活时做的)
 

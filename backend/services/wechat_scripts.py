@@ -37,7 +37,11 @@ class WechatScriptError(RuntimeError):
 
 
 def _run(cmd: list[str], *, timeout: int = 180, cwd: str | None = None) -> subprocess.CompletedProcess:
-    """跑 subprocess,失败抛 WechatScriptError 带 stderr。"""
+    """跑 subprocess,失败抛 WechatScriptError 带 stderr+stdout。
+
+    D-039 改: 微信 skill 脚本 (push_to_wechat.sh 等) 把错误用 echo 写到 stdout 而不是 >&2,
+    所以 stderr 经常为空. 失败时同时附 stdout 尾部, 便于定位真正原因.
+    """
     try:
         r = subprocess.run(
             cmd,
@@ -50,10 +54,14 @@ def _run(cmd: list[str], *, timeout: int = 180, cwd: str | None = None) -> subpr
     except subprocess.TimeoutExpired as e:
         raise WechatScriptError(f"超时 {timeout}s: {' '.join(cmd[:3])}") from e
     if r.returncode != 0:
-        raise WechatScriptError(
-            f"脚本失败 rc={r.returncode}: {' '.join(cmd[:3])}\n"
-            f"stderr: {r.stderr.strip()[-600:]}"
-        )
+        err = (r.stderr or "").strip()
+        out = (r.stdout or "").strip()
+        msg = f"脚本失败 rc={r.returncode}: {' '.join(cmd[:3])}"
+        if err:
+            msg += f"\nstderr: {err[-600:]}"
+        if out:
+            msg += f"\nstdout(tail): {out[-600:]}"
+        raise WechatScriptError(msg)
     return r
 
 
@@ -63,6 +71,10 @@ def gen_section_image(prompt: str, size: str = "16:9") -> dict[str, Any]:
     """给一段文字生图,上传微信图床,返回 mmbiz 永久 URL。
 
     耗时 30-60s(生图 25-50s + 上传 5-10s)。
+
+    D-039 改: 同时把生成的图本地拷贝到 data/wechat-images/, 返回 media_url 给前端预览.
+    原因: mmbiz.qpic.cn 有 referer 防盗链, 浏览器直接 <img src=mmbiz_url> 显示
+    "未经允许不可引用" 占位图, 用户看不到真实图. HTML 拼装 / 推送公众号草稿仍用 mmbiz_url.
     """
     script = skill_loader.script_path(SKILL_SLUG, "gen_section_image.sh")
     if not script.exists():
@@ -73,8 +85,30 @@ def gen_section_image(prompt: str, size: str = "16:9") -> dict[str, Any]:
     mmbiz_url = r.stdout.strip().splitlines()[-1] if r.stdout.strip() else ""
     if not mmbiz_url.startswith("http"):
         raise WechatScriptError(f"生图脚本未输出 URL: stdout={r.stdout[-300:]}")
+
+    # D-039: 从 stderr 解析 LOCAL_PATH (脚本里 echo "💾 本地已存 $LOCAL_PATH" >&2)
+    local_path: str | None = None
+    media_url: str | None = None
+    m = re.search(r"💾 本地已存 (\S+)", r.stderr or "")
+    if m:
+        src = Path(m.group(1))
+        if src.exists():
+            from shortvideo.config import DATA_DIR
+            target_dir = DATA_DIR / "wechat-images"
+            target_dir.mkdir(parents=True, exist_ok=True)
+            target = target_dir / f"{int(time.time())}_{src.name}"
+            try:
+                import shutil
+                shutil.copy2(src, target)
+                local_path = str(target)
+                media_url = f"/media/wechat-images/{target.name}"
+            except Exception:
+                pass  # 拷贝失败不影响主流程, 退化到只回 mmbiz_url
+
     return {
         "mmbiz_url": mmbiz_url,
+        "media_url": media_url,    # 前端预览用 (可能为 null, 退化到 mmbiz_url)
+        "local_path": local_path,
         "prompt": prompt,
         "size": size,
         "elapsed_sec": round(time.time() - t0, 1),
