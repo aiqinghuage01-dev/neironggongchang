@@ -262,12 +262,21 @@ function PageSettings({ onNav }) {
 
 function SettingsSection({ icon, title, desc, children }) {
   return (
-    <div style={{ padding: 18, background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 12 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
-        <div style={{ fontSize: 22 }}>{icon}</div>
-        <div>
-          <div style={{ fontSize: 15, fontWeight: 600 }}>{title}</div>
-          <div style={{ fontSize: 12, color: T.muted, marginTop: 2 }}>{desc}</div>
+    <div style={{
+      padding: 20, background: "#fff",
+      border: `1px solid ${T.borderSoft}`, borderRadius: 14,
+      boxShadow: "0 1px 2px rgba(0,0,0,0.03)",
+    }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16,
+                    paddingBottom: 14, borderBottom: `1px solid ${T.borderSoft}` }}>
+        <div style={{
+          width: 40, height: 40, borderRadius: 10, background: T.brandSoft,
+          display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20,
+          flexShrink: 0,
+        }}>{icon}</div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 15.5, fontWeight: 600, color: T.text }}>{title}</div>
+          <div style={{ fontSize: 12, color: T.muted, marginTop: 3, lineHeight: 1.5 }}>{desc}</div>
         </div>
       </div>
       <div>{children}</div>
