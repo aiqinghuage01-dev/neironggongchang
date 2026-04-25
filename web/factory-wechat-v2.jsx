@@ -309,7 +309,7 @@ function PageWechat({ onNav }) {
         {step === "titles"  && <WxStepTitles titles={titles} loading={loading} onPick={genOutline} onPrev={() => setStep("topic")} onRegen={genTitles} autoMode={autoMode} />}
         {step === "outline" && <WxStepOutline outline={outline} setOutline={setOutline} title={pickedTitle} topic={topic} loading={loading} onPrev={() => setStep("titles")} onNext={writeArticle} onRegen={() => genOutline(pickedTitle)} />}
         {step === "write"   && <WxStepWrite article={article} loading={loading} onPrev={() => setStep("outline")} onNext={planImages} onRewrite={writeArticle} />}
-        {step === "images"  && <WxStepImages plans={imagePlans} onGen={generateOneImage} loading={loading} onPrev={() => setStep("write")} onNext={assembleHtml} onRegen={planImages} />}
+        {step === "images"  && <WxStepImages plans={imagePlans} setPlans={setImagePlans} onGen={generateOneImage} loading={loading} onPrev={() => setStep("write")} onNext={assembleHtml} onRegen={planImages} />}
         {step === "html"    && <WxStepHtml result={htmlResult} loading={loading} onPrev={() => setStep("images")} onNext={genCover} />}
         {step === "cover"   && <WxStepCover cover={coverResult} title={pickedTitle} loading={loading} onPrev={() => setStep("html")} onNext={push} onRegen={genCover} />}
         {step === "push"    && <WxStepPush result={pushResult} loading={loading} onPrev={() => setStep("cover")} onReset={reset} onNav={onNav} />}
@@ -605,7 +605,17 @@ function WxStepWrite({ article, loading, onPrev, onNext, onRewrite }) {
 }
 
 // ─── Step 5 · 段间配图 ───────────────────────────────────────
-function WxStepImages({ plans, onGen, loading, onPrev, onNext, onRegen }) {
+// D-033 ① 段间配图 prompt 可改 + 风格预设 + 改完重生
+const IMAGE_STYLE_PRESETS = [
+  { id: "real",     label: "📷 真实感照片", append: ",真实感照片,自然光,暖色调" },
+  { id: "documentary", label: "🎬 纪实风", append: ",纪实摄影风格,高细节,真实环境" },
+  { id: "warm",     label: "🌅 暖色慢节奏", append: ",暖黄色调,慢节奏氛围,柔光" },
+  { id: "ink",      label: "🖌️ 水墨/中式", append: ",中式水墨风,山水意境,留白" },
+  { id: "cartoon",  label: "🎨 卡通插画", append: ",扁平卡通插画风格,暖色配色" },
+  { id: "vintage",  label: "📼 复古怀旧", append: ",复古胶片质感,90 年代色调" },
+];
+
+function WxStepImages({ plans, setPlans, onGen, loading, onPrev, onNext, onRegen }) {
   if (loading || plans.length === 0) return <Spinning icon="🎨" phases={[
     { text: "把文章切成 4 个大段", sub: "按 H2 / 语义转折定界" },
     { text: "为每段设计具象画面 prompt", sub: "真实感照片 · 暖色调 · 避免人脸特写" },
@@ -623,13 +633,21 @@ function WxStepImages({ plans, onGen, loading, onPrev, onNext, onRegen }) {
       }
     }
   }
+  function updatePrompt(i, newPrompt) {
+    setPlans(prev => prev.map((p, idx) => idx === i ? { ...p, image_prompt: newPrompt } : p));
+  }
+  function appendPreset(i, preset) {
+    setPlans(prev => prev.map((p, idx) => idx === i ? {
+      ...p, image_prompt: (p.image_prompt || "").trimEnd() + preset.append,
+    } : p));
+  }
 
   return (
     <div style={{ padding: "32px 40px 120px", maxWidth: 1200, margin: "0 auto" }}>
       <div style={{ marginBottom: 16, display: "flex", alignItems: "flex-start", gap: 16 }}>
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 6 }}>段间配图 · {doneCount}/{plans.length} 🎨</div>
-          <div style={{ fontSize: 13, color: T.muted }}>每段 16:9 AI 图。prompt 可改,点「生成」走 apimart → 微信图床。每张 30-60s。</div>
+          <div style={{ fontSize: 13, color: T.muted }}>prompt 可改 · 加风格预设 · 改完点「生成/🔄 重生」用新 prompt 重生。每张 30-60s。</div>
         </div>
         {pending.length > 0 && (
           <Btn variant="primary" onClick={genAll} disabled={runningCount > 0}>
@@ -637,7 +655,6 @@ function WxStepImages({ plans, onGen, loading, onPrev, onNext, onRegen }) {
           </Btn>
         )}
       </div>
-      {/* 固定 2 列,每张卡用 flex 列布局保证按钮始终可见 · 用户截图里曾出现"按钮看不到"歧义 */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 14 }}>
         {plans.map((p, i) => (
           <div key={i} style={{
@@ -651,8 +668,24 @@ function WxStepImages({ plans, onGen, loading, onPrev, onNext, onRegen }) {
               {p.status === "running" && <span style={{ fontSize: 11, color: T.amber }}>⏳ 生成中</span>}
               {p.status === "failed" && <span style={{ fontSize: 11, color: T.red }}>⚠️ 失败</span>}
             </div>
-            <textarea rows={2} value={p.image_prompt} readOnly
-              style={{ width: "100%", border: `1px solid ${T.borderSoft}`, borderRadius: 6, padding: 8, fontSize: 12, fontFamily: "inherit", outline: "none", resize: "none", color: T.muted, lineHeight: 1.6, background: T.bg2 }} />
+            <textarea rows={3} value={p.image_prompt}
+              onChange={e => updatePrompt(i, e.target.value)}
+              placeholder="改 prompt 再点重生..."
+              style={{ width: "100%", border: `1px solid ${T.borderSoft}`, borderRadius: 6, padding: 8, fontSize: 12, fontFamily: "inherit", outline: "none", resize: "vertical", color: T.text, lineHeight: 1.6, background: "#fff" }} />
+            {/* 风格预设 chip · 点击 append 到 prompt 末尾 */}
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+              {IMAGE_STYLE_PRESETS.map(preset => (
+                <button key={preset.id} onClick={() => appendPreset(i, preset)}
+                  title={`追加: ${preset.append}`}
+                  style={{
+                    padding: "3px 8px", fontSize: 10.5, borderRadius: 100,
+                    background: T.bg2, border: `1px solid ${T.borderSoft}`,
+                    color: T.muted, cursor: "pointer", fontFamily: "inherit",
+                  }}>
+                  {preset.label}
+                </button>
+              ))}
+            </div>
             {p.mmbiz_url ? (
               <div style={{ aspectRatio: "16/9", borderRadius: 8, overflow: "hidden", background: `url(${p.mmbiz_url}) center/cover`, border: `1px solid ${T.borderSoft}` }} />
             ) : (
@@ -670,7 +703,7 @@ function WxStepImages({ plans, onGen, loading, onPrev, onNext, onRegen }) {
             <div style={{ display: "flex", justifyContent: "flex-end" }}>
               <Btn size="sm" variant={p.status === "done" ? "outline" : "primary"}
                 onClick={() => onGen(i)} disabled={p.status === "running"}>
-                {p.status === "done" ? "🔄 重生" : p.status === "running" ? "生成中..." : p.status === "failed" ? "重试" : "生成这张"}
+                {p.status === "done" ? "🔄 用新 prompt 重生" : p.status === "running" ? "生成中..." : p.status === "failed" ? "重试" : "生成这张"}
               </Btn>
             </div>
           </div>
