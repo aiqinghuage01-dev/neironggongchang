@@ -675,46 +675,50 @@ class ChatDockReq(BaseModel):
 
 # ─── 即梦(Dreamina) AIGC 接入 (D-028) ────────────────────
 
-@app.get("/api/dreamina/info")
+@app.get("/api/dreamina/info", tags=["即梦 AIGC"], summary="CLI 探活 + 余额")
 def dreamina_info():
-    """CLI 探活 + 版本 + 余额。"""
+    """探 ~/.local/bin/dreamina · 返回 {ok, version, credit: {points, ...}}.
+    余额 ≥10 才能稳定生图. 不通常因为 dreamina CLI 没装或登录态过期."""
     info = dreamina_service.cli_info()
     credit = dreamina_service.user_credit() if info.get("ok") else {}
     return {**info, "credit": credit}
 
 
 class DreaminaText2ImageReq(BaseModel):
-    prompt: str
-    ratio: str = "1:1"
-    resolution_type: Optional[str] = None  # 1k / 2k / 4k
-    model_version: Optional[str] = None    # 3.0 / 3.1 / 4.0 / 4.1 / 4.5 / 4.6 / 5.0 / lab
-    poll: int = 0  # 同步等秒数,0 = 异步立即返回 submit_id
+    prompt: str = Field(..., description="生图 prompt (英文 / 中文都行)")
+    ratio: str = Field("1:1", description="比例: 1:1 / 16:9 / 9:16 / 3:4 / 4:3")
+    resolution_type: Optional[str] = Field(None, description="分辨率档: 1k / 2k / 4k")
+    model_version: Optional[str] = Field(None, description="模型: 3.0 / 3.1 / 4.0 / 4.1 / 4.5 / 4.6 / 5.0 / lab")
+    poll: int = Field(0, ge=0, le=120, description="同步轮询秒数, 0=异步立即返回 submit_id, ≤120s")
 
 
-@app.post("/api/dreamina/text2image")
+@app.post("/api/dreamina/text2image", tags=["即梦 AIGC"], summary="文生图")
 def dreamina_text2image(req: DreaminaText2ImageReq):
+    """submit_id 异步任务. poll>0 时同步等结果, =0 立即返回 submit_id 让前端轮询.
+    单张消耗 ~30 credits (1k) / ~80 credits (2k)."""
     try:
         return dreamina_service.text2image(
             req.prompt, ratio=req.ratio,
             resolution_type=req.resolution_type,
             model_version=req.model_version,
-            poll=max(0, min(req.poll, 120)),  # 最多 poll 120s
+            poll=max(0, min(req.poll, 120)),
         )
     except dreamina_service.DreaminaError as e:
         raise HTTPException(500, str(e))
 
 
 class DreaminaImage2VideoReq(BaseModel):
-    image: str   # 本地文件路径
-    prompt: str
-    duration: Optional[int] = None  # 秒数
-    video_resolution: Optional[str] = None  # 720p / 1080p
-    model_version: Optional[str] = None     # 3.0 / 3.0fast / 3.0pro / 3.5pro / seedance2.0 / seedance2.0fast
-    poll: int = 0
+    image: str = Field(..., description="本地图片绝对路径 (输入图)")
+    prompt: str = Field(..., description="动作 prompt, 例 '人物缓慢走出'")
+    duration: Optional[int] = Field(None, description="时长秒数, 默认 5s")
+    video_resolution: Optional[str] = Field(None, description="分辨率: 720p / 1080p")
+    model_version: Optional[str] = Field(None, description="模型: 3.0 / 3.0fast / 3.0pro / 3.5pro / seedance2.0 / seedance2.0fast")
+    poll: int = Field(0, ge=0, le=180, description="同步轮询秒数, ≤180s")
 
 
-@app.post("/api/dreamina/image2video")
+@app.post("/api/dreamina/image2video", tags=["即梦 AIGC"], summary="图生视频")
 def dreamina_image2video(req: DreaminaImage2VideoReq):
+    """submit_id 异步. 5s 视频耗时 60-180s + 大量 credits (~300-500 各模型不一)."""
     try:
         return dreamina_service.image2video(
             req.image, req.prompt,
@@ -728,12 +732,14 @@ def dreamina_image2video(req: DreaminaImage2VideoReq):
 
 
 class DreaminaQueryReq(BaseModel):
-    submit_id: str
-    download: bool = True
+    submit_id: str = Field(..., description="text2image / image2video 返回的 submit_id")
+    download: bool = Field(True, description="完成后是否下载到 data/dreamina/, 转 media_url")
 
 
-@app.post("/api/dreamina/query")
+@app.post("/api/dreamina/query", tags=["即梦 AIGC"], summary="查任务结果")
 def dreamina_query(req: DreaminaQueryReq):
+    """状态: pending / running / done / failed. done 时附 downloaded 路径列表 +
+    media_urls (本地下载的转 /media/... URL 给前端预览)."""
     try:
         result = dreamina_service.query_result(req.submit_id, download=req.download)
         # 转下载文件路径为 media URL
@@ -752,8 +758,10 @@ def dreamina_query(req: DreaminaQueryReq):
         raise HTTPException(500, str(e))
 
 
-@app.get("/api/dreamina/list-tasks")
+@app.get("/api/dreamina/list-tasks", tags=["即梦 AIGC"], summary="历史任务列表")
 def dreamina_list_tasks():
+    """CLI 拉最近所有任务 (text2image + image2video 混排), 含 status / submit_id /
+    prompt 摘要. 给前端 PageDreamina 历史区用."""
     return dreamina_service.list_tasks()
 
 
@@ -1935,7 +1943,7 @@ def planner_write(req: PlannerWriteReq):
 COMPLIANCE_SKILL_SLUG = "违禁违规审查-学员版"
 
 
-@app.get("/api/compliance/skill-info")
+@app.get("/api/compliance/skill-info", tags=["违规审查"], summary="skill 元信息")
 def compliance_skill_info():
     try:
         return skill_loader.skill_info(COMPLIANCE_SKILL_SLUG)
@@ -1944,34 +1952,36 @@ def compliance_skill_info():
 
 
 class ComplianceCheckReq(BaseModel):
-    text: str
-    industry: str = "通用"   # 大健康/美业/教育/金融/医美/通用
+    text: str = Field(..., description="待审查文案")
+    industry: str = Field("通用", description="行业 (通用 / 大健康 / 美业 / 教育 / 金融 / 医美) - 决定是否查敏感词库")
 
 
-@app.post("/api/compliance/check")
+@app.post("/api/compliance/check", tags=["违规审查"], summary="单 step 审查 + 必出 2 版改写")
 def compliance_check(req: ComplianceCheckReq):
-    """单 step 审查: 报告 + 必出 2 版改写(保守/营销)。"""
+    """走 opus, 一次性出审核报告 + 保守/营销 2 版改写. 6 类行业敏感词库分行业激活."""
     return compliance_pipeline.check_compliance(req.text, req.industry)
 
 
 # 保留 analyze/write 骨架路径以兼容 add_skill 统一约定
 class ComplianceAnalyzeReq(BaseModel):
-    input: str
+    input: str = Field(..., description="待审查文案 (兼容 add_skill 范式)")
 
 
-@app.post("/api/compliance/analyze")
+@app.post("/api/compliance/analyze", tags=["违规审查"], summary="(兼容 add_skill 范式) analyze")
 def compliance_analyze(req: ComplianceAnalyzeReq):
+    """跟 /check 等价 · 留这条路径让 add_skill 模板统一. 优先用 /check."""
     return compliance_pipeline.analyze_input(req.input)
 
 
 class ComplianceWriteReq(BaseModel):
-    input: str
-    analysis: dict[str, Any] = Field(default_factory=dict)
-    angle: dict[str, Any] = Field(default_factory=dict)
+    input: str = Field(..., description="原文")
+    analysis: dict[str, Any] = Field(default_factory=dict, description="analyze 输出的报告")
+    angle: dict[str, Any] = Field(default_factory=dict, description="挑定改写方向")
 
 
-@app.post("/api/compliance/write")
+@app.post("/api/compliance/write", tags=["违规审查"], summary="(兼容 add_skill 范式) write")
 def compliance_write(req: ComplianceWriteReq):
+    """add_skill 范式留的 step 2 路径. 实际 /check 已一步到位."""
     return compliance_pipeline.write_output(req.input, req.analysis, req.angle)
 
 
