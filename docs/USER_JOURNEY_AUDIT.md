@@ -280,6 +280,14 @@
         清华哥不会知道 "auto / placeholder / manual" 各是啥
         改成: 🤖 AI 自动切 / 📋 用模板原字段 / ✏️ 手动填, 每个 1-2 行说明
         与 Step 2 / Step 3 朴素卡 视觉一致 (brandSoft 高亮 + 已选 tag)
+      → **D-062hh** ✅ Step 5 PublishPanel 加 "复制平台版" 按钮
+        每个平台 PLATFORMS 加 format(title, desc) 函数, 拼成符合该平台风格的成品
+        · 抖音: 标题切 21 字 + 3 个固定 #话题
+        · 视频号: 仅标题 (短描述风格)
+        · 小红书: ✨标题✨ + desc 切 200 + 3 个 #话题
+        · 快手: 标题! + desc 切 120 (口语化)
+        · B 站: 标题 + 简介: desc 切 300
+        新组件 PlatformRow 抽出来管 "复制 toast" state (避免 map 里跑 useState)
 
 - [x] **D-062-AUDIT-4** 2026-04-25 14:50 复盘 (D-062cc/z 后第四拍)
       新发现的真 bug + 2 修:

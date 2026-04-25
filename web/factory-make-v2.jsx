@@ -1016,12 +1016,19 @@ function PublishPanel({ outputPath, outputUrl, script }) {
   const title = firstLine.trim().slice(0, 30);
   const desc = (script || "").trim();
 
+  // D-062hh: 各平台 "复制平台版" 模板 (title + desc 拼成符合该平台风格的成品)
+  // 不接 AI, 模板拼接, 用户复制了再人工微调
   const PLATFORMS = [
-    { plat: "抖音",   emoji: "🎵", hint: "≤ 21 字标题 · 加 3-5 个 # 话题" },
-    { plat: "视频号", emoji: "📺", hint: "短描述 · 配 1-2 张封面" },
-    { plat: "小红书", emoji: "📕", hint: "标题钩子 + 正文加表情符号" },
-    { plat: "快手",   emoji: "⚡", hint: "口语化标题 · 强 CTA 收口" },
-    { plat: "B 站",   emoji: "📹", hint: "标题不超过 80 字 · 简介详细" },
+    { plat: "抖音",   emoji: "🎵", hint: "≤ 21 字标题 · 加 3-5 个 # 话题",
+      format: (t, d) => `${t.slice(0, 21)}\n\n#内容创作 #AI工具 #短视频干货` },
+    { plat: "视频号", emoji: "📺", hint: "短描述 · 配 1-2 张封面",
+      format: (t, d) => t },
+    { plat: "小红书", emoji: "📕", hint: "标题钩子 + 正文加表情符号",
+      format: (t, d) => `✨${t}✨\n\n${d.slice(0, 200)}\n\n#内容创作 #AI #干货分享` },
+    { plat: "快手",   emoji: "⚡", hint: "口语化标题 · 强 CTA 收口",
+      format: (t, d) => `${t}!\n\n${d.slice(0, 120)}` },
+    { plat: "B 站",   emoji: "📹", hint: "标题不超过 80 字 · 简介详细",
+      format: (t, d) => `${t}\n\n简介: ${d.slice(0, 300)}` },
   ];
 
   const publishedCount = Object.values(marks).filter(Boolean).length;
@@ -1057,27 +1064,49 @@ function PublishPanel({ outputPath, outputUrl, script }) {
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {PLATFORMS.map(p => {
           const sent = !!marks[p.plat];
+          const [copiedFmt, setCopiedFmt] = [
+            // 自管 state 用 useRef 简单起见 (避免在 map 里跑 useState)
+            null, null,
+          ];
           return (
-            <div key={p.plat} style={{
-              padding: "10px 12px", borderRadius: 8,
-              background: sent ? T.brandSoft : T.bg2,
-              border: `1px solid ${sent ? T.brand + "55" : T.borderSoft}`,
-              display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap",
-            }}>
-              <span style={{ fontSize: 16 }}>{p.emoji}</span>
-              <span style={{ fontSize: 12.5, fontWeight: 600, color: T.text, minWidth: 50 }}>{p.plat}</span>
-              <span style={{ fontSize: 10.5, color: T.muted2, flex: 1, minWidth: 160 }}>{p.hint}</span>
-              <Btn size="sm" variant={sent ? "soft" : "primary"} onClick={() => toggle(p.plat)}>
-                {sent ? `✓ 已发 ${new Date(marks[p.plat]).toLocaleTimeString().slice(0, 5)}` : "标记已发"}
-              </Btn>
-            </div>
+            <PlatformRow key={p.plat} p={p} sent={sent} marks={marks} toggle={toggle}
+              title={title} desc={desc} copy={copy} />
           );
         })}
       </div>
 
       <div style={{ marginTop: 10, fontSize: 10.5, color: T.muted2, lineHeight: 1.6 }}>
-        💡 当前: 手动发 (复制文案 + 下载 mp4 → 各平台 App 上传) · 标记状态记在本地 · Phase 4 接 OAuth 后一键多发
+        💡 当前: 手动发 (复制平台版文案 + 下载 mp4 → 各平台 App 上传) · 标记状态记在本地 · Phase 4 接 OAuth 后一键多发
       </div>
+    </div>
+  );
+}
+
+// D-062hh: 单平台行 — 抽出来用 useState 管 "已复制" toast
+function PlatformRow({ p, sent, marks, toggle, title, desc, copy }) {
+  const [copied, setCopied] = React.useState(false);
+  function copyFmt() {
+    const text = p.format(title || "", desc || "");
+    copy(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  }
+  return (
+    <div style={{
+      padding: "10px 12px", borderRadius: 8,
+      background: sent ? T.brandSoft : T.bg2,
+      border: `1px solid ${sent ? T.brand + "55" : T.borderSoft}`,
+      display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap",
+    }}>
+      <span style={{ fontSize: 16 }}>{p.emoji}</span>
+      <span style={{ fontSize: 12.5, fontWeight: 600, color: T.text, minWidth: 50 }}>{p.plat}</span>
+      <span style={{ fontSize: 10.5, color: T.muted2, flex: 1, minWidth: 140 }}>{p.hint}</span>
+      <Btn size="sm" variant={copied ? "soft" : "outline"} onClick={copyFmt} disabled={!title}>
+        {copied ? "✓ 已复制" : "📋 复制平台版"}
+      </Btn>
+      <Btn size="sm" variant={sent ? "soft" : "primary"} onClick={() => toggle(p.plat)}>
+        {sent ? `✓ 已发 ${new Date(marks[p.plat]).toLocaleTimeString().slice(0, 5)}` : "标记已发"}
+      </Btn>
     </div>
   );
 }
