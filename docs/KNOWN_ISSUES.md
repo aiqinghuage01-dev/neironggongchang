@@ -49,7 +49,10 @@
 
 ### 6. 老 endpoint 没补 tags / summary / Field description
 **位置**: backend/api.py.
-**状态**: 新加的 endpoint (小华夜班 / 公众号头像) 已带规范注释. 老的 60+ endpoint (公众号文章 8 步 / 投流 / 录音改写 / 内容策划 / 违规审查 / 即梦 / hot-topics / topics / works / kb / settings / etc) 还是裸的 — `localhost:8001/docs` 看到一堆没 summary 的 path.
+**状态**:
+- ✓ 小华夜班 7 + 公众号头像 3 (D-040b/D-051): 已规范
+- ✓ **公众号 8 步 11 个 endpoint (D-053): 已规范** (skill-info / titles / outline / write / rewrite-section / plan-images / section-image / html / templates / cover / push)
+- ⏸ 还没补的: 投流 / 录音改写 / 内容策划 / 违规审查 / 即梦 / hot-topics / topics / works / kb / settings 等 ~50 个
 **做法**: 一段一段补 (一次一个 skill 全部 endpoints). 不阻塞功能, 但学员版 poju.ai 部署前要补完.
 
 ---

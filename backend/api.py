@@ -1478,9 +1478,9 @@ from backend.services import compliance_pipeline
 WECHAT_SKILL_SLUG = "公众号文章"
 
 
-@app.get("/api/wechat/skill-info")
+@app.get("/api/wechat/skill-info", tags=["公众号"], summary="skill 元信息")
 def wechat_skill_info():
-    """供前端展示"正在用技能:公众号文章 · XX 字"标识。"""
+    """供前端展示"用技能:公众号文章 · XX 字"标识 (skill_md_chars + references)."""
     try:
         return skill_loader.skill_info(WECHAT_SKILL_SLUG)
     except skill_loader.SkillNotFound as e:
@@ -1488,35 +1488,38 @@ def wechat_skill_info():
 
 
 class WechatTitlesReq(BaseModel):
-    topic: str
-    n: int = 3
+    topic: str = Field(..., description="选题, 例 '一个老板花3万学AI'")
+    n: int = Field(3, ge=1, le=8, description="出几个候选标题, 默认 3")
 
 
-@app.post("/api/wechat/titles")
+@app.post("/api/wechat/titles", tags=["公众号"], summary="Step 2 出标题候选")
 def wechat_titles(req: WechatTitlesReq):
+    """走 wechat_pipeline.gen_titles, 6 模板差异化 + 禁忌词过滤. 返回 {titles: [...]}."""
     titles = wechat_pipeline.gen_titles(req.topic, n=req.n)
     return {"titles": titles}
 
 
 class WechatOutlineReq(BaseModel):
-    topic: str
-    title: str
+    topic: str = Field(..., description="选题")
+    title: str = Field(..., description="挑定的标题")
 
 
-@app.post("/api/wechat/outline")
+@app.post("/api/wechat/outline", tags=["公众号"], summary="Step 3 出大纲")
 def wechat_outline(req: WechatOutlineReq):
+    """5 字段大纲 (核心观点/分论点/数据例证/金句/钩子). 走 deepseek 路由."""
     outline = wechat_pipeline.gen_outline(req.topic, req.title)
     return outline
 
 
 class WechatWriteReq(BaseModel):
-    topic: str
-    title: str
-    outline: dict[str, Any] = Field(default_factory=dict)
+    topic: str = Field(..., description="选题")
+    title: str = Field(..., description="挑定的标题")
+    outline: dict[str, Any] = Field(default_factory=dict, description="Step 3 输出的大纲 JSON")
 
 
-@app.post("/api/wechat/write")
+@app.post("/api/wechat/write", tags=["公众号"], summary="Step 4 写长文")
 def wechat_write(req: WechatWriteReq):
+    """2000-3000 字方法论长文. 走 opus 路由 (质量优先, 慢 30-60s)."""
     result = wechat_pipeline.write_article(req.topic, req.title, req.outline)
     return result
 
@@ -1524,13 +1527,14 @@ def wechat_write(req: WechatWriteReq):
 # ─── 局部重写 (D-036) ────────────────────────────────────
 
 class WechatRewriteSectionReq(BaseModel):
-    full_article: str
-    selected: str            # 选中要改的那段(必须是 full_article 的子串)
-    instruction: str = ""    # 改写指令
+    full_article: str = Field(..., description="完整文章")
+    selected: str = Field(..., description="选中要改的那段 (必须是 full_article 子串)")
+    instruction: str = Field("", description="改写指令, 例 '更口语化' / '加个数字' / 留空走默认重写")
 
 
-@app.post("/api/wechat/rewrite-section")
+@app.post("/api/wechat/rewrite-section", tags=["公众号"], summary="Step 4 长文局部重写")
 def wechat_rewrite_section(req: WechatRewriteSectionReq):
+    """选中一段重写, 不动其它. 走 opus, 返回 {new_section, new_full, instruction}."""
     if not req.selected.strip():
         raise HTTPException(400, "selected 不能为空")
     if req.selected not in req.full_article:
@@ -1541,26 +1545,27 @@ def wechat_rewrite_section(req: WechatRewriteSectionReq):
 # ─── Phase 2.5 · 段间配图 ───────────────────────────────────
 
 class WechatPlanImagesReq(BaseModel):
-    content: str
-    title: str
-    n: int = 4
+    content: str = Field(..., description="正文 markdown")
+    title: str = Field(..., description="文章标题")
+    n: int = Field(4, ge=1, le=8, description="出几条配图 prompt, 默认 4")
 
 
-@app.post("/api/wechat/plan-images")
+@app.post("/api/wechat/plan-images", tags=["公众号"], summary="Step 5 规划配图 prompt")
 def wechat_plan_images(req: WechatPlanImagesReq):
-    """AI 产 n 条段间配图 prompt(不真生图),给前端确认后再调 /section-image。"""
+    """AI 产 n 条段间配图 prompt (不真生图). 给前端 Step 5 让用户改 prompt 后再调 /section-image."""
     plans = wechat_scripts.plan_section_images(req.content, req.title, n=req.n)
     return {"plans": plans}
 
 
 class WechatSectionImageReq(BaseModel):
-    prompt: str
-    size: str = "16:9"
+    prompt: str = Field(..., description="生图 prompt (具象画面 ≤60 字)")
+    size: str = Field("16:9", description="尺寸: 16:9 (横版默认) / 9:16 / 1:1")
 
 
-@app.post("/api/wechat/section-image")
+@app.post("/api/wechat/section-image", tags=["公众号"], summary="Step 5 真生一张段间图")
 def wechat_section_image(req: WechatSectionImageReq):
-    """真生一张图(30-60s,可能更久),上传微信图床,返回 mmbiz URL。"""
+    """调 apimart GPT-Image-2 生图 + 自动上传微信图床.
+    耗时 30-60s. 返回 {mmbiz_url, media_url, local_path, prompt, size, elapsed_sec}."""
     try:
         return wechat_scripts.gen_section_image(req.prompt, size=req.size)
     except wechat_scripts.WechatScriptError as e:
@@ -1570,17 +1575,19 @@ def wechat_section_image(req: WechatSectionImageReq):
 # ─── Phase 3 · HTML 拼装 ─────────────────────────────────────
 
 class WechatHtmlReq(BaseModel):
-    title: str
-    content_md: str
-    section_images: list[dict[str, Any]] = Field(default_factory=list)
-    hero_badge: str = "老板必看"
-    hero_highlight: str = ""
-    hero_subtitle: str = ""
-    template: str = "v3-clean"  # v3-clean / v2-magazine / v1-dark (D-034)
+    title: str = Field(..., description="文章标题")
+    content_md: str = Field(..., description="正文 markdown")
+    section_images: list[dict[str, Any]] = Field(default_factory=list, description="段间图列表 [{mmbiz_url:'...'}], 通常 4 张")
+    hero_badge: str = Field("老板必看", description="顶部 badge 文字, 例 '老板必看' / '深度好文'")
+    hero_highlight: str = Field("", description="标题中要高亮的子串, 留空不高亮")
+    hero_subtitle: str = Field("", description="副标题, 留空自动从首段抽")
+    template: str = Field("v3-clean", description="模板: v3-clean / v2-magazine / v1-dark (D-034)")
 
 
-@app.post("/api/wechat/html")
+@app.post("/api/wechat/html", tags=["公众号"], summary="Step 6 拼装 HTML 模板")
 def wechat_html(req: WechatHtmlReq):
+    """正文 + 段间图 + hero 注入到模板, 走 convert_to_wechat_markup.py 转微信 markup.
+    返回 {raw_html_path, wechat_html_path, meta_path, raw_html, wechat_html, title, digest}."""
     try:
         return wechat_scripts.assemble_html(
             title=req.title,
@@ -1595,24 +1602,24 @@ def wechat_html(req: WechatHtmlReq):
         raise HTTPException(500, str(e))
 
 
-@app.get("/api/wechat/templates")
+@app.get("/api/wechat/templates", tags=["公众号"], summary="可用 HTML 模板列表")
 def wechat_templates():
-    """返回可用的 HTML 模板列表 (D-034)。"""
+    """返回 v3-clean / v2-magazine / v1-dark 等模板的 id + 描述 + 预览缩略 (D-034)."""
     return {"templates": wechat_scripts.list_templates()}
 
 
 # ─── Phase 4 · 封面 ──────────────────────────────────────────
 
 class WechatCoverReq(BaseModel):
-    title: str
-    label: str = "清华哥说"
-    n: int = 4   # D-035: 4 选 1, 旧调用 n=1 走 Chrome 模板单张
+    title: str = Field(..., description="文章标题")
+    label: str = Field("清华哥说", description="封面右下角小标签 (n=1 模板模式才用)")
+    n: int = Field(4, ge=1, le=8, description="出几张候选 · ≥2 走 apimart 4 选 1 · =1 走 Chrome 模板兼容老调用 (D-035)")
 
 
-@app.post("/api/wechat/cover")
+@app.post("/api/wechat/cover", tags=["公众号"], summary="Step 7 出封面 (4 选 1)")
 def wechat_cover(req: WechatCoverReq):
-    """D-035: 默认 n=4 走 apimart GPT-Image-2 出 4 张候选,4 选 1 不满意再来一批。
-    n=1 时走旧 Chrome 模板单张(兼容)."""
+    """D-035: 默认 n=4 走 apimart GPT-Image-2 出 4 张候选, 4 选 1 不满意再来一批.
+    n=1 走旧 Chrome 模板单张 (兼容). 4 张走批量耗时 60-120s."""
     try:
         if req.n >= 2:
             return wechat_scripts.gen_cover_batch(req.title, n=max(2, min(req.n, 8)))
@@ -1635,15 +1642,18 @@ def wechat_cover(req: WechatCoverReq):
 # ─── Phase 5 · 推送草稿箱 ────────────────────────────────────
 
 class WechatPushReq(BaseModel):
-    title: str
-    digest: str
-    html_path: str   # /tmp/preview/wechat_article.html
-    cover_path: str  # /tmp/preview/cover.jpg 或 data/wechat-cover/xxx.jpg
-    author: str = "清华哥"
+    title: str = Field(..., description="文章标题")
+    digest: str = Field(..., description="摘要 (≤120 字)")
+    html_path: str = Field(..., description="HTML 路径, 通常 /tmp/preview/wechat_article.html")
+    cover_path: str = Field(..., description="封面图路径")
+    author: str = Field("清华哥", description="作者名")
 
 
-@app.post("/api/wechat/push")
+@app.post("/api/wechat/push", tags=["公众号"], summary="Step 8 推送草稿箱")
 def wechat_push(req: WechatPushReq):
+    """需要 ~/.wechat-article-config 已配 wechat_appid + wechat_appsecret.
+    推送前自动 sanitize HTML (剥 ?from=appmsg / 危险 tag), 配了 author_avatar_path
+    则上传头像合法替换. 失败时看 /tmp/preview/last_push_request.{html,json} 诊断."""
     try:
         return wechat_scripts.push_to_wechat(
             title=req.title,
