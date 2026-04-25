@@ -435,7 +435,22 @@ D-062 系列方向: **不是单点优化, 是按 user journey 全流程闭环检
 - [x] **D-062f** wechat write 完成态加 ✨摘金句段做视频 (有选段则带选段, 无则带全文) + 推送草稿提示
 - [x] **D-062g** moments copy 完成态加每条 🎬 做视频 + 底部 "把第 1 条做成视频" CTA
 - [x] **D-062h** PageMakeV2 Step 5 PublishPanel 多平台卡片化 (5 张可操作卡 + 通用素材复制 + 标记已发)
-- [ ] **D-062i-t** 余下 backlog (空状态飞轮按钮, 跨页 state 锚扩展, 默认值, SSE)
+- [x] **D-062i** hot_topics 空启动飞轮 (新建共享 NightHotFlywheel · 接入 PageMakeV2 + PageMaterials)
+- [x] **D-062j** topics 空 内嵌 AI 飞轮 (input + "✨ 让小华生 5 条" 主按钮 · n=5 默认)
+- [x] **D-062u** Step 1 6-skill cards desc 提示文案换 (跨页 state 已通的真相)
+- [x] **D-062v** Step 2 PickerColumn empty actionable CTA (声音→设置 / 数字人→复制柿榴说明)
+- [x] **D-062w** Step 3 模板空 朴素模式 CTA (brandSoft 卡 + "👆 用朴素模式继续")
+- [x] **D-062x** 反向 anchor from_make (PageMakeV2 ↔ skill 双向收尾, useFromMake hook + FromMakeBanner)
+- [x] **D-062y** WxStepWrite 选段 ≥10 字阈值显眼化
+- [x] **D-062aa** PageHotrewrite Step 1 列今日热点 + 空时飞轮 CTA (Path A item 1 漏修补)
+- [x] **D-062bb** voicerewrite Step 1 URL 自动转写 (Path B item 1 · 走轻抖 ASR)
+- [x] **D-062-AUDIT-1/2/3** 三轮自我复盘 (每 3 拍一次, 写进 USER_JOURNEY_AUDIT.md)
+      AUDIT-2 修了 hot/topic/viral/works onUse 不带 seed bug + 删 __materialHandoff 双轨
+      AUDIT-2-todo3 文案过长 amber 警告
+- [ ] **D-062cc** Step 4 errorMsg 长难懂 (待后续: 错误码映射 + 重试 CTA)
+- [ ] **D-062dd** sidebar 各 skill 入口"今日产出"小数字 (P3)
+- [ ] **D-062z** Step 5 标记已发跨视频聚合统计 (P2)
+- [ ] **D-062r-t** SSE 流式输出 (touliu/wechat write 长任务进度反馈, 需后端 infra)
 
 清华哥拍板的产品架构修正:
 1. 平台只做数字人内容 (真人视频用手机 "开拍" 自己搞)
