@@ -21,7 +21,7 @@
 | # | Page | Status | Stage | Last Tick | 备注 |
 |---|---|---|---|---|---|
 | 1 | make-step1 | done | commit | tick 1 | step1-mockup-v2.html 已审过 + 直接实施 + 8 项自审 PASS |
-| 2 | make-step2-3-4 | in_progress | plan | tick 3 | plan done · 4 个 step 改造方案 = 删技术词 + 友好化错误态 (~30 min implement) |
+| 2 | make-step2-3-4 | done | commit | tick 4 | 4 step 文案 + 错误态全改, 8 项 PASS, -4 行净 |
 | 3 | home | pending | — | — | 总部看板 |
 | 4 | baokuan | pending | — | — | D-063 刚接, 顺手优化 |
 | 5 | hotrewrite | pending | — | — | |
@@ -42,13 +42,14 @@
 
 ## 当前 in_progress
 
-- **task #2 make-step2-3-4-5** · stage `plan` done → 下 tick 进 `implement`
+(空 — 下个 tick 拉 task #3 home)
 
 ## 历史 tick 日志
 
 - tick 1 · 2026-04-25 23:55 · task#1 make-step1 · 直接 implement (mockup 已审过) · 8 项自审 PASS · +201 行
 - tick 2 · 2026-04-25 23:55 · task#2 make-step2-3-4-5 · survey · 4 step 痛点是文案/错误态/技术词暴露 (非 UI 大改)
 - tick 3 · 2026-04-26 00:09 · task#2 plan · P0/P1/P2 痛点分级 + 8 项改造矩阵 + 实施步骤 (手动跑, cron :07 错过 idle)
+- tick 4 · 2026-04-26 00:30 · task#2 implement+verify · 4 step 文案/错误态全改, 8 项 PASS, -4 行净 (手动跑, 切 /loop 后立即执行)
 
 ---
 

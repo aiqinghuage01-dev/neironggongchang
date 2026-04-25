@@ -1033,9 +1033,9 @@ function MakeV2StepVoiceDh({ voiceId, setVoiceId, avatarId, setAvatarId, dhVideo
         <BigPickerColumn loading={!avatars}
           items={avatars || []} idKey="id" titleKey="title" iconDefault="👤"
           selectedId={avatarId} onSelect={setAvatarId} kind="avatar"
-          emptyTip="柿榴账号下还没数字人形象 · 去柿榴 Web 后台创建一个 (3-5 分钟 trained)"
-          emptyAction={{ label: "📋 复制柿榴操作", onClick: () => {
-            navigator.clipboard?.writeText("登录柿榴后台 → 数字人管理 → 创建 → 上传 30s 自拍视频 → 训练");
+          emptyTip="还没数字人形象 · 录一段 30 秒自拍视频上传训练, 3-5 分钟后小华就能用了"
+          emptyAction={{ label: "📋 复制操作步骤", onClick: () => {
+            navigator.clipboard?.writeText("登录柿榴后台 → 数字人管理 → 创建 → 上传 30s 自拍视频 → 等 3-5 分钟训练完");
           }}} />
       </div>
 
@@ -1046,10 +1046,8 @@ function MakeV2StepVoiceDh({ voiceId, setVoiceId, avatarId, setAvatarId, dhVideo
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
               <span style={{ fontSize: 18 }}>✅</span>
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 13, fontWeight: 600 }}>数字人 mp4 已生成</div>
-                <div style={{ fontSize: 10.5, color: T.muted2, fontFamily: "SF Mono, monospace", overflow: "hidden", textOverflow: "ellipsis" }}>
-                  {dhVideoPath}
-                </div>
+                <div style={{ fontSize: 13, fontWeight: 600 }}>数字人视频已生成</div>
+                <div style={{ fontSize: 11, color: T.muted2, marginTop: 2 }}>下一步选模板 / 直接做成片</div>
               </div>
             </div>
             <button onClick={() => { setTaskInfo(null); setDhVideoPath(""); setPollStatus(null); }}
@@ -1060,26 +1058,22 @@ function MakeV2StepVoiceDh({ voiceId, setVoiceId, avatarId, setAvatarId, dhVideo
         ) : generating ? (
           <div style={{ textAlign: "center", padding: 16 }}>
             <div style={{ fontSize: 26, marginBottom: 8 }}>⚙️</div>
-            <div style={{ fontSize: 13, fontWeight: 600 }}>柿榴合成中…</div>
-            <div style={{ fontSize: 11, color: T.muted, marginTop: 4 }}>
-              video_id={taskInfo.video_id} · work_id={taskInfo.work_id}
-              {pollStatus && pollStatus.status && ` · status=${pollStatus.status}`}
-            </div>
-            <div style={{ fontSize: 10.5, color: T.muted2, marginTop: 6 }}>通常 30-90s 完成 · 完成后自动进下一步</div>
+            <div style={{ fontSize: 13, fontWeight: 600 }}>小华正在合成你的数字人...</div>
+            <div style={{ fontSize: 11, color: T.muted, marginTop: 4 }}>通常 30-90s 完成 · 合成完自动进下一步</div>
           </div>
         ) : (
           <Btn variant="primary" size="lg" onClick={startGenerate} disabled={!ready || submitting}
             style={{ width: "100%" }}>
-            {submitting ? "提交中…" : ready ? "▶ 一键造数字人 (柿榴异步)" : "↑ 先选声音 + 数字人"}
+            {submitting ? "提交中…" : ready ? "▶ 一键造数字人" : "↑ 先选声音 + 数字人"}
           </Btn>
         )}
 
-        {/* 过渡占位: 跳过合成直接填 mp4 路径 */}
+        {/* 过渡占位: 跳过合成直接填现成视频路径 (power user 入口) */}
         {!done && !generating && (
           <details style={{ marginTop: 14 }}>
-            <summary style={{ fontSize: 11, color: T.muted2, cursor: "pointer" }}>· · · 或者跳过合成, 直接填现成 mp4 路径</summary>
+            <summary style={{ fontSize: 11, color: T.muted2, cursor: "pointer" }}>· · · 或者跳过合成, 直接用现成的数字人视频</summary>
             <input value={dhVideoPath} onChange={e => setDhVideoPath(e.target.value)}
-              placeholder="/Users/.../works/xxx.mp4 (柿榴出过的)"
+              placeholder="/Users/.../works/xxx.mp4"
               style={{ marginTop: 6, width: "100%", padding: "8px 10px", border: `1px solid ${T.border}`, borderRadius: 6, fontSize: 12, fontFamily: "SF Mono, monospace", outline: "none", background: "#fff" }} />
           </details>
         )}
@@ -1172,8 +1166,8 @@ function BigPickerColumn({ items, selectedId, onSelect, loading, emptyTip, empty
               onClick={(e) => {
                 e.stopPropagation();
                 alert(kind === "voice"
-                  ? `🔊 试听 #${id} · 后端 CosyVoice 合成接入待 D-062kk-ext\n(可去 ⚙️ 设置 看 speaker 列表)`
-                  : `📷 预览 #${id} · 柿榴 avatar 预览图待 D-062kk-ext\n(可去柿榴后台看)`);
+                  ? `🔊 试听暂未上线 · 可去 ⚙️ 设置 看声音列表`
+                  : `📷 预览暂未上线 · 形象效果会在合成完一起看到`);
               }}
               style={{
                 padding: "7px 16px", borderRadius: 100, fontSize: 12,
@@ -1235,11 +1229,10 @@ function MakeV2StepTemplate({ templateId, setTemplateId, onPrev, onNext }) {
 
   return (
     <div>
-      {/* C11 hero (与 Step 2 风格一致 24px) */}
       <div style={{ marginBottom: 16 }}>
         <div style={{ fontSize: 24, fontWeight: 700, color: T.text, marginBottom: 4 }}>选哪个剪辑模板? 🎞️</div>
         <div style={{ fontSize: 13, color: T.muted, marginBottom: 12 }}>
-          模板 = 节奏 + 字体/音乐 + 配图 · 同 mp4 套不同模板能出多版
+          模板 = 节奏 + 字体/音乐 + 配图 · 同一段数字人套不同模板能出多版
         </div>
       </div>
 
@@ -1263,12 +1256,12 @@ function MakeV2StepTemplate({ templateId, setTemplateId, onPrev, onNext }) {
         <div style={{ fontSize: 28, flexShrink: 0 }}>📹</div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-            <span style={{ fontSize: 16, fontWeight: 700, color: T.text }}>朴素 · 直接出数字人 mp4</span>
+            <span style={{ fontSize: 16, fontWeight: 700, color: T.text }}>朴素 · 不剪辑直接出</span>
             <Tag size="xs" color="amber">最快</Tag>
             {templateId === null && <Tag size="xs" color="green">已选</Tag>}
           </div>
           <div style={{ fontSize: 12.5, color: T.muted, lineHeight: 1.6 }}>
-            不剪辑 · 不配图 · 数字人原视频直接当成片 · 30s 走完
+            不剪辑 · 不配图 · 数字人视频直接当成片 · 30s 走完
           </div>
         </div>
       </div>
@@ -1320,9 +1313,7 @@ function MakeV2StepTemplate({ templateId, setTemplateId, onPrev, onNext }) {
             <div style={{ fontSize: 28, marginBottom: 8 }}>📦</div>
             <div style={{ fontSize: 14, fontWeight: 600, color: T.text, marginBottom: 4 }}>暂无模板可选</div>
             <div style={{ fontSize: 12, color: T.muted, marginBottom: 12, lineHeight: 1.6 }}>
-              选上面的「朴素无模板 · 直接出片」继续 (数字人 mp4 直接发, 不剪辑)
-              <br />
-              <span style={{ color: T.muted2, fontSize: 11 }}>(后续: 由编导维护 v5 模板包后, 这里会自动出现可选模板)</span>
+              选上面的「朴素 · 不剪辑直接出」继续, 数字人视频直接当成片发就行
             </div>
             <Btn size="sm" variant="primary" onClick={() => setTemplateId(null)}>👆 用朴素模式继续</Btn>
           </div>
@@ -1368,19 +1359,18 @@ function MakeV2StepEdit({ templateId, script, dhVideoPath, alignedScenes, setAli
     return (
       <div>
         <div style={{ marginBottom: 16, padding: 16, background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 12 }}>
-          <div style={{ fontSize: 14, fontWeight: 600, color: T.text, marginBottom: 6 }}>4. 剪辑 — 朴素模式</div>
+          <div style={{ fontSize: 14, fontWeight: 600, color: T.text, marginBottom: 6 }}>4. 不剪辑直接出</div>
           <div style={{ fontSize: 12, color: T.muted }}>
-            没选剪辑模板 · 数字人 mp4 直接当成片 · 不剪辑直接进预览
+            上一步选了「朴素」 · 数字人视频直接当成片, 跳过剪辑进预览
           </div>
         </div>
         <div style={{ padding: 30, background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 12, textAlign: "center" }}>
           <div style={{ fontSize: 32, marginBottom: 10 }}>📹</div>
           <div style={{ fontSize: 13, color: T.muted, marginBottom: 14 }}>
-            朴素模式不需要剪辑步, 数字人 mp4 是最终成片
+            不剪辑模式 · 数字人视频就是最终成片
           </div>
           <video src={api.media(`/media/${dhVideoPath.split('/data/')[1] || ''}`)}
             controls style={{ maxWidth: 360, maxHeight: 360, borderRadius: 6, background: "#000", display: dhVideoPath.includes('/data/') ? "inline-block" : "none" }} />
-          <div style={{ fontSize: 10.5, color: T.muted2, marginTop: 8, fontFamily: "SF Mono, monospace" }}>{dhVideoPath}</div>
         </div>
         <div style={{ marginTop: 18, display: "flex", gap: 10, justifyContent: "space-between" }}>
           <Btn variant="outline" onClick={onPrev}>← 改模板</Btn>
@@ -1575,7 +1565,7 @@ function MakeV2StepPreview({ renderTaskId, setRenderTaskId, templateId, script, 
     <div style={{ background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 12, padding: 20 }}>
       <div style={{ fontSize: 16, fontWeight: 600, color: T.text, marginBottom: 6 }}>5. 预览 + 发布</div>
       <div style={{ fontSize: 12, color: T.muted, marginBottom: 16 }}>
-        看完成视频 · 不满意留意见 AI 重剪 · 满意去发布 (D-061g 接通)
+        看成片 · 不满意留个意见小华回去重剪 · 满意去发布
       </div>
 
       {!task ? (
@@ -1588,16 +1578,24 @@ function MakeV2StepPreview({ renderTaskId, setRenderTaskId, templateId, script, 
         </div>
       ) : isFailed ? (
         <div style={{ padding: 16, background: T.redSoft, borderRadius: 8 }}>
-          <div style={{ color: T.red, fontWeight: 600, marginBottom: 8 }}>❌ 渲染失败</div>
-          <div style={{ fontSize: 11, fontFamily: "SF Mono, monospace", color: T.red, whiteSpace: "pre-wrap", maxHeight: 200, overflow: "auto" }}>{task.error || "(无错误信息)"}</div>
+          <div style={{ color: T.red, fontWeight: 600, marginBottom: 6 }}>❌ 渲染失败 · 看下面 ▾</div>
+          <div style={{ fontSize: 12, color: T.red, marginBottom: 8 }}>
+            常见原因: 数字人视频路径失效 / 模板资源缺失 / 网络中断
+          </div>
+          <details>
+            <summary style={{ fontSize: 11, color: T.muted, cursor: "pointer" }}>· · · 点开看技术细节</summary>
+            <div style={{ fontSize: 11, fontFamily: "SF Mono, monospace", color: T.red, whiteSpace: "pre-wrap", maxHeight: 200, overflow: "auto", marginTop: 8 }}>{task.error || "(无错误信息)"}</div>
+          </details>
         </div>
       ) : isDone && result?.output_url ? (
         <div>
           <video src={api.media(result.output_url)} controls
             style={{ width: "100%", maxHeight: 540, borderRadius: 8, background: "#000", display: "block" }} />
-          <div style={{ marginTop: 10, fontSize: 11, color: T.muted2, fontFamily: "SF Mono, monospace" }}>
-            📁 {result.output_path} · {result.size_bytes ? `${(result.size_bytes / 1024 / 1024).toFixed(1)} MB` : ""}
-          </div>
+          {result.size_bytes && (
+            <div style={{ marginTop: 10, fontSize: 11, color: T.muted2 }}>
+              成片大小 {(result.size_bytes / 1024 / 1024).toFixed(1)} MB
+            </div>
+          )}
         </div>
       ) : null}
 
@@ -1628,8 +1626,6 @@ function FeedbackPanel({ onReedit }) {
       <div style={{ fontSize: 13, fontWeight: 600, color: T.text, marginBottom: 6 }}>📝 不满意? 留个修改意见</div>
       <div style={{ fontSize: 11.5, color: T.muted, marginBottom: 10 }}>
         例: "第 3 段字幕太长改短点 / 把 b1 那张图换成餐饮场景 / B 段大字换成具体数字"
-        <br />
-        <span style={{ color: T.muted2 }}>(当前实现: 把 note 带回剪辑步, 你照着改字段 / 重生 broll · D-061g+ 接 AI 自动改)</span>
       </div>
       <textarea
         value={note}
