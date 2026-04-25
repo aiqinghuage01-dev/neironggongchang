@@ -269,8 +269,13 @@
       清华哥发截图: PageMakeV2 Step 2 交互被批 "很奇怪, 应该清晰展示有那些, 默认勾选哪个"
       当前: PickerColumn 默认收起 (showPickers=false), 只在"默认快捷区"显已选, 用户得点"换"才看其他
       修法: 把全部声音/数字人列表默认展开, 选中的高亮 + "默认" tag, 其他点选切换
-      → D-062ff (本拍立即修)
-      顺手发现 Settings 我的声音/数字人 empty 状态死胡同 → D-062ee 一并修
+      → **D-062ff** ✅ Step 2 picker 重构 (本拍立即修)
+        删 showPickers state + "默认快捷区"双栏 + "换"按钮
+        picker 默认展开两列 (1fr 1fr): 全部声音 / 全部数字人
+        PickerColumn header 显总数 Tag + "当前: XXX"
+        每项: radio dot 风格 (与 Settings 一致), 选中→brandSoft 背景 + brand border + 绿"默认"tag
+        新加 #ID 显示, 视觉与 Settings 我的声音/数字人 section 1:1 对齐
+      → **D-062ee** ✅ Settings 我的声音/数字人 empty 给柿榴指引 (顺手修)
 
 - [x] **D-062-AUDIT-4** 2026-04-25 14:50 复盘 (D-062cc/z 后第四拍)
       新发现的真 bug + 2 修:

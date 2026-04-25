@@ -330,7 +330,7 @@ function MakeV2StepVoiceDh({ voiceId, setVoiceId, avatarId, setAvatarId, dhVideo
   const [taskInfo, setTaskInfo] = React.useState(null);  // {video_id, work_id} after submit
   const [pollStatus, setPollStatus] = React.useState(null);
   const [localErr, setLocalErr] = React.useState("");
-  const [showPickers, setShowPickers] = React.useState(false);
+  // D-062ff: showPickers 删了 — picker 默认就展开 (清华哥反馈: 不应该藏起来)
 
   // 加载 speakers + avatars + 上次默认
   React.useEffect(() => {
@@ -412,43 +412,33 @@ function MakeV2StepVoiceDh({ voiceId, setVoiceId, avatarId, setAvatarId, dhVideo
 
   return (
     <div>
-      {/* 默认快捷区 */}
-      <div style={{ marginBottom: 16, padding: 16, background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 12 }}>
-        <div style={{ fontSize: 14, fontWeight: 600, color: T.text, marginBottom: 10 }}>2. 声音 + 数字人</div>
-        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-          <div style={{ flex: 1, minWidth: 200, padding: "10px 14px", background: T.bg2, borderRadius: 8, fontSize: 13 }}>
-            🎙️ 声音: <b>{speaker ? speaker.title || `#${voiceId}` : "(未选)"}</b>
-          </div>
-          <div style={{ flex: 1, minWidth: 200, padding: "10px 14px", background: T.bg2, borderRadius: 8, fontSize: 13 }}>
-            👤 数字人: <b>{avatar ? avatar.title || `#${avatarId}` : "(未选)"}</b>
-          </div>
-          <Btn size="sm" variant="outline" onClick={() => setShowPickers(!showPickers)}>
-            {showPickers ? "× 收起" : (ready ? "🔄 换" : "📋 选")}
-          </Btn>
-        </div>
-        <div style={{ marginTop: 8, fontSize: 11, color: T.muted2 }}>
-          下次默认用这套 (localStorage 记住) · 不满意点"换"
+      {/* D-062ff: 标题 + 默认提示 (无 toggle, picker 始终展开) */}
+      <div style={{ marginBottom: 14, padding: "14px 16px", background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ fontSize: 14, fontWeight: 600, color: T.text }}>2. 声音 + 数字人</div>
+          <span style={{ fontSize: 11.5, color: T.muted }}>· 选中即默认 · localStorage 记住</span>
+          <div style={{ flex: 1 }} />
+          <span style={{ fontSize: 11, color: T.muted2 }}>
+            {ready ? `当前: ${speaker?.title || ""} × ${avatar?.title || ""}` : "↓ 选一对开始"}
+          </span>
         </div>
       </div>
 
-      {/* 选择 picker (展开时显) */}
-      {showPickers && (
-        <div style={{ marginBottom: 16, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-          {/* D-062v: empty 状态加可点 CTA */}
-          <PickerColumn title="🎙️ 声音 (CosyVoice)" loading={!speakers}
-            items={speakers?.map(s => ({ id: s.speaker_id, label: s.title || `#${s.speaker_id}` })) || []}
-            selectedId={voiceId} onSelect={setVoiceId}
-            emptyTip="还没有克隆声音 · 上传 1 段你的录音 (≥ 10s) 克隆专属音色"
-            emptyAction={onNav ? { label: "去 ⚙️ 设置 · 克隆样本上传", onClick: () => onNav("settings") } : null} />
-          <PickerColumn title="👤 数字人 (柿榴)" loading={!avatars}
-            items={avatars?.map(a => ({ id: a.avatar_id, label: a.title || `#${a.avatar_id}` })) || []}
-            selectedId={avatarId} onSelect={setAvatarId}
-            emptyTip="柿榴账号下还没数字人形象 · 去柿榴 Web 后台创建一个 (3-5 分钟 trained)"
-            emptyAction={{ label: "📋 复制柿榴说明 (待补)", onClick: () => {
-              navigator.clipboard?.writeText("登录柿榴后台 → 数字人管理 → 创建 → 上传 30s 自拍视频 → 训练");
-            }}} />
-        </div>
-      )}
+      {/* D-062ff: 全部声音 + 全部数字人 默认展开, 选中明显高亮 */}
+      <div style={{ marginBottom: 16, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        <PickerColumn title="🎙️ 声音 (CosyVoice)" loading={!speakers}
+          items={speakers?.map(s => ({ id: s.speaker_id, label: s.title || `#${s.speaker_id}` })) || []}
+          selectedId={voiceId} onSelect={setVoiceId}
+          emptyTip="还没有克隆声音 · 上传 1 段你的录音 (≥ 10s) 克隆专属音色"
+          emptyAction={onNav ? { label: "去 ⚙️ 设置 · 克隆样本上传", onClick: () => onNav("settings") } : null} />
+        <PickerColumn title="👤 数字人 (柿榴)" loading={!avatars}
+          items={avatars?.map(a => ({ id: a.avatar_id, label: a.title || `#${a.avatar_id}` })) || []}
+          selectedId={avatarId} onSelect={setAvatarId}
+          emptyTip="柿榴账号下还没数字人形象 · 去柿榴 Web 后台创建一个 (3-5 分钟 trained)"
+          emptyAction={{ label: "📋 复制柿榴操作", onClick: () => {
+            navigator.clipboard?.writeText("登录柿榴后台 → 数字人管理 → 创建 → 上传 30s 自拍视频 → 训练");
+          }}} />
+      </div>
 
       {/* 合成结果区 */}
       <div style={{ background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 12, padding: 16 }}>
@@ -515,33 +505,56 @@ function MakeV2StepVoiceDh({ voiceId, setVoiceId, avatarId, setAvatarId, dhVideo
 }
 
 function PickerColumn({ title, items, selectedId, onSelect, loading, emptyTip, emptyAction }) {
+  // D-062ff: header 显数量 + 当前选中 (与 Settings 风格一致)
+  const selectedItem = items?.find(it => it.id === selectedId);
   return (
-    <div style={{ background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 10, padding: 12 }}>
-      <div style={{ fontSize: 12.5, fontWeight: 600, color: T.text, marginBottom: 8 }}>{title}</div>
+    <div style={{ background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 10, padding: 14 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: T.text }}>{title}</div>
+        {!loading && items.length > 0 && (
+          <Tag size="xs" color="gray">{items.length}</Tag>
+        )}
+        <div style={{ flex: 1 }} />
+        {selectedItem && (
+          <span style={{ fontSize: 10.5, color: T.brand, fontWeight: 500 }}>当前: {selectedItem.label}</span>
+        )}
+      </div>
       {loading ? (
         <div style={{ fontSize: 11, color: T.muted2, textAlign: "center", padding: 16 }}>加载中…</div>
       ) : items.length === 0 ? (
         // D-062v: empty 加 actionable CTA
-        <div style={{ padding: 12 }}>
-          <div style={{ fontSize: 11.5, color: T.muted2, marginBottom: emptyAction ? 10 : 0, lineHeight: 1.6 }}>{emptyTip}</div>
+        <div style={{ padding: 12, background: T.bg2, borderRadius: 8 }}>
+          <div style={{ fontSize: 12, color: T.muted2, marginBottom: emptyAction ? 10 : 0, lineHeight: 1.6 }}>{emptyTip}</div>
           {emptyAction && (
             <Btn size="sm" variant="primary" onClick={emptyAction.onClick}>{emptyAction.label}</Btn>
           )}
         </div>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: 240, overflow: "auto" }}>
+        // D-062ff: 选中明显高亮 (brandSoft + brand border + ✓ + "默认" tag), 其他 hover-able 卡
+        <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 320, overflow: "auto" }}>
           {items.map(it => {
             const on = it.id === selectedId;
             return (
               <div key={it.id} onClick={() => onSelect(it.id)}
                 style={{
-                  padding: "6px 10px", borderRadius: 6, cursor: "pointer", fontSize: 12,
-                  background: on ? T.brandSoft : "transparent",
-                  color: on ? T.brand : T.text,
-                  fontWeight: on ? 600 : 500,
-                  display: "flex", alignItems: "center", gap: 6,
+                  display: "flex", alignItems: "center", gap: 10,
+                  padding: "10px 12px", borderRadius: 8, cursor: "pointer",
+                  background: on ? T.brandSoft : "#fff",
+                  border: `1px solid ${on ? T.brand : T.borderSoft}`,
+                  transition: "all 0.1s",
                 }}>
-                {on ? "✓" : "○"} <span>{it.label}</span> <span style={{ color: T.muted2, fontFamily: "SF Mono, monospace", fontSize: 10 }}>#{it.id}</span>
+                {/* radio dot 风格 (与 Settings 一致) */}
+                <div style={{
+                  width: 16, height: 16, borderRadius: "50%",
+                  border: `1.5px solid ${on ? T.brand : T.muted2}`,
+                  background: on ? T.brand : "transparent", flexShrink: 0,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                }}>{on && <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#fff" }} />}</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: on ? 600 : 500, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.label}</div>
+                  <div style={{ fontSize: 10.5, color: T.muted2, fontFamily: "SF Mono, monospace" }}>#{it.id}</div>
+                </div>
+                {on && <Tag size="xs" color="green">默认</Tag>}
               </div>
             );
           })}
