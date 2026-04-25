@@ -8,19 +8,24 @@ function PageSettings({ onNav }) {
   const [aiHealth, setAiHealth] = React.useState(null);
   const [opusModels, setOpusModels] = React.useState([]);
 
+  // D-060b 修评审 P0 硬伤: 之前 Promise.all 等 /api/ai/health 5s 超时拖死整个页面.
+  // 改: 主体 (settings/speakers/avatars) 立即加载渲染, AI 信息 fire-and-forget 后到.
   async function load() {
-    const [settings, sp, av, ai, models] = await Promise.all([
+    const [settings, sp, av] = await Promise.all([
       api.get("/api/settings"),
       api.get("/api/speakers").catch(() => []),
       api.get("/api/avatars").catch(() => []),
-      api.get("/api/ai/health").catch(() => null),
-      api.get("/api/ai/models").catch(() => ({ models: [] })),
     ]);
     setS(settings);
     setSpeakers(sp || []);
     setAvatars(av || []);
-    setAiHealth(ai);
-    setOpusModels(models?.models || []);
+
+    // AI 探活独立 fire-and-forget — 后端 /api/ai/health 慢 (探活会真打 LLM)
+    // 不阻塞主页面渲染
+    api.get("/api/ai/health").catch(() => null).then(setAiHealth);
+    api.get("/api/ai/models")
+      .catch(() => ({ models: [] }))
+      .then(m => setOpusModels(m?.models || []));
   }
   React.useEffect(() => { load(); }, []);
 
