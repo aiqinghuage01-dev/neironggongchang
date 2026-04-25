@@ -939,29 +939,42 @@ function MakeV2StepTemplate({ templateId, setTemplateId, onPrev, onNext }) {
 
   return (
     <div>
-      <div style={{ marginBottom: 16, padding: 16, background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 12 }}>
-        <div style={{ fontSize: 14, fontWeight: 600, color: T.text, marginBottom: 6 }}>3. 选剪辑模板</div>
-        <div style={{ fontSize: 12, color: T.muted }}>
-          模板 = 节奏骨架 + 字体/音乐 + 配图 prompts · 数字人 mp4 套不同模板出多版
+      {/* C11 hero (与 Step 2 风格一致 24px) */}
+      <div style={{ marginBottom: 16 }}>
+        <div style={{ fontSize: 24, fontWeight: 700, color: T.text, marginBottom: 4 }}>选哪个剪辑模板? 🎞️</div>
+        <div style={{ fontSize: 13, color: T.muted, marginBottom: 12 }}>
+          模板 = 节奏 + 字体/音乐 + 配图 · 同 mp4 套不同模板能出多版
         </div>
       </div>
 
-      {/* 朴素无模板选项 (放最上面) */}
+      {/* 朴素无模板选项 (放最上面 · 升级大卡 同 Step 2 BigPickerColumn 风格) */}
       <div onClick={() => setTemplateId(null)}
         style={{
-          marginBottom: 14, padding: 14, background: "#fff",
-          border: templateId === null ? `2px solid ${T.brand}` : `1px solid ${T.borderSoft}`,
-          boxShadow: templateId === null ? `0 0 0 4px ${T.brandSoft}` : "none",
-          borderRadius: 10, cursor: "pointer", display: "flex", alignItems: "center", gap: 14,
+          marginBottom: 14, padding: "16px 20px",
+          background: templateId === null ? T.brandSoft : "#fff",
+          border: `${templateId === null ? 2 : 1}px solid ${templateId === null ? T.brand : T.borderSoft}`,
+          boxShadow: templateId === null ? `0 0 0 4px ${T.brandSoft}66` : "none",
+          borderRadius: 12, cursor: "pointer", display: "flex", alignItems: "center", gap: 16,
+          transition: "all 0.1s",
         }}>
-        <div style={{ fontSize: 28 }}>📹</div>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 14, fontWeight: 600, color: T.text }}>朴素无模板 · 直接出片</div>
-          <div style={{ fontSize: 11.5, color: T.muted, marginTop: 3 }}>
-            数字人 mp4 不剪辑直接发, 适合"快出片"场景
+        {/* radio dot 与 BigPickerColumn 一致 */}
+        <div style={{
+          width: 22, height: 22, borderRadius: "50%",
+          border: `2px solid ${templateId === null ? T.brand : T.muted2}`,
+          background: templateId === null ? T.brand : "transparent", flexShrink: 0,
+          display: "flex", alignItems: "center", justifyContent: "center",
+        }}>{templateId === null && <div style={{ width: 9, height: 9, borderRadius: "50%", background: "#fff" }} />}</div>
+        <div style={{ fontSize: 28, flexShrink: 0 }}>📹</div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+            <span style={{ fontSize: 16, fontWeight: 700, color: T.text }}>朴素 · 直接出数字人 mp4</span>
+            <Tag size="xs" color="amber">最快</Tag>
+            {templateId === null && <Tag size="xs" color="green">已选</Tag>}
+          </div>
+          <div style={{ fontSize: 12.5, color: T.muted, lineHeight: 1.6 }}>
+            不剪辑 · 不配图 · 数字人原视频直接当成片 · 30s 走完
           </div>
         </div>
-        {templateId === null && <Tag size="xs" color="green">已选</Tag>}
       </div>
 
       {/* 筛选 chip */}
