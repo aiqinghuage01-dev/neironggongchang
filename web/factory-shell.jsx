@@ -5,6 +5,7 @@
 const NAV_TOP = [{ id: "home", icon: "🏠", label: "总部" }];
 const NAV_MAIN = [
   { id: "make", icon: "🎬", label: "做视频" },
+  { id: "dhv5", icon: "🎞️", label: "v5 模板成片" },
   { id: "ad", icon: "💰", label: "投流文案" },
   { id: "wechat", icon: "📄", label: "公众号" },
   { id: "moments", icon: "📱", label: "朋友圈" },

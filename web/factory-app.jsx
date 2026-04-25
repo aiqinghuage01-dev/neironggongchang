@@ -19,6 +19,7 @@ function FactoryApp() {
       case "compliance": return <PageCompliance onNav={setPage} />;
       case "dreamina":   return <PageDreamina onNav={setPage} />;
       case "nightshift": return <PageNightShift onNav={setPage} />;
+      case "dhv5":       return <PageDhv5 onNav={setPage} />;
       default:           return <PageHome onNav={setPage} />;
     }
   };
