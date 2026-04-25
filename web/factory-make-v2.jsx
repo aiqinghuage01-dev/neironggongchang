@@ -206,7 +206,11 @@ function MakeV2StepScript({ script, setScript, onNext, onNav, seedFrom, onDismis
           <div style={{ fontSize: 16, fontWeight: 600, color: T.text }}>1. 文案</div>
           <Tag size="xs" color="gray">{script.length} 字</Tag>
           {script.length > 0 && (
-            <Tag size="xs" color="blue">~{Math.round(script.length / 3.5)} 秒口播</Tag>
+            <Tag size="xs" color={script.length > 600 ? "amber" : "blue"}>~{Math.round(script.length / 3.5)} 秒口播</Tag>
+          )}
+          {/* D-062-AUDIT-2-todo3: 文案过长警告 (数字人合成成本 ∝ 字数, 平台播放完成率 ∝ 短) */}
+          {script.length > 600 && (
+            <Tag size="xs" color="amber">⚠ 偏长 · 建议精简 300-500</Tag>
           )}
           <div style={{ flex: 1 }} />
           {script && (

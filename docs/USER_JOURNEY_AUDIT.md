@@ -206,9 +206,9 @@
         FromMakeBanner 在 skill 顶部显眼 banner: "你从🎬做视频来 · 完成后点 X CTA 自动带回"
         TTL 30 分钟避免长尾误显; PageMakeV2 收 seed 后 clearFromMake 双向收尾
         Planner skip (无文案产出 CTA) — 留给后续 D-062x2
-      - **D-062y** WxStepWrite 选段 ≥10 字才显 toolbar, 用户不知道
-        建议: 即使没选段, CTA 卡也加 "未选段则带全文" 提示 (已有, 但要更显眼)
-        OR: 在 textarea 上方先加固定 "选段 ≥ 10 字解锁选段 CTA"
+      - **D-062y** ✅ WxStepWrite 选段 ≥10 字阈值显眼化
+        CTA hint 改成 "💡 选中正文一段 (≥ 10 字) 再点 → 只带选段 · 不选则带全文(切 1200 字)"
+        阈值 + 行为 + 全文 fallback 一行讲清
       - **D-062z** Step 5 "标记已发"无导出/统计入口
         现状: 标了已发只是本地 UI tag, 没法导出周报/复盘
         建议: 沿 storeKey 跨视频聚合, sidebar "我的作品" tab 显多平台发布矩阵
@@ -227,10 +227,11 @@
       - **D-062-AUDIT-2-todo2** PageMakeV2 Step 1 hot_topics 列表点 "用这条 →"
         line 174 写的是 hardcoded 模板, 而非走 hot-topic seed 机制
         现状能工作 (因为本就在 PageMakeV2 内), 但语义不一致
-      - **D-062-AUDIT-2-todo3** seed 文案过长无截断/警告
-        wechat 长文 → make Step 1, 1500+ 字直接灌进 textarea
-        当前: Tag 显 "X 字 ~Y 秒" 让用户看, 但没 enforce 上限
-        建议: 超 600 字时 banner 加 "建议精简到 300-500 字" hint
+      - **D-062-AUDIT-2-todo3** ✅ seed 文案过长 amber 警告
+        Step 1 Tag 行加判断: > 600 字时
+          - 秒数 Tag 颜色 blue → amber
+          - 多挂一个 amber Tag "⚠ 偏长 · 建议精简 300-500"
+        不强制截断, 让用户自己决策 (可能他真要长口播)
 
 ---
 

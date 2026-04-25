@@ -774,7 +774,9 @@ function WxStepWrite({ article, loading, onPrev, onNext, onRewrite, onRewriteSel
               onNav("make");
             }}>🎬 {hasSel ? "把选中段做成视频" : "摘段做数字人视频"} →</Btn>
             <span style={{ fontSize: 11, color: T.muted2 }}>
-              {hasSel ? `已选 ${selectedText.length} 字 · 跳到「做视频」自动带入` : "未选段则带全文,到「做视频」再裁;或先选段再点这里"}
+              {hasSel
+                ? `已选 ${selectedText.length} 字 · 跳到「做视频」自动带入`
+                : "💡 选中正文一段 (≥ 10 字) 再点 → 只带选段 · 不选则带全文(切 1200 字)"}
             </span>
             <div style={{ flex: 1 }} />
             <span style={{ fontSize: 11, color: T.muted2 }}>📮 推送草稿箱 → 走完段间配图 + HTML 后即推</span>
