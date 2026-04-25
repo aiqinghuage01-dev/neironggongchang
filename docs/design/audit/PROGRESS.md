@@ -1,0 +1,71 @@
+# 24h 全站审计进度 (cron 心跳文件)
+
+> 启动: 2026-04-25 23:31 CST · 截止: 2026-04-26 23:31 CST
+> Cron: `*/20 * * * *` (每 20 分钟, durable=true)
+> 特权: 清华哥本次明确授权 — "直接动代码, 铁律暂时解除, 你模拟我本人去审核"
+> 顺延规则: 一个 tick 做不完不要打断, 下个 tick 续 in_progress
+
+## Stage 状态机 (4 stage, 简化版)
+
+每个 page 走以下 stage, 一个 tick 推进 1 个 stage:
+
+1. `survey` — 摸现状: 读 jsx + 关联 backend + 现有 spec/mockup
+2. `plan` — 用 SELF_REVIEW.md 8 项标准自审, 决定改什么 + 写 `<page>-plan.md`
+3. `implement` — 改 web/factory-<page>.jsx (允许!) 严格按 plan
+4. `verify` — 视觉对照 plan + git commit + 标 done
+
+`status`: pending / in_progress / done / blocked
+
+## 任务清单 (按优先级)
+
+| # | Page | Status | Stage | Last Tick | 备注 |
+|---|---|---|---|---|---|
+| 1 | make-step1 | in_progress | implement | tick 1 | step1-mockup-v2.html 已审过, 直接实施 |
+| 2 | make-step2-3-4 | pending | — | — | 选数字人 / 配音 / 渲染 |
+| 3 | home | pending | — | — | 总部看板 |
+| 4 | baokuan | pending | — | — | D-063 刚接, 顺手优化 |
+| 5 | hotrewrite | pending | — | — | |
+| 6 | voicerewrite | pending | — | — | |
+| 7 | ad | pending | — | — | 投流文案 |
+| 8 | wechat | pending | — | — | 公众号 8 步 |
+| 9 | moments | pending | — | — | 朋友圈 |
+| 10 | planner | pending | — | — | 内容策划 |
+| 11 | compliance | pending | — | — | 违规审查 |
+| 12 | dreamina | pending | — | — | 即梦 AIGC |
+| 13 | materials | pending | — | — | 素材库 |
+| 14 | works | pending | — | — | 作品库 |
+| 15 | knowledge | pending | — | — | 知识库 |
+| 16 | nightshift | pending | — | — | 小华夜班 |
+| 17 | settings | pending | — | — | 设置 |
+| 18 | cross-page-consistency | pending | — | — | 跨 page 视觉/命名一致性 |
+| 19 | summary | pending | — | — | 全站汇总报告 |
+
+## 当前 in_progress
+
+- **task #1 make-step1** · stage `implement` · 起 tick 1
+
+## 历史 tick 日志
+
+(每个 tick 在 commit 时附加: `tick N · YYYY-MM-DD HH:MM · task#K stage:X result:Y`)
+
+---
+
+## Cron 自检 (每 tick 起手必做)
+
+1. cwd 是 `/Users/black.chen/Desktop/neironggongchang`
+2. `git status --short` 干净 (上次 tick 残留要先 commit 或 stash)
+3. 读本文件: 有 `in_progress` 的 → 续做 stage; 没有 → 拉下一个 `pending` task
+4. 时间 ≥ 启动 + 24h → 跳到 task #19 (summary) 然后 CronDelete + 写 SUMMARY.md
+
+## 触禁区自动 abort
+
+不允许动:
+- `backend/**.py` (本次只前端审, 后端单独议题)
+- `pyproject.toml` / `requirements.txt`
+- `.claude/**` / `settings.json`
+- `cosyvoice_*` / `vendor/` / `data/`
+
+允许动:
+- `web/factory-*.jsx` (implement 当前 task 的 page)
+- `docs/design/audit/**`
+- git add / commit (commit message 加 `[24h-audit]` 前缀)
