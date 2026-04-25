@@ -194,6 +194,25 @@ function PageWechat({ onNav }) {
     });
   }
 
+  // D-036 ③ 局部重写 · selected 段调 AI 重写,只换那段
+  async function rewriteSelection(selected, instruction) {
+    if (!article || !selected) return null;
+    setErr("");
+    try {
+      const r = await api.post("/api/wechat/rewrite-section", {
+        full_article: article.content,
+        selected, instruction: instruction || "",
+      });
+      if (r.new_full) {
+        setArticle({ ...article, content: r.new_full, word_count: r.new_full.length });
+      }
+      return r;
+    } catch (e) {
+      setErr(e.message);
+      return null;
+    }
+  }
+
   function planImages() {
     return runStep({
       nextStep: "images", rollbackStep: "write", clearSetter: () => setImagePlans([]),
@@ -327,7 +346,7 @@ function PageWechat({ onNav }) {
         {step === "topic"   && <WxStepTopic topic={topic} setTopic={setTopic} onGo={genTitles} onAuto={startAuto} loading={loading} skillInfo={skillInfo} skipImages={skipImages} setSkipImages={setSkipImages} />}
         {step === "titles"  && <WxStepTitles titles={titles} loading={loading} onPick={genOutline} onPrev={() => setStep("topic")} onRegen={genTitles} autoMode={autoMode} />}
         {step === "outline" && <WxStepOutline outline={outline} setOutline={setOutline} title={pickedTitle} topic={topic} loading={loading} onPrev={() => setStep("titles")} onNext={writeArticle} onRegen={() => genOutline(pickedTitle)} />}
-        {step === "write"   && <WxStepWrite article={article} loading={loading} onPrev={() => setStep("outline")} onNext={planImages} onRewrite={writeArticle} />}
+        {step === "write"   && <WxStepWrite article={article} loading={loading} onPrev={() => setStep("outline")} onNext={planImages} onRewrite={writeArticle} onRewriteSelection={rewriteSelection} />}
         {step === "images"  && <WxStepImages plans={imagePlans} setPlans={setImagePlans} onGen={generateOneImage} loading={loading} onPrev={() => setStep("write")} onNext={assembleHtml} onRegen={planImages} />}
         {step === "html"    && <WxStepHtml result={htmlResult} loading={loading} onPrev={() => setStep("images")} onNext={genCover} onSwitchTemplate={assembleHtml} />}
         {step === "cover"   && <WxStepCover cover={coverResult} title={pickedTitle} loading={loading} onPrev={() => setStep("html")} onNext={push} onRegen={genCover} onSelect={selectCover} />}
@@ -563,7 +582,7 @@ function OutlineField({ label, value, onChange, multi }) {
 }
 
 // ─── Step 4 · 长文 + 三层自检 ───────────────────────────────
-function WxStepWrite({ article, loading, onPrev, onNext, onRewrite }) {
+function WxStepWrite({ article, loading, onPrev, onNext, onRewrite, onRewriteSelection }) {
   if (loading || !article) return <Spinning icon="✍️" phases={[
     { text: "读完整人设 + 方法论 + 风格圣经", sub: "who-is-qinghuage + writing-methodology + style-bible · ~7200 token" },
     { text: "铺开场判断", sub: "原则① 先定性再解释 · 避免「不此地无银」" },
@@ -584,6 +603,39 @@ function WxStepWrite({ article, loading, onPrev, onNext, onRewrite }) {
 
   const [editing, setEditing] = React.useState(article.content);
   React.useEffect(() => setEditing(article.content), [article.content]);
+
+  // D-036 ③ 局部重写 · selection 监听
+  const taRef = React.useRef(null);
+  const [selRange, setSelRange] = React.useState({ start: 0, end: 0 });
+  const [instruction, setInstruction] = React.useState("");
+  const [rewriting, setRewriting] = React.useState(false);
+  const selectedText = editing.slice(selRange.start, selRange.end);
+  const hasSel = selRange.end > selRange.start && selectedText.trim().length >= 10;
+
+  function captureSel() {
+    const ta = taRef.current;
+    if (ta) setSelRange({ start: ta.selectionStart, end: ta.selectionEnd });
+  }
+
+  async function doRewriteSel() {
+    if (!hasSel || rewriting) return;
+    setRewriting(true);
+    const r = await onRewriteSelection?.(selectedText, instruction);
+    setRewriting(false);
+    if (r?.new_section) {
+      // 替换 editing 中的选中段(用 selRange 而非 indexOf,避免重复字符串误替换)
+      const newEdit = editing.slice(0, selRange.start) + r.new_section + editing.slice(selRange.end);
+      setEditing(newEdit);
+      setSelRange({ start: selRange.start, end: selRange.start + r.new_section.length });
+      setInstruction("");
+    }
+  }
+
+  // 改写指令 chip 快捷
+  const QUICK_INSTRUCTIONS = [
+    "更犀利", "压短到一半", "拉长 + 加学员故事", "加具体数字",
+    "口吻更口语", "去掉营销味", "加反差钩子",
+  ];
 
   return (
     <div style={{ padding: "32px 40px 120px", maxWidth: 1080, margin: "0 auto" }}>
@@ -607,8 +659,56 @@ function WxStepWrite({ article, loading, onPrev, onNext, onRewrite }) {
         </div>
       )}
 
+      {/* D-036 ③ 局部重写工具栏 · 选中文字超 10 字才显示 */}
+      {hasSel && (
+        <div style={{
+          background: T.brandSoft, border: `1px solid ${T.brand}44`,
+          borderRadius: 10, padding: 12, marginBottom: 10,
+          display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap",
+        }}>
+          <span style={{ fontSize: 12, color: T.brand, fontWeight: 600, whiteSpace: "nowrap" }}>
+            ✏️ 已选 {selectedText.length} 字
+          </span>
+          <input value={instruction} onChange={e => setInstruction(e.target.value)}
+            placeholder="改写指令(留空=更犀利,口吻不变)"
+            disabled={rewriting}
+            onKeyDown={e => { if (e.key === "Enter") doRewriteSel(); }}
+            style={{
+              flex: 1, minWidth: 240,
+              padding: "6px 12px", fontSize: 12, fontFamily: "inherit",
+              border: `1px solid ${T.brand}55`, borderRadius: 6, outline: "none",
+              background: "#fff",
+            }} />
+          <Btn size="sm" variant="primary" onClick={doRewriteSel} disabled={rewriting}>
+            {rewriting ? "AI 改写中..." : "🔄 重写选中段"}
+          </Btn>
+        </div>
+      )}
+      {hasSel && (
+        <div style={{ display: "flex", gap: 6, marginBottom: 10, flexWrap: "wrap" }}>
+          {QUICK_INSTRUCTIONS.map(q => (
+            <button key={q} onClick={() => setInstruction(q)}
+              disabled={rewriting}
+              style={{
+                padding: "3px 10px", fontSize: 11, borderRadius: 100,
+                background: instruction === q ? T.brand : T.bg2,
+                color: instruction === q ? "#fff" : T.muted,
+                border: `1px solid ${instruction === q ? T.brand : T.borderSoft}`,
+                cursor: rewriting ? "not-allowed" : "pointer",
+                fontFamily: "inherit",
+              }}>{q}</button>
+          ))}
+        </div>
+      )}
+      {!hasSel && onRewriteSelection && (
+        <div style={{ fontSize: 11.5, color: T.muted2, marginBottom: 6, display: "flex", alignItems: "center", gap: 6 }}>
+          💡 选中下面文字 ≥ 10 字 · 上方会出现「重写选中段」工具栏
+        </div>
+      )}
       <div style={{ background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 12, padding: 20 }}>
-        <textarea value={editing} onChange={e => setEditing(e.target.value)}
+        <textarea ref={taRef} value={editing}
+          onChange={e => setEditing(e.target.value)}
+          onSelect={captureSel} onKeyUp={captureSel} onMouseUp={captureSel}
           style={{ width: "100%", border: "none", outline: "none", background: "transparent", fontSize: 14.5, fontFamily: "inherit", resize: "vertical", lineHeight: 1.9, color: T.text, minHeight: 420 }} />
       </div>
       {sc.summary && <div style={{ marginTop: 10, padding: 10, background: T.bg2, borderRadius: 8, fontSize: 12, color: T.muted, lineHeight: 1.6 }}>💬 <b>总评:</b> {sc.summary}</div>}

@@ -1286,6 +1286,23 @@ def wechat_write(req: WechatWriteReq):
     return result
 
 
+# ─── 局部重写 (D-036) ────────────────────────────────────
+
+class WechatRewriteSectionReq(BaseModel):
+    full_article: str
+    selected: str            # 选中要改的那段(必须是 full_article 的子串)
+    instruction: str = ""    # 改写指令
+
+
+@app.post("/api/wechat/rewrite-section")
+def wechat_rewrite_section(req: WechatRewriteSectionReq):
+    if not req.selected.strip():
+        raise HTTPException(400, "selected 不能为空")
+    if req.selected not in req.full_article:
+        raise HTTPException(400, "selected 不是 full_article 的子串")
+    return wechat_pipeline.rewrite_section(req.full_article, req.selected, req.instruction)
+
+
 # ─── Phase 2.5 · 段间配图 ───────────────────────────────────
 
 class WechatPlanImagesReq(BaseModel):

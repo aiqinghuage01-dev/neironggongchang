@@ -237,3 +237,63 @@ def write_article(topic: str, title: str, outline: dict[str, Any]) -> dict[str, 
             "check": check_r.total_tokens,
         },
     }
+
+
+# ─── 局部重写 (D-036) — 只改选中段,其他不动 ──────────────
+
+def rewrite_section(full_article: str, selected: str, instruction: str = "") -> dict[str, Any]:
+    """选中一段 → 调 AI 用 instruction 重写,只换那段,其余原样保留。
+
+    full_article: 完整 markdown 正文(给 AI 上下文)
+    selected: 选中的文字(必须是 full_article 的子串)
+    instruction: 用户的改写指令(如"更犀利"/"加学员故事"/"压短到 200 字")
+    """
+    skill = skill_loader.load_skill(SKILL_SLUG)
+    style = skill["references"].get("style-bible", "")
+    persona = skill["references"].get("who-is-qinghuage", "")[:5000]
+
+    system = f"""你在执行公众号文章 skill 的局部重写。
+**只改用户选中的那段,其他段一概不动**。
+
+===== 风格圣经(Section 6 六原则必守) =====
+{style}
+
+===== 清华哥人设(节选) =====
+{persona}
+
+硬规则:
+- 输出**只是选中段的新版**,不是完整文章
+- 字数控制: 默认接近原选段字数 ± 20%(除非用户明确要求"压短"/"拉长")
+- 保持上下文衔接(第一句衔接前文最后一句,末句衔接后文第一句)
+- 不要 markdown 符号 / emoji 段首
+- 直接输出新段落,不要前言不要解释
+"""
+
+    prompt = f"""完整文章(给上下文,不要全部重写):
+---
+{full_article.strip()}
+---
+
+【需要重写的段落】(原长 {len(selected)} 字):
+---
+{selected.strip()}
+---
+
+【用户改写指令】
+{instruction.strip() or "更犀利,保留核心观点,口吻不变"}
+
+直接输出重写后的新段落:"""
+    ai = get_ai_client(route_key="wechat.rewrite-section")
+    r = ai.chat(prompt, system=system, deep=False, temperature=0.85, max_tokens=2500)
+    new_text = (r.text or "").strip()
+
+    # 拼接: 把新段替换到 full_article 里
+    new_full = full_article.replace(selected, new_text, 1) if selected in full_article else None
+
+    return {
+        "new_section": new_text,
+        "new_full": new_full,  # null = 没找到原文中的 selected,需要前端用 fallback
+        "old_length": len(selected),
+        "new_length": len(new_text),
+        "tokens": r.total_tokens,
+    }
