@@ -135,6 +135,7 @@
 - C14 PageWorks WorkCard + EmptyWorks polish — hover ring + 时长徽章 + Empty hero (480 max + 1 px brand border + 大 emoji)
 - C15 PageMaterials ViralCard/HotRow/TopicRow polish — 抽 HotRow + TopicRow 组件, 加 hover ring (跟 WorkCard 一致)
 - C16 PageKnowledge SectionCard polish — 加 hover ring (按 accent 色) + 数字 mono 32px + "看 →" hover 提示
+- C17 PageHome BigAction polish — hot 卡 brand ring + hover ring + 大字 19px 700 + 删 "Phase 2 已通" dev 文案 → 用真实 hint 文案 (今日还没出过投流 等)
 
 ## 卡住记录
 

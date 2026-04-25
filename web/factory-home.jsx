@@ -30,25 +30,25 @@ function PageHome({ onNav }) {
             </div>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 32 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 36 }}>
             <BigAction
               icon="🎬" title="做条短视频" subtitle="链接 → 文案 → 声音 → 数字人 → 剪辑 → 发布"
               stat={make.hint || "最高频动作"} hot
               onClick={() => onNav("make")}
             />
             <BigAction
-              icon="💰" title="写投流文案" subtitle="一个卖点 · 批量出 5 版 · 自动挑最佳"
-              stat={stats?.ad?.hint || "Phase 2 已通 · 5 版批量"}
+              icon="💰" title="写投流文案" subtitle="一个卖点 · 批量出 N 版 · 自动跑 lint 质检"
+              stat={stats?.ad?.hint || "今日还没出过投流"}
               onClick={() => onNav("ad")}
             />
             <BigAction
-              icon="📄" title="写公众号" subtitle="方法论长文 · 2000+ 字 · 自动排版"
-              stat={stats?.wechat?.hint || "Phase 2 已通 · 大纲+长文"}
+              icon="📄" title="写公众号" subtitle="方法论长文 · 2000+ 字 · 段间配图 + 自动排版"
+              stat={stats?.wechat?.hint || "本周还没写过公众号"}
               onClick={() => onNav("wechat")}
             />
             <BigAction
-              icon="📱" title="发朋友圈" subtitle="从金句库衍生 3 条 · 配图 · 一键复制"
-              stat={stats?.moments?.hint || "Phase 2 已通 · 衍生 5 条"}
+              icon="📱" title="发朋友圈" subtitle="一个话题 → 衍生 5 条 + 自动配图 + 一键复制"
+              stat={stats?.moments?.hint || "今日还没发朋友圈"}
               onClick={() => onNav("moments")}
             />
           </div>
@@ -250,24 +250,35 @@ function AiUsageCard({ usage }) {
 }
 
 function BigAction({ icon, title, subtitle, stat, hot, onClick }) {
+  const [hover, setHover] = React.useState(false);
   return (
     <div
       onClick={onClick}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
       style={{
-        padding: "24px 24px 20px", background: "#fff",
-        border: `1px solid ${hot ? T.brand : T.borderSoft}`,
-        boxShadow: hot ? `0 0 0 3px ${T.brandSoft}` : "none",
-        borderRadius: 14, cursor: "pointer", transition: "all 0.15s",
-        minHeight: 140,
+        padding: "26px 26px 22px", background: "#fff",
+        border: `${hot ? 1.5 : 1}px solid ${hot || hover ? T.brand : T.borderSoft}`,
+        boxShadow: hot
+          ? `0 0 0 4px ${T.brandSoft}, 0 6px 20px rgba(47,122,82,0.10)`
+          : hover
+            ? `0 4px 16px rgba(47,122,82,0.10)`
+            : "0 1px 2px rgba(0,0,0,0.03)",
+        borderRadius: 16, cursor: "pointer", transition: "all 0.15s",
+        minHeight: 150,
+        position: "relative",
       }}
     >
-      <div style={{ fontSize: 36, marginBottom: 12, lineHeight: 1 }}>{icon}</div>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-        <div style={{ fontSize: 18, fontWeight: 600, color: T.text }}>{title}</div>
+      <div style={{ fontSize: 40, marginBottom: 14, lineHeight: 1 }}>{icon}</div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+        <div style={{ fontSize: 19, fontWeight: 700, color: T.text }}>{title}</div>
         {hot && <Tag size="xs" color="green">最常用</Tag>}
       </div>
-      <div style={{ fontSize: 12.5, color: T.muted, lineHeight: 1.55, marginBottom: 12 }}>{subtitle}</div>
-      <div style={{ fontSize: 11.5, color: T.muted2 }}>{stat}</div>
+      <div style={{ fontSize: 13, color: T.muted, lineHeight: 1.6, marginBottom: 14 }}>{subtitle}</div>
+      <div style={{ fontSize: 12, color: hover ? T.brand : T.muted2, fontWeight: hover ? 500 : 400 }}>
+        {stat}
+        {hover && <span style={{ float: "right", color: T.brand }}>开始 →</span>}
+      </div>
     </div>
   );
 }
