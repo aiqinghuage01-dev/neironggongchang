@@ -426,6 +426,42 @@ def skills_catalog():
     return {"skills": registered_skills.list_catalog()}
 
 
+# ─── 全局任务清单 (D-037a) ───────────────────────────────
+# 只读 + 取消。endpoint 异步化在 D-037b 做。
+
+@app.get("/api/tasks")
+def tasks_list(
+    status: Optional[str] = None,
+    kind: Optional[str] = None,
+    ns: Optional[str] = None,
+    limit: int = 50,
+):
+    """列任务。status 支持多值逗号分隔,如 status=running,pending。"""
+    from backend.services import tasks as tasks_service
+    return {
+        "tasks": tasks_service.list_tasks(status=status, kind=kind, ns=ns, limit=limit),
+        "counts": tasks_service.counts(),
+    }
+
+
+@app.get("/api/tasks/{task_id}")
+def tasks_get(task_id: str):
+    from backend.services import tasks as tasks_service
+    t = tasks_service.get_task(task_id)
+    if not t:
+        raise HTTPException(status_code=404, detail="task not found")
+    return t
+
+
+@app.post("/api/tasks/{task_id}/cancel")
+def tasks_cancel(task_id: str):
+    from backend.services import tasks as tasks_service
+    ok = tasks_service.cancel_task(task_id)
+    if not ok:
+        raise HTTPException(status_code=409, detail="task not cancellable (already finished?)")
+    return {"ok": True, "task": tasks_service.get_task(task_id)}
+
+
 # ─── 小华自由对话 dock (D-027) ────────────────────────────
 
 class ChatDockMsg(BaseModel):

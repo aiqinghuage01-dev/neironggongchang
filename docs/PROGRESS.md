@@ -252,13 +252,20 @@ P0-P10 所有任务落地, 14 个 commit 从 `09faf92` 到今日末 commit。
 
 ## 下一阶段进行中 (⑤ 任务管理 · 用户主诉痛点)
 
-- [ ] **⑤ 全局任务清单 + 顶栏 TaskBar** (D-037)
-      用户痛点: "写长文/配图时切到别的页面回来工作流被吃了一截"
-      做法:
-      1. 后端改异步任务模式 · /api/wechat/write 立即返回 task_id, 后台跑
-      2. SQLite tasks 表 (id/kind/status/started/finished/payload/result/error)
-      3. 顶栏 TaskBar (任何页都能看到 "写长文 35s/60s" 进行中)
-      4. 任务详情抽屉 · 点 TaskBar 展开列表 · 点任务跳回原页恢复 state
+用户痛点: "写长文/配图时切到别的页面回来工作流被吃了一截"
+分 3 个子 commit 做, 每段可独立回滚:
+
+- [x] **D-037a 后端 tasks 基建**
+      backend/services/tasks.py — SQLite `tasks` 表 +
+      create/update_progress/finish/cancel/list/counts/cleanup_old + is_cancelled 软取消轮询点
+      /api/tasks (list + count) · /api/tasks/{id} · POST /api/tasks/{id}/cancel
+      tests/test_tasks.py 12/12 · 纯新增不改既有 endpoint
+- [ ] **D-037b 慢 endpoint 异步化**
+      /api/wechat/write / /api/wechat/cover / /api/wechat/plan-images 改为立即返回 task_id,
+      后台 thread 跑实际任务并通过 tasks_service.update_progress / finish_task 写回状态
+- [ ] **D-037c 前端顶栏 TaskBar + 任务详情抽屉**
+      factory-shell.jsx 顶栏常驻 TaskBar (active 数 + 最近进度),
+      点开抽屉列任务,点任务跳回原 page + step 恢复 state (payload 里的工作流状态)
 
 ## 公众号 8 步打磨完成(D-033 ~ D-036)
 
