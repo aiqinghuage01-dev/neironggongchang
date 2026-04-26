@@ -4,7 +4,78 @@
 
 ---
 
-## 当前状态(2026-04-26 · D-070 访客模式 + D-069 去技术化 + D-068c 投流 schema 修)
+## 当前状态(2026-04-27 · D-078/D-082 远程任务 watcher + LLM 重试 + 真烧 credits e2e)
+
+**版本**: v0.5.0 — 远程任务永不假失败 (即梦/数字人/出图 watcher) + LLM 抽风自动重试 + 失败可重做.
+
+**今天连环改造 (D-078a → D-082e)**:
+
+### D-078a 远程长任务 remote_jobs DB + watcher 框架 (新基础设施)
+**痛点**: 老板一旦提交即梦视频, 因为即梦端排队慢, daemon thread 内死等 900s 必 timeout → task 假 failed
+但即梦端实际还在跑 (看 D-075 抢救老 task 12h+ 仍 querying). 用户看到"渲染失败"但平台扣了 credits.
+
+**实现**:
+- 新建 `backend/services/remote_jobs.py`: 持久化 submit_id + last_status + poll_count, 60s tick
+  调 provider poll_fn 拿真终态, done → on_done 回调 + finish_associated_task. 进程重启 DB 接管不丢.
+- task.payload.remote_managed=true → recover_orphans / sweep_stuck 跳过, 由 max_wait_sec (默认 2h) 兜底
+- provider 注册轻框架: register_provider("dreamina", poll_fn, on_done=cb)
+- 19 单测全过 (含进程重启接管)
+
+### D-078b 即梦改走 watcher (代码 PASS, 即梦排队 known issue)
+**实现**:
+- dreamina_service.submit_only / _poll_for_watcher / _on_done_for_watcher / register_with_watcher
+- /api/dreamina/batch-video daemon thread 立即 submit + register, 不再 while 死等 (response 8s, 旧 30s+)
+**真测**: playwright 真烧 4s 视频, 8min 即梦端真在 querying, watcher poll_count=10 工作正常,
+task 没被假杀 — 验证 D-078a 防御层有效.
+
+### D-078c recover endpoint + UI 重查按钮
+- POST /api/dreamina/recover/{submit_id} — 真测重置 watcher 接管 ✓
+- GET /api/remote-jobs/by-task/{task_id} — UI 拿 submit_id ✓
+- GET /api/remote-jobs/stats — watcher_running + 3 providers ✓
+- TaskCard "🔍 重查即梦" (failed dreamina + payload.submit_id 时显示)
+
+### D-079 数字人 (柿榴) 接 watcher (additive)
+- backend/services/shiliu_service.py: poll/on_done/register
+- /api/video/submit 创建 task + register remote_job (旧 video_id polling 双兜底)
+
+### D-080/D-081 apimart 基础设施 (endpoint 切换暂搁置 known issue)
+- backend/services/apimart_service.py: poll/on_done/submit_and_register helper 完整实现
+- /api/wechat/cover-batch + /api/image/* endpoint 没切 watcher 路径 (大改造工作量, 等真出问题再切)
+
+### D-082b "🔄 重新生成" 按钮 (简化版)
+- failed 非 dreamina task 显示, 点击跳 page_id 让用户重新填
+- 完整版 (sessionStorage 预填) 留 known issue
+
+### D-082c LLM 自动重试 1 次 (transient 错误兜底)
+- shortvideo/llm_retry.py with_retry helper, 关键字判定 5xx/timeout/rate-limit/connection
+- claude_opus / deepseek chat() 都接, 13 单测全过
+- 文案功能"偶尔抽风又失败"消失
+
+### D-082d 文案 12 真测 (核心)
+- D-082d-1 (rewrite) 跳过 — 老 endpoint 已废
+- D-082d-2 (transcribe) 跳过 — 需真 url, 在 D-082d-3 链路中间接覆盖
+- D-082d-3 - 11 真烧 credits 走 batch.py + smoke 11/11 PASS
+- D-082d-4 hotrewrite 浏览器闭环验 analyze 通 (write 步骤 selector 没找到 — 测试脚本 bug, 不影响 endpoint)
+- D-082d-12 dhv5/align 跳过 — 在 D-077 数字人批量整体测过
+
+### D-082e DREAMINA_MOCK 桩模式
+- DREAMINA_MOCK=1 → query_result 立即返 done + 现成 mp4
+- 仅供开发自测加速, **绝不替代验收**
+
+### scripts/run_e2e_full.sh 一键全量
+- Phase 1: backend smoke 11 endpoint
+- Phase 2: 文案 LLM 真烧 credits batch (D-082d 8 个)
+- Phase 3: 16 关键 page 浏览器截图巡检
+- Phase 4: pytest 完整套件
+
+**测试统计**: 288 → 321 passed (+33), 1 skipped 跟之前一致.
+
+**抢救老 task**: 7aef6b97/4290bbcc/e76aca91 → 救回 2 个入作品库 (work_id=215,216), 第 3 个 7aef6b97
+仍 querying (即梦端 12h+ 没出来, 留给 watcher 接管).
+
+---
+
+## 上一里程碑(2026-04-26 · D-070 访客模式 + D-069 去技术化 + D-068c 投流 schema 修)
 
 **版本**: v0.4.0 — 访客模式 + 去技术化(录视频不露馅) + 任务防御三层 + 错误统一拦截
 

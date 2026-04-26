@@ -3,7 +3,33 @@
 > 对外可见但还没修, 或修了一半的事. 清华哥睡醒可以快速扫一遍知道当前哪些路不通.
 > 修好一项就把它从这里删掉(或挪到 PROGRESS.md 的"已完成"段).
 
-最后更新: 2026-04-26 (D-070 后)
+最后更新: 2026-04-27 (D-078/D-082 远程任务 watcher + LLM 重试 后)
+
+---
+
+## 🟡 D-078/D-082 留下的小尾巴
+
+### A. 即梦超长排队 (>2h) 的最终兜底
+**症状**: 即梦 querying 超 max_wait_sec=7200s (2h), watcher 标 timeout, task=failed.
+**当前缓解**: D-078c "🔍 重查即梦" 按钮可手动触发 dreamina CLI query → 若真就绪自动入作品库.
+**已知 case**: submit_id `7aef6b9715e2eee7` (强基计划那条) 已 12h+ 仍 querying, 即梦后端真排队.
+**Follow-up**: max_wait_sec 提到 4h? 或者 timeout 后自动通知小华消息提示 "需重查".
+
+### B. apimart (出图/封面) endpoint 没切 watcher 路径
+**症状**: D-080/D-081 apimart_service 框架 + provider 注册已落, 但 /api/wechat/cover-batch 和
+/api/image/* 仍走 daemon thread 内 generate_and_download (≤150s 同步等). 偶尔 apimart 卡住超 150s
+仍会 task=failed.
+**Follow-up**: 把 cover-batch / image.generate sync_fn 改用 apimart_service.submit_and_register.
+留作下次 apimart 真卡住后修.
+
+### C. 文案 retry 体验半成品 (D-082b 简化版)
+**症状**: failed 文案 task 点 "🔄 重新生成" 跳到对应 page 但**不预填**, 用户得自己重打输入.
+**Follow-up**: 各 page 接 sessionStorage 的 retry_payload_<page_id>, 启动时检测 + 自动填表单.
+
+### D. D-082d-2 录音转文字 没直接真测
+**症状**: /api/transcribe/submit 需要真公开视频 url, 当前 batch 跑里跳过. 整链路在 D-082d-3 录音
+改写里间接覆盖.
+**Follow-up**: 准备几个测试 url + e2e 加一段 ASR 真烧.
 
 ---
 
