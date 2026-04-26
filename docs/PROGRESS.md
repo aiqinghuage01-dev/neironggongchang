@@ -4,7 +4,20 @@
 
 ---
 
-## 当前状态(2026-04-26 · D-068 任务卡死防御 + 侧栏总部/战略部)
+## 当前状态(2026-04-26 · D-068b 防御扩展: deepseek timeout + night runs 恢复)
+
+**版本**: v0.3.7b — 三层防御 + 横向扩展 (deepseek 显式 timeout, night_job_runs 同步孤儿恢复)
+
+**举一反三 (D-068b)**:
+- `shortvideo/deepseek.py`: OpenAI SDK 默认 timeout 是 10min, 改 120s. 上游卡住先抛, 走正常 fail 路径.
+- `night_shift.recover_orphan_runs()`: night_job_runs 也走 daemon thread, --reload 后会孤儿. 启动钩子同步收尾.
+- 审计 5 处 daemon thread spawn: tasks/compliance/dhv5 → 都用 tasks DB 已覆盖; cover → in-memory dict (用户重试即可); night → 现已覆盖.
+
+测试: 279 passed (+2 night_shift recovery 测试).
+
+---
+
+## 上一个里程碑(2026-04-26 · D-068 任务卡死防御 + 侧栏总部/战略部)
 
 **版本**: v0.3.7 — 任务孤儿恢复 + 周期 watchdog + UI 卡死可视化 + 战略部入口
 

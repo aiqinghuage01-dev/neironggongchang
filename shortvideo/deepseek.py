@@ -20,11 +20,18 @@ class LLMResult:
 
 
 class DeepSeekClient:
-    def __init__(self, api_key: str | None = None, base_url: str | None = None, model: str | None = None):
+    # D-068: 显式 timeout=120s. 之前用 SDK 默认 (10 min), 上游卡住要等 10 分钟
+    # 才能让 watchdog 介入. 120s 后客户端层先抛, worker 直接 finish_task(failed)
+    # 路径正常, UI 立刻看到失败原因.
+    DEFAULT_TIMEOUT = 120.0
+
+    def __init__(self, api_key: str | None = None, base_url: str | None = None, model: str | None = None,
+                 timeout: float | None = None):
         self.model = model or settings.deepseek_model
         self._client = OpenAI(
             api_key=api_key or settings.deepseek_api_key,
             base_url=base_url or settings.deepseek_base_url,
+            timeout=timeout or self.DEFAULT_TIMEOUT,
         )
 
     def chat(

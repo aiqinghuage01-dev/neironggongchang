@@ -198,6 +198,33 @@ def test_finish_run_log_truncated(tmp_db):
     assert len(r["log"]) == 4000  # 留尾部
 
 
+# D-068b: 启动孤儿 run 恢复
+
+def test_recover_orphan_runs_kills_running(tmp_db):
+    from backend.services import night_shift as ns
+    jid = ns.create_job(name="A", trigger_type="cron")
+    rid_run = ns.start_run(jid)
+    rid_done = ns.start_run(jid)
+    ns.finish_run(rid_done, output_summary="ok")
+
+    n = ns.recover_orphan_runs()
+    assert n == 1
+
+    rec = ns.get_run(rid_run)
+    assert rec["status"] == "failed"
+    assert "服务重启" in (rec["log"] or "")
+    assert rec["ended_at"] is not None
+
+    done = ns.get_run(rid_done)
+    assert done["status"] == "success"  # 已完成的不动
+
+
+def test_recover_orphan_runs_returns_zero_when_empty(tmp_db):
+    from backend.services import night_shift as ns
+    n = ns.recover_orphan_runs()
+    assert n == 0
+
+
 def test_list_runs_filters(tmp_db, monkeypatch):
     from backend.services import night_shift as ns
     # 手动控制时间, 保证排序稳定

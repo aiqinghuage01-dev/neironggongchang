@@ -261,6 +261,22 @@ def finish_run(
         con.commit()
 
 
+def recover_orphan_runs() -> int:
+    """D-068b: 启动时调一次. 上次进程死掉的 running runs 全标 failed.
+    night executor 也是 daemon thread, --reload / 崩溃后留孤儿 row 永远 running.
+    返回回收的 run 数."""
+    _ensure_schema()
+    now = int(time.time())
+    with closing(sqlite3.connect(DB_PATH)) as con:
+        cur = con.execute(
+            "UPDATE night_job_runs SET ended_at=?, status='failed', "
+            "log='[recover] 服务重启, 夜班 run 中断' WHERE status='running'",
+            (now,),
+        )
+        con.commit()
+        return cur.rowcount
+
+
 def get_run(run_id: int) -> dict[str, Any] | None:
     _ensure_schema()
     with closing(sqlite3.connect(DB_PATH)) as con:
