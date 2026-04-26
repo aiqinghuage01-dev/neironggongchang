@@ -238,4 +238,128 @@ function SelfCheckChip({ pass, score, max = 120, threshold, label, summary, dims
   );
 }
 
-Object.assign(window, { Spinning, SkeletonCard, TitlesSkeleton, SkillBadge, StepDots, StepHeader, SelfCheckChip });
+// ─── 图引擎 chip + hook (D-064 · 2026-04-26) ────────────────
+// 用法 (生图按钮旁边挂):
+//   const [imgEngine, setImgEngine] = useImageEngine();
+//   ...
+//   <ImageEngineChip engine={imgEngine} onChange={setImgEngine} />
+//   <button onClick={() => api.post("/api/cover", { ..., engine: imgEngine })}>...</button>
+//
+// imgEngine: null = 用 settings 默认 (跟着改) / "apimart" / "dreamina" = 临时覆盖.
+// 同一浏览器的所有 page 共享这个 override (localStorage), 切了一次全局生效.
+//
+// 按 settings 改了默认时 hook 会通过 storage 事件感知刷新, 不用手动 reload.
+
+const IMAGE_ENGINE_META = {
+  apimart:  { icon: "🎨", label: "apimart", desc: "GPT-Image-2 · 默认 · 30-60s/张" },
+  dreamina: { icon: "🎬", label: "即梦",     desc: "字节即梦 · 60-120s/张" },
+};
+const IMAGE_ENGINE_KEY = "image_engine_override";
+
+function useImageEngine() {
+  // 返回 [override, setOverride, defaultEngine]
+  // override: null = 用默认 / 字符串 = 临时覆盖
+  // defaultEngine: 从 /api/settings 读, 用户没覆盖时跟它走
+  const [override, setOverrideState] = React.useState(() => {
+    try { return localStorage.getItem(IMAGE_ENGINE_KEY) || null; } catch { return null; }
+  });
+  const [defaultEngine, setDefaultEngine] = React.useState("apimart");
+  React.useEffect(() => {
+    api.get("/api/settings").then(s => {
+      const e = (s && s.image_engine) || "apimart";
+      setDefaultEngine(e);
+    }).catch(() => {});
+  }, []);
+  // 跨 page 同步 override
+  React.useEffect(() => {
+    function onStorage(e) {
+      if (e.key === IMAGE_ENGINE_KEY) {
+        setOverrideState(e.newValue || null);
+      }
+    }
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
+  function setOverride(v) {
+    setOverrideState(v);
+    try {
+      if (v) localStorage.setItem(IMAGE_ENGINE_KEY, v);
+      else localStorage.removeItem(IMAGE_ENGINE_KEY);
+    } catch (_) {}
+  }
+  // 返回当前生效的引擎 + 是否是 override 状态
+  const current = override || defaultEngine;
+  return [current, setOverride, defaultEngine, !!override];
+}
+
+function ImageEngineChip({ engine, onChange, defaultEngine, isOverride, size = "sm" }) {
+  // 受控. 父组件提供 engine + onChange, 通常都通过 useImageEngine() 解构.
+  // 不传 onChange 时只展示, 不可点.
+  const [open, setOpen] = React.useState(false);
+  const meta = IMAGE_ENGINE_META[engine] || IMAGE_ENGINE_META.apimart;
+  const ref = React.useRef(null);
+  React.useEffect(() => {
+    function onDoc(e) { if (ref.current && !ref.current.contains(e.target)) setOpen(false); }
+    if (open) document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [open]);
+
+  const pad = size === "xs" ? "3px 8px" : "5px 10px";
+  const fs = size === "xs" ? 11 : 12;
+  return (
+    <div ref={ref} style={{ position: "relative", display: "inline-block" }}>
+      <button onClick={() => onChange && setOpen(!open)} disabled={!onChange}
+        title={onChange ? "点击切换生图引擎 (本浏览器临时, settings 改默认)" : ""}
+        style={{
+          background: isOverride ? T.amberSoft : T.bg2,
+          border: `1px solid ${isOverride ? T.amber + "66" : T.borderSoft}`,
+          color: isOverride ? T.amber : T.muted,
+          padding: pad, borderRadius: 100, fontSize: fs, fontFamily: "inherit",
+          cursor: onChange ? "pointer" : "default",
+          display: "inline-flex", alignItems: "center", gap: 6, fontWeight: 500,
+        }}
+      >
+        <span>{meta.icon}</span>
+        <span>{meta.label}</span>
+        {isOverride && <span style={{ fontSize: 10, opacity: 0.8 }}>(临时)</span>}
+        {onChange && <span style={{ fontSize: 9, marginLeft: 2 }}>▾</span>}
+      </button>
+      {open && onChange && (
+        <div style={{
+          position: "absolute", top: "calc(100% + 4px)", left: 0, zIndex: 20,
+          background: "#fff", border: `1px solid ${T.border}`, borderRadius: 8,
+          boxShadow: "0 8px 20px rgba(0,0,0,0.08)", minWidth: 220, padding: 4,
+        }}>
+          {Object.entries(IMAGE_ENGINE_META).map(([id, m]) => {
+            const sel = id === engine;
+            const isDef = id === defaultEngine;
+            return (
+              <div key={id} onClick={() => {
+                // 选中默认 = 清 override
+                onChange(isDef ? null : id);
+                setOpen(false);
+              }} style={{
+                padding: "8px 10px", borderRadius: 6, cursor: "pointer",
+                background: sel ? T.brandSoft : "transparent",
+                color: sel ? T.brand : T.text,
+              }}
+              onMouseEnter={(e) => { if (!sel) e.currentTarget.style.background = T.bg2; }}
+              onMouseLeave={(e) => { if (!sel) e.currentTarget.style.background = "transparent"; }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: sel ? 600 : 500 }}>
+                  <span>{m.icon}</span>
+                  <span>{m.label}</span>
+                  {isDef && <span style={{ fontSize: 10, color: T.muted2, marginLeft: "auto" }}>设置默认</span>}
+                  {sel && !isDef && <span style={{ fontSize: 10, color: T.amber, marginLeft: "auto" }}>临时</span>}
+                </div>
+                <div style={{ fontSize: 11, color: T.muted, marginTop: 2 }}>{m.desc}</div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+Object.assign(window, { Spinning, SkeletonCard, TitlesSkeleton, SkillBadge, StepDots, StepHeader, SelfCheckChip, ImageEngineChip, useImageEngine, IMAGE_ENGINE_META });

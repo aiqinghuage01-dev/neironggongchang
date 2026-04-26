@@ -69,15 +69,26 @@ def _run(cmd: list[str], *, timeout: int = 180, cwd: str | None = None) -> subpr
 
 # ─── Phase 2.5 · 段间配图 ─────────────────────────────────────
 
-def gen_section_image(prompt: str, size: str = "16:9") -> dict[str, Any]:
+def gen_section_image(prompt: str, size: str = "16:9", engine: str | None = None) -> dict[str, Any]:
     """给一段文字生图,上传微信图床,返回 mmbiz 永久 URL。
 
     耗时 30-60s(生图 25-50s + 上传 5-10s)。
 
-    D-039 改: 同时把生成的图本地拷贝到 data/wechat-images/, 返回 media_url 给前端预览.
+    D-039: 同时把生成的图本地拷贝到 data/wechat-images/, 返回 media_url 给前端预览.
     原因: mmbiz.qpic.cn 有 referer 防盗链, 浏览器直接 <img src=mmbiz_url> 显示
     "未经允许不可引用" 占位图, 用户看不到真实图. HTML 拼装 / 推送公众号草稿仍用 mmbiz_url.
+
+    D-064: engine 参数. apimart 走原 skill 脚本 (含微信图床上传).
+    dreamina 暂不支持 (需要单独做 dreamina → 微信图床上传链路, 留待 D-064b).
     """
+    from shortvideo import image_engine
+    actual_engine = (engine or image_engine.get_default_engine()).lower()
+    if actual_engine == "dreamina":
+        raise WechatScriptError(
+            "段间图暂不支持即梦引擎 (需要先把生成的图上传微信图床, 即梦客户端没接这条链路). "
+            "改成默认 apimart, 或用即梦独立页生图后手动复制 mmbiz_url."
+        )
+
     script = skill_loader.script_path(SKILL_SLUG, "gen_section_image.sh")
     if not script.exists():
         raise WechatScriptError(f"脚本不存在: {script}")
@@ -457,9 +468,13 @@ COVER_STYLE_VARIANTS = [
 ]
 
 
-def gen_cover_batch(title: str, n: int = 4) -> dict[str, Any]:
-    """用 apimart GPT-Image-2 生 n 张候选封面 · 16:9 · 串行避免并发限制。"""
-    from shortvideo.apimart import ApimartClient, ApimartError
+def gen_cover_batch(title: str, n: int = 2, engine: str | None = None) -> dict[str, Any]:
+    """生 n 张候选封面 · 16:9 · 串行避免并发限制.
+
+    D-064: 走 image_engine 抽象, 支持 apimart / dreamina 切换 (默认 settings 配置).
+    n 默认 2 (D-064 统一从 4 改 2).
+    """
+    from shortvideo import image_engine
 
     cover_dir = PREVIEW_DIR.parent / "wechat-cover-batch"
     cover_dir.mkdir(parents=True, exist_ok=True)
@@ -476,48 +491,44 @@ def gen_cover_batch(title: str, n: int = 4) -> dict[str, Any]:
 
     results = []
     t0_total = time.time()
-    try:
-        client = ApimartClient()
-    except Exception as e:
-        raise WechatScriptError(f"apimart 客户端初始化失败: {e}")
+    actual_engine = (engine or image_engine.get_default_engine()).lower()
 
-    with client as c:
-        for i, p in enumerate(prompts):
-            ts = int(time.time())
-            out = cover_dir / f"wxcover_{ts}_{i}.png"
-            try:
-                res = c.generate_and_download(p, out, size="16:9")
-                media_path = res.local_path or out
-                media_url_path = None
-                if media_target_dir and media_path and Path(media_path).exists():
-                    import shutil
-                    target = media_target_dir / Path(media_path).name
-                    shutil.copy2(media_path, target)
-                    try:
-                        from shortvideo.config import DATA_DIR
-                        media_url_path = "/media/" + str(target.relative_to(DATA_DIR)).replace("\\", "/")
-                    except Exception:
-                        pass
+    for i, p in enumerate(prompts):
+        try:
+            r = image_engine.generate(p, size="16:9", n=1, engine=actual_engine, label=f"wxcover_{i}", output_dir=media_target_dir or cover_dir)
+            imgs = r.get("images") or []
+            if imgs and not imgs[0].get("error"):
+                img = imgs[0]
                 results.append({
                     "index": i,
                     "prompt": p,
                     "style": COVER_STYLE_VARIANTS[i % len(COVER_STYLE_VARIANTS)],
-                    "local_path": str(media_path) if media_path else None,
-                    "media_url": media_url_path,
-                    "elapsed_sec": getattr(res, "elapsed_sec", 0),
+                    "local_path": img.get("local_path"),
+                    "media_url": img.get("media_url"),
+                    "url": img.get("url"),
+                    "engine": r.get("engine"),
+                    "elapsed_sec": r.get("elapsed_sec"),
                 })
-            except ApimartError as e:
+            else:
+                err = imgs[0].get("error", "unknown") if imgs else "no images"
                 results.append({
                     "index": i, "prompt": p,
                     "style": COVER_STYLE_VARIANTS[i % len(COVER_STYLE_VARIANTS)],
-                    "error": str(e)[:200],
+                    "error": str(err)[:200],
                 })
+        except Exception as e:
+            results.append({
+                "index": i, "prompt": p,
+                "style": COVER_STYLE_VARIANTS[i % len(COVER_STYLE_VARIANTS)],
+                "error": f"{type(e).__name__}: {e}",
+            })
 
     succeeded = [r for r in results if r.get("local_path")]
     return {
         "covers": results,
         "succeeded_count": len(succeeded),
         "total_count": len(results),
+        "engine": actual_engine,
         "total_elapsed_sec": round(time.time() - t0_total, 1),
     }
 
@@ -832,16 +843,21 @@ def push_to_wechat(
 
 # ─── 异步 (D-037b6) ─────────────────────────────────────
 
-def gen_section_image_async(prompt: str, size: str = "16:9") -> str:
-    """异步触发 gen_section_image, 立即返 task_id. 30-60s (apimart GPT-Image-2 + 微信图床上传)."""
+def gen_section_image_async(prompt: str, size: str = "16:9", engine: str | None = None) -> str:
+    """异步触发 gen_section_image, 立即返 task_id. 30-60s (apimart GPT-Image-2 + 微信图床上传).
+
+    D-064: engine 透传给 gen_section_image. dreamina 当前不支持, 同步抛错.
+    """
+    from shortvideo import image_engine
+    actual_engine = (engine or image_engine.get_default_engine()).lower()
     return tasks_service.run_async(
         kind="wechat.section-image",
         label=f"段间图 · {prompt[:32]}",
         ns="wechat",
         page_id="wechat",
         step="section-image",
-        payload={"prompt_preview": prompt[:200], "size": size},
+        payload={"prompt_preview": prompt[:200], "size": size, "engine": actual_engine},
         estimated_seconds=45,
-        progress_text="apimart 生图 (16:9, GPT-Image-2) + 微信图床上传...",
-        sync_fn=lambda: gen_section_image(prompt, size=size),
+        progress_text=f"{actual_engine} 生图 ({size}) + 微信图床上传...",
+        sync_fn=lambda: gen_section_image(prompt, size=size, engine=engine),
     )

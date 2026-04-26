@@ -163,8 +163,9 @@ class VideoSubmitReq(BaseModel):
 class CoverReq(BaseModel):
     slogan: str
     category: str = "实体店引流"
-    n: int = 4
+    n: int = 2  # D-064 统一 2 张候选 (旧默认 4)
     size: str = "9:16"
+    engine: str | None = None  # D-064 apimart / dreamina · None 用 settings 默认
 
 
 class PublishReq(BaseModel):
@@ -201,19 +202,27 @@ def media_url(p: Path) -> str:
 COVER_TASKS: dict[str, dict] = {}
 
 
-def _run_cover_task(task_id: str, prompt: str, size: str):
-    COVER_TASKS[task_id] = {"status": "running", "url": None, "local_path": None, "error": None, "started": time.time()}
+def _run_cover_task(task_id: str, prompt: str, size: str, engine: str | None = None):
+    """D-064: 走 image_engine 抽象, 支持切 apimart / dreamina."""
+    COVER_TASKS[task_id] = {"status": "running", "url": None, "local_path": None, "error": None, "started": time.time(), "engine": engine}
     try:
-        out = COVER_DIR / f"cover_{task_id}.png"
-        with ApimartClient() as c:
-            res = c.generate_and_download(prompt, out, size=size)
-        COVER_TASKS[task_id].update(
-            status="succeed",
-            url=res.url,
-            local_path=str(res.local_path),
-            media_url=media_url(res.local_path) if res.local_path else None,
-            elapsed_sec=res.elapsed_sec,
-        )
+        from shortvideo import image_engine
+        r = image_engine.generate(prompt, size=size, n=1, engine=engine, label="cover")
+        imgs = r.get("images") or []
+        if imgs and not imgs[0].get("error"):
+            img = imgs[0]
+            local_path = img.get("local_path")
+            COVER_TASKS[task_id].update(
+                status="succeed",
+                url=img.get("url"),
+                local_path=local_path,
+                media_url=img.get("media_url") or (media_url(local_path) if local_path else None),
+                elapsed_sec=r.get("elapsed_sec"),
+                engine=r.get("engine"),
+            )
+        else:
+            err = imgs[0].get("error", "unknown") if imgs else "no images"
+            COVER_TASKS[task_id].update(status="failed", error=err)
     except Exception as e:
         COVER_TASKS[task_id].update(status="failed", error=f"{type(e).__name__}: {e}")
 
@@ -420,18 +429,24 @@ def video_query(video_id: int):
 
 
 # ---- P6 封面 GPT-Image-2 ----
-@app.post("/api/cover", tags=["短视频"], summary="出短视频封面 (apimart 异步)")
+@app.post("/api/cover", tags=["短视频"], summary="出短视频/朋友圈封面 (异步, n 个 task_id)")
 def cover_create(req: CoverReq):
+    """D-064: 走 image_engine 抽象, 默认 2 张候选, 支持 engine 切换 (apimart / dreamina).
+
+    返回 {tasks: [{task_id}, ...], engine}. 前端轮询每个 /api/cover/query/{task_id}.
+    """
     tasks = []
     for _ in range(max(1, min(req.n, 8))):
         tid = uuid.uuid4().hex[:12]
         prompt = cover_prompt(req.slogan, req.category)
         COVER_TASKS[tid] = {"status": "pending"}
-        # run in background thread(FastAPI 同步 endpoint 中用线程池)
         import threading
-        threading.Thread(target=_run_cover_task, args=(tid, prompt, req.size), daemon=True).start()
+        threading.Thread(target=_run_cover_task, args=(tid, prompt, req.size, req.engine), daemon=True).start()
         tasks.append({"task_id": tid})
-    return {"tasks": tasks}
+    # 把实际生效的 engine 回传给前端 (None 时按 settings 默认)
+    from shortvideo import image_engine as _ie
+    actual_engine = req.engine or _ie.get_default_engine()
+    return {"tasks": tasks, "engine": actual_engine}
 
 
 @app.get("/api/cover/query/{task_id}", tags=["短视频"], summary="查封面生成结果")
@@ -1621,16 +1636,18 @@ def wechat_plan_images(req: WechatPlanImagesReq):
 class WechatSectionImageReq(BaseModel):
     prompt: str = Field(..., description="生图 prompt (具象画面 ≤60 字)")
     size: str = Field("16:9", description="尺寸: 16:9 (横版默认) / 9:16 / 1:1")
+    engine: str | None = Field(None, description="apimart | dreamina · None 用 settings 默认 (D-064)")
 
 
 @app.post("/api/wechat/section-image", tags=["公众号"], summary="Step 5 真生一张段间图 (异步, 立即返 task_id)")
 def wechat_section_image(req: WechatSectionImageReq):
-    """D-037b6 异步化: 立即返 task_id, daemon thread 跑 30-60s.
+    """D-037b6 异步化 + D-064 图引擎切换:
 
-    完成后 task.result = {mmbiz_url, media_url, local_path, prompt, size, elapsed_sec}.
+    立即返 task_id, daemon thread 跑 30-60s (apimart) 或 60-120s (dreamina).
+    完成后 task.result = {mmbiz_url, media_url, local_path, prompt, size, engine, elapsed_sec}.
     autoFlow 用 apiPostThenWait 自动轮询.
     """
-    task_id = wechat_scripts.gen_section_image_async(req.prompt, size=req.size)
+    task_id = wechat_scripts.gen_section_image_async(req.prompt, size=req.size, engine=req.engine)
     return {"task_id": task_id, "status": "running", "estimated_seconds": 45, "page_id": "wechat"}
 
 
@@ -1675,16 +1692,17 @@ def wechat_templates():
 class WechatCoverReq(BaseModel):
     title: str = Field(..., description="文章标题")
     label: str = Field("清华哥说", description="封面右下角小标签 (n=1 模板模式才用)")
-    n: int = Field(4, ge=1, le=8, description="出几张候选 · ≥2 走 apimart 4 选 1 · =1 走 Chrome 模板兼容老调用 (D-035)")
+    n: int = Field(2, ge=1, le=8, description="出几张候选 · ≥2 走 image_engine N 选 1 · =1 走 Chrome 模板兼容老调用 (D-035 → D-064 默认 2)")
+    engine: str | None = Field(None, description="apimart | dreamina · None 用 settings 默认 (D-064)")
 
 
-@app.post("/api/wechat/cover", tags=["公众号"], summary="Step 7 出封面 (4 选 1)")
+@app.post("/api/wechat/cover", tags=["公众号"], summary="Step 7 出封面 (默认 2 选 1)")
 def wechat_cover(req: WechatCoverReq):
-    """D-035: 默认 n=4 走 apimart GPT-Image-2 出 4 张候选, 4 选 1 不满意再来一批.
-    n=1 走旧 Chrome 模板单张 (兼容). 4 张走批量耗时 60-120s."""
+    """D-064: 默认 n=2 (旧 4 张), 走 image_engine 抽象, 支持 apimart / dreamina 切换.
+    n=1 走旧 Chrome 模板单张 (兼容). N 张走批量耗时 30-60s × N."""
     try:
         if req.n >= 2:
-            return wechat_scripts.gen_cover_batch(req.title, n=max(2, min(req.n, 8)))
+            return wechat_scripts.gen_cover_batch(req.title, n=max(2, min(req.n, 8)), engine=req.engine)
         # 旧路径: Chrome 模板单张
         r = wechat_scripts.gen_cover(req.title, label=req.label)
         p = Path(r["local_path"])

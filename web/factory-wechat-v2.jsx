@@ -41,6 +41,9 @@ function PageWechat({ onNav }) {
   const [skillInfo, setSkillInfo] = React.useState(null);
   React.useEffect(() => { api.get("/api/wechat/skill-info").then(setSkillInfo).catch(() => {}); }, []);
 
+  // D-064 图引擎 chip
+  const [imgEngine, setImgEngine, defaultImgEngine, isImgOverride] = useImageEngine();
+
   // 统一模式: 立即跳 step + 清空目标数据 + loading=true, API 失败时 step 回退
   async function runStep({ nextStep, rollbackStep, clearSetter, apiCall }) {
     if (clearSetter) clearSetter(null);
@@ -131,7 +134,7 @@ function PageWechat({ onNav }) {
           try {
             const imgR = await runStep_(key, async () => {
               // D-037b6: section-image 异步化, autoFlow 用 apiPostThenWait 自动等任务完成
-              return await apiPostThenWait("/api/wechat/section-image", { prompt: finalPlans[i].image_prompt, size: "16:9" });
+              return await apiPostThenWait("/api/wechat/section-image", { prompt: finalPlans[i].image_prompt, size: "16:9", engine: imgEngine });
             });
             finalPlans[i] = { ...finalPlans[i], status: "done", mmbiz_url: imgR.mmbiz_url, media_url: imgR.media_url, elapsed_sec: imgR.elapsed_sec };
             setImagePlans([...finalPlans]);
@@ -151,7 +154,8 @@ function PageWechat({ onNav }) {
         setHtmlResult(r); return r;
       });
       await runStep_("cover", async () => {
-        const r = await api.post("/api/wechat/cover", { title, label: "清华哥说" });
+        // D-064: cover 接 engine
+        const r = await api.post("/api/wechat/cover", { title, label: "清华哥说", n: 2, engine: imgEngine });
         setCoverResult(r); return r;
       });
 
@@ -232,7 +236,7 @@ function PageWechat({ onNav }) {
     setImagePlans(prev => prev.map((p, i) => i === idx ? { ...p, status: "running" } : p));
     try {
       // D-037b6: section-image 异步化, 用 apiPostThenWait 自动轮询任务完成
-      const r = await apiPostThenWait("/api/wechat/section-image", { prompt: plan.image_prompt, size: "16:9" });
+      const r = await apiPostThenWait("/api/wechat/section-image", { prompt: plan.image_prompt, size: "16:9", engine: imgEngine });
       setImagePlans(prev => prev.map((p, i) => i === idx ? { ...p, status: "done", mmbiz_url: r.mmbiz_url, media_url: r.media_url, elapsed_sec: r.elapsed_sec } : p));
     } catch (e) {
       setImagePlans(prev => prev.map((p, i) => i === idx ? { ...p, status: "failed", error: e.message } : p));
@@ -267,7 +271,8 @@ function PageWechat({ onNav }) {
     return runStep({
       nextStep: "cover", rollbackStep: "html", clearSetter: setCoverResult,
       apiCall: async () => {
-        const r = await api.post("/api/wechat/cover", { title: pickedTitle, n: 4 });
+        // D-064: 默认 n=2 (旧 4), engine 跟着 chip
+        const r = await api.post("/api/wechat/cover", { title: pickedTitle, n: 2, engine: imgEngine });
         // 自动选第一张已成功的
         const firstOk = (r.covers || []).find(c => c.local_path);
         setCoverResult({ ...r, selected_index: firstOk ? firstOk.index : 0 });
@@ -373,9 +378,11 @@ function PageWechat({ onNav }) {
         {step === "titles"  && <WxStepTitles titles={titles} loading={loading} onPick={genOutline} onPrev={() => setStep("topic")} onRegen={genTitles} autoMode={autoMode} />}
         {step === "outline" && <WxStepOutline outline={outline} setOutline={setOutline} title={pickedTitle} topic={topic} loading={loading} onPrev={() => setStep("titles")} onNext={writeArticle} onRegen={() => genOutline(pickedTitle)} />}
         {step === "write"   && <WxStepWrite article={article} loading={loading} onPrev={() => setStep("outline")} onNext={planImages} onRewrite={writeArticle} onRewriteSelection={rewriteSelection} onNav={onNav} pickedTitle={pickedTitle} topic={topic} />}
-        {step === "images"  && <WxStepImages plans={imagePlans} setPlans={setImagePlans} onGen={generateOneImage} loading={loading} onPrev={() => setStep("write")} onNext={() => assembleHtml()} onRegen={planImages} />}
+        {step === "images"  && <WxStepImages plans={imagePlans} setPlans={setImagePlans} onGen={generateOneImage} loading={loading} onPrev={() => setStep("write")} onNext={() => assembleHtml()} onRegen={planImages}
+          imgChip={{ engine: imgEngine, onChange: setImgEngine, defaultEngine: defaultImgEngine, isOverride: isImgOverride }} />}
         {step === "html"    && <WxStepHtml result={htmlResult} loading={loading} onPrev={() => setStep("images")} onNext={genCover} onSwitchTemplate={assembleHtml} />}
-        {step === "cover"   && <WxStepCover cover={coverResult} title={pickedTitle} loading={loading} onPrev={() => setStep("html")} onNext={push} onRegen={genCover} onSelect={selectCover} />}
+        {step === "cover"   && <WxStepCover cover={coverResult} title={pickedTitle} loading={loading} onPrev={() => setStep("html")} onNext={push} onRegen={genCover} onSelect={selectCover}
+          imgChip={{ engine: imgEngine, onChange: setImgEngine, defaultEngine: defaultImgEngine, isOverride: isImgOverride }} />}
         {step === "push"    && <WxStepPush result={pushResult} loading={loading} onPrev={() => setStep("cover")} onReset={reset} onNav={onNav} />}
       </div>
     </div>
@@ -814,7 +821,7 @@ const IMAGE_STYLE_PRESETS = [
   { id: "vintage",  label: "📼 复古怀旧", append: ",复古胶片质感,90 年代色调" },
 ];
 
-function WxStepImages({ plans, setPlans, onGen, loading, onPrev, onNext, onRegen }) {
+function WxStepImages({ plans, setPlans, onGen, loading, onPrev, onNext, onRegen, imgChip }) {
   if (loading || plans.length === 0) return <Spinning icon="🎨" phases={[
     { text: "把文章切成 4 个大段", sub: "按 H2 / 语义转折定界" },
     { text: "为每段设计具象画面 prompt", sub: "真实感照片 · 暖色调 · 避免人脸特写" },
@@ -843,11 +850,12 @@ function WxStepImages({ plans, setPlans, onGen, loading, onPrev, onNext, onRegen
 
   return (
     <div style={{ padding: "32px 40px 120px", maxWidth: 1200, margin: "0 auto" }}>
-      <div style={{ marginBottom: 16, display: "flex", alignItems: "flex-start", gap: 16 }}>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 6 }}>段间配图 · {doneCount}/{plans.length} 🎨</div>
+      <div style={{ marginBottom: 16, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+        <div style={{ flex: 1, minWidth: 280 }}>
+          <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>段间配图 · {doneCount}/{plans.length} 🎨</div>
           <div style={{ fontSize: 13, color: T.muted }}>prompt 可改 · 加风格预设 · 改完点「生成/🔄 重生」用新 prompt 重生。每张 30-60s。</div>
         </div>
+        {imgChip && <ImageEngineChip {...imgChip} />}
         {pending.length > 0 && (
           <Btn variant="primary" onClick={genAll} disabled={runningCount > 0}>
             ✨ 一键生成剩余 {pending.length} 张
@@ -987,7 +995,7 @@ function WxStepHtml({ result, loading, onPrev, onNext, onSwitchTemplate }) {
 }
 
 // ─── Step 7 · 封面 ───────────────────────────────────────────
-function WxStepCover({ cover, title, loading, onPrev, onNext, onRegen, onSelect }) {
+function WxStepCover({ cover, title, loading, onPrev, onNext, onRegen, onSelect, imgChip }) {
   if (loading || !cover) return <Spinning icon="🖼️" phases={[
     { text: "构造 4 个不同风格的 prompt", sub: "现代简约 / 暖色暖光 / 深色冲击 / 复古胶片" },
     { text: "调 apimart GPT-Image-2 生第 1 张", sub: "16:9 横版 · 30-60s/张" },
@@ -1006,17 +1014,19 @@ function WxStepCover({ cover, title, loading, onPrev, onNext, onRegen, onSelect 
 
   return (
     <div style={{ padding: "32px 40px 120px", maxWidth: 1080, margin: "0 auto" }}>
-      <div style={{ marginBottom: 16, display: "flex", alignItems: "flex-start", gap: 16 }}>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 6 }}>
-            封面 {isBatch ? `4 选 1 (${successCount}/${covers.length} 成功)` : ""} 🖼️
+      <div style={{ marginBottom: 16, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+        <div style={{ flex: 1, minWidth: 280 }}>
+          <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>
+            封面 {isBatch ? `${covers.length} 选 1 (${successCount}/${covers.length} 成功)` : ""} 🖼️
           </div>
           <div style={{ fontSize: 13, color: T.muted }}>
             {isBatch ? "点选一张作为正式封面 · 不满意整批重来" : "旧版单张 · 文件可能已丢失,建议重生"}
             {cover.total_elapsed_sec && ` · 总耗时 ${cover.total_elapsed_sec}s`}
+            {cover.engine && ` · ${cover.engine}`}
           </div>
         </div>
-        <Btn onClick={onRegen}>🔄 {isBatch ? "再来 4 张" : "升级到 4 选 1"}</Btn>
+        {imgChip && <ImageEngineChip {...imgChip} />}
+        <Btn onClick={onRegen}>🔄 {isBatch ? "再来一批" : "升级到多选模式"}</Btn>
       </div>
 
       {!isBatch && (

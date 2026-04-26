@@ -42,6 +42,9 @@ DEFAULTS: dict[str, Any] = {
     "opus_base_url": "http://localhost:3456/v1",
     "opus_api_key": "",           # 空值→使用 "not-needed" 哨兵
     "opus_model": "claude-opus-4-6",
+    # 图引擎 (D-064 · 2026-04-26)
+    "image_engine": "apimart",    # apimart (GPT-Image-2, 默认) | dreamina (即梦)
+    "image_n_default": 2,          # 一次出几张候选 (cover / 朋友圈 / 段间图都用)
 }
 
 

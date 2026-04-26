@@ -15,6 +15,7 @@ function PageMoments({ onNav }) {
   const [items, setItems] = React.useState([]);
   const [kbUsed, setKbUsed] = React.useState([]);
   const [coversMap, setCoversMap] = React.useState({});   // itemIdx → [cover...]
+  const [imgEngine, setImgEngine, defaultImgEngine, isImgOverride] = useImageEngine();  // D-064
 
   async function derive() {
     if (!topic.trim()) return;
@@ -32,7 +33,7 @@ function PageMoments({ onNav }) {
     const it = items[idx];
     const slogan = (it?.text || "").split(/[\n。!?!?]/).filter(s => s.trim().length >= 4)[0]?.slice(0, 14) || "今日一句";
     try {
-      const r = await api.post("/api/cover", { slogan, category: "朋友圈配图", n: 1, size: "1:1" });
+      const r = await api.post("/api/cover", { slogan, category: "朋友圈配图", n: 1, size: "1:1", engine: imgEngine });
       const tid = r.tasks[0].task_id;
       setCoversMap(prev => ({ ...prev, [idx]: { task_id: tid, status: "running", media_url: null } }));
       for (let i = 0; i < 40; i++) {
@@ -62,7 +63,8 @@ function PageMoments({ onNav }) {
         </div>
         {step === "topic" && <MStepTopic topic={topic} setTopic={setTopic} onGo={derive} loading={loading} />}
         {step === "derive" && <MStepDeriving topic={topic} items={items} loading={loading} onPrev={() => setStep("topic")} onNext={() => setStep("cover")} />}
-        {step === "cover" && <MStepCover items={items} coversMap={coversMap} onGenCover={genCoverFor} onPrev={() => setStep("derive")} onNext={() => setStep("copy")} />}
+        {step === "cover" && <MStepCover items={items} coversMap={coversMap} onGenCover={genCoverFor} onPrev={() => setStep("derive")} onNext={() => setStep("copy")}
+          imgEngine={imgEngine} setImgEngine={setImgEngine} defaultImgEngine={defaultImgEngine} isImgOverride={isImgOverride} />}
         {step === "copy" && <MStepCopy items={items} coversMap={coversMap} onPrev={() => setStep("cover")} onDone={() => onNav("home")} onNav={onNav} topic={topic} />}
       </div>
       <MChatBar prompt={sp.prompt} chips={sp.chips} />
@@ -243,12 +245,15 @@ function MStepDeriving({ topic, items, loading, onPrev, onNext }) {
 }
 
 // Step 3 · 配图
-function MStepCover({ items, coversMap, onGenCover, onPrev, onNext }) {
+function MStepCover({ items, coversMap, onGenCover, onPrev, onNext, imgEngine, setImgEngine, defaultImgEngine, isImgOverride }) {
   return (
     <div style={{ padding: "32px 40px 120px", maxWidth: 860, margin: "0 auto" }}>
-      <div style={{ marginBottom: 18 }}>
-        <div style={{ fontSize: 22, fontWeight: 700, color: T.text, marginBottom: 6 }}>配个图? 🎨</div>
-        <div style={{ fontSize: 13, color: T.muted }}>点"生成配图"为这条出一张 1:1 方图 · 不配图直接下一步</div>
+      <div style={{ marginBottom: 18, display: "flex", alignItems: "flex-start", gap: 12 }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 22, fontWeight: 700, color: T.text, marginBottom: 6 }}>配个图? 🎨</div>
+          <div style={{ fontSize: 13, color: T.muted }}>点"生成配图"为这条出一张 1:1 方图 · 不配图直接下一步</div>
+        </div>
+        <ImageEngineChip engine={imgEngine} onChange={setImgEngine} defaultEngine={defaultImgEngine} isOverride={isImgOverride} />
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>

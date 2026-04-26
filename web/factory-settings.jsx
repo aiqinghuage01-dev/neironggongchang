@@ -96,6 +96,14 @@ function PageSettings({ onNav }) {
             </div>
           </SettingsSection>
 
+          {/* 图引擎 (D-064) */}
+          <SettingsSection icon="🎨" title="生图引擎 · 默认" desc="封面 / 朋友圈 / 段间图 / 公众号封面 都走这个引擎. 每个生图按钮旁边有 chip 可临时换.">
+            <ChoiceRow label="默认引擎" current={s.image_engine || "apimart"} onChange={v => saveOne("image_engine", v)} options={[
+              { v: "apimart",  label: "🎨 apimart (GPT-Image-2)", hint: "默认 · 30-60s/张 · 公众号段间图必走 (会自动上传微信图床)" },
+              { v: "dreamina", label: "🎬 即梦", hint: "字节即梦 · 60-120s/张 · 段间图暂不支持 (没接微信图床上传)" },
+            ]} />
+          </SettingsSection>
+
           {/* 小华偏好 */}
           <SettingsSection icon="🤖" title="小华偏好" desc="调小华的性格、主动性、默认风格">
             <ChoiceRow label="语气" current={s.li_tone} onChange={v => saveOne("li_tone", v)} options={[
