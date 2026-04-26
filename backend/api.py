@@ -794,6 +794,31 @@ def dreamina_query(req: DreaminaQueryReq):
                     except Exception:
                         urls.append(str(pp))
             result["media_urls"] = urls
+        # D-065: 即梦产物入作品库 (done 时一次性写入). prompt/title 没保留, 用 submit_id.
+        if result.get("status") == "done" and result.get("downloaded"):
+            try:
+                from shortvideo.works import insert_work
+                import json as _json
+                kind = (result.get("type") or "").lower()  # image / video
+                wtype = "video" if "video" in kind else "image"
+                for p in result["downloaded"]:
+                    pp = Path(p)
+                    if not pp.exists():
+                        continue
+                    insert_work(
+                        type=wtype, source_skill="dreamina",
+                        title=f"即梦 {wtype} · {pp.stem[:24]}",
+                        local_path=str(pp),
+                        thumb_path=str(pp) if wtype == "image" else None,
+                        status="ready",
+                        metadata=_json.dumps({
+                            "submit_id": req.submit_id,
+                            "filename": pp.name,
+                            "kind": kind,
+                        }, ensure_ascii=False),
+                    )
+            except Exception:
+                pass
         return result
     except dreamina_service.DreaminaError as e:
         raise HTTPException(500, str(e))

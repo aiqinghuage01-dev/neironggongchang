@@ -164,12 +164,11 @@ function PageWorks({ onNav }) {
             <EmptyByTab tab={tab} sinceFilter={sinceFilter} onGo={() => onNav("make")} onClearFilter={() => { setSinceFilter("all"); setSourceFilter(""); setQ(""); }} />
           )}
 
-          {/* D-065: 三类作品网格 (inline 渲染避开 React dev 误报) */}
+          {/* D-065: 三类作品瀑布流 (CSS columns, 每张图按原比例铺满卡片) */}
           {!loading && (tab === "all" || tabType(tab)) && works.length > 0 && (
             <div style={{
-              display: "grid",
-              gridTemplateColumns: tab === "text" ? "repeat(2, 1fr)" : "repeat(4, 1fr)",
-              gap: 14,
+              columnCount: tab === "text" ? 2 : 4,
+              columnGap: 14,
             }}>
               {works.map(w => renderCard(w, () => setPicked(w)))}
             </div>
@@ -273,6 +272,7 @@ function renderCard(w, onPick) {
       <div key={w.id} onClick={onPick} style={{
         background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 12, padding: 16,
         cursor: "pointer", transition: "all 0.15s",
+        marginBottom: 14, breakInside: "avoid", WebkitColumnBreakInside: "avoid",
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
           <span style={{ padding: "3px 10px", borderRadius: 100, background: T.amberSoft, color: T.amber, fontSize: 11.5, fontWeight: 500 }}>
@@ -293,19 +293,20 @@ function renderCard(w, onPick) {
     );
   }
 
-  // 图片卡
+  // 图片卡 (masonry: 按原始 aspect ratio 铺满)
   if (w.type === "image") {
     return (
       <div key={w.id} onClick={onPick} style={{
         background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 12, overflow: "hidden",
         cursor: "pointer", transition: "all 0.15s",
+        marginBottom: 14, breakInside: "avoid", WebkitColumnBreakInside: "avoid",
       }}>
-        <div style={{ position: "relative", aspectRatio: "16/10", background: T.bg3, overflow: "hidden" }}>
+        <div style={{ position: "relative", background: T.bg3 }}>
           {w.thumb_url ? (
             <img src={api.media(w.thumb_url)} alt={w.title || ""} loading="lazy"
-              style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+              style={{ width: "100%", height: "auto", display: "block" }} />
           ) : (
-            <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", color: T.muted2, fontSize: 32 }}>🖼️</div>
+            <div style={{ aspectRatio: "16/10", display: "flex", alignItems: "center", justifyContent: "center", color: T.muted2, fontSize: 32 }}>🖼️</div>
           )}
           <div style={{ position: "absolute", top: 8, left: 8 }}>
             <span style={{ padding: "3px 9px", borderRadius: 100, background: "rgba(255,255,255,0.92)", color: T.text, fontSize: 11, fontWeight: 500, border: "1px solid rgba(0,0,0,0.04)" }}>
@@ -339,15 +340,17 @@ function renderCard(w, onPick) {
     <div key={w.id} onClick={onPick} style={{
       background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 12, overflow: "hidden",
       cursor: "pointer", transition: "all 0.15s",
+      marginBottom: 14, breakInside: "avoid", WebkitColumnBreakInside: "avoid",
     }}>
       <div style={{
-        aspectRatio: "9 / 16",
         background: w.local_url ? "#000" : "linear-gradient(135deg, #1e293b 0%, #475569 100%)",
         position: "relative", overflow: "hidden",
       }}>
-        {w.local_url && (
+        {w.local_url ? (
           <video src={api.media(w.local_url)} muted preload="metadata"
-            style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
+            style={{ width: "100%", height: "auto", display: "block" }} />
+        ) : (
+          <div style={{ aspectRatio: "9/16", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 36, opacity: 0.5 }}>▶</div>
         )}
         <div style={{ position: "absolute", top: 10, right: 10 }}>
           <Tag size="xs" color={st.color}>{st.text}</Tag>

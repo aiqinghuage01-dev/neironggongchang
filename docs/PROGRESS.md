@@ -65,13 +65,38 @@ wechat-images / dreamina) 共 46 张,文字根本不入库。
 - console 干净(无 error)
 - 后端 pytest 266 通过(无回归)
 
-**下一步**(Follow-up,下次 session):
-1. 其他 5 个生成点回写 works:
-   - `/api/wechat/cover` / `/api/wechat/section-image` / `/api/dreamina/text2image`
-   - 文字 skill: `/api/baokuan` / `/api/hotrewrite` / `/api/voicerewrite` /
-     `/api/touliu` / `/api/wechat/write` / `/api/planner`
-2. 卡片 hover 高亮(目前为静态)
-3. 详情抽屉细节优化(图片放大查看 / 文字一键复制)
+**Follow-up commit (同 session)**:
+
+7. **Masonry 瀑布流布局** (`web/factory-works.jsx`)
+   - 用户反馈: 视频 9:16 + 图片 16:10 混排时强制 grid 行高被竖版撑大,
+     横版图卡下面大片白色, 视觉很丑
+   - 改 grid → CSS columns(columnCount:4 / columnGap:14)
+   - 卡片 `breakInside: avoid` 防跨列断裂
+   - 图/视频缩略元素去掉固定 aspectRatio,改 `width:100%; height:auto`
+   - 每张图按原始比例自然铺满,卡片高度参差(即梦风)
+
+8. **3 个图片生成点回写** (D-065 主路径)
+   - `gen_cover_batch` 调 image_engine.generate 时传 `source_skill="wechat-cover-batch"`
+     (image_engine 里的 hook 会自动 insert_work)
+   - `gen_section_image` 在 return 前手动 insert_work(走 bash script
+     不经 image_engine), source_skill="wechat-section-image"
+   - `/api/dreamina/query` endpoint 在 status==done 且 downloaded 非空时
+     一次性 insert_work, source_skill="dreamina"
+
+9. **6 个文字 skill 自动入库** (单点改 `tasks_service.run_async`)
+   - 加 `_autoinsert_text_work(kind, label, task_id, result)` hook
+   - 按 kind 前缀映射 source_skill: baokuan / hotrewrite / voicerewrite /
+     touliu / wechat (write only) / planner / moments
+   - `_extract_text_from_result` best-effort 解析异构 result 结构
+     (article / versions / copies / scripts / drafts / content / final_text 等)
+   - 验证 8 种 result shape 全部正确提取 + token 字段提取
+   - 不动 6 个 pipeline 文件,单点单改省事
+
+**下一步**(下次 session,优先级低):
+1. 卡片 hover 高亮 / 状态指示
+2. 详情抽屉打磨(图片点开放大 + 文字一键复制按钮已有但视觉)
+3. 详情图片支持点开 lightbox 大图查看
+4. 文字 skill 加 unit test 覆盖 _autoinsert_text_work 集成路径
 
 ---
 

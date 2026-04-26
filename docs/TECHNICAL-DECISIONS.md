@@ -272,5 +272,21 @@ PROGRESS.md 行内的 1 行说明 + 这里的 1 句"为什么这么做"是日常
 
 **替代被否**:新建 `artifacts` 表 — 短视频与 metrics 表的联动会断,两表 union 查询繁琐,得不偿失。
 
+**Follow-up(同 session 第二次 commit)**:
+
+- **UI 改瀑布流**: 视频 9:16 + 图片 16:10 grid 混排丑,改 CSS columns,
+  每张图按原始 aspect ratio 自然铺满,卡片高度参差。`breakInside: avoid`
+  防跨列断裂。
+- **11 个生成点回写完整覆盖**:
+  - 直接出图 (`image_engine.generate` 自带 hook,加 `source_skill` 参数)
+  - 公众号封面批 (`gen_cover_batch` 调 image_engine 时传 source_skill)
+  - 公众号段间图 (`gen_section_image` 走 bash 不经 image_engine,return 前手动 insert)
+  - 即梦 text2image / image2video (`/api/dreamina/query` done 时 insert,kind 字段决定 type=image/video)
+  - 6 个文字 skill (`tasks_service.run_async` 完成时按 kind 前缀自动 insert,
+    `_extract_text_from_result` 覆盖 article/versions/copies/scripts/drafts/content 等 8 种 result shape)
+- **同名函数全局污染教训**: babel-in-browser 把所有 jsx 合并到同一全局 scope,
+  跨文件同名 React 组件**后定义覆盖前定义**(本次 ImageCard 同名 bug 浪费了 ~1 小时调试)。
+  约定: 跨文件 React 组件命名加 page 前缀(WorksImageCard / GenImageCard 而非 ImageCard)。
+
 
 

@@ -118,6 +118,24 @@ def gen_section_image(prompt: str, size: str = "16:9", engine: str | None = None
             except Exception:
                 pass  # 拷贝失败不影响主流程, 退化到只回 mmbiz_url
 
+    # D-065: 段间图入作品库
+    if local_path:
+        try:
+            from shortvideo.works import insert_work
+            import json as _json
+            insert_work(
+                type="image", source_skill="wechat-section-image",
+                title=(prompt or "")[:60] or None,
+                local_path=local_path, thumb_path=local_path, status="ready",
+                metadata=_json.dumps({
+                    "prompt": prompt, "size": size,
+                    "mmbiz_url": mmbiz_url,
+                    "elapsed_sec": round(time.time() - t0, 1),
+                }, ensure_ascii=False),
+            )
+        except Exception:
+            pass
+
     return {
         "mmbiz_url": mmbiz_url,
         "media_url": media_url,    # 前端预览用 (可能为 null, 退化到 mmbiz_url)
@@ -495,7 +513,7 @@ def gen_cover_batch(title: str, n: int = 2, engine: str | None = None) -> dict[s
 
     for i, p in enumerate(prompts):
         try:
-            r = image_engine.generate(p, size="16:9", n=1, engine=actual_engine, label=f"wxcover_{i}", output_dir=media_target_dir or cover_dir)
+            r = image_engine.generate(p, size="16:9", n=1, engine=actual_engine, label=f"wxcover_{i}", output_dir=media_target_dir or cover_dir, source_skill="wechat-cover-batch")
             imgs = r.get("images") or []
             if imgs and not imgs[0].get("error"):
                 img = imgs[0]

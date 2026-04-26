@@ -318,6 +318,7 @@ def run_async(
                 return
             update_progress(task_id, "整理结果...", pct=95)
             finish_task(task_id, result=result)
+            _autoinsert_text_work(kind=kind, label=label, task_id=task_id, result=result)
         except Exception as e:
             finish_task(
                 task_id,
@@ -327,6 +328,85 @@ def run_async(
 
     threading.Thread(target=_worker, daemon=True).start()
     return task_id
+
+
+# D-065: 文字 skill 自动入作品库 helper (kind 前缀映射 source_skill)
+_KIND_TO_SKILL = (
+    ("baokuan.", "baokuan"),
+    ("hotrewrite.", "hotrewrite"),
+    ("voicerewrite.", "voicerewrite"),
+    ("touliu.", "touliu"),
+    ("wechat.write", "wechat"),
+    ("planner.", "planner"),
+    ("moments.", "moments"),
+)
+
+
+def _extract_text_from_result(r):
+    """best-effort 从异构 result 结构提主要文本. 各 skill result 字段名不一."""
+    if isinstance(r, str):
+        return r
+    if not isinstance(r, dict):
+        return ""
+    # 直接文本字段
+    for k in ("article", "content", "text", "final_text", "result", "script", "html"):
+        v = r.get(k)
+        if isinstance(v, str) and v.strip():
+            return v
+    # 列表字段 (versions / copies / scripts / drafts)
+    for k in ("versions", "copies", "scripts", "drafts", "items", "outputs"):
+        v = r.get(k)
+        if isinstance(v, list) and v:
+            if all(isinstance(x, str) for x in v):
+                return "\n\n---\n\n".join(v)
+            if all(isinstance(x, dict) for x in v):
+                parts = []
+                for x in v:
+                    for k2 in ("text", "content", "final_text", "version", "script", "copy", "body"):
+                        if isinstance(x.get(k2), str) and x[k2].strip():
+                            parts.append(x[k2])
+                            break
+                if parts:
+                    return "\n\n---\n\n".join(parts)
+    return ""
+
+
+def _extract_tokens(r):
+    if not isinstance(r, dict):
+        return 0
+    for k in ("tokens", "tokens_used", "total_tokens"):
+        v = r.get(k)
+        if isinstance(v, int):
+            return v
+    return 0
+
+
+def _autoinsert_text_work(*, kind: str, label: str | None, task_id: str, result: Any) -> None:
+    """D-065: 文字 skill 完成时自动 insert_work(type=text). 失败吃掉."""
+    skill = None
+    for prefix, name in _KIND_TO_SKILL:
+        if kind.startswith(prefix):
+            skill = name
+            break
+    if not skill:
+        return
+    try:
+        from shortvideo.works import insert_work  # 局部 import, 避免循环
+        text = _extract_text_from_result(result)
+        if not text or len(text.strip()) < 10:
+            return
+        title = (label or "")[:60] or None
+        insert_work(
+            type="text",
+            source_skill=skill,
+            title=title,
+            final_text=text,
+            tokens_used=_extract_tokens(result),
+            status="ready",
+            metadata=json.dumps({"task_id": task_id, "kind": kind}, ensure_ascii=False),
+        )
+    except Exception:
+        pass  # 回写失败不阻塞主流程
 
 
 def cleanup_old(days: int = 7) -> int:
