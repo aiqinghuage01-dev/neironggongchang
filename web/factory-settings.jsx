@@ -1,6 +1,99 @@
 // factory-settings.jsx — 设置页实装:5 个 section(小华偏好/品牌/平台账号/声音/形象)
 
+// D-072: 设置页密码门. 防误触 / 防录视频时凑过来的人乱改 / 保护 API key 等敏感.
+// 密码硬编码 (本地工具, 不联外网). sessionStorage 存解锁状态 — 关浏览器要重输.
+const SETTINGS_PASSWORD = "qinghua116";
+const SETTINGS_UNLOCK_KEY = "settings_unlocked";
+
+function _isSettingsUnlocked() {
+  try { return sessionStorage.getItem(SETTINGS_UNLOCK_KEY) === "1"; }
+  catch (_) { return false; }
+}
+function _unlockSettings() {
+  try { sessionStorage.setItem(SETTINGS_UNLOCK_KEY, "1"); } catch (_) {}
+}
+function _lockSettings() {
+  try { sessionStorage.removeItem(SETTINGS_UNLOCK_KEY); } catch (_) {}
+}
+
+function SettingsPasswordGate({ onUnlock }) {
+  const [pwd, setPwd] = React.useState("");
+  const [err, setErr] = React.useState(false);
+  const inputRef = React.useRef(null);
+  React.useEffect(() => { inputRef.current && inputRef.current.focus(); }, []);
+  function submit() {
+    if (pwd === SETTINGS_PASSWORD) {
+      _unlockSettings();
+      onUnlock();
+    } else {
+      setErr(true);
+      setPwd("");
+      setTimeout(() => setErr(false), 1500);
+      inputRef.current && inputRef.current.focus();
+    }
+  }
+  return (
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: T.bg }}>
+      <div style={{ padding: "22px 32px", background: "#fff", borderBottom: `1px solid ${T.border}` }}>
+        <div style={{ fontSize: 20, fontWeight: 600 }}>⚙️ 设置</div>
+      </div>
+      <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div style={{
+          width: 360, padding: "32px 28px", background: "#fff",
+          border: `1px solid ${T.border}`, borderRadius: 14,
+          boxShadow: "0 1px 3px rgba(0,0,0,0.04)", textAlign: "center",
+        }}>
+          <div style={{ fontSize: 36, marginBottom: 12 }}>🔒</div>
+          <div style={{ fontSize: 16, fontWeight: 600, color: T.text, marginBottom: 6 }}>设置已锁</div>
+          <div style={{ fontSize: 12.5, color: T.muted, marginBottom: 18, lineHeight: 1.6 }}>
+            输入密码进入设置 · 关浏览器后会重新锁定
+          </div>
+          <input
+            ref={inputRef}
+            type="password"
+            value={pwd}
+            onChange={(e) => setPwd(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") submit(); }}
+            placeholder="密码"
+            style={{
+              width: "100%", boxSizing: "border-box",
+              padding: "10px 14px", fontSize: 14,
+              border: `1.5px solid ${err ? T.red : T.border}`,
+              borderRadius: 8, outline: "none", fontFamily: "inherit",
+              transition: "border-color 0.15s",
+            }}
+          />
+          {err && (
+            <div style={{ fontSize: 11.5, color: T.red, marginTop: 8 }}>密码不对, 再试试</div>
+          )}
+          <button
+            onClick={submit}
+            disabled={!pwd}
+            style={{
+              marginTop: 14, width: "100%",
+              background: pwd ? T.brand : T.muted3, color: "#fff",
+              border: "none", borderRadius: 8,
+              padding: "10px 18px", fontSize: 14, fontWeight: 600,
+              cursor: pwd ? "pointer" : "not-allowed",
+              fontFamily: "inherit",
+            }}
+          >解锁</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function PageSettings({ onNav }) {
+  // D-072: 密码门 — 没解锁就显密码框, 解锁后渲染真设置
+  const [unlocked, setUnlocked] = React.useState(() => _isSettingsUnlocked());
+  if (!unlocked) {
+    return <SettingsPasswordGate onUnlock={() => setUnlocked(true)} />;
+  }
+  return <PageSettingsInner onNav={onNav} unlocked={unlocked} setUnlocked={setUnlocked} />;
+}
+
+function PageSettingsInner({ onNav, setUnlocked }) {
   const [s, setS] = React.useState(null);
   const [saved, setSaved] = React.useState(false);
   const [speakers, setSpeakers] = React.useState([]);
@@ -64,6 +157,12 @@ function PageSettings({ onNav }) {
         <div style={{ flex: 1 }} />
         {saved && <Tag color="green">✓ 已保存</Tag>}
         <Btn size="sm" onClick={resetAll}>重置默认</Btn>
+        {/* D-072: 一键锁定 — 录视频前点一下, 防有人凑过来乱看/乱改设置 */}
+        <Btn size="sm" onClick={() => {
+          _lockSettings();
+          setUnlocked(false);
+          if (onNav) onNav("home");
+        }}>🔒 锁定</Btn>
       </div>
 
       <div style={{ flex: 1, overflow: "auto", padding: "24px 32px", background: T.bg }}>
