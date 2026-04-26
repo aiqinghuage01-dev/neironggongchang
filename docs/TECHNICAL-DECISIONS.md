@@ -389,5 +389,167 @@ PROGRESS.md 行内的 1 行说明 + 这里的 1 句"为什么这么做"是日常
 - 偏好抽取增强: 不光看关键词命中, 也分析 user_action=discarded 的版本特征
 - 行为日志 `## YYYY-MM-DD` 节按周做"周报"长摘要
 
+---
+
+## D-068 - 任务卡死防御三层 (2026-04-26)
+
+**背景**: 老板触发"热点改写"等了 14 分钟 UI 一直转圈, 进度卡 15%, 没任何信号. 查 root cause:
+`uvicorn --reload` 在 D-067 commit 期间随 6 个文件改动重启, 异步任务的 daemon thread 随进程一起被杀, DB 行 `tasks.status='running'` 没人收尾, 前端轮询无解.
+
+**结论**: 三层防御, 缺一不可:
+
+**Layer 1 启动孤儿恢复** (`backend/services/tasks.py::recover_orphans` + `backend/api.py::_recover_orphan_tasks` startup hook):
+- uvicorn boot 时把上次没收尾的 `pending`/`running` 全标 `failed` + `error="服务重启,任务中断,请重新触发"`
+- 每次 --reload 自动跑
+
+**Layer 2 周期 watchdog** (`tasks.sweep_stuck` + `start_watchdog` threading.Timer 每 60s):
+- 跑超 `max(5*estimated_seconds, 600s)` 的 running 标 failed
+- 处理"进程活着但任务实质卡在上游 AI proxy"
+- error 文案明确: `watchdog: 超时未完成(>5x 预估或 >600s), 任务可能卡在 AI proxy`
+
+**Layer 3 UI 卡死可视化** (`web/factory-task.jsx::TaskCard`):
+- `isTaskStale()` 判定: elapsed > 2*estimated 或缺估时按 5min 兜底
+- stale 时橙边框 + "等了 5m14s" + "比预想久 6.3 倍" + "停掉"按钮
+- 用户主动 cancel 触发立即重拉刷新 (`refreshTick` state)
+
+**代价**:
+- 每分钟一次 SQLite 写: `UPDATE tasks SET status='failed' WHERE ... > threshold` — 极轻
+- 真正长任务 (touliu 估时 150s, 实际可能 5min+) 也会被 watchdog 误杀: 用户重试或调高 estimated_seconds
+- daemon thread 起来时必须手动 capture/set contextvar (D-070 也踩这同一坑)
+
+**预防 checklist** (新加任何 daemon thread 必读):
+- 必须用 `tasks_service.run_async()` 或自己 `create_task()` + `finish_task()`, 否则 D-068 三层防御覆盖不到
+- 独立 DB 表 (如 `night_job_runs`) 必须自己实现 `recover_orphan_runs()` (D-068b 加了)
+- 不要用 in-memory dict 跟踪长任务状态 (旧 `COVER_TASKS` 是反例, 进程重启丢)
+
+**附带做** (老板当面定):
+- 侧栏品牌行 (🏭 清华哥内容工厂) 整行可点 → home (作为总部入口)
+- 原首位 NAV `总部` 改名 `战略部` (id=strategy, 占位等装战略规划技能)
+
+---
+
+## D-068b - 防御扩展: deepseek timeout + night runs 恢复 (2026-04-26)
+
+**背景**: 举一反三审计 5 处 `threading.Thread(daemon=True)` spawn:
+1. `tasks.run_async` ✓ (D-068 已覆盖)
+2. `compliance_pipeline` ✓ (用 tasks DB)
+3. `dhv5_pipeline` ✓ (用 tasks DB)
+4. `api.py::cover_create` 用 in-memory `COVER_TASKS` dict (重启丢, 但短任务用户可重试)
+5. `night_executor` 用 `night_shift.finish_run` 写独立 DB 表 `night_job_runs` ✗ 没收尾
+
+另查 httpx 客户端 timeout: `claude_opus.py timeout=120` ✓, `cosyvoice timeout=300` ✓, qingdou/apimart/shiliu 各自显式 ✓, **但 `shortvideo/deepseek.py` 没设, OpenAI SDK 默认 10min** — 卡住要等 10 分钟才让 watchdog 介入.
+
+**结论**:
+- `deepseek.py`: 加 `DEFAULT_TIMEOUT = 120.0`, 显式传给 `OpenAI(timeout=...)`
+- `night_shift.recover_orphan_runs()`: UPDATE `night_job_runs SET status='failed', log='[recover] 服务重启'` WHERE status='running'
+- 接到 `_recover_orphan_tasks` startup hook 一起跑
+
+**代价**: deepseek 120s 上限 (之前 600s) — 真要 deepseek 跑 2 分钟以上的几乎不会发生, 风险极低.
+
+---
+
+## D-068c - 投流 422 修 + scripts/smoke_endpoints.sh (2026-04-26)
+
+**背景**: 老板随手测投流, `POST /api/touliu/generate` 直接 422. D-062e 把前端 `useState(1)` 改默认值求速度, 但后端 `TouliuGenerateReq.n: ge=3` 没同步. 而且 pipeline 里 `max(3, min(n, 15))` 偷偷把 n=1 翻成 3 — **用户选 1 实际生成 3 条, 是双重欺骗**.
+
+**结论**:
+- 修 schema: API `ge=3 → ge=1`, pipeline `max(3,...) → max(1,...)`
+- `DEFAULT_STRUCTURE_ALLOC` 加 1/2 条规则 (1=1痛点, 2=1痛点+1对比)
+- 加 `scripts/smoke_endpoints.sh`: curl 9 个主 POST endpoint 用合理 payload, 自动 task_id cancel, 防同类 schema 错配再发生
+
+**代价**:
+- 1 条投流文案 alloc 没什么"结构感" (单条只能选一种), 但快, 这是用户求的
+- smoke 不进 pytest (会消耗 token + 需 live AI proxy), 留 scripts/ 老板手动跑
+
+**反例教训** (避免再写):
+- 任何"silent clamp" (`max(N, ...)` 偷偷改 user input) 都是欺骗模式. UI 显示什么后端就该执行什么, 不一致时该 422 报错让前端修, 不该悄悄改值.
+
+---
+
+## D-069 - 去技术化 + 错误统一拦截 + LiDock 融合 TaskBar (2026-04-26)
+
+**背景**: 老板录短视频要露屏, 现状一堆"技术味"会被观众看见:
+- 错误弹窗直吐 `ClaudeOpusError: Claude Opus 调用失败(http://localhost:3456/v1 · ...)`
+- 422 直吐 Pydantic JSON `{"detail":[{"type":"greater_than_equal","loc":["body","n"]...`
+- 任务卡 fallback "hotrewrite.write" 这种 dot 命名
+- "skill 资源 (开发用 · 默认折叠)" 4 处面板
+- "{tokens} tokens" 露 6 处
+- 顶栏 chip "0 进行中 · 8 完成"
+
+**结论**:
+
+**1. 错误统一拦截** (`web/factory-api.jsx::_handleErrorResponse`):
+- 422 Pydantic JSON 解析: `greater_than_equal/less_than/missing/string_too_short` 等映射成大白话 ("n 至少 1; brief 没填")
+- 5xx → 统一 "AI 上游临时不可用, 一会儿再试"
+- 其他 4xx 取 detail 截 180 字, 不露 stack trace
+- `FailedRetry` monospace 错误区块默认折叠到"看技术详情"按钮, 主区只显友好 reason
+- `_friendlyErrorReason()` 把 `timeout/502/429/auth/safety/422` 关键词映射成大白话
+
+**2. LiDock 融合 TaskBar** (老板当面定 — 顶栏 chip 看着累):
+- 顶栏 `<TaskBar>` 整删
+- `LiDock` 按钮上小华头像加红点徽章 (橙=卡死/蓝=进行中/0=不显)
+- LiDock 面板加 "对话/任务" 双 tab
+- 任务 tab 复用 `TaskCard` 组件 (代码复用, 不重写)
+- 跨页跳转走 window event `ql-nav` (LiDock 不需要每个 page 传 onNav)
+
+**3. 调试件硬隐藏**:
+- `ApiStatusLight` 移除 settings 入口, 只 `localStorage.show_api_status=1` 才显
+- 设置页 "开发调试" section 整删
+- 设置页 AI 健康 "已连通 · opus · model" → "AI 通讯正常"
+
+**4. 文案脱敏**:
+- 任务卡 fallback `task.kind` → `TASK_KIND_LABELS` 中文 ("hotrewrite.write" → "热点改写")
+- "skill 资源" 4 处面板全删 (hotrewrite/voicerewrite/wechat/touliu)
+- "skill 提示 100+" → "字数偏短"
+- "{tokens} tokens" 全删 (compliance/flow/planner/touliu/works)
+- 首页 "今日 AI 消耗 12.3K tokens" → "今天用了多少 AI · 约 9K 字 · 深度 AI 5 次"
+- "卡死/杀掉" → "等了/停掉"
+
+**代价**:
+- 老板自己排查问题时要点"看技术详情"展开. 但日常 90% 用户都用不上.
+- LiDock 按钮加徽章后视觉略复杂, 但不开任务时干净.
+
+---
+
+## D-070 - 访客模式 (2026-04-26)
+
+**背景**: 老板问"我用我的工厂帮朋友项目产出, 会被自动记录吗?". 是, 而且会污染 D-067 越用越懂闭环 (5 个写入口子全开):
+1. `tasks._autoinsert_text_work` 入作品库
+2. `wechat_scripts` 公众号入作品库
+3. `work_log.maybe_log` 行为日志
+4. `preference.maybe_learn` 偏好学习
+5. AI 强制注入"清华哥"几千字人设
+
+最贵的是 `preference + work_log` 被污染, 直接歪了 D-067 闭环, 不可逆 (除非手动删 Obsidian 文件).
+
+**结论**: 全局开关, 一切短路:
+
+**架构**:
+- `backend/services/guest_mode.py`: `contextvars.ContextVar` 存当前 request 的 guest 状态
+- `backend/api.py` HTTP middleware 读 `X-Guest-Mode` header → 写 contextvar
+- `tasks.run_async` 跨 daemon thread 显式传递: `captured_guest = guest_mode.capture()`, worker 内 `set_guest(captured_guest)` (否则 daemon 起来 contextvar 默认 False, 失去访客意义)
+- 5 个写入口子各加 `if guest_mode.is_guest(): return` 短路
+- `PersonaInjectedAI.chat`: 访客时不读 persona, 改"中文写作助手"中性 system (~100 字)
+
+**前端**:
+- `factory-api.jsx`: 所有 fetch 自动带 `X-Guest-Mode` header (从 `localStorage.guest_mode` 读)
+- `factory-shell.jsx::GuestToggle`: 侧栏底部 🕶 按钮, 开启时橙色高亮
+- `factory-app.jsx`: 主区顶橙 banner "🕶 访客模式 · 这次产出不进你的作品库 / ..." + "切回我自己" 一键关
+- localStorage 持久化 (跨 session 保留, 防"切完忘关"伪安全)
+
+**代价**:
+- contextvar 跨 daemon thread 必须手动 capture/set, 是 Python contextvar 的常见陷阱. 文档化在 `guest_mode.py` 模块 docstring + `tasks.run_async` 注释里.
+- 访客模式下 AI 不带清华哥人设 → 朋友项目稿子风格中性, 用户可能想要"切到朋友的人设" — 当前不支持 multi-tenant persona, 一期不做.
+- 访客模式不入作品库 → 朋友项目稿子无地方留底, 用户需要手动复制保存. 一期可接受.
+
+**测试** (`tests/test_guest_mode.py`, 7 项):
+- contextvar 默认 / set / reset / capture
+- work_log / preference / autoinsert_text_work 在访客时短路
+- PersonaInjectedAI 访客 system 远小于真人设 (中性约 100 字 vs 真人设 几千字)
+
+**Follow-up**:
+- 多租户人设: 给每个朋友项目配自己的 persona-prompt (一期不做, 等真有需求)
+- 访客模式独立作品库 (隔离 namespace, 老板用完能"导出/清空"整批) — 一期不做
+
 
 

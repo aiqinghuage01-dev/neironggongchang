@@ -4,16 +4,71 @@
 
 ---
 
-## 当前状态(2026-04-26 · D-068b 防御扩展: deepseek timeout + night runs 恢复)
+## 当前状态(2026-04-26 · D-070 访客模式 + D-069 去技术化 + D-068c 投流 schema 修)
 
-**版本**: v0.3.7b — 三层防御 + 横向扩展 (deepseek 显式 timeout, night_job_runs 同步孤儿恢复)
+**版本**: v0.4.0 — 访客模式 + 去技术化(录视频不露馅) + 任务防御三层 + 错误统一拦截
 
-**举一反三 (D-068b)**:
-- `shortvideo/deepseek.py`: OpenAI SDK 默认 timeout 是 10min, 改 120s. 上游卡住先抛, 走正常 fail 路径.
-- `night_shift.recover_orphan_runs()`: night_job_runs 也走 daemon thread, --reload 后会孤儿. 启动钩子同步收尾.
-- 审计 5 处 daemon thread spawn: tasks/compliance/dhv5 → 都用 tasks DB 已覆盖; cover → in-memory dict (用户重试即可); night → 现已覆盖.
+**今天一天连环优化(D-068 → D-070)**:
 
-测试: 279 passed (+2 night_shift recovery 测试).
+### D-070 访客模式 (最新)
+**用户问题**: "我用我的工厂帮朋友项目产出, 会被自动记录吗?"
+**答案**: 会, 而且会污染 D-067 越用越懂闭环. 5 个写入口子全开 (work_log / preference / 作品库 / 公众号入库 / 人设注入).
+
+**实现**: 侧栏底部 🕶 访客模式 按钮 + 主区顶橙色 banner. 切开后:
+- 后端 contextvar (`backend/services/guest_mode.py`) + middleware 读 `X-Guest-Mode` header
+- 跨 daemon thread 显式传递 (run_async 里 capture + set in worker)
+- 5 个写入口子全短路, AI 切中性写作助手 (~100 字 system, 不再注入清华哥几千字人设)
+- localStorage 持久化, 防"切完忘关"伪安全
+
+测试 +7. 总 288 passed.
+
+### D-069 去技术化 + LiDock 融合 TaskBar (录视频不露馅)
+**用户痛点**: 要拍短视频, 顶栏 chip / API 调试条 / skill / tokens / Pydantic 422 原文 / `ClaudeOpusError(http://localhost:3456/v1)` 等技术词露给观众.
+
+**实现**:
+- 顶栏 TaskBar chip 整删, 任务计数走小华按钮头像右上角红点徽章 (橙=卡死/蓝=进行中/0=不显)
+- LiDock 面板加"对话/任务"双 tab, 任务 tab 复用 TaskCard
+- factory-api.jsx 加 `_handleErrorResponse`: 422 Pydantic JSON 转大白话 ("n 至少 1; brief 没填"), 5xx → "AI 上游临时不可用"
+- FailedRetry monospace 默认折叠到"看技术详情"
+- ApiStatusLight 硬关, 只 localStorage flag 才开 (移除 settings 入口)
+- 任务卡 fallback "hotrewrite.write" → "热点改写" (TASK_KIND_LABELS 映射)
+- "skill 资源 (开发用)" 4 处面板全删
+- "{tokens} tokens" 全删 6 处, 首页"今日 AI 消耗"换"今天用了多少 AI · 约 X 字"
+- "卡死/杀掉" → "等了/停掉"
+- 设置页 AI 健康 "已连通 · opus · model" → "AI 通讯正常"
+
+### D-068c 修投流 422 + smoke_endpoints.sh
+**痛点**: 老板随手测投流, 直接 422 — D-062e 把前端 useState(1) 改求速度但后端 ge=3 + pipeline 内 max(3,n) 偷偷翻倍 (用户选 1 实际生成 3, 双重欺骗).
+
+**修法**: API ge=3→ge=1, pipeline max 改 max(1,...), alloc 加 1/2 条规则.
+**举一反三**: 加 `scripts/smoke_endpoints.sh` 巡检 9 个主 POST endpoint 用合理 payload, 防类似 schema 错配.
+
+### D-068b 防御扩展
+- `shortvideo/deepseek.py`: OpenAI SDK 默认 10min timeout 改 120s
+- `night_shift.recover_orphan_runs()`: night_job_runs 也是 daemon thread, 启动钩子同步收尾
+- 审计 5 处 daemon spawn 全覆盖
+
+### D-068 任务卡死防御三层 + 侧栏总部/战略部
+**痛点**: 老板触发"热点改写"等 14 分钟 UI 转圈不动. uvicorn --reload 在 D-067 commit 期间随多次文件改动重启, daemon 异步工作线程随进程被杀, DB 行卡 running 永远.
+
+**三层防御**:
+1. 启动孤儿恢复 (`tasks.recover_orphans` + startup hook)
+2. 周期 watchdog 60s (`tasks.sweep_stuck` + start_watchdog)
+3. UI 卡死可视化 (TaskBar/TaskCard 橙警告 + 杀掉按钮)
+
+**侧栏重构** (老板当面定):
+- 品牌行 (🏭 清华哥内容工厂) 整行可点 → home, 子文案 "🏠 总部"
+- 原首位 NAV `总部` → 改 `战略部` (id=strategy, icon=🧭, 占位等装战略规划技能)
+
+---
+
+**今天总产出**: 5 个 commit (D-068 → D-068b → D-068c → D-068c+ → D-069 → D-070), 281+7=288 测试, 13.8 分钟卡死 → 60s 内自动恢复, 顶栏纯净, 访客模式可用.
+
+**下一步候选**:
+1. 装战略规划技能 (战略部页面真功能)
+2. LiDock 加真 tool calling (从 D-067 滚来)
+3. 偏好抽取增强 (从 D-067 滚来)
+4. 周报长摘要 (从 D-067 滚来)
 
 ---
 

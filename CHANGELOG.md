@@ -6,6 +6,61 @@
 
 ---
 
+## [v0.4.0] — 2026-04-26 (任务防御 + 去技术化 + 访客模式)
+
+一天连环修 + 加固 + 去技术化, 5 个 D 编号, 6 个 commit:
+
+### Added
+- **[D-068]** 任务卡死防御三层 — 启动孤儿恢复 + 周期 watchdog 60s + UI 卡死可视化
+  - `tasks.recover_orphans()` startup hook, --reload 后自动收尾
+  - `tasks.sweep_stuck()` + `start_watchdog()` Timer 60s 巡检
+  - TaskCard stale 时橙边框 + "等了 Xm" + "停掉"按钮
+  - 老板触发"热点改写"等 14min 卡死的 root cause + 全套防御
+- **[D-068]** 战略部入口 (placeholder, 等装战略规划技能)
+  - 品牌行 (🏭 清华哥内容工厂) 整行可点 → home (作为总部入口)
+  - 原首位 NAV `总部` 改名 `战略部` (id=strategy, icon=🧭)
+- **[D-068b]** 防御扩展 — deepseek 显式 timeout=120s + `night_shift.recover_orphan_runs()`
+  - OpenAI SDK 默认 timeout 10min 改 120s, 上游卡先抛
+  - night_job_runs 也是 daemon thread, 启动钩子同步收尾
+  - 审计 5 处 daemon spawn 全覆盖 (tasks/compliance/dhv5/cover/night)
+- **[D-068c]** 修投流 422 + `scripts/smoke_endpoints.sh`
+  - API `n: ge=3 → ge=1`, pipeline `max(3,...) → max(1,...)`
+  - 1/2 条 alloc 规则补齐 (单条 = 1痛点, 2 条 = 1痛点+1对比)
+  - 巡检 9 个主 POST endpoint 用合理 payload, 防 schema 错配复发
+- **[D-069]** 错误统一拦截 + LiDock 融合 TaskBar + 去技术化文案
+  - `factory-api.jsx::_handleErrorResponse`: 422 Pydantic JSON → 大白话 ("n 至少 1; brief 没填"), 5xx → "AI 上游临时不可用"
+  - `FailedRetry` monospace 默认折叠到"看技术详情"
+  - 顶栏 chip 整删, 任务计数走小华按钮头像红点徽章 (橙=卡死/蓝=进行中)
+  - LiDock 面板加"对话/任务"双 tab, 任务 tab 复用 TaskCard
+  - 跨页跳转走 window event `ql-nav`
+  - 任务卡 fallback `task.kind` → `TASK_KIND_LABELS` 中文
+  - 设置页"开发调试" section 删, ApiStatusLight 硬关 (只 localStorage 才能开)
+  - 文案脱敏: "skill"/"tokens"/"卡死/杀掉" 全替换
+- **[D-070]** 访客模式 — 帮朋友写不污染清华哥越用越懂
+  - 后端: `backend/services/guest_mode.py` contextvar + middleware 读 `X-Guest-Mode`
+  - 跨 daemon thread 显式 capture/set (run_async 里)
+  - 5 个写入口子全短路: work_log / preference / autoinsert_text_work / wechat 入库 / persona 注入
+  - 访客模式 AI 走"中文写作助手"中性 system (~100 字, 不注入清华哥几千字人设)
+  - 前端: 侧栏底部 🕶 按钮 + 主区顶橙 banner + localStorage 持久化
+
+### Fixed
+- **[D-067 follow]** `test_persona_short_exists_and_reasonable / _deep_much_larger` 加 `include_memory=False`
+  (D-067 默认开了行为记忆注入, 让原断言 < 2000 失败)
+
+### Tested
+- pytest 268 → **288** passed (+20: 8 recovery/watchdog + 2 alloc + 7 guest + 2 night recovery + 修 1 个 persona)
+- Playwright 21 页全 0 console error / 0 4xx-5xx
+- `scripts/smoke_endpoints.sh` 9 个主 endpoint live 200
+
+### Files Changed
+- 新加: `backend/services/guest_mode.py`, `tests/test_guest_mode.py`, `tests/test_tasks_recovery.py`, `web/factory-strategy.jsx`, `scripts/smoke_endpoints.sh`
+- 改: tasks/persona/work_log/preference/wechat_scripts/night_shift/api.py + 大量 web/*.jsx
+
+### 一句话总结
+今天发现 + 修了 daemon thread 集体死亡, 然后举一反三装防御; 顺便把短视频会露馅的技术词全清; 临门一脚加访客模式防朋友项目污染 D-067 越用越懂.
+
+---
+
 ## [v0.4.1] — 2026-04-25 (P10 之后续做 · cron 缩短到 10min)
 
 P0-P10 主清单完成后, cron 继续按 PROGRESS 的 Phase 1/2/3 旧 TODO + 用户主动插单 推进。

@@ -20,7 +20,7 @@
 - 仅清华哥本人使用，MacBook 本地，不考虑多用户/部署
 
 ### 当前版本
-v0.3.0 -- 设计稿 C2 全量实施。详见 `docs/PROGRESS.md`。
+v0.4.0 -- 任务防御三层 + 去技术化 + 访客模式 (D-068 → D-070, 2026-04-26)。详见 `docs/PROGRESS.md`。
 
 ---
 
@@ -206,7 +206,24 @@ python3 scripts/add_skill.py --slug "爆款改写" --key baokuan --icon 💥 --l
 - 人设详细版：`00 AI清华哥/`（业务画像.md / 写作风格规范.md / 人设定位.md / AI协作偏好.md）
 - 核心知识：`07 知识Wiki/`（方法论 / 行业洞察 / 直播体系等）
 - 匹配接口：`POST /api/kb/match`（jieba 分词 + TF-IDF + 分区权重）
-- **关键架构**：所有 AI 调用通过 `ai.py` 关卡层统一注入人设，新技能��动继承（见 D-005/D-008）
+- **关键架构**：所有 AI 调用通过 `ai.py` 关卡层统一注入人设，新技能自动继承（见 D-005/D-008/D-067）
+
+### 任务防御 + 访客模式 (D-068 / D-070, 写新代码必读)
+
+**任何 daemon thread 跑长任务必须用 `tasks_service.run_async()`** (或自己 `create_task()` + `finish_task()`):
+- 否则 D-068 三层防御 (启动恢复 / watchdog 60s / UI 卡死) 覆盖不到, 进程重启 → DB 永远卡 running → UI 转圈不动
+- 独立 DB 表(如 `night_job_runs`) 必须自己实现 `recover_orphan_runs()` (D-068b 加了)
+- 反例: in-memory dict 跟踪长任务状态 (旧 `COVER_TASKS`, 重启丢)
+
+**访客模式 (D-070)** — 新加任何写入档案的 hook 必须先看 `guest_mode.is_guest()`:
+- 当前 5 个写入口子已加: `work_log` / `preference` / `tasks._autoinsert_text_work` / `wechat_scripts insert_work` / `PersonaInjectedAI` 注入
+- 跨 daemon thread 必须 capture/set contextvar (示例见 `tasks.run_async`), 否则 daemon 起来 contextvar 默认 False, 访客模式失效
+- 详见 `backend/services/guest_mode.py` docstring
+
+**错误友好化 (D-069)** — 后端 raise 不用纠结文案:
+- 前端 `factory-api.jsx::_handleErrorResponse` 已统一拦截: 422 Pydantic JSON 转大白话, 5xx 转"AI 上游临时不可用"
+- 不要往 UI 里直吐 `task.kind` (`hotrewrite.write` 这种), 用 `taskFriendlyName(task)` 走 `TASK_KIND_LABELS` 映射
+- 录视频前可设 `localStorage.show_api_status` 不设 → ApiStatusLight 默认完全不显
 
 ---
 
