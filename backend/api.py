@@ -867,6 +867,119 @@ def dreamina_list_tasks():
     return dreamina_service.list_tasks()
 
 
+# 即梦 CLI 要本地路径不要 data URL, 不能复用 D-073 的 /api/image/upload-ref (那个返 base64).
+# 落盘到 data/dreamina/refs/ , 用完不删 (CLI submit 后还会再读一次, 不能临时清).
+DREAMINA_REFS_DIR = Path("data/dreamina/refs")
+DREAMINA_REFS_DIR.mkdir(parents=True, exist_ok=True)
+
+
+@app.post("/api/dreamina/upload-ref", tags=["即梦 AIGC"], summary="上传参考图 → 落盘 path")
+async def dreamina_upload_ref(file: UploadFile = File(...)):
+    """单张图 → 落盘 data/dreamina/refs/ → 返回本地绝对路径.
+    即梦 CLI 的 multimodal2video / image2video 都要本地路径.
+    ≤4MB, jpg/png/webp.
+    """
+    data = await file.read()
+    if not data:
+        raise HTTPException(400, "空文件")
+    if len(data) > 4 * 1024 * 1024:
+        raise HTTPException(400, f"图太大 {len(data)//1024} KB · 上限 4096 KB")
+    ext = (Path(file.filename or "ref.jpg").suffix or ".jpg").lower()
+    if ext not in (".jpg", ".jpeg", ".png", ".webp"):
+        raise HTTPException(400, f"只支持 jpg/png/webp · 收到 {ext}")
+    fname = f"{int(time.time()*1000)}-{uuid.uuid4().hex[:8]}{ext}"
+    fpath = (DREAMINA_REFS_DIR / fname).resolve()
+    fpath.write_bytes(data)
+    return {
+        "ok": True,
+        "path": str(fpath),
+        "name": file.filename or fname,
+        "size_bytes": len(data),
+        "media_url": media_url(fpath),
+    }
+
+
+class DreaminaBatchVideoReq(BaseModel):
+    prompts: list[str] = Field(..., min_length=1, max_length=20,
+        description="一条或多条 prompt, ≤20. 每条独立起一个异步 task.")
+    ref_paths: list[str] = Field(default_factory=list, max_length=9,
+        description="参考图本地路径 (上传 endpoint 返回的 path). 0=text2video / 1=image2video / ≥2=multimodal2video. 所有 prompt 共享这组参考图.")
+    duration: Optional[int] = Field(None, ge=4, le=15)
+    ratio: Optional[str] = Field(None, description="1:1/3:4/16:9/4:3/9:16/21:9 (text2video 和 multimodal2video 用)")
+    video_resolution: Optional[str] = Field("720p", description="720p / 1080p")
+    model_version: Optional[str] = Field("seedance2.0fast", description="seedance2.0 / seedance2.0fast")
+
+
+@app.post("/api/dreamina/batch-video", tags=["即梦 AIGC"], summary="批量生视频 (统一入口, 单/批都走)")
+def dreamina_batch_video(req: DreaminaBatchVideoReq):
+    """每条 prompt 独立起一个 daemon task, 立即返回 N 个 task_id.
+    按 ref_paths 数量自动分流:
+      - 0 张 → text2video (纯文字)
+      - 1 张 → image2video (首帧动)
+      - ≥2 张 → multimodal2video (全参考)
+    sync_fn 内部 submit + 轮询 + 下载, 完成后写入作品库.
+    单跑 (N=1) 也走这条统一路径, UI 只需要 task 卡片视图。
+    """
+    from backend.services import tasks as tasks_service
+
+    prompts = [p.strip() for p in req.prompts if p and p.strip()]
+    if not prompts:
+        raise HTTPException(400, "prompts 全为空")
+    refs = [p for p in (req.ref_paths or []) if p]
+    for p in refs:
+        if not Path(p).exists():
+            raise HTTPException(400, f"参考图不存在: {p}")
+
+    if len(refs) == 0:
+        route = "text2video"
+    elif len(refs) == 1:
+        route = "image2video"
+    else:
+        route = "multimodal2video"
+
+    est_per = 180 if req.model_version == "seedance2.0fast" else 240
+    out_tasks = []
+    for prompt in prompts:
+        def _make_sync(p=prompt):
+            def _sync():
+                return dreamina_service.submit_and_wait(
+                    prompt=p, refs=refs,
+                    duration=req.duration,
+                    ratio=req.ratio,
+                    video_resolution=req.video_resolution,
+                    model_version=req.model_version,
+                    timeout_sec=600,
+                )
+            return _sync
+
+        task_id = tasks_service.run_async(
+            kind=f"dreamina.{route}",
+            label=f"即梦 {route} · {prompt[:24]}" + (f" · {len(refs)} 张参考图" if refs else ""),
+            ns="dreamina",
+            page_id="dreamina",
+            step="batch",
+            payload={
+                "prompt_preview": prompt[:200],
+                "route": route,
+                "refs_count": len(refs),
+                "model_version": req.model_version,
+                "duration": req.duration,
+            },
+            estimated_seconds=est_per,
+            progress_text=f"即梦 {route} 跑中 ({req.model_version}, {req.duration or 5}s)...",
+            sync_fn=_make_sync(),
+        )
+        out_tasks.append({"task_id": task_id, "prompt": prompt})
+
+    return {
+        "tasks": out_tasks,
+        "route": route,
+        "refs_count": len(refs),
+        "estimated_seconds": est_per,
+        "page_id": "dreamina",
+    }
+
+
 @app.post("/api/chat", tags=["总部"], summary="小华自由对话 dock 多轮 (D-027)")
 def chat_dock(req: ChatDockReq, background_tasks: "BackgroundTasks" = None):
     """小华浮动 dock 自由对话(多轮)。messages 是完整对话历史,context 是当前页。

@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>即梦批量 Prompt · 三版方案对比 · D-075 mockup</title>
+<style>
+  :root {
+    --bg: #f7f5f0;
+    --bg2: #fcfaf6;
+    --bg3: #f0ebe1;
+    --text: #1a1a1a;
+    --muted: #6b6960;
+    --muted2: #8a877e;
+    --muted3: #b8b5ac;
+    --borderSoft: #f2efe7;
+    --border: #e3dfd5;
+    --brand: #2a6f4a;
+    --brandSoft: #e8f3ed;
+    --amber: #c47a1f;
+    --amberSoft: #fdf4e3;
+    --red: #b8422e;
+    --redSoft: #f8e7e2;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 24px; background: var(--bg); color: var(--text);
+    font: 14px/1.6 -apple-system, "SF Pro Text", "PingFang SC", sans-serif;
+  }
+  h1 { font-size: 22px; margin: 0 0 6px; font-weight: 700; }
+  .sub { color: var(--muted); font-size: 13px; margin-bottom: 24px; }
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; align-items: start; }
+  .col { background: #fff; border: 1px solid var(--borderSoft); border-radius: 14px; padding: 18px; }
+  .col h2 { font-size: 16px; margin: 0 0 4px; font-weight: 700; }
+  .col .tag { display: inline-block; padding: 2px 8px; background: var(--brandSoft); color: var(--brand); font-size: 11px; border-radius: 100px; font-weight: 600; }
+  .col .tagline { color: var(--muted); font-size: 12px; margin: 6px 0 14px; }
+  .mockup { background: var(--bg); padding: 14px; border-radius: 10px; border: 1px solid var(--borderSoft); margin-bottom: 14px; }
+
+  /* 通用 mockup 元素 */
+  .field-label { font-size: 10.5px; font-weight: 600; color: var(--muted2); letter-spacing: 0.06em; margin-bottom: 6px; text-transform: uppercase; }
+  .small-text { font-size: 11px; color: var(--muted2); }
+  .brand-text { color: var(--brand); }
+  .amber-text { color: var(--amber); }
+
+  /* 模拟参考图缩略 */
+  .ref-grid { display: flex; flex-wrap: wrap; gap: 6px; }
+  .ref-thumb {
+    width: 48px; height: 48px; border-radius: 6px; background: linear-gradient(135deg, #c8d4cb, #a8c4b3);
+    border: 1px solid var(--borderSoft); position: relative; flex-shrink: 0;
+  }
+  .ref-thumb.alt { background: linear-gradient(135deg, #e0d4c4, #c4b59a); }
+  .ref-add {
+    width: 48px; height: 48px; border-radius: 6px; border: 1.5px dashed var(--border); background: var(--bg2);
+    display: flex; align-items: center; justify-content: center; font-size: 14px; color: var(--muted);
+  }
+  .ref-section { background: #fff; border: 1px solid var(--borderSoft); border-radius: 8px; padding: 10px; margin-bottom: 12px; }
+
+  /* 公共 — 顶部 mode */
+  .modes { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 12px; }
+  .mode { padding: 8px; background: #fff; border: 1px solid var(--borderSoft); border-radius: 8px; text-align: center; font-size: 11.5px; }
+  .mode.active { background: var(--brandSoft); border-color: var(--brand); color: var(--brand); font-weight: 600; }
+
+  /* 提交按钮 */
+  .submit { padding: 7px 16px; font-size: 12px; font-weight: 600; background: var(--brand); color: #fff; border: none; border-radius: 100px; }
+
+  /* === 方案 A: 卡片堆叠 === */
+  .card-list { display: flex; flex-direction: column; gap: 8px; }
+  .pcard {
+    background: #fff; border: 1px solid var(--borderSoft); border-radius: 10px; padding: 10px;
+    position: relative;
+  }
+  .pcard-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .pcard-num {
+    width: 22px; height: 22px; border-radius: 50%; background: var(--brandSoft); color: var(--brand);
+    font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center;
+  }
+  .pcard-route { font-size: 10.5px; color: var(--muted); font-family: "SF Mono", monospace; }
+  .pcard-actions { margin-left: auto; display: flex; gap: 4px; font-size: 11px; color: var(--muted); }
+  .pcard-actions span { cursor: pointer; padding: 2px 5px; border-radius: 4px; }
+  .pcard-actions span:hover { background: var(--bg); }
+  .pcard textarea {
+    width: 100%; border: none; outline: none; resize: none; background: transparent;
+    font: inherit; font-size: 12.5px; color: var(--text); line-height: 1.6; padding: 0;
+  }
+  .add-prompt {
+    padding: 8px; border: 1.5px dashed var(--border); border-radius: 10px; text-align: center;
+    color: var(--muted); font-size: 12px; cursor: pointer; background: var(--bg2);
+  }
+
+  /* === 方案 B: 紧凑表格 === */
+  .table-wrap { background: #fff; border: 1px solid var(--borderSoft); border-radius: 10px; overflow: hidden; }
+  .table-row { display: grid; grid-template-columns: 28px 1fr 60px; align-items: center; gap: 8px; padding: 8px 10px; border-bottom: 1px solid var(--borderSoft); }
+  .table-row:last-child { border-bottom: none; }
+  .table-row.header { background: var(--bg); font-size: 10.5px; color: var(--muted2); font-weight: 600; padding: 6px 10px; }
+  .table-num { font-weight: 600; color: var(--brand); font-size: 12px; text-align: center; }
+  .table-row input { width: 100%; border: none; outline: none; background: transparent; font: inherit; font-size: 12.5px; color: var(--text); padding: 0; }
+  .table-row .actions { display: flex; gap: 4px; font-size: 11px; color: var(--muted); justify-content: flex-end; }
+  .table-row .actions span { cursor: pointer; padding: 2px 4px; border-radius: 3px; }
+  .add-row { text-align: center; padding: 8px; color: var(--muted); font-size: 12px; cursor: pointer; background: var(--bg2); }
+
+  /* === 方案 C: 主从分栏 === */
+  .master-detail { display: grid; grid-template-columns: 130px 1fr; gap: 10px; min-height: 240px; }
+  .master {
+    background: #fff; border: 1px solid var(--borderSoft); border-radius: 10px; padding: 8px;
+    display: flex; flex-direction: column; gap: 4px;
+  }
+  .master-item {
+    padding: 7px 8px; border-radius: 6px; cursor: pointer; font-size: 11.5px; line-height: 1.4;
+    color: var(--text); display: flex; align-items: flex-start; gap: 6px;
+  }
+  .master-item:hover { background: var(--bg); }
+  .master-item.active { background: var(--brandSoft); color: var(--brand); font-weight: 500; }
+  .master-num { font-weight: 700; min-width: 14px; }
+  .master-text { flex: 1; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .master-add { padding: 6px; text-align: center; border: 1.5px dashed var(--border); border-radius: 6px; font-size: 11px; color: var(--muted); cursor: pointer; margin-top: 4px; }
+
+  .detail { background: #fff; border: 1px solid var(--borderSoft); border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+  .detail-head { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted); }
+  .detail-head .badge { padding: 2px 7px; background: var(--brandSoft); color: var(--brand); border-radius: 100px; font-weight: 600; font-size: 10.5px; }
+  .detail textarea { width: 100%; border: 1px solid var(--borderSoft); outline: none; resize: vertical; background: var(--bg2); font: inherit; font-size: 12.5px; color: var(--text); line-height: 1.6; padding: 8px; border-radius: 6px; }
+  .detail .ref-mini-section { padding: 8px; background: var(--bg); border-radius: 6px; }
+
+  /* 优缺点 */
+  .props { font-size: 12px; line-height: 1.7; }
+  .props strong { color: var(--text); }
+  .props .pro { color: var(--brand); }
+  .props .con { color: var(--amber); }
+  .props li { list-style: none; padding-left: 14px; position: relative; }
+  .props li::before { content: ""; position: absolute; left: 0; top: 9px; width: 6px; height: 6px; border-radius: 50%; }
+  .props li.pro::before { background: var(--brand); }
+  .props li.con::before { background: var(--amber); }
+  .props ul { padding: 0; margin: 6px 0; }
+  .props .fit { padding: 8px 10px; background: var(--bg); border-radius: 6px; font-size: 11.5px; color: var(--muted); margin-top: 8px; }
+  .props .fit strong { color: var(--text); }
+</style>
+</head>
+<body>
+
+<h1>即梦视频生成 · 批量 Prompt 输入 · 三版方案对比</h1>
+<div class="sub">
+  D-075 设计阶段 · 内容: 已填 3 个 prompt + 2 张共享参考图 · 走 multimodal2video · 同样数据用 3 种 UI 呈现
+</div>
+
+<div class="grid">
+
+  <!-- =================== 方案 A: 卡片堆叠 =================== -->
+  <div class="col">
+    <span class="tag">方案 A</span>
+    <h2 style="margin-top:6px">卡片堆叠</h2>
+    <div class="tagline">每条 prompt 一张独立卡片 · 视觉分隔最强</div>
+
+    <div class="mockup">
+      <div class="modes">
+        <div class="mode">🖼️ 文本生图</div>
+        <div class="mode active">🎬 视频生成</div>
+      </div>
+
+      <div class="ref-section">
+        <div class="field-label">📷 共享参考图 · 2 张 · 走 multimodal2video</div>
+        <div class="ref-grid">
+          <div class="ref-thumb"></div>
+          <div class="ref-thumb alt"></div>
+          <div class="ref-add">+</div>
+        </div>
+      </div>
+
+      <div class="field-label" style="margin-top:14px;display:flex;align-items:center;gap:6px">
+        <span>📝 PROMPT 列表 · 3 条</span>
+        <span class="small-text" style="font-weight:400;text-transform:none;letter-spacing:0;margin-left:auto">批量并发跑</span>
+      </div>
+
+      <div class="card-list">
+        <div class="pcard">
+          <div class="pcard-head">
+            <div class="pcard-num">1</div>
+            <div class="pcard-route">multimodal2video</div>
+            <div class="pcard-actions"><span>📋</span><span>✕</span></div>
+          </div>
+          <textarea rows="2">少年在雨夜走过霓虹街道, 镜头慢推, 电影感, 蓝紫调</textarea>
+        </div>
+        <div class="pcard">
+          <div class="pcard-head">
+            <div class="pcard-num">2</div>
+            <div class="pcard-route">multimodal2video</div>
+            <div class="pcard-actions"><span>📋</span><span>✕</span></div>
+          </div>
+          <textarea rows="2">同一少年仰头看天, 雨水从面颊滑落, 特写眼睛</textarea>
+        </div>
+        <div class="pcard">
+          <div class="pcard-head">
+            <div class="pcard-num">3</div>
+            <div class="pcard-route">multimodal2video</div>
+            <div class="pcard-actions"><span>📋</span><span>✕</span></div>
+          </div>
+          <textarea rows="2">少年转身离开, 镜头慢慢拉远, 街道亮灯一一熄灭</textarea>
+        </div>
+        <div class="add-prompt">+ 添加 prompt</div>
+      </div>
+
+      <div style="display:flex;align-items:center;margin-top:12px;padding-top:10px;border-top:1px solid var(--borderSoft);font-size:11.5px;color:var(--muted2)">
+        共 3 条 · seedance2.0fast · 5s · 720p
+        <div style="flex:1"></div>
+        <button class="submit">批量提交 3 条 →</button>
+      </div>
+    </div>
+
+    <div class="props">
+      <ul>
+        <li class="pro"><strong class="pro">视觉分隔最强</strong> — 每条 prompt 独立卡片, 一眼数清楚有几条</li>
+        <li class="pro"><strong class="pro">操作位明确</strong> — 复制/删除按钮挂在每张卡上, 不需要找</li>
+        <li class="pro"><strong class="pro">可演化</strong> — 卡片内未来可加"该条独立参考图""该条独立时长", 不破坏布局</li>
+        <li class="con"><strong class="con">占空间</strong> — 5 条以上要滚动 (但批量场景就是 N 条, 滚动可接受)</li>
+      </ul>
+      <div class="fit">
+        <strong>适合</strong>: prompt 数量 ≤8, 内容相对独立, 未来可能要给某条单独配参考图/时长。<br>
+        <strong>清华哥反馈"明显区分"的最直接答案</strong>。
+      </div>
+    </div>
+  </div>
+
+  <!-- =================== 方案 B: 紧凑表格 =================== -->
+  <div class="col">
+    <span class="tag">方案 B</span>
+    <h2 style="margin-top:6px">紧凑表格</h2>
+    <div class="tagline">行式布局 · 序号对齐 · Excel 感</div>
+
+    <div class="mockup">
+      <div class="modes">
+        <div class="mode">🖼️ 文本生图</div>
+        <div class="mode active">🎬 视频生成</div>
+      </div>
+
+      <div class="ref-section">
+        <div class="field-label">📷 共享参考图 · 2 张 · 走 multimodal2video</div>
+        <div class="ref-grid">
+          <div class="ref-thumb"></div>
+          <div class="ref-thumb alt"></div>
+          <div class="ref-add">+</div>
+        </div>
+      </div>
+
+      <div class="field-label" style="margin-top:14px">📝 PROMPT 表 · 3 行</div>
+
+      <div class="table-wrap">
+        <div class="table-row header">
+          <div>#</div>
+          <div>PROMPT</div>
+          <div style="text-align:right">操作</div>
+        </div>
+        <div class="table-row">
+          <div class="table-num">1</div>
+          <input value="少年在雨夜走过霓虹街道, 镜头慢推, 电影感, 蓝紫调" />
+          <div class="actions"><span>📋</span><span>✕</span></div>
+        </div>
+        <div class="table-row">
+          <div class="table-num">2</div>
+          <input value="同一少年仰头看天, 雨水从面颊滑落, 特写眼睛" />
+          <div class="actions"><span>📋</span><span>✕</span></div>
+        </div>
+        <div class="table-row">
+          <div class="table-num">3</div>
+          <input value="少年转身离开, 镜头慢慢拉远, 街道亮灯一一熄灭" />
+          <div class="actions"><span>📋</span><span>✕</span></div>
+        </div>
+        <div class="add-row">+ 添加 prompt</div>
+      </div>
+
+      <div style="display:flex;align-items:center;margin-top:12px;padding-top:10px;border-top:1px solid var(--borderSoft);font-size:11.5px;color:var(--muted2)">
+        共 3 条 · 都走 multimodal2video
+        <div style="flex:1"></div>
+        <button class="submit">批量提交 3 条 →</button>
+      </div>
+    </div>
+
+    <div class="props">
+      <ul>
+        <li class="pro"><strong class="pro">高密度</strong> — 8 条都不需要滚动, 一眼看全</li>
+        <li class="pro"><strong class="pro">对齐感强</strong> — 序号一列, 像在填表, 不容易遗漏</li>
+        <li class="pro"><strong class="pro">轻量</strong> — UI 占用最少, 跟单跑模式视觉接近</li>
+        <li class="con"><strong class="con">长 prompt 不好编辑</strong> — 单行 input, 长文案被截断 (要双击展开)</li>
+        <li class="con"><strong class="con">每条独立配置难加</strong> — 行内塞不下太多控件, 未来扩展受限</li>
+      </ul>
+      <div class="fit">
+        <strong>适合</strong>: prompt 数量多 (10+), 每条短小, 一次跑完不需要单独调。<br>
+        <strong>"明显区分" 程度中等</strong> — 行有分割但视觉密度高。
+      </div>
+    </div>
+  </div>
+
+  <!-- =================== 方案 C: 主从分栏 =================== -->
+  <div class="col">
+    <span class="tag">方案 C</span>
+    <h2 style="margin-top:6px">主从分栏</h2>
+    <div class="tagline">左侧列表 + 右侧详情 · 每条可独立配参考图/时长</div>
+
+    <div class="mockup">
+      <div class="modes">
+        <div class="mode">🖼️ 文本生图</div>
+        <div class="mode active">🎬 视频生成</div>
+      </div>
+
+      <div class="master-detail">
+        <div class="master">
+          <div class="master-item active">
+            <div class="master-num">1</div>
+            <div class="master-text">少年在雨夜走过霓虹街道, 镜头慢推, 电影感, 蓝紫调</div>
+          </div>
+          <div class="master-item">
+            <div class="master-num">2</div>
+            <div class="master-text">同一少年仰头看天, 雨水从面颊滑落, 特写眼睛</div>
+          </div>
+          <div class="master-item">
+            <div class="master-num">3</div>
+            <div class="master-text">少年转身离开, 镜头慢慢拉远, 街道亮灯一一熄灭</div>
+          </div>
+          <div class="master-add">+ 添加</div>
+        </div>
+
+        <div class="detail">
+          <div class="detail-head">
+            <span class="badge">第 1 条</span>
+            <span>· multimodal2video · 5s</span>
+          </div>
+          <textarea rows="3">少年在雨夜走过霓虹街道, 镜头慢推, 电影感, 蓝紫调</textarea>
+          <div class="ref-mini-section">
+            <div class="field-label" style="margin-bottom:4px">📷 该条专属参考图 (覆盖共享)</div>
+            <div class="ref-grid">
+              <div class="ref-thumb"></div>
+              <div class="ref-add">+</div>
+            </div>
+          </div>
+          <div style="display:flex;gap:6px;font-size:11px;color:var(--muted)">
+            <span>时长: 5s</span>
+            <span>·</span>
+            <span>比例: 16:9</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="ref-section" style="margin-top:12px">
+        <div class="field-label">📷 默认共享参考图 · 2 张 (没设独立的就用这组)</div>
+        <div class="ref-grid">
+          <div class="ref-thumb"></div>
+          <div class="ref-thumb alt"></div>
+          <div class="ref-add">+</div>
+        </div>
+      </div>
+
+      <div style="display:flex;align-items:center;margin-top:12px;padding-top:10px;border-top:1px solid var(--borderSoft);font-size:11.5px;color:var(--muted2)">
+        共 3 条 · 1 条用专属图, 2 条用共享
+        <div style="flex:1"></div>
+        <button class="submit">批量提交 3 条 →</button>
+      </div>
+    </div>
+
+    <div class="props">
+      <ul>
+        <li class="pro"><strong class="pro">能力最强</strong> — 每条 prompt 可独立挂参考图/时长/比例</li>
+        <li class="pro"><strong class="pro">编辑长 prompt 最爽</strong> — 详情区是大编辑器, 不挤</li>
+        <li class="pro"><strong class="pro">视觉区分极强</strong> — 当前选中条高亮, 一眼能辨别</li>
+        <li class="con"><strong class="con">UI 重</strong> — 比当前的 textarea 复杂 ~3 倍, 单跑场景显得过度</li>
+        <li class="con"><strong class="con">切换才能看下一条全文</strong> — 不能一屏看完所有 prompt 完整文案</li>
+      </ul>
+      <div class="fit">
+        <strong>适合</strong>: 每条 prompt 真的"很不一样", 想给某条挂独立参考图/时长。<br>
+        <strong>"明显区分" 最强</strong>, 但前置认知成本最高。
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div style="margin-top:32px;padding:18px;background:#fff;border:1px solid var(--borderSoft);border-radius:12px">
+  <div style="font-size:13px;font-weight:700;margin-bottom:8px">📐 设计差异速览</div>
+  <table style="width:100%;border-collapse:collapse;font-size:12.5px">
+    <thead>
+      <tr style="border-bottom:1px solid var(--borderSoft)">
+        <th style="text-align:left;padding:6px 8px;color:var(--muted2);font-weight:600">维度</th>
+        <th style="text-align:left;padding:6px 8px">A · 卡片堆叠</th>
+        <th style="text-align:left;padding:6px 8px">B · 紧凑表格</th>
+        <th style="text-align:left;padding:6px 8px">C · 主从分栏</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td style="padding:6px 8px;color:var(--muted)">视觉区分</td><td style="padding:6px 8px">⭐⭐⭐⭐</td><td style="padding:6px 8px">⭐⭐</td><td style="padding:6px 8px">⭐⭐⭐⭐⭐</td></tr>
+      <tr><td style="padding:6px 8px;color:var(--muted)">空间占用</td><td style="padding:6px 8px">中</td><td style="padding:6px 8px">小</td><td style="padding:6px 8px">大</td></tr>
+      <tr><td style="padding:6px 8px;color:var(--muted)">编辑长 prompt</td><td style="padding:6px 8px">易</td><td style="padding:6px 8px">难 (单行)</td><td style="padding:6px 8px">最易</td></tr>
+      <tr><td style="padding:6px 8px;color:var(--muted)">每条独立配置</td><td style="padding:6px 8px">可拓展</td><td style="padding:6px 8px">受限</td><td style="padding:6px 8px">原生支持</td></tr>
+      <tr><td style="padding:6px 8px;color:var(--muted)">单跑 (N=1) 体验</td><td style="padding:6px 8px">略重</td><td style="padding:6px 8px">最轻</td><td style="padding:6px 8px">最重</td></tr>
+      <tr><td style="padding:6px 8px;color:var(--muted)">实现成本</td><td style="padding:6px 8px">低 (~30min)</td><td style="padding:6px 8px">最低 (~20min)</td><td style="padding:6px 8px">高 (~1.5h)</td></tr>
+      <tr><td style="padding:6px 8px;color:var(--muted)">适合的批量规模</td><td style="padding:6px 8px">3-8 条</td><td style="padding:6px 8px">5-20 条</td><td style="padding:6px 8px">3-10 条但每条很不同</td></tr>
+    </tbody>
+  </table>
+</div>
+
+</body>
+</html>

@@ -1,23 +1,35 @@
-// factory-dreamina-v2.jsx — 即梦(Dreamina) AIGC 工具 (D-028)
+// factory-dreamina-v2.jsx — 即梦(Dreamina) AIGC 工具 (D-028, D-075 batch + 参考图)
 // CLI: ~/.local/bin/dreamina · 字节官方 AIGC
-// 2 step: 输入 prompt + 配置 → 提交 → 轮询 → 显示结果
+//
+// D-075 (2026-04-26): 视频生成统一为 "视频生成" 模式 (替代旧 image2video).
+//   按参考图数量自动分流: 0 → text2video / 1 → image2video / ≥2 → multimodal2video
+//   prompt 多行 = 自动批量并发 (≤20). 结果区显示 N 个 task 卡片.
 
 const DM_STEPS = [
   { id: "input",   n: 1, label: "Prompt + 配置" },
-  { id: "result",  n: 2, label: "提交 / 轮询 / 结果" },
+  { id: "result",  n: 2, label: "提交 / 结果" },
 ];
 
 const DM_MODES = [
-  { id: "text2image",  label: "文本生图", icon: "🖼️" },
-  { id: "image2video", label: "图生视频", icon: "🎞️" },
+  { id: "text2image", label: "文本生图", icon: "🖼️" },
+  { id: "video",      label: "视频生成", icon: "🎬" },
 ];
 
 const DM_T2I_MODELS = ["", "3.0", "3.1", "4.0", "4.1", "4.5", "4.6", "5.0", "lab"];
 const DM_T2I_RATIOS = ["1:1", "16:9", "9:16", "4:3", "3:4", "21:9", "3:2", "2:3"];
 const DM_T2I_RES   = ["", "1k", "2k", "4k"];
 
-const DM_I2V_MODELS = ["", "3.0", "3.0fast", "3.0pro", "3.5pro", "seedance2.0", "seedance2.0fast"];
-const DM_I2V_RES   = ["", "720p", "1080p"];
+const DM_VIDEO_MODELS = ["seedance2.0fast", "seedance2.0"];
+const DM_VIDEO_RATIOS = ["16:9", "9:16", "1:1", "3:4", "4:3", "21:9"];
+const DM_VIDEO_RES = ["720p", "1080p"];
+
+const selectStyle = { width: "100%", padding: "5px 8px", borderRadius: 6, border: `1px solid ${T.borderSoft}`, fontSize: 12 };
+
+function videoRoute(refsCount) {
+  if (refsCount === 0) return { name: "text2video", label: "纯文字生视频" };
+  if (refsCount === 1) return { name: "image2video", label: "首帧图动起来" };
+  return { name: "multimodal2video", label: `${refsCount} 张全参考` };
+}
 
 function PageDreamina({ onNav }) {
   const [step, setStep] = React.useState("input");
@@ -27,72 +39,158 @@ function PageDreamina({ onNav }) {
   const [info, setInfo] = React.useState(null);
   const [mode, setMode] = React.useState("text2image");
   const [prompt, setPrompt] = React.useState("");
-  const [ratio, setRatio] = React.useState("1:1");
-  const [resolution, setResolution] = React.useState("");
-  const [modelVer, setModelVer] = React.useState("");
-  const [imagePath, setImagePath] = React.useState("");
-  const [duration, setDuration] = React.useState(5);
 
-  const [submitResult, setSubmitResult] = React.useState(null);  // {submit_id, ...}
+  // 文本生图
+  const [t2iRatio, setT2iRatio] = React.useState("1:1");
+  const [t2iRes, setT2iRes] = React.useState("");
+  const [t2iModelVer, setT2iModelVer] = React.useState("");
+  const [t2iSubmit, setT2iSubmit] = React.useState(null);
+  const [t2iQuery, setT2iQuery] = React.useState(null);
   const [polling, setPolling] = React.useState(false);
-  const [queryResult, setQueryResult] = React.useState(null);
+
+  // 视频生成 (统一)
+  const [videoRatio, setVideoRatio] = React.useState("16:9");
+  const [videoRes, setVideoRes] = React.useState("720p");
+  const [videoModelVer, setVideoModelVer] = React.useState("seedance2.0fast");
+  const [duration, setDuration] = React.useState(5);
+  const [refs, setRefs] = React.useState([]);          // [{id, name, path, uploading?, error?}]
+  const [promptList, setPromptList] = React.useState([{ id: `p-${Date.now()}`, text: "" }]); // 卡片堆叠
+  const [batchTasks, setBatchTasks] = React.useState([]); // [{task_id, prompt}]
+  const fileInputRef = React.useRef(null);
+
+  // promptList helpers
+  const PROMPT_MAX = 20;
+  function addPrompt() {
+    setPromptList(prev => prev.length >= PROMPT_MAX ? prev : [...prev, { id: `p-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, text: "" }]);
+  }
+  function removePrompt(id) {
+    setPromptList(prev => prev.length > 1 ? prev.filter(p => p.id !== id) : prev);
+  }
+  function duplicatePrompt(id) {
+    setPromptList(prev => {
+      if (prev.length >= PROMPT_MAX) return prev;
+      const idx = prev.findIndex(p => p.id === id);
+      if (idx < 0) return prev;
+      const copy = { id: `p-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, text: prev[idx].text };
+      return [...prev.slice(0, idx + 1), copy, ...prev.slice(idx + 1)];
+    });
+  }
+  function updatePrompt(id, text) {
+    setPromptList(prev => prev.map(p => p.id === id ? { ...p, text } : p));
+  }
 
   React.useEffect(() => { api.get("/api/dreamina/info").then(setInfo).catch(() => {}); }, []);
 
-  // 工作流持久化
-  const wfState = { step, mode, prompt, ratio, resolution, modelVer, imagePath, duration, submitResult, queryResult };
+  // 工作流持久化 (refs 不持久化, 临时素材)
+  const wfState = {
+    step, mode, prompt, promptList,
+    t2iRatio, t2iRes, t2iModelVer, t2iSubmit, t2iQuery,
+    videoRatio, videoRes, videoModelVer, duration, batchTasks,
+  };
   const wfRestore = (s) => {
     if (s.step) setStep(s.step);
     if (s.mode) setMode(s.mode);
     if (s.prompt != null) setPrompt(s.prompt);
-    if (s.ratio) setRatio(s.ratio);
-    if (s.resolution != null) setResolution(s.resolution);
-    if (s.modelVer != null) setModelVer(s.modelVer);
-    if (s.imagePath != null) setImagePath(s.imagePath);
+    if (Array.isArray(s.promptList) && s.promptList.length > 0) setPromptList(s.promptList);
+    if (s.t2iRatio) setT2iRatio(s.t2iRatio);
+    if (s.t2iRes != null) setT2iRes(s.t2iRes);
+    if (s.t2iModelVer != null) setT2iModelVer(s.t2iModelVer);
+    if (s.t2iSubmit) setT2iSubmit(s.t2iSubmit);
+    if (s.t2iQuery) setT2iQuery(s.t2iQuery);
+    if (s.videoRatio) setVideoRatio(s.videoRatio);
+    if (s.videoRes) setVideoRes(s.videoRes);
+    if (s.videoModelVer) setVideoModelVer(s.videoModelVer);
     if (s.duration != null) setDuration(s.duration);
-    if (s.submitResult) setSubmitResult(s.submitResult);
-    if (s.queryResult) setQueryResult(s.queryResult);
+    if (Array.isArray(s.batchTasks)) setBatchTasks(s.batchTasks);
   };
   const wf = useWorkflowPersist({ ns: "dreamina", state: wfState, onRestore: wfRestore });
 
-  async function submit() {
-    if (!prompt.trim()) return;
-    if (mode === "image2video" && !imagePath.trim()) {
-      setErr("图生视频需要本地图片路径"); return;
+  // ── 参考图上传 (落盘版, 调 /api/dreamina/upload-ref 拿本地 path)
+  async function uploadRefs(files) {
+    const remaining = 9 - refs.length;
+    if (remaining <= 0) return;
+    const list = Array.from(files).slice(0, remaining);
+    const placeholders = list.map((f, i) => ({
+      id: `tmp-${Date.now()}-${i}`, name: f.name, size_bytes: f.size, uploading: true,
+    }));
+    setRefs(prev => [...prev, ...placeholders]);
+
+    for (let i = 0; i < list.length; i++) {
+      const f = list[i];
+      const ph = placeholders[i];
+      try {
+        const r = await api.upload("/api/dreamina/upload-ref", f);
+        setRefs(prev => prev.map(x => x.id === ph.id ? {
+          ...x, uploading: false, path: r.path, media_url: r.media_url,
+        } : x));
+      } catch (e) {
+        setRefs(prev => prev.map(x => x.id === ph.id ? {
+          ...x, uploading: false, error: e.message || "上传失败",
+        } : x));
+      }
     }
-    setStep("result");
-    setSubmitResult(null); setQueryResult(null);
-    setLoading(true); setErr("");
+  }
+  function removeRef(id) {
+    setRefs(prev => prev.filter(x => x.id !== id));
+  }
+
+  // ── 提交
+  const isVideo = mode === "video";
+  const videoPrompts = promptList.map(p => (p.text || "").trim()).filter(Boolean);
+  const videoPromptCount = videoPrompts.length;
+  const readyRefs = refs.filter(r => r.path && !r.error);
+
+  async function submit() {
+    setStep("result"); setErr("");
+    if (mode === "text2image") {
+      if (!prompt.trim()) return;
+      setT2iSubmit(null); setT2iQuery(null); setLoading(true);
+      try {
+        const r = await api.post("/api/dreamina/text2image", {
+          prompt: prompt.trim(), ratio: t2iRatio,
+          resolution_type: t2iRes || undefined,
+          model_version: t2iModelVer || undefined,
+          poll: 0,
+        });
+        setT2iSubmit(r);
+      } catch (e) { setErr(e.message); setStep("input"); }
+      setLoading(false);
+      return;
+    }
+    // video 模式
+    if (videoPromptCount === 0) { setStep("input"); setErr("至少填一条 prompt"); return; }
+    setBatchTasks([]); setLoading(true);
     try {
-      const path = mode === "text2image" ? "/api/dreamina/text2image" : "/api/dreamina/image2video";
-      const body = mode === "text2image"
-        ? { prompt: prompt.trim(), ratio,
-            resolution_type: resolution || undefined,
-            model_version: modelVer || undefined, poll: 0 }
-        : { image: imagePath.trim(), prompt: prompt.trim(),
-            duration: duration || undefined,
-            video_resolution: resolution || undefined,
-            model_version: modelVer || undefined, poll: 0 };
-      const r = await api.post(path, body);
-      setSubmitResult(r);
+      const r = await api.post("/api/dreamina/batch-video", {
+        prompts: videoPrompts,
+        ref_paths: readyRefs.map(x => x.path),
+        duration: duration || undefined,
+        ratio: videoRatio,
+        video_resolution: videoRes,
+        model_version: videoModelVer,
+      });
+      setBatchTasks(r.tasks || []);
     } catch (e) { setErr(e.message); setStep("input"); }
     setLoading(false);
   }
 
   async function pollOnce() {
-    const submitId = submitResult?.result?.submit_id || submitResult?.result?.SubmitId;
+    const submitId = t2iSubmit?.result?.submit_id || t2iSubmit?.result?.SubmitId;
     if (!submitId) { setErr("没拿到 submit_id, 看 raw 输出"); return; }
     setPolling(true); setErr("");
     try {
       const r = await api.post("/api/dreamina/query", { submit_id: submitId, download: true });
-      setQueryResult(r);
+      setT2iQuery(r);
     } catch (e) { setErr(e.message); }
     setPolling(false);
   }
 
   function reset() {
     setStep("input"); setErr("");
-    setPrompt(""); setSubmitResult(null); setQueryResult(null);
+    setPrompt("");
+    setPromptList([{ id: `p-${Date.now()}`, text: "" }]);
+    setT2iSubmit(null); setT2iQuery(null);
+    setBatchTasks([]); setRefs([]);
     clearWorkflow("dreamina");
   }
 
@@ -113,22 +211,46 @@ function PageDreamina({ onNav }) {
         )}
         {step === "input"  && <DStepInput
           info={info} mode={mode} setMode={setMode} prompt={prompt} setPrompt={setPrompt}
-          ratio={ratio} setRatio={setRatio} resolution={resolution} setResolution={setResolution}
-          modelVer={modelVer} setModelVer={setModelVer}
-          imagePath={imagePath} setImagePath={setImagePath} duration={duration} setDuration={setDuration}
+          isVideo={isVideo}
+          promptList={promptList} addPrompt={addPrompt} removePrompt={removePrompt}
+          duplicatePrompt={duplicatePrompt} updatePrompt={updatePrompt}
+          videoPromptCount={videoPromptCount} promptMax={PROMPT_MAX}
+          t2iRatio={t2iRatio} setT2iRatio={setT2iRatio}
+          t2iRes={t2iRes} setT2iRes={setT2iRes}
+          t2iModelVer={t2iModelVer} setT2iModelVer={setT2iModelVer}
+          videoRatio={videoRatio} setVideoRatio={setVideoRatio}
+          videoRes={videoRes} setVideoRes={setVideoRes}
+          videoModelVer={videoModelVer} setVideoModelVer={setVideoModelVer}
+          duration={duration} setDuration={setDuration}
+          refs={refs} readyRefs={readyRefs} fileInputRef={fileInputRef}
+          uploadRefs={uploadRefs} removeRef={removeRef}
           loading={loading} onGo={submit} />}
-        {step === "result" && <DStepResult mode={mode} submitResult={submitResult} queryResult={queryResult}
-          loading={loading} polling={polling} onPoll={pollOnce} onPrev={() => setStep("input")} onReset={reset} />}
+        {step === "result" && mode === "text2image" && <DStepT2IResult
+          submitResult={t2iSubmit} queryResult={t2iQuery}
+          loading={loading} polling={polling} onPoll={pollOnce}
+          onPrev={() => setStep("input")} onReset={reset} />}
+        {step === "result" && mode === "video" && <DStepVideoResult
+          batchTasks={batchTasks} loading={loading}
+          onPrev={() => setStep("input")} onReset={reset} />}
       </div>
     </div>
   );
 }
 
-function DStepInput({ info, mode, setMode, prompt, setPrompt, ratio, setRatio, resolution, setResolution, modelVer, setModelVer, imagePath, setImagePath, duration, setDuration, loading, onGo }) {
-  const isVideo = mode === "image2video";
-  const models = isVideo ? DM_I2V_MODELS : DM_T2I_MODELS;
-  const reses  = isVideo ? DM_I2V_RES    : DM_T2I_RES;
-  const ready = !!prompt.trim() && (!isVideo || !!imagePath.trim()) && !loading;
+function DStepInput({
+  info, mode, setMode, prompt, setPrompt, isVideo,
+  promptList, addPrompt, removePrompt, duplicatePrompt, updatePrompt,
+  videoPromptCount, promptMax,
+  t2iRatio, setT2iRatio, t2iRes, setT2iRes, t2iModelVer, setT2iModelVer,
+  videoRatio, setVideoRatio, videoRes, setVideoRes, videoModelVer, setVideoModelVer,
+  duration, setDuration, refs, readyRefs, fileInputRef, uploadRefs, removeRef,
+  loading, onGo,
+}) {
+  const route = isVideo ? videoRoute(readyRefs.length) : null;
+  const refsBusy = refs.some(r => r.uploading);
+  const readyT2i = !!prompt.trim() && !loading;
+  const readyVideo = videoPromptCount > 0 && !loading && !refsBusy;
+  const ready = isVideo ? readyVideo : readyT2i;
   return (
     <div style={{ padding: "32px 40px 80px", maxWidth: 820, margin: "0 auto" }}>
       <div style={{ textAlign: "center", marginBottom: 16 }}>
@@ -152,66 +274,225 @@ function DStepInput({ info, mode, setMode, prompt, setPrompt, ratio, setRatio, r
         ))}
       </div>
 
-      <div style={{ background: "#fff", border: `1.5px solid ${T.brand}`, boxShadow: `0 0 0 5px ${T.brandSoft}`, borderRadius: 14, padding: 16, marginBottom: 14 }}>
-        {isVideo && (
-          <div style={{ marginBottom: 10 }}>
-            <div style={{ fontSize: 11.5, color: T.muted2, fontWeight: 600, marginBottom: 4, letterSpacing: "0.06em" }}>本地图片路径</div>
-            <input value={imagePath} onChange={e => setImagePath(e.target.value)}
-              placeholder="/Users/black.chen/Desktop/poju-gen/.../xxx.png"
-              style={{ width: "100%", border: `1px solid ${T.borderSoft}`, borderRadius: 6, padding: "6px 10px", fontSize: 12, fontFamily: "SF Mono, monospace", outline: "none" }} />
+      {/* === 视频生成: 参考图 → prompt 卡片列表 + 提交 === */}
+      {isVideo && (
+        <>
+          {/* 共享参考图 */}
+          <div style={{ padding: 14, background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 10, marginBottom: 12 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+              <div style={{ fontSize: 11.5, color: T.muted2, fontWeight: 600, letterSpacing: "0.08em" }}>📷 共享参考图</div>
+              <span style={{ fontSize: 11, color: T.muted2 }}>
+                {readyRefs.length} 张 · 走 <b style={{ color: T.brand }}>{route.name}</b> ({route.label})
+              </span>
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+              {refs.map(r => (
+                <div key={r.id} style={{
+                  position: "relative", width: 64, height: 64, borderRadius: 8,
+                  background: r.media_url ? `url(${api.media(r.media_url)}) center/cover` : T.bg2,
+                  border: `1px solid ${r.error ? T.red : T.borderSoft}`,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                }} title={r.name}>
+                  {r.uploading && <span style={{ fontSize: 16 }}>⏳</span>}
+                  {r.error && <span style={{ fontSize: 9, color: T.red, padding: 3, textAlign: "center" }}>{r.error.slice(0, 16)}</span>}
+                  <button onClick={() => removeRef(r.id)} title="删除" style={{
+                    position: "absolute", top: -6, right: -6,
+                    width: 18, height: 18, borderRadius: "50%",
+                    background: "#fff", border: `1px solid ${T.border}`,
+                    color: T.muted, fontSize: 10, cursor: "pointer",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    padding: 0, fontFamily: "inherit",
+                    boxShadow: "0 1px 2px rgba(0,0,0,0.1)",
+                  }}>✕</button>
+                </div>
+              ))}
+              {refs.length < 9 && (
+                <button
+                  onClick={() => fileInputRef.current && fileInputRef.current.click()}
+                  style={{
+                    width: 64, height: 64, borderRadius: 8,
+                    border: `1.5px dashed ${T.border}`, background: T.bg2,
+                    cursor: "pointer", color: T.muted, fontSize: 11,
+                    display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+                    gap: 2, fontFamily: "inherit",
+                  }}>
+                  <span style={{ fontSize: 16 }}>+</span>
+                  <span style={{ fontSize: 9 }}>添加</span>
+                </button>
+              )}
+            </div>
+            <input
+              ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp"
+              multiple style={{ display: "none" }}
+              onChange={(e) => {
+                if (e.target.files && e.target.files.length > 0) {
+                  uploadRefs(e.target.files); e.target.value = "";
+                }
+              }}
+            />
           </div>
-        )}
-        <textarea rows={5} value={prompt} onChange={e => setPrompt(e.target.value)}
-          placeholder={isVideo ? "描述视频内容(画面/动作/氛围)..." : "描述图片(主体/风格/光线/构图)..."}
-          style={{ width: "100%", border: "none", outline: "none", background: "transparent", fontSize: 14, fontFamily: "inherit", resize: "vertical", lineHeight: 1.7, color: T.text }} />
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, paddingTop: 10, borderTop: `1px solid ${T.borderSoft}` }}>
-          <div style={{ fontSize: 11.5, color: T.muted2 }}>提示 {prompt.length} 字 · 即梦消耗 credits</div>
-          <div style={{ flex: 1 }} />
-          <button onClick={onGo} disabled={!ready} style={{
-            padding: "7px 18px", fontSize: 13, fontWeight: 600,
-            background: ready ? T.brand : T.muted3, color: "#fff",
-            border: "none", borderRadius: 100, cursor: ready ? "pointer" : "not-allowed", fontFamily: "inherit",
-          }}>{loading ? "提交中..." : "提交任务 →"}</button>
-        </div>
-      </div>
 
+          {/* prompt 卡片列表 */}
+          <div style={{ padding: 14, background: "#fff", border: `1.5px solid ${T.brand}`, boxShadow: `0 0 0 5px ${T.brandSoft}`, borderRadius: 14, marginBottom: 14 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+              <div style={{ fontSize: 11.5, color: T.muted2, fontWeight: 600, letterSpacing: "0.08em" }}>📝 PROMPT 列表</div>
+              <span style={{ fontSize: 11, color: T.muted2 }}>{promptList.length} 条 · 上限 {promptMax}</span>
+              <div style={{ flex: 1 }} />
+              <span style={{ fontSize: 11, color: T.muted2 }}>批量并发跑</span>
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {promptList.map((p, idx) => (
+                <DPromptCard key={p.id} idx={idx + 1} text={p.text} route={route}
+                  isLast={idx === promptList.length - 1}
+                  onChange={t => updatePrompt(p.id, t)}
+                  onDup={() => duplicatePrompt(p.id)}
+                  onRemove={promptList.length > 1 ? () => removePrompt(p.id) : null} />
+              ))}
+              {promptList.length < promptMax && (
+                <div onClick={addPrompt} style={{
+                  padding: 10, border: `1.5px dashed ${T.border}`, borderRadius: 10,
+                  textAlign: "center", color: T.muted, fontSize: 12.5, cursor: "pointer", background: T.bg2,
+                  fontFamily: "inherit",
+                }}>+ 添加 prompt</div>
+              )}
+            </div>
+
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, paddingTop: 10, borderTop: `1px solid ${T.borderSoft}` }}>
+              <div style={{ fontSize: 11.5, color: T.muted2 }}>
+                共 {videoPromptCount} 条有内容
+                {refsBusy && <span style={{ color: T.amber, marginLeft: 6 }}>· 等参考图传完</span>}
+              </div>
+              <div style={{ flex: 1 }} />
+              <button onClick={onGo} disabled={!ready} style={{
+                padding: "7px 18px", fontSize: 13, fontWeight: 600,
+                background: ready ? T.brand : T.muted3, color: "#fff",
+                border: "none", borderRadius: 100, cursor: ready ? "pointer" : "not-allowed", fontFamily: "inherit",
+              }}>{loading ? "提交中..." : videoPromptCount > 1 ? `批量提交 ${videoPromptCount} 条 →` : "提交任务 →"}</button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* === 文本生图: 单 textarea + 提交 (旧路径不变) === */}
+      {!isVideo && (
+        <div style={{ background: "#fff", border: `1.5px solid ${T.brand}`, boxShadow: `0 0 0 5px ${T.brandSoft}`, borderRadius: 14, padding: 16, marginBottom: 14 }}>
+          <textarea rows={5} value={prompt} onChange={e => setPrompt(e.target.value)}
+            placeholder="描述图片(主体/风格/光线/构图)..."
+            style={{ width: "100%", border: "none", outline: "none", background: "transparent", fontSize: 14, fontFamily: "inherit", resize: "vertical", lineHeight: 1.7, color: T.text }} />
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, paddingTop: 10, borderTop: `1px solid ${T.borderSoft}` }}>
+            <div style={{ fontSize: 11.5, color: T.muted2 }}>提示 {prompt.length} 字 · 即梦消耗 credits</div>
+            <div style={{ flex: 1 }} />
+            <button onClick={onGo} disabled={!ready} style={{
+              padding: "7px 18px", fontSize: 13, fontWeight: 600,
+              background: ready ? T.brand : T.muted3, color: "#fff",
+              border: "none", borderRadius: 100, cursor: ready ? "pointer" : "not-allowed", fontFamily: "inherit",
+            }}>{loading ? "提交中..." : "提交任务 →"}</button>
+          </div>
+        </div>
+      )}
+
+      {/* 高级参数 */}
       <div style={{ padding: 14, background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 10 }}>
-        <div style={{ fontSize: 11.5, color: T.muted2, fontWeight: 600, letterSpacing: "0.08em", marginBottom: 10 }}>高级参数(留空走默认)</div>
+        <div style={{ fontSize: 11.5, color: T.muted2, fontWeight: 600, letterSpacing: "0.08em", marginBottom: 10 }}>高级参数</div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, fontSize: 12 }}>
           {!isVideo && (
-            <div>
-              <div style={{ color: T.muted, marginBottom: 4 }}>比例</div>
-              <select value={ratio} onChange={e => setRatio(e.target.value)} style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: `1px solid ${T.borderSoft}`, fontSize: 12 }}>
-                {DM_T2I_RATIOS.map(r => <option key={r} value={r}>{r}</option>)}
-              </select>
-            </div>
+            <>
+              <div>
+                <div style={{ color: T.muted, marginBottom: 4 }}>比例</div>
+                <select value={t2iRatio} onChange={e => setT2iRatio(e.target.value)} style={selectStyle}>
+                  {DM_T2I_RATIOS.map(r => <option key={r} value={r}>{r}</option>)}
+                </select>
+              </div>
+              <div>
+                <div style={{ color: T.muted, marginBottom: 4 }}>图片精度</div>
+                <select value={t2iRes} onChange={e => setT2iRes(e.target.value)} style={selectStyle}>
+                  {DM_T2I_RES.map(r => <option key={r} value={r}>{r || "(默认)"}</option>)}
+                </select>
+              </div>
+              <div>
+                <div style={{ color: T.muted, marginBottom: 4 }}>模型版本</div>
+                <select value={t2iModelVer} onChange={e => setT2iModelVer(e.target.value)} style={selectStyle}>
+                  {DM_T2I_MODELS.map(m => <option key={m} value={m}>{m || "(默认)"}</option>)}
+                </select>
+              </div>
+            </>
           )}
           {isVideo && (
-            <div>
-              <div style={{ color: T.muted, marginBottom: 4 }}>时长(秒)</div>
-              <input type="number" value={duration} onChange={e => setDuration(Number(e.target.value))} min={3} max={15}
-                style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: `1px solid ${T.borderSoft}`, fontSize: 12, fontFamily: "inherit" }} />
-            </div>
+            <>
+              <div>
+                <div style={{ color: T.muted, marginBottom: 4 }}>时长(秒)</div>
+                <input type="number" value={duration} onChange={e => setDuration(Number(e.target.value))} min={4} max={15}
+                  style={{ ...selectStyle, fontFamily: "inherit" }} />
+              </div>
+              <div>
+                <div style={{ color: T.muted, marginBottom: 4 }}>比例</div>
+                <select value={videoRatio} onChange={e => setVideoRatio(e.target.value)} style={selectStyle}>
+                  {DM_VIDEO_RATIOS.map(r => <option key={r} value={r}>{r}</option>)}
+                </select>
+              </div>
+              <div>
+                <div style={{ color: T.muted, marginBottom: 4 }}>清晰度</div>
+                <select value={videoRes} onChange={e => setVideoRes(e.target.value)} style={selectStyle}>
+                  {DM_VIDEO_RES.map(r => <option key={r} value={r}>{r}</option>)}
+                </select>
+              </div>
+              <div style={{ gridColumn: "span 3" }}>
+                <div style={{ color: T.muted, marginBottom: 4 }}>模型版本</div>
+                <select value={videoModelVer} onChange={e => setVideoModelVer(e.target.value)} style={selectStyle}>
+                  {DM_VIDEO_MODELS.map(m => <option key={m} value={m}>{m}{m === "seedance2.0fast" ? " · 推荐, 更快" : ""}</option>)}
+                </select>
+              </div>
+            </>
           )}
-          <div>
-            <div style={{ color: T.muted, marginBottom: 4 }}>{isVideo ? "视频清晰度" : "图片精度"}</div>
-            <select value={resolution} onChange={e => setResolution(e.target.value)} style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: `1px solid ${T.borderSoft}`, fontSize: 12 }}>
-              {reses.map(r => <option key={r} value={r}>{r || "(默认)"}</option>)}
-            </select>
-          </div>
-          <div>
-            <div style={{ color: T.muted, marginBottom: 4 }}>模型版本</div>
-            <select value={modelVer} onChange={e => setModelVer(e.target.value)} style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: `1px solid ${T.borderSoft}`, fontSize: 12 }}>
-              {models.map(m => <option key={m} value={m}>{m || "(默认)"}</option>)}
-            </select>
-          </div>
         </div>
+        {isVideo && (
+          <div style={{ fontSize: 11, color: T.muted2, marginTop: 10, lineHeight: 1.6 }}>
+            💡 单条 60-180s. 批量并行起跑总耗时 ≈ 单条耗时. 每条扣 ~300-500 credits.
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-function DStepResult({ mode, submitResult, queryResult, loading, polling, onPoll, onPrev, onReset }) {
+const cardActionStyle = {
+  cursor: "pointer", padding: "2px 6px", borderRadius: 4,
+  fontSize: 12, color: T.muted, lineHeight: 1,
+  background: "transparent", border: "none", fontFamily: "inherit",
+};
+
+function DPromptCard({ idx, text, route, onChange, onDup, onRemove }) {
+  return (
+    <div style={{
+      background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 10, padding: 10,
+    }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+        <div style={{
+          width: 22, height: 22, borderRadius: "50%", background: T.brandSoft,
+          color: T.brand, fontSize: 11, fontWeight: 700,
+          display: "flex", alignItems: "center", justifyContent: "center",
+        }}>{idx}</div>
+        <div style={{ fontSize: 10.5, color: T.muted, fontFamily: "SF Mono, monospace" }}>
+          {route?.name || "video"}
+        </div>
+        <div style={{ flex: 1 }} />
+        <button onClick={onDup} title="复制" style={cardActionStyle}>📋</button>
+        {onRemove && <button onClick={onRemove} title="删除" style={cardActionStyle}>✕</button>}
+      </div>
+      <textarea rows={2} value={text} onChange={e => onChange(e.target.value)}
+        placeholder={`第 ${idx} 条 · 描述视频(画面/动作/氛围)...`}
+        style={{
+          width: "100%", border: "none", outline: "none", resize: "none",
+          background: "transparent", fontSize: 12.5, fontFamily: "inherit",
+          color: T.text, lineHeight: 1.6, padding: 0,
+        }} />
+    </div>
+  );
+}
+
+// ── 文本生图结果区 (D-028 老路径不变, 单 submit_id + 手动轮询)
+function DStepT2IResult({ submitResult, queryResult, loading, polling, onPoll, onPrev, onReset }) {
   if (loading || !submitResult) return <Spinning icon="🎨" phases={[
     { text: "提交任务到即梦", sub: "subprocess 调 ~/.local/bin/dreamina" },
     { text: "等任务编号(submit_id)", sub: "" },
@@ -227,11 +508,10 @@ function DStepResult({ mode, submitResult, queryResult, loading, polling, onPoll
           任务已提交 {status === "succeed" || status === "Success" ? "✅" : "🎨"}
         </div>
         <div style={{ fontSize: 12, color: T.muted, fontFamily: "SF Mono, monospace" }}>
-          submit_id: {submitId || "(未获取)"} · 模式: {mode}
+          submit_id: {submitId || "(未获取)"} · 文本生图
         </div>
       </div>
 
-      {/* 提交时返回的原始信息 (折叠, 用户一般不需要) */}
       <details style={{ padding: 12, background: T.bg2, borderRadius: 8, marginBottom: 14 }}>
         <summary style={{ fontSize: 12, color: T.muted, cursor: "pointer", fontWeight: 600 }}>📋 看提交细节 (一般不用看)</summary>
         <pre style={{ fontSize: 11, color: T.muted, lineHeight: 1.6, marginTop: 8, whiteSpace: "pre-wrap", maxHeight: 200, overflow: "auto" }}>
@@ -239,7 +519,6 @@ function DStepResult({ mode, submitResult, queryResult, loading, polling, onPoll
         </pre>
       </details>
 
-      {/* 轮询区 */}
       <div style={{ padding: 16, background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 12, marginBottom: 14 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
           <div style={{ fontSize: 14, fontWeight: 600, flex: 1 }}>
@@ -250,22 +529,14 @@ function DStepResult({ mode, submitResult, queryResult, loading, polling, onPoll
           </Btn>
         </div>
 
-        {/* media 预览 */}
         {media.length > 0 && (
           <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 12, marginTop: 10 }}>
-            {media.map((u, i) => {
-              const isVid = u.match(/\.(mp4|mov|webm)$/i);
-              return (
-                <div key={i} style={{ background: T.bg2, borderRadius: 8, overflow: "hidden", padding: 4 }}>
-                  {isVid ? (
-                    <video src={api.media(u)} controls style={{ width: "100%", borderRadius: 6 }} />
-                  ) : (
-                    <ImageWithLightbox src={api.media(u)} downloadName={u.split("/").pop()} style={{ width: "100%", borderRadius: 6, display: "block" }} />
-                  )}
-                  <div style={{ fontSize: 10, color: T.muted2, marginTop: 4, fontFamily: "SF Mono, monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.split("/").pop()}</div>
-                </div>
-              );
-            })}
+            {media.map((u, i) => (
+              <div key={i} style={{ background: T.bg2, borderRadius: 8, overflow: "hidden", padding: 4 }}>
+                <ImageWithLightbox src={api.media(u)} downloadName={u.split("/").pop()} style={{ width: "100%", borderRadius: 6, display: "block" }} />
+                <div style={{ fontSize: 10, color: T.muted2, marginTop: 4, fontFamily: "SF Mono, monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.split("/").pop()}</div>
+              </div>
+            ))}
           </div>
         )}
 
@@ -282,6 +553,105 @@ function DStepResult({ mode, submitResult, queryResult, loading, polling, onPoll
         <div style={{ flex: 1 }} />
         <Btn variant="primary" onClick={onReset}>再来一个</Btn>
       </div>
+    </div>
+  );
+}
+
+// ── 视频结果区 (D-075 N 个 task 卡片, 每个独立 useTaskPoller)
+function DStepVideoResult({ batchTasks, loading, onPrev, onReset }) {
+  if (loading || batchTasks.length === 0) return <Spinning icon="🎬" phases={[
+    { text: "提交批量任务", sub: `准备起 ${batchTasks.length || "N"} 个并发 task` },
+    { text: "起 daemon thread", sub: "即将拿到 N 个 task_id" },
+  ]} />;
+
+  return (
+    <div style={{ padding: "32px 40px 80px", maxWidth: 1080, margin: "0 auto" }}>
+      <div style={{ marginBottom: 14 }}>
+        <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 6 }}>
+          🎬 批量视频生成中 · {batchTasks.length} 个 task
+        </div>
+        <div style={{ fontSize: 12, color: T.muted }}>
+          每条 60-180s · 并行起跑 · 完成后自动入作品库
+        </div>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 12, marginBottom: 14 }}>
+        {batchTasks.map((t, i) => (
+          <DTaskCard key={t.task_id} taskId={t.task_id} prompt={t.prompt} idx={i + 1} />
+        ))}
+      </div>
+
+      <div style={{ display: "flex", gap: 10 }}>
+        <Btn variant="outline" onClick={onPrev}>← 改 prompt</Btn>
+        <div style={{ flex: 1 }} />
+        <Btn variant="primary" onClick={onReset}>再来一批</Btn>
+      </div>
+    </div>
+  );
+}
+
+function DTaskCard({ taskId, prompt, idx }) {
+  const poller = useTaskPoller(taskId);
+  const result = poller.task?.result || null;
+  const mediaUrls = result?.media_urls || [];
+  const downloaded = result?.downloaded || [];
+  const route = result?.route || poller.task?.kind?.replace("dreamina.", "") || "video";
+  const elapsed = poller.elapsedSec || 0;
+  const pct = poller.progressPct || (poller.isRunning ? 15 : 0);
+
+  return (
+    <div style={{
+      background: "#fff", border: `1px solid ${poller.isOk ? T.green : poller.isFailed ? T.red : T.borderSoft}`,
+      borderRadius: 12, padding: 14, display: "flex", flexDirection: "column", gap: 10,
+    }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <div style={{
+          width: 24, height: 24, borderRadius: "50%", background: T.brandSoft,
+          color: T.brand, fontSize: 11, fontWeight: 700,
+          display: "flex", alignItems: "center", justifyContent: "center",
+        }}>{idx}</div>
+        <div style={{ fontSize: 11, color: T.muted2, fontFamily: "SF Mono, monospace" }}>{route}</div>
+        <div style={{ flex: 1 }} />
+        <div style={{ fontSize: 11, color: T.muted }}>{elapsed}s</div>
+      </div>
+      <div style={{ fontSize: 12, color: T.text, lineHeight: 1.5, maxHeight: 60, overflow: "hidden" }}>
+        {prompt}
+      </div>
+
+      {poller.isRunning && (
+        <div>
+          <div style={{ fontSize: 11, color: T.muted, marginBottom: 4 }}>{poller.progressText || "跑中..."}</div>
+          <div style={{ height: 4, background: T.bg2, borderRadius: 2, overflow: "hidden" }}>
+            <div style={{ height: "100%", width: `${pct}%`, background: T.brand, transition: "width 0.5s" }} />
+          </div>
+        </div>
+      )}
+
+      {poller.isFailed && (
+        <div style={{ fontSize: 11, color: T.red, padding: 8, background: T.redSoft, borderRadius: 6 }}>
+          ⚠ {poller.error || "任务失败"}
+        </div>
+      )}
+
+      {poller.isOk && mediaUrls.length > 0 && (
+        <div style={{ display: "grid", gap: 6 }}>
+          {mediaUrls.map((rel, j) => {
+            const fullUrl = api.media(rel);
+            const fname = (downloaded[j] || rel).split("/").pop();
+            const isVid = /\.(mp4|mov|webm)$/i.test(fname);
+            return (
+              <div key={j} style={{ background: T.bg2, borderRadius: 6, overflow: "hidden" }}>
+                {isVid ? (
+                  <video src={fullUrl} controls style={{ width: "100%", display: "block" }} />
+                ) : (
+                  <ImageWithLightbox src={fullUrl} downloadName={fname} style={{ width: "100%", display: "block" }} />
+                )}
+                <div style={{ fontSize: 10, color: T.muted2, padding: "4px 6px", fontFamily: "SF Mono, monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{fname}</div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
