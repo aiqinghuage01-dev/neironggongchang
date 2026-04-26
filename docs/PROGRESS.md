@@ -4,7 +4,53 @@
 
 ---
 
-## 当前状态(2026-04-26 · D-067 真正越用越懂闭环)
+## 当前状态(2026-04-26 · D-068 任务卡死防御 + 侧栏总部/战略部)
+
+**版本**: v0.3.7 — 任务孤儿恢复 + 周期 watchdog + UI 卡死可视化 + 战略部入口
+
+**用户痛点**: 老板触发"热点改写"等了 14 分钟 UI 一直转圈, 进度卡 15% 不动, 没任何信号.
+查 root cause: `uvicorn --reload` 在 D-067 commit 期间随 6 个文件改动重启, daemon
+异步工作线程随进程一起被杀, DB 行卡 `running` 永远不会变, 前端轮询无解.
+
+**本次完成**(4 phase):
+
+1. **P1 启动孤儿恢复** (`tasks.recover_orphans`, `api._recover_orphan_tasks`)
+   - uvicorn boot 时把上次没收尾的 pending/running 全标 failed
+   - error="服务重启,任务中断,请重新触发"
+   - 每次 --reload 都自动跑, 解决 DB 卡死问题
+
+2. **P2 周期 watchdog** (`tasks.sweep_stuck`, `tasks.start_watchdog`)
+   - 每 60s 扫一次, 跑超 max(5*estimated, 600s) 的 running 标 failed
+   - 处理"进程活着但任务实质卡在上游 AI proxy"的场景
+   - error 含明确诊断, 帮老板知道是 AI 卡了
+
+3. **P3 UI 卡死可视化** (`web/factory-task.jsx` TaskBar/TaskCard)
+   - chip: stale 时变橙 "⚠ N 卡死 · M 进行中"
+   - 任务卡: 橙边框 + "卡了 5m14s" + "实际超 6.3x" + 杀掉按钮
+   - 用户主动 cancel 触发立即重拉刷新
+   - stale 判定: elapsed > 2*estimated 或缺估时按 5min 兜底
+
+4. **P4 侧栏 总部/战略部 重构** (老板当面要求)
+   - 品牌行 (🏭 清华哥内容工厂) 整行可点 → home, 子文案 "🏠 总部"
+   - 原首位 NAV `总部` → 改 `战略部` (id=strategy, icon=🧭)
+   - 新 page 占位: 等老板装"战略规划"技能后, 在这里聊战略方向
+
+**端到端**: pytest 276 通过 (新增 8 个 recovery/watchdog 测试).
+Playwright 验 sidebar+strategy 页面 0 console error, chip 卡死警告渲染正确.
+
+**预防 checklist** (避免再次踩坑):
+- 任何 `threading.Thread(daemon=True)` 跑长任务都得有 DB 收尾兜底
+- 启动恢复 + 周期 watchdog + UI 兜底 三层防御缺一不可
+
+**下一步**:
+1. LiDock 加真 tool calling (从 D-067 滚来)
+2. 偏好抽取增强 (从 D-067 滚来)
+3. 周报长摘要 (从 D-067 滚来)
+4. 装战略规划技能 (战略部页面真功能)
+
+---
+
+## 上一个 session(2026-04-26 · D-067 真正越用越懂闭环)
 
 **版本**: v0.3.6 — 行为记忆 + 偏好回读注入 + LiDock 不撒谎守则 + 采纳/否决信号
 

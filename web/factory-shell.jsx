@@ -3,7 +3,8 @@
 
 // D-040d 信息架构: 工厂四大板块 (首页→总部 + 生产部 / 档案部 / 夜班分组)
 // D-066: 生产部从 11 个收纳到 6 个 (写文案/出图片/黑科技 是 3 个二级页, 子工具进入对应二级页)
-const NAV_TOP = [{ id: "home", icon: "🏠", label: "总部" }];
+// D-068b: 总部入口移到品牌行 (🏭 清华哥内容工厂 → home), 原 NAV_TOP 槽位让给"战略部"
+const NAV_TOP = [{ id: "strategy", icon: "🧭", label: "战略部" }];
 const NAV_MAIN = [
   { id: "make", icon: "🎬", label: "做视频" },
   { id: "wechat", icon: "📄", label: "公众号" },
@@ -107,9 +108,34 @@ function Sidebar({ active, onNav }) {
         overflow: "hidden",
       }}
     >
-      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "4px 6px 14px", marginBottom: 6, borderBottom: `1px solid ${T.borderSoft}` }}>
+      {/* D-068b: 品牌行 = 总部入口. 整行点击 → home, hover 高亮, active(home) 时变品牌色 */}
+      <div
+        onClick={() => onNav("home")}
+        title="进总部 (首页)"
+        style={{
+          display: "flex", alignItems: "center", gap: 10,
+          padding: "4px 6px 14px", marginBottom: 6,
+          borderBottom: `1px solid ${T.borderSoft}`,
+          cursor: "pointer",
+          background: active === "home" ? T.brandSoft : "transparent",
+          borderRadius: 8,
+          transition: "background 0.15s",
+        }}
+      >
         <div style={{ width: 30, height: 30, borderRadius: 8, background: T.brand, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 16 }}>🏭</div>
-        {hover && <div style={{ fontSize: 13, fontWeight: 600, color: T.text, whiteSpace: "nowrap" }}>清华哥内容工厂</div>}
+        {hover && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: T.text, whiteSpace: "nowrap" }}>清华哥内容工厂</div>
+            <div style={{
+              fontSize: 11, fontWeight: 500,
+              color: active === "home" ? T.brand : T.muted,
+              whiteSpace: "nowrap",
+              display: "flex", alignItems: "center", gap: 4,
+            }}>
+              <span>🏠</span><span>总部</span>
+            </div>
+          </div>
+        )}
       </div>
 
       {NAV_TOP.map((n) => (

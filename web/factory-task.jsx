@@ -323,11 +323,21 @@ function taskIcon(kind) {
   return "⚙️";
 }
 
+// D-068: 任务"卡死"判定 — 跑过预估 2x 或缺预估时跑超 5 min
+function isTaskStale(t) {
+  if (!t || (t.status !== "running" && t.status !== "pending")) return false;
+  const elapsed = t.elapsed_sec || 0;
+  const est = t.estimated_seconds || 0;
+  if (est > 0) return elapsed > est * 2;
+  return elapsed > 300;  // 没估时按 5 min 兜底
+}
+
 // ─── TaskBar (顶栏 chip + 抽屉) ───────────────────────────
 function TaskBar({ onNav }) {
   const [open, setOpen] = React.useState(false);
   const [tasks, setTasks] = React.useState([]);
   const [counts, setCounts] = React.useState({ running: 0, ok: 0, failed: 0 });
+  const [refreshTick, setRefreshTick] = React.useState(0);  // D-068: cancel 后强制刷新
 
   // 拉数据: 抽屉关时 30s 一次, 抽屉开时 3s 一次, 进行中存在时 3s
   React.useEffect(() => {
@@ -345,42 +355,52 @@ function TaskBar({ onNav }) {
     const interval = (open || running) ? 3000 : 30000;
     const timer = setInterval(pull, interval);
     return () => { stop = true; clearInterval(timer); };
-  }, [open, counts.running, counts.pending]);
+  }, [open, counts.running, counts.pending, refreshTick]);
 
   const running = (counts.running || 0) + (counts.pending || 0);
   const today0 = (() => { const d = new Date(); d.setHours(0,0,0,0); return Math.floor(d.getTime()/1000); })();
   const todayOk = tasks.filter(t => t.status === "ok" && (t.finished_ts || 0) >= today0);
   const todayFailed = tasks.filter(t => t.status === "failed" && (t.finished_ts || 0) >= today0);
   const runningTasks = tasks.filter(t => t.status === "running" || t.status === "pending");
+  const staleCount = runningTasks.filter(isTaskStale).length;  // D-068
 
   function go(t) {
     if (t.page_id && onNav) onNav(t.page_id);
     setOpen(false);
   }
 
+  async function handleCancel(taskId) {
+    try {
+      await api.post(`/api/tasks/${taskId}/cancel`, {});
+    } catch (e) {}
+    setRefreshTick(x => x + 1);  // 立即重拉
+  }
+
   return (
     <React.Fragment>
-      {/* chip */}
+      {/* chip — D-068: 卡死任务时变橙警告 */}
       <button
         onClick={() => setOpen(!open)}
         style={{
           position: "fixed", top: 14, right: 16, zIndex: 50,
-          background: running ? T.brandSoft : "#fff",
-          color: running ? T.brand : T.muted,
-          border: `1px solid ${running ? T.brand + "55" : T.border}`,
+          background: staleCount > 0 ? "#FFF4E5" : (running ? T.brandSoft : "#fff"),
+          color: staleCount > 0 ? "#B55B00" : (running ? T.brand : T.muted),
+          border: `1px solid ${staleCount > 0 ? "#FFB066" : (running ? T.brand + "55" : T.border)}`,
           borderRadius: 8, padding: "5px 12px", fontSize: 12, fontWeight: 600,
           cursor: "pointer", display: "flex", alignItems: "center", gap: 8,
           fontFamily: "inherit",
-          boxShadow: running ? `0 2px 8px ${T.brand}22` : "0 1px 3px rgba(0,0,0,0.04)",
+          boxShadow: staleCount > 0 ? "0 2px 8px rgba(181,91,0,0.18)" : (running ? `0 2px 8px ${T.brand}22` : "0 1px 3px rgba(0,0,0,0.04)"),
         }}
-        title={running ? `${running} 个任务进行中` : "没有进行中的任务"}
+        title={staleCount > 0 ? `${staleCount} 个任务可能卡死, 点开看看` : (running ? `${running} 个任务进行中` : "没有进行中的任务")}
       >
         <span style={{
           width: 7, height: 7, borderRadius: "50%",
-          background: running ? T.brand : T.muted3,
+          background: staleCount > 0 ? "#E07A1A" : (running ? T.brand : T.muted3),
           animation: running ? "qltaskpulse 1.5s infinite" : "none",
         }} />
-        {running > 0 ? `${running} 个进行中 · ${todayOk.length} 完成` : `没有进行中 · ${todayOk.length} 完成`}
+        {staleCount > 0
+          ? `⚠ ${staleCount} 卡死 · ${running - staleCount} 进行中`
+          : (running > 0 ? `${running} 个进行中 · ${todayOk.length} 完成` : `没有进行中 · ${todayOk.length} 完成`)}
       </button>
 
       {/* 抽屉 */}
@@ -412,7 +432,7 @@ function TaskBar({ onNav }) {
                 <div style={{ fontSize: 11, color: T.muted2, letterSpacing: 0.5, marginTop: 4 }}>
                   进行中 ({runningTasks.length})
                 </div>
-                {runningTasks.map(t => <TaskCard key={t.id} task={t} onClick={() => go(t)} />)}
+                {runningTasks.map(t => <TaskCard key={t.id} task={t} onClick={() => go(t)} onCancel={handleCancel} />)}
               </React.Fragment>
             )}
 
@@ -450,47 +470,75 @@ function TaskBar({ onNav }) {
 }
 
 // ─── TaskCard (抽屉里的单个任务卡) ───────────────────────
-function TaskCard({ task, onClick, compact }) {
+// D-068: 加 onCancel + stale 状态 (橙色边框 + "卡了 Xm" + 杀任务按钮)
+function TaskCard({ task, onClick, compact, onCancel }) {
   const failed = task.status === "failed";
   const cancelled = task.status === "cancelled";
   const ok = task.status === "ok";
   const running = task.status === "running" || task.status === "pending";
+  const stale = isTaskStale(task);
   const pct = typeof task.progress_pct === "number" ? task.progress_pct : null;
   const elapsedDisplay = running ? fmtSec(task.elapsed_sec || 0)
                        : ok ? fmtRelativeTs(task.finished_ts)
                        : fmtRelativeTs(task.finished_ts);
 
+  // D-068: stale 用橙色, failed 用红色
+  const accentColor = stale ? "#E07A1A" : (failed ? T.red : T.brand);
+  const accentBg = stale ? "#FFF4E5" : (failed ? T.redSoft : T.bg2);
+  const accentBorder = stale ? "#FFB066" : (failed ? T.red + "44" : T.borderSoft);
+
   return (
-    <div onClick={onClick} style={{
-      background: failed ? T.redSoft : (ok ? T.bg2 : T.bg2),
-      border: `1px solid ${failed ? T.red + "44" : T.borderSoft}`,
+    <div style={{
+      background: accentBg,
+      border: `1px solid ${accentBorder}`,
       borderRadius: 10, padding: compact ? "8px 12px" : 12,
-      cursor: "pointer", opacity: ok ? 0.75 : 1,
+      opacity: ok ? 0.75 : 1,
       transition: "all 0.15s",
-    }}
-    onMouseEnter={(e) => { e.currentTarget.style.background = failed ? T.redSoft : "#fff"; e.currentTarget.style.borderColor = failed ? T.red + "66" : T.brand + "55"; }}
-    onMouseLeave={(e) => { e.currentTarget.style.background = failed ? T.redSoft : T.bg2; e.currentTarget.style.borderColor = failed ? T.red + "44" : T.borderSoft; }}
-    >
-      <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>
-        <span style={{ fontSize: 15 }}>{taskIcon(task.kind)}</span>
-        <span style={{ flex: 1, color: failed ? T.red : T.text, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-          {task.label || task.kind}
-        </span>
-        <span style={{ color: T.muted2, fontSize: 11 }}>
-          {ok ? "✓ " : ""}{cancelled ? "⊘ " : ""}{elapsedDisplay}
-        </span>
-      </div>
-      {running && pct !== null && (
-        <div style={{ marginTop: 8, height: 4, background: T.bg3, borderRadius: 2, overflow: "hidden" }}>
-          <div style={{ height: "100%", width: `${pct}%`, background: T.brand, borderRadius: 2, transition: "width 0.4s" }} />
+    }}>
+      <div onClick={onClick} style={{ cursor: "pointer" }}
+        onMouseEnter={(e) => { e.currentTarget.parentElement.style.background = stale ? "#FFEAD0" : (failed ? T.redSoft : "#fff"); e.currentTarget.parentElement.style.borderColor = accentColor + "99"; }}
+        onMouseLeave={(e) => { e.currentTarget.parentElement.style.background = accentBg; e.currentTarget.parentElement.style.borderColor = accentBorder; }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>
+          <span style={{ fontSize: 15 }}>{taskIcon(task.kind)}</span>
+          <span style={{ flex: 1, color: stale ? "#B55B00" : (failed ? T.red : T.text), fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {task.label || task.kind}
+          </span>
+          <span style={{ color: stale ? "#B55B00" : T.muted2, fontSize: 11, fontWeight: stale ? 600 : 400 }}>
+            {ok ? "✓ " : ""}{cancelled ? "⊘ " : ""}{stale ? "⚠ 卡了 " : ""}{elapsedDisplay}
+          </span>
         </div>
-      )}
-      {running && task.progress_text && (
-        <div style={{ fontSize: 11.5, color: T.muted, marginTop: 6 }}>{task.progress_text}</div>
-      )}
-      {failed && task.error && (
-        <div style={{ fontSize: 11.5, color: T.red, marginTop: 6, lineHeight: 1.5, fontFamily: "ui-monospace, monospace" }}>
-          {task.error.length > 100 ? task.error.slice(0, 100) + "..." : task.error}
+        {running && pct !== null && (
+          <div style={{ marginTop: 8, height: 4, background: T.bg3, borderRadius: 2, overflow: "hidden" }}>
+            <div style={{ height: "100%", width: `${pct}%`, background: stale ? "#E07A1A" : T.brand, borderRadius: 2, transition: "width 0.4s" }} />
+          </div>
+        )}
+        {running && task.progress_text && (
+          <div style={{ fontSize: 11.5, color: stale ? "#B55B00" : T.muted, marginTop: 6 }}>
+            {task.progress_text}
+            {stale && task.estimated_seconds ? ` · 预估 ${fmtSec(task.estimated_seconds)}, 实际超 ${Math.round(((task.elapsed_sec||0) / task.estimated_seconds) * 10) / 10}x` : ""}
+          </div>
+        )}
+        {failed && task.error && (
+          <div style={{ fontSize: 11.5, color: T.red, marginTop: 6, lineHeight: 1.5, fontFamily: "ui-monospace, monospace" }}>
+            {task.error.length > 100 ? task.error.slice(0, 100) + "..." : task.error}
+          </div>
+        )}
+      </div>
+      {running && onCancel && (
+        <div style={{ marginTop: 8, display: "flex", justifyContent: "flex-end", gap: 6 }}>
+          <button
+            onClick={(e) => { e.stopPropagation(); if (window.confirm(stale ? "确定杀掉这个卡死的任务?" : "确定取消这个任务?")) onCancel(task.id); }}
+            style={{
+              background: stale ? "#E07A1A" : "transparent",
+              color: stale ? "#fff" : T.muted2,
+              border: `1px solid ${stale ? "#E07A1A" : T.border}`,
+              borderRadius: 6, padding: "3px 10px",
+              fontSize: 11, fontWeight: stale ? 600 : 500,
+              cursor: "pointer", fontFamily: "inherit",
+            }}
+            title={stale ? "杀掉卡死的任务" : "取消任务"}
+          >{stale ? "杀掉" : "取消"}</button>
         </div>
       )}
     </div>

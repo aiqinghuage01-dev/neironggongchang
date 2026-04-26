@@ -30,6 +30,7 @@ function FactoryApp() {
       case "works":      return <PageWorks onNav={setPage} />;
       case "knowledge":  return <PageKnowledge onNav={setPage} />;
       case "settings":   return <PageSettings onNav={setPage} />;
+      case "strategy":   return <PageStrategy onNav={setPage} />;
       case "planner": return <PagePlanner onNav={setPage} />;
       case "compliance": return <PageCompliance onNav={setPage} />;
       case "imagegen":   return <PageImageGen onNav={setPage} />;

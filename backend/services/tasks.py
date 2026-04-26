@@ -221,6 +221,83 @@ def is_cancelled(task_id: str) -> bool:
     return bool(r and r[0] == "cancelled")
 
 
+def recover_orphans() -> int:
+    """启动时调一次: 上次进程死掉(uvicorn --reload / 崩溃 / 手动 kill)的孤儿任务全标 failed.
+    daemon 工作线程随进程退出, DB 行没人收尾会永远卡 running, 前端轮询无解.
+    返回回收数量."""
+    _ensure_schema()
+    now = int(time.time())
+    with closing(sqlite3.connect(DB_PATH)) as con:
+        cur = con.execute(
+            "UPDATE tasks SET status='failed', error=?, finished_ts=?, updated_ts=? "
+            "WHERE status IN ('pending','running')",
+            ("服务重启,任务中断,请重新触发", now, now),
+        )
+        con.commit()
+        return cur.rowcount
+
+
+# D-068: 周期 watchdog — 处理"进程没死但任务挂了"的情况
+# (上游 AI proxy hang / httpx 没正确 timeout / sync_fn 死循环 / 网络永久阻塞)
+# 启动恢复只能处理"进程已重启"的孤儿, watchdog 处理"进程还活着但任务实质卡死"
+_WATCHDOG_INTERVAL_SEC = 60
+_WATCHDOG_MIN_TIMEOUT_SEC = 600   # 兜底: estimated 没填或 0 时, 视为 10 分钟超时
+_WATCHDOG_MULTIPLIER = 5          # 实际超时 = max(estimated*5, MIN_TIMEOUT)
+
+_watchdog_started = False
+_watchdog_lock = threading.Lock()
+
+
+def sweep_stuck() -> int:
+    """周期 watchdog 一次扫描: 把跑超时的 running 任务标 failed.
+    超时 = max(estimated_seconds*5, 600s). 估时缺失按 600s 兜底.
+    不动 pending (没起跑无所谓), 不动 ok/failed/cancelled (已收尾).
+    返回这次扫到的过期任务数."""
+    _ensure_schema()
+    now = int(time.time())
+    threshold_expr = f"MAX(COALESCE(estimated_seconds,0)*{_WATCHDOG_MULTIPLIER}, {_WATCHDOG_MIN_TIMEOUT_SEC})"
+    with closing(sqlite3.connect(DB_PATH)) as con:
+        cur = con.execute(
+            f"UPDATE tasks SET status='failed', error=?, finished_ts=?, updated_ts=? "
+            f"WHERE status='running' AND ? - COALESCE(started_ts, updated_ts) > {threshold_expr}",
+            (
+                f"watchdog: 超时未完成(>{_WATCHDOG_MULTIPLIER}x 预估或 >{_WATCHDOG_MIN_TIMEOUT_SEC}s), 任务可能卡在 AI proxy",
+                now, now, now,
+            ),
+        )
+        con.commit()
+        return cur.rowcount
+
+
+def _watchdog_tick() -> None:
+    """单次 tick: 扫一次 + 重新挂下一轮 Timer."""
+    try:
+        n = sweep_stuck()
+        if n:
+            import logging
+            logging.getLogger("tasks.watchdog").warning(f"swept {n} stuck running tasks")
+    except Exception as e:
+        import logging
+        logging.getLogger("tasks.watchdog").error(f"sweep failed: {e}")
+    finally:
+        t = threading.Timer(_WATCHDOG_INTERVAL_SEC, _watchdog_tick)
+        t.daemon = True
+        t.start()
+
+
+def start_watchdog() -> bool:
+    """启动周期 watchdog (idempotent). 返回 True 表示这次真启动了."""
+    global _watchdog_started
+    with _watchdog_lock:
+        if _watchdog_started:
+            return False
+        _watchdog_started = True
+    t = threading.Timer(_WATCHDOG_INTERVAL_SEC, _watchdog_tick)
+    t.daemon = True
+    t.start()
+    return True
+
+
 def get_task(task_id: str) -> dict[str, Any] | None:
     _ensure_schema()
     with closing(sqlite3.connect(DB_PATH)) as con:

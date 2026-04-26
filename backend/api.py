@@ -253,6 +253,26 @@ def _stop_night_scheduler():
         pass
 
 
+# --------- 启动钩子: 孤儿任务回收 + 周期 watchdog (D-068) ----------
+@app.on_event("startup")
+def _recover_orphan_tasks():
+    """uvicorn boot 时把上次进程没收尾的 pending/running 任务全标 failed.
+    场景: --reload 改文件 / 进程崩 / Ctrl-C → daemon 工作线程死, DB 卡 running 永远轮询.
+    再挂上周期 watchdog (60s 一次), 处理"进程活着但任务卡在 AI proxy"的场景."""
+    try:
+        from backend.services import tasks as tasks_service
+        n = tasks_service.recover_orphans()
+        if n:
+            import logging
+            logging.getLogger("tasks").warning(f"recovered {n} orphan tasks (服务重启,任务中断)")
+        if tasks_service.start_watchdog():
+            import logging
+            logging.getLogger("tasks").info("watchdog started (60s sweep stuck running)")
+    except Exception as e:
+        import logging
+        logging.getLogger("tasks").error(f"orphan/watchdog setup failed: {e}")
+
+
 # --------- Endpoints ----------
 @app.get("/api/health", tags=["总部"], summary="健康检查 + 各依赖探活")
 def health():
