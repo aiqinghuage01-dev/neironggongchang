@@ -2,43 +2,76 @@
 // 1:1 还原 docs/design_v3/factory3-shell.jsx
 
 // D-040d 信息架构: 工厂四大板块 (首页→总部 + 生产部 / 档案部 / 夜班分组)
+// D-066: 生产部从 11 个收纳到 6 个 (写文案/出图片/黑科技 是 3 个二级页, 子工具进入对应二级页)
 const NAV_TOP = [{ id: "home", icon: "🏠", label: "总部" }];
 const NAV_MAIN = [
   { id: "make", icon: "🎬", label: "做视频" },
-  // D-061a: 移除独立 v5 入口 — 模板剪辑应是"做视频"流程 Step 4 子选项, 不是 sidebar skill.
-  // route "dhv5" 保留供 PageMake 内部跳转 (D-061f 复用 PageDhv5 组件).
-  { id: "ad", icon: "💰", label: "投流文案" },
   { id: "wechat", icon: "📄", label: "公众号" },
   { id: "moments", icon: "📱", label: "朋友圈" },
-  { id: "hotrewrite", icon: "🔥", label: "热点改写" },
-  { id: "voicerewrite", icon: "🎙️", label: "录音改写" },
-  { id: "baokuan", icon: "✍️", label: "爆款改写" },
-  { id: "planner", icon: "🗓️", label: "内容策划" },
-  { id: "compliance", icon: "🛡️", label: "违规审查" },
-  { id: "imagegen", icon: "🖼️", label: "直接出图" },
-  { id: "dreamina", icon: "🎨", label: "即梦 AIGC" },
+  { id: "write", icon: "✏️", label: "写文案" },
+  { id: "image", icon: "🎨", label: "出图片" },
+  { id: "beta", icon: "🧪", label: "黑科技" },
 ];
 const NAV_ASSETS = [
   { id: "materials", icon: "📥", label: "素材库" },
   { id: "works", icon: "🗂️", label: "作品库" },
   { id: "knowledge", icon: "📚", label: "知识库" },
 ];
-const NAV_NIGHT = [{ id: "nightshift", icon: "🌙", label: "小华夜班" }];
+const NAV_NIGHT = [{ id: "nightshift", icon: "🦉", label: "小华夜班" }];
 const NAV_BOTTOM = [{ id: "settings", icon: "⚙️", label: "设置" }];
 
-function NavGroupLabel({ text, expanded }) {
-  if (!expanded) return null;
+// D-066: 旧 sidebar 一级入口已收纳到「写文案 / 出图片」二级页, 但保留 id 让
+// (a) ?page=xxx 深链 + 二级页 onNav 跳转还能用
+// (b) tests/test_skills_smoke.py::test_skills_in_sidebar 能找到 skill id
+// 这个数组不被 sidebar 渲染消费, 仅做注册 + 文档.
+const LEGACY_NAV_HIDDEN = [
+  { id: "ad", icon: "💰", label: "投流文案" },         // 进 写文案 二级页
+  { id: "hotrewrite", icon: "🔥", label: "热点改写" },
+  { id: "voicerewrite", icon: "🎙️", label: "录音改写" },
+  { id: "baokuan", icon: "✍️", label: "爆款改写" },
+  { id: "planner", icon: "🗓️", label: "内容策划" },
+  { id: "compliance", icon: "🛡️", label: "违规审查" },
+  { id: "imagegen", icon: "🖼️", label: "直接出图" },   // 进 出图片 二级页
+  { id: "dreamina", icon: "🎨", label: "即梦 AIGC" },
+];
+
+// D-066: 部门 = group, 含 icon + label + 工具列表
+const SECTIONS = [
+  { id: "main",   icon: "🏭", label: "生产部", items: NAV_MAIN },
+  { id: "assets", icon: "📦", label: "档案部", items: NAV_ASSETS },
+  { id: "night",  icon: "🌙", label: "夜班",   items: NAV_NIGHT },
+];
+
+// D-066: 部门 header (双层纸叠风格) — 白卡 + emoji + 大粗字
+function SectionHeader({ section, expanded }) {
+  if (!expanded) {
+    // 窄态: 用一条细分隔线 + 部门 emoji 当锚点
+    return (
+      <div style={{ display: "flex", justifyContent: "center", padding: "10px 0 6px" }}>
+        <span style={{ fontSize: 14, opacity: 0.6 }}>{section.icon}</span>
+      </div>
+    );
+  }
   return (
     <div style={{
-      fontSize: 10, color: T.muted3, fontWeight: 500,
-      padding: "10px 10px 4px", letterSpacing: 0.5,
-    }}>{text}</div>
+      display: "flex", alignItems: "center", gap: 8,
+      padding: "10px 14px", margin: "10px 0 0",
+      background: "#fff",
+      border: `1px solid ${T.border}`,
+      borderRadius: 10,
+      fontSize: 13.5, fontWeight: 700, color: T.text,
+      boxShadow: "0 1px 2px rgba(0,0,0,0.04)",
+      position: "relative", zIndex: 2,
+    }}>
+      <span style={{ fontSize: 17 }}>{section.icon}</span>
+      <span>{section.label}</span>
+    </div>
   );
 }
 
 function Sidebar({ active, onNav }) {
   const [hover, setHover] = React.useState(false);
-  const w = hover ? 164 : 60;
+  const w = hover ? 220 : 60;  // D-066: 展开宽度从 164 → 220 容纳新版部门 header
   // D-062dd: 各 skill "今日产出" 计数 (拉一次 + 5 min 刷一次 + api 调用后立刻刷)
   // D-062-AUDIT-6-todo1: 加 api-call event listener, OK 的 POST 调用后 1.5s 延后刷
   // (1.5s 等 ai_calls 落库, 避免拉到旧值)
@@ -83,19 +116,28 @@ function Sidebar({ active, onNav }) {
         <NavItem key={n.id} item={n} active={active === n.id} expanded={hover} onClick={() => onNav(n.id)} count={counts[n.id]} />
       ))}
 
-      <NavGroupLabel text="生产部" expanded={hover} />
-      {NAV_MAIN.map((n) => (
-        <NavItem key={n.id} item={n} active={active === n.id} expanded={hover} onClick={() => onNav(n.id)} count={counts[n.id]} />
-      ))}
-
-      <NavGroupLabel text="档案部" expanded={hover} />
-      {NAV_ASSETS.map((n) => (
-        <NavItem key={n.id} item={n} active={active === n.id} expanded={hover} onClick={() => onNav(n.id)} />
-      ))}
-
-      <NavGroupLabel text="夜班" expanded={hover} />
-      {NAV_NIGHT.map((n) => (
-        <NavItem key={n.id} item={n} active={active === n.id} expanded={hover} onClick={() => onNav(n.id)} />
+      {SECTIONS.map((sec) => (
+        <React.Fragment key={sec.id}>
+          <SectionHeader section={sec} expanded={hover} />
+          {hover ? (
+            <div style={{
+              background: T.bg2,
+              border: `1px solid ${T.borderSoft}`,
+              borderTop: "none",
+              borderRadius: "0 0 10px 10px",
+              padding: "6px 6px 8px",
+              margin: "-3px 6px 0",
+            }}>
+              {sec.items.map((n) => (
+                <NavItem key={n.id} item={n} active={active === n.id} expanded={hover} onClick={() => onNav(n.id)} count={counts[n.id]} flat />
+              ))}
+            </div>
+          ) : (
+            sec.items.map((n) => (
+              <NavItem key={n.id} item={n} active={active === n.id} expanded={hover} onClick={() => onNav(n.id)} count={counts[n.id]} />
+            ))
+          )}
+        </React.Fragment>
       ))}
 
       <div style={{ flex: 1 }} />
@@ -106,8 +148,9 @@ function Sidebar({ active, onNav }) {
   );
 }
 
-function NavItem({ item, active, expanded, onClick, count }) {
+function NavItem({ item, active, expanded, onClick, count, flat }) {
   // D-062dd: 今日产出 > 0 时显小绿点 / 数字
+  // D-066: flat=true 在部门工具列表内, padding 略小, 选中态加圆角内置
   const showCount = typeof count === "number" && count > 0;
   return (
     <div
@@ -115,10 +158,12 @@ function NavItem({ item, active, expanded, onClick, count }) {
       title={showCount ? `${item.label} · 今日 ${count} 次` : item.label}
       style={{
         display: "flex", alignItems: "center", gap: 10,
-        padding: "9px 10px", borderRadius: 8, cursor: "pointer",
+        padding: flat ? "7px 10px" : "9px 10px",
+        borderRadius: flat ? 7 : 8, cursor: "pointer",
         background: active ? T.brandSoft : "transparent",
         color: active ? T.brand : T.muted,
-        fontSize: 13, fontWeight: active ? 600 : 500, marginBottom: 2,
+        fontSize: 13, fontWeight: active ? 600 : 500,
+        marginBottom: flat ? 1 : 2,
         whiteSpace: "nowrap", overflow: "hidden",
         position: "relative",
       }}

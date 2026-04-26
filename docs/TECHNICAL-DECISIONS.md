@@ -288,5 +288,51 @@ PROGRESS.md 行内的 1 行说明 + 这里的 1 句"为什么这么做"是日常
   跨文件同名 React 组件**后定义覆盖前定义**(本次 ImageCard 同名 bug 浪费了 ~1 小时调试)。
   约定: 跨文件 React 组件命名加 page 前缀(WorksImageCard / GenImageCard 而非 ImageCard)。
 
+---
+
+## D-066 - 侧栏整合 6 个一级入口 + 写文案/出图片二级页(2026-04-26)
+
+**背景**: 用户反馈生产部 11 个图标太多, 看着乱. 实际上"做视频/公众号/朋友圈"是
+独立大流程(每个都是端到端的多 step 工作流), 而"投流/热点改写/录音改写/爆款改写/
+内容策划/违规审查/直接出图/即梦"都是子工具(单页面), 应该收纳到二级页.
+
+**结论**: 生产部从 11 个收到 6 个一级入口:
+- 🎬 做视频(独立流程)
+- 📄 公众号(独立流程)
+- 📱 朋友圈(独立流程)
+- ✏️ 写文案(整合 6 个文字 skill 的二级页)
+- 🎨 出图片(整合 2 个图引擎的二级页)
+- 🧪 黑科技(给未来好玩的功能预留坑位 + 3 张未开发草稿)
+
+**视觉**: 侧栏走"双层纸叠"风格(决策路径见 docs/design/sidebar-*.html 7 份草稿):
+- 部门 header = 白卡 + emoji + 大粗字 + 轻投影 (🏭 生产部 / 📦 档案部 / 🌙 夜班)
+- 工具列表 = 浅米色 bg "内页", 紧贴 header 下方, 用 -3px overlap + 6px 左右 inset
+  (像两张纸叠在一起, 部门是封面纸, 工具是内页)
+- 「小华夜班」emoji 改 🦉 避免和夜班 🌙 冲突
+- 侧栏宽度 hover 64 → 220px, 收起时只显示 emoji 列表 + 部门图标作为视觉锚点
+
+**二级页架构**(写文案/出图片):
+- 顶部 4 个 stats 卡(今日产出 / 今日热门 / AI token / 累计作品)
+- 「选个工具开始」标题 + 工具卡网格(hardcode 工具列表, 跟 backend registered_skills.py 解耦)
+- 工具卡角标显示「今日 N 次」(从 /api/ai/usage by_route 聚合)
+- 「最近写过的文案 / 出过的图」从 /api/works?type=text|image 取最近 4-8 条
+- 卡片点击跳具体 skill 页 (?page=baokuan / ?page=imagegen 等), 旧 URL 全部保留兼容
+
+**接通的真实数据**:
+- /api/works/sources(by_type / by_source 计数)
+- /api/works?type=&since=today&limit=N(最近列表)
+- /api/ai/usage?range=today(token / 金额 / by_route 用于工具卡今日次数)
+
+**代价**:
+- 侧栏 hover 展开宽度从 164 → 220px(双层纸叠样式需要更多内容)
+- 工具列表元数据(slug/icon/label/desc/steps)在前端 hardcode, 跟 backend
+  registered_skills.py 不再是 single source of truth — 但子工具列表稳定, 
+  改动频率低, hardcode 更省事且视觉描述更精细
+- 黑科技页当前空, 仅 placeholder + 3 张灰色草稿卡占位
+
+**Follow-up**:
+- 作品库默认时间智能 fallback(今天 0 条 → 自动切本周, 加提示语)
+- 卡片 hover 高亮 / 详情抽屉图片 lightbox(仍待做)
+
 
 

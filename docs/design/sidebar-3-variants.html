@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8" />
+<title>侧栏视觉 3 版对比</title>
+<style>
+:root {
+  --bg: #f7f5f0; --bg1: #ffffff; --bg2: #fcfaf6; --bg3: #f2efe7;
+  --border: #ece8df; --border-soft: #f2efe7;
+  --text: #1a1a1a; --text2: #3d3d3d; --muted: #6b6960; --muted2: #a19e93;
+  --brand: #2a6f4a; --brand-soft: #e8f3ed;
+}
+* { box-sizing: border-box; }
+body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif;
+  background: var(--bg); color: var(--text); font-size: 13.5px; -webkit-font-smoothing: antialiased; padding: 30px; }
+
+.row { display: flex; gap: 30px; align-items: flex-start; max-width: 1100px; margin: 0 auto; }
+.col { flex: 1; }
+.label { font-size: 14px; font-weight: 700; margin-bottom: 6px; }
+.label-sub { font-size: 12px; color: var(--muted); margin-bottom: 12px; line-height: 1.6; }
+
+.sidebar {
+  width: 220px; background: var(--bg1); border: 1px solid var(--border); border-radius: 16px;
+  padding: 14px 12px; min-height: 700px;
+}
+.brand { display: flex; align-items: center; gap: 10px; padding: 4px 6px 14px;
+  border-bottom: 1px solid var(--border-soft); margin-bottom: 6px; }
+.brand-icon { width: 30px; height: 30px; border-radius: 8px; background: var(--brand);
+  display: flex; align-items: center; justify-content: center; color: #fff; font-size: 16px; }
+.brand-text { font-size: 14px; font-weight: 600; }
+
+.nav-icon { font-size: 17px; flex-shrink: 0; width: 20px; text-align: center; }
+.nav-badge { margin-left: auto; font-size: 10.5px; padding: 1px 7px; border-radius: 100px;
+  background: var(--brand-soft); color: var(--brand); font-weight: 500; }
+
+/* ============ 方案 A: 极简清单风 ============
+ * 部门标题: 顶部细线 + 加粗黑字 + 留白
+ * 工具: 无圆角整行 hover, 选中态用左侧 accent bar
+ * 像 macOS Finder / VSCode sidebar
+ */
+.A .sec { font-size: 12.5px; color: var(--text); font-weight: 700;
+  padding: 20px 12px 8px; margin: 8px -12px 0;
+  border-top: 1px solid var(--border-soft); }
+.A .sec:first-of-type { margin-top: 4px; border-top: none; padding-top: 6px; }
+.A .nav-item { display: flex; align-items: center; gap: 10px; padding: 7px 12px;
+  cursor: pointer; font-size: 13px; color: var(--text2); font-weight: 500;
+  margin: 0 -12px; transition: background .12s;
+  border-left: 3px solid transparent; }
+.A .nav-item:hover { background: var(--bg2); }
+.A .nav-item.on { background: var(--brand-soft); color: var(--brand); font-weight: 600;
+  border-left-color: var(--brand); }
+
+/* ============ 方案 B: 部门卡框风 ============
+ * 每个部门 = 浅色 group 框, 标题贴框顶
+ * 工具圆角块紧贴, 选中态浅绿
+ * 像 Notion / Linear sidebar
+ */
+.B .group { background: var(--bg2); border: 1px solid var(--border-soft); border-radius: 12px;
+  padding: 8px 8px 6px; margin-bottom: 12px; }
+.B .group:first-of-type { margin-top: 8px; }
+.B .sec { font-size: 11.5px; color: var(--muted); font-weight: 700;
+  padding: 4px 6px 6px; letter-spacing: 0.04em; }
+.B .nav-item { display: flex; align-items: center; gap: 10px; padding: 7px 8px;
+  border-radius: 6px; cursor: pointer; font-size: 13px; color: var(--text2);
+  font-weight: 500; transition: background .12s; }
+.B .nav-item:hover { background: var(--bg1); }
+.B .nav-item.on { background: var(--brand-soft); color: var(--brand); font-weight: 600; }
+.B .nav-item.standalone { background: transparent; padding-left: 12px; }
+.B .nav-item.standalone:hover { background: var(--bg2); }
+
+/* ============ 方案 C: 大标题 + 缩进列表 ============
+ * 部门标题大粗字, 工具用 indent 视觉表达从属关系
+ * 现代 app 风, 视觉对比强
+ */
+.C .sec { font-size: 13px; color: var(--text); font-weight: 700;
+  padding: 22px 8px 4px; }
+.C .sec:first-of-type { padding-top: 12px; }
+.C .nav-item { display: flex; align-items: center; gap: 10px; padding: 7px 10px 7px 14px;
+  border-radius: 8px; cursor: pointer; font-size: 13px; color: var(--text2);
+  font-weight: 500; margin-left: 4px; position: relative;
+  transition: background .12s; }
+.C .nav-item.standalone { margin-left: 0; padding-left: 10px; }
+.C .nav-item::before { content: ""; position: absolute; left: -2px; top: 16px; bottom: 16px;
+  width: 2px; background: var(--border); border-radius: 100px; }
+.C .nav-item.standalone::before { display: none; }
+.C .nav-item:hover { background: var(--bg2); }
+.C .nav-item.on { background: var(--brand-soft); color: var(--brand); font-weight: 600; }
+.C .nav-item.on::before { background: var(--brand); }
+</style>
+</head>
+<body>
+
+<div style="max-width: 1100px; margin: 0 auto 24px;">
+  <h1 style="font-size: 22px; margin: 0 0 6px;">侧栏视觉 3 版对比</h1>
+  <p style="color: var(--muted); margin: 0;">同样的入口结构, 三种视觉表达. 部门(生产/档案/夜班)如何凸显 + 工具如何成组.</p>
+</div>
+
+<div class="row">
+
+  <!-- ========== A 极简清单 ========== -->
+  <div class="col">
+    <div class="label">A · 极简清单风</div>
+    <div class="label-sub">部门标题压细分隔线上, 工具整行 hover, 选中靠左侧绿条<br>像 macOS Finder / VSCode</div>
+    <div class="sidebar A">
+      <div class="brand">
+        <div class="brand-icon">🏭</div>
+        <div class="brand-text">清华哥工厂</div>
+      </div>
+      <div class="nav-item"><span class="nav-icon">🏠</span><span>总部</span></div>
+      <div class="sec">生产部</div>
+      <div class="nav-item"><span class="nav-icon">🎬</span><span>做视频</span><span class="nav-badge">40</span></div>
+      <div class="nav-item"><span class="nav-icon">📝</span><span>公众号</span></div>
+      <div class="nav-item"><span class="nav-icon">📱</span><span>朋友圈</span></div>
+      <div class="nav-item on"><span class="nav-icon">✏️</span><span>写文案</span><span class="nav-badge">25</span></div>
+      <div class="nav-item"><span class="nav-icon">🎨</span><span>出图片</span></div>
+      <div class="nav-item"><span class="nav-icon">🧪</span><span>黑科技</span></div>
+      <div class="sec">档案部</div>
+      <div class="nav-item"><span class="nav-icon">📥</span><span>素材库</span></div>
+      <div class="nav-item"><span class="nav-icon">📂</span><span>作品库</span></div>
+      <div class="nav-item"><span class="nav-icon">📚</span><span>知识库</span></div>
+      <div class="sec">夜班</div>
+      <div class="nav-item"><span class="nav-icon">🌙</span><span>小华夜班</span></div>
+    </div>
+  </div>
+
+  <!-- ========== B 部门卡框 ========== -->
+  <div class="col">
+    <div class="label">B · 部门卡框风</div>
+    <div class="label-sub">每个部门一个浅色 group 框, 标题贴框顶, 工具圆角紧贴<br>像 Notion / Linear, 整体感最强</div>
+    <div class="sidebar B">
+      <div class="brand">
+        <div class="brand-icon">🏭</div>
+        <div class="brand-text">清华哥工厂</div>
+      </div>
+      <div class="nav-item standalone"><span class="nav-icon">🏠</span><span>总部</span></div>
+
+      <div class="group">
+        <div class="sec">生产部</div>
+        <div class="nav-item"><span class="nav-icon">🎬</span><span>做视频</span><span class="nav-badge">40</span></div>
+        <div class="nav-item"><span class="nav-icon">📝</span><span>公众号</span></div>
+        <div class="nav-item"><span class="nav-icon">📱</span><span>朋友圈</span></div>
+        <div class="nav-item on"><span class="nav-icon">✏️</span><span>写文案</span><span class="nav-badge">25</span></div>
+        <div class="nav-item"><span class="nav-icon">🎨</span><span>出图片</span></div>
+        <div class="nav-item"><span class="nav-icon">🧪</span><span>黑科技</span></div>
+      </div>
+
+      <div class="group">
+        <div class="sec">档案部</div>
+        <div class="nav-item"><span class="nav-icon">📥</span><span>素材库</span></div>
+        <div class="nav-item"><span class="nav-icon">📂</span><span>作品库</span></div>
+        <div class="nav-item"><span class="nav-icon">📚</span><span>知识库</span></div>
+      </div>
+
+      <div class="group">
+        <div class="sec">夜班</div>
+        <div class="nav-item"><span class="nav-icon">🌙</span><span>小华夜班</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== C 大标题 + 缩进 ========== -->
+  <div class="col">
+    <div class="label">C · 大标题 + 缩进风</div>
+    <div class="label-sub">部门标题大粗字, 工具左侧细线表达从属关系<br>视觉对比最强, 现代 app 风</div>
+    <div class="sidebar C">
+      <div class="brand">
+        <div class="brand-icon">🏭</div>
+        <div class="brand-text">清华哥工厂</div>
+      </div>
+      <div class="nav-item standalone"><span class="nav-icon">🏠</span><span>总部</span></div>
+      <div class="sec">生产部</div>
+      <div class="nav-item"><span class="nav-icon">🎬</span><span>做视频</span><span class="nav-badge">40</span></div>
+      <div class="nav-item"><span class="nav-icon">📝</span><span>公众号</span></div>
+      <div class="nav-item"><span class="nav-icon">📱</span><span>朋友圈</span></div>
+      <div class="nav-item on"><span class="nav-icon">✏️</span><span>写文案</span><span class="nav-badge">25</span></div>
+      <div class="nav-item"><span class="nav-icon">🎨</span><span>出图片</span></div>
+      <div class="nav-item"><span class="nav-icon">🧪</span><span>黑科技</span></div>
+      <div class="sec">档案部</div>
+      <div class="nav-item"><span class="nav-icon">📥</span><span>素材库</span></div>
+      <div class="nav-item"><span class="nav-icon">📂</span><span>作品库</span></div>
+      <div class="nav-item"><span class="nav-icon">📚</span><span>知识库</span></div>
+      <div class="sec">夜班</div>
+      <div class="nav-item"><span class="nav-icon">🌙</span><span>小华夜班</span></div>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>

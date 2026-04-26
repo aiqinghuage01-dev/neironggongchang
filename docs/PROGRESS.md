@@ -4,7 +4,62 @@
 
 ---
 
-## 当前状态（2026-04-26 · D-065 作品库扩为统一资产库)
+## 当前状态(2026-04-26 · D-066 侧栏整合 6 个一级入口)
+
+**版本**: v0.3.5 — 生产部从 11 入口收到 6 个 + 双层纸叠侧栏 + 写文案/出图片二级页
+
+**用户痛点**: 生产部图标太多看着乱. 决定:
+- 做视频/公众号/朋友圈 是独立大流程 → 一级保留
+- 投流/热点改写/录音改写/爆款改写/内容策划/违规审查 → 收纳进「✏️ 写文案」二级页
+- 直接出图/即梦 → 收纳进「🎨 出图片」二级页
+- 黑科技 → 给未来预留坑位
+
+**本次 session 完成**(单 commit):
+
+1. **侧栏改造** (`web/factory-shell.jsx`)
+   - NAV_MAIN 从 11 个收到 6 个 (做视频/公众号/朋友圈/写文案/出图片/黑科技)
+   - 加 SECTIONS 配置 (生产部 🏭 / 档案部 📦 / 夜班 🌙) + emoji 部门图标
+   - 新 SectionHeader 组件: 白卡 + emoji + 大粗字 + 轻投影
+   - 工具列表浅米色 bg "内页", -3px overlap 跟 header 紧贴(双层纸叠)
+   - 侧栏 hover 展开宽度 164 → 220px
+   - 「小华夜班」emoji 改 🦉 避免跟夜班图标 🌙 冲突
+   - 收起态(60px)用部门 emoji 当视觉锚点
+   - 新增 LEGACY_NAV_HIDDEN 数组保留旧 id (深链 + skills smoke test)
+
+2. **写文案二级页** (`web/factory-write.jsx`)
+   - 顶部 4 个 stats (今日产出 / 今日热门工具 / AI token+金额 / 累计文案)
+   - 6 张工具卡 (hardcode WRITE_TOOLS): 投流/热点/录音/爆款/策划/审查
+   - 工具卡角标「今日 N 次」(从 /api/ai/usage by_route 聚合)
+   - 最近 4 条文字 (作品库 type=text 取)
+   - 卡片点击 → onNav(page) 跳具体 skill 页
+
+3. **出图片二级页** (`web/factory-image.jsx`)
+   - 同样的 stats + 2 张工具卡 (直接出图 / 即梦) + 最近 8 张图
+
+4. **黑科技页** (`web/factory-beta.jsx`)
+   - 空状态 + "想法可以在小华夜班跟 AI 聊"
+   - 3 张未开发草稿卡 (批量去水印 / 直播字幕 / 一键剪辑)
+
+5. **路由 + index.html**
+   - factory-app.jsx 加 `case "write" / "image" / "beta"`
+   - 旧 8 个 page URL **全部保留**(深链兼容 — `?page=baokuan` 还能直接进)
+   - index.html script 列表加 3 个新 jsx
+
+6. **作品库 D-065 follow-up** (`web/factory-works.jsx`)
+   - 默认时间「今天」如果 0 条 → 自动 fallback 到「本周」+ 显示提示语
+   - 用户人工切时间时 reset 这个 fallback 标记
+
+**端到端验证**(CDP 真 chrome): 写文案/出图片/黑科技 三个页都正常渲染,
+console 干净, stats 接通真数据. pytest 266 通过.
+
+**下一步** (Follow-up):
+1. 卡片 hover 高亮 / 详情抽屉图片 lightbox (D-065 留)
+2. 黑科技 3 张草稿卡的"未开发"按钮如果点击, 跳到 LiDock 自动开聊
+3. 视觉统一: 写文案/出图片/总部 三页的 stats 卡片样式收成共享组件
+
+---
+
+## 上一个 session(2026-04-26 · D-065 作品库扩为统一资产库)
 
 **版本**: v0.3.4 — works 表升级,文字/图片/视频统一管理
 

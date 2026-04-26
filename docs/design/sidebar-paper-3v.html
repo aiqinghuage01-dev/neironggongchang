@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8" />
+<title>侧栏折纸风 · 3 版</title>
+<style>
+:root {
+  --bg: #f7f5f0; --bg1: #ffffff; --bg2: #fcfaf6; --bg3: #f2efe7;
+  --border: #ece8df; --border-soft: #f2efe7;
+  --text: #1a1a1a; --text2: #3d3d3d; --muted: #6b6960; --muted2: #a19e93;
+  --brand: #2a6f4a; --brand-soft: #e8f3ed;
+}
+* { box-sizing: border-box; }
+body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif;
+  background: var(--bg); color: var(--text); font-size: 13.5px; -webkit-font-smoothing: antialiased; padding: 30px; }
+
+.row { display: flex; gap: 30px; align-items: flex-start; max-width: 1100px; margin: 0 auto; }
+.col { flex: 1; }
+.label { font-size: 14px; font-weight: 700; margin-bottom: 6px; }
+.label-sub { font-size: 12px; color: var(--muted); margin-bottom: 12px; line-height: 1.6; min-height: 60px; }
+
+.sidebar { width: 220px; background: var(--bg1); border: 1px solid var(--border); border-radius: 16px;
+  padding: 14px 12px; min-height: 720px; }
+.brand { display: flex; align-items: center; gap: 10px; padding: 4px 6px 14px;
+  border-bottom: 1px solid var(--border-soft); margin-bottom: 6px; }
+.brand-icon { width: 30px; height: 30px; border-radius: 8px; background: var(--brand);
+  display: flex; align-items: center; justify-content: center; color: #fff; font-size: 16px; }
+.brand-text { font-size: 14px; font-weight: 600; }
+.nav-icon { font-size: 17px; flex-shrink: 0; width: 20px; text-align: center; }
+.nav-badge { margin-left: auto; font-size: 10.5px; padding: 1px 7px; border-radius: 100px;
+  background: var(--brand-soft); color: var(--brand); font-weight: 500; }
+
+.standalone-home { display: flex; align-items: center; gap: 10px; padding: 7px 12px; border-radius: 8px;
+  cursor: pointer; font-size: 13px; color: var(--text2); font-weight: 500; margin-bottom: 8px; }
+.standalone-home:hover { background: var(--bg2); }
+
+/* ============ V7: 双层纸叠 (header 在工具上方) ============
+ * 部门 header 像一张纸的"封面"
+ * 工具列表像纸下面的"内页", 用浅 bg + 阴影 + 微 indent
+ */
+.V7 .group { margin-bottom: 14px; }
+.V7 .sec { display: flex; align-items: center; gap: 8px;
+  padding: 10px 14px;
+  background: var(--bg1);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 13.5px; font-weight: 700; color: var(--text);
+  position: relative; z-index: 2;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+}
+.V7 .sec-icon { font-size: 17px; }
+.V7 .nav-list {
+  background: var(--bg2);
+  border-radius: 0 0 10px 10px;
+  padding: 6px 6px 6px 10px;
+  margin: -3px 8px 0;
+  border: 1px solid var(--border-soft);
+  border-top: none;
+}
+.V7 .nav-item { display: flex; align-items: center; gap: 10px; padding: 6px 8px;
+  border-radius: 6px; cursor: pointer; font-size: 13px; color: var(--text2);
+  font-weight: 500; transition: background .12s; }
+.V7 .nav-item:hover { background: var(--bg1); }
+.V7 .nav-item.on { background: var(--brand-soft); color: var(--brand); font-weight: 600; }
+
+/* ============ V8: 撕开线 (锯齿) ============
+ * 部门 header 底部用小三角圆点序列模拟"被撕开"
+ * 工具紧贴下方
+ */
+.V8 .group { margin-bottom: 16px; }
+.V8 .sec { display: flex; align-items: center; gap: 8px;
+  padding: 10px 14px 14px;
+  background: var(--bg2);
+  border-radius: 10px 10px 0 0;
+  font-size: 13.5px; font-weight: 700; color: var(--text);
+  position: relative;
+}
+.V8 .sec::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: -3px; height: 6px;
+  background-image: radial-gradient(circle at 3px 6px, var(--bg2) 2.5px, transparent 3px);
+  background-size: 6px 6px;
+  background-repeat: repeat-x;
+}
+.V8 .sec-icon { font-size: 17px; }
+.V8 .nav-list { padding: 8px 4px 0; }
+.V8 .nav-item { display: flex; align-items: center; gap: 10px; padding: 7px 10px;
+  border-radius: 8px; cursor: pointer; font-size: 13px; color: var(--text2);
+  font-weight: 500; transition: background .12s; }
+.V8 .nav-item:hover { background: var(--bg2); }
+.V8 .nav-item.on { background: var(--brand-soft); color: var(--brand); font-weight: 600; }
+
+/* ============ V9: 文件夹标签 (Tab) ============
+ * 部门 = 文件夹"标签页"(只占行的一部分宽度)
+ * 工具列表在 tab 下方, 圆角对齐 tab 的右下/左下
+ * 视觉感: 标签 + 内容板的层叠
+ */
+.V9 .group { margin-bottom: 0; padding-top: 14px; }
+.V9 .sec { display: inline-flex; align-items: center; gap: 7px;
+  padding: 7px 14px;
+  background: var(--brand-soft);
+  color: var(--brand);
+  font-size: 13px; font-weight: 700;
+  border-radius: 9px 9px 0 0;
+  margin-left: 4px;
+  position: relative; z-index: 2;
+}
+.V9 .sec-icon { font-size: 15px; }
+.V9 .nav-list {
+  background: var(--bg1);
+  border: 1px solid var(--border);
+  border-radius: 0 12px 12px 12px;
+  padding: 8px 6px 10px;
+  margin-top: -1px;
+  position: relative;
+}
+.V9 .nav-item { display: flex; align-items: center; gap: 10px; padding: 7px 10px;
+  border-radius: 7px; cursor: pointer; font-size: 13px; color: var(--text2);
+  font-weight: 500; transition: background .12s; }
+.V9 .nav-item:hover { background: var(--bg2); }
+.V9 .nav-item.on { background: var(--brand-soft); color: var(--brand); font-weight: 600; }
+</style>
+</head>
+<body>
+
+<div style="max-width: 1100px; margin: 0 auto 24px;">
+  <h1 style="font-size: 22px; margin: 0 0 6px;">侧栏折纸风 · 3 版</h1>
+  <p style="color: var(--muted); margin: 0;">部门像"封面 / 标签 / 撕开的纸", 工具像"内页". 视觉有层叠感, 但保持简洁.</p>
+</div>
+
+<div class="row">
+
+  <!-- ========== 7 ========== -->
+  <div class="col">
+    <div class="label">7 · 双层纸叠</div>
+    <div class="label-sub">部门 = 白底纸卡(轻投影) 在最上层<br>工具列表 = 浅米色"内页", 边距收窄, 像纸下面压着的内容.</div>
+    <div class="sidebar V7">
+      <div class="brand">
+        <div class="brand-icon">🏭</div>
+        <div class="brand-text">清华哥工厂</div>
+      </div>
+      <div class="standalone-home"><span class="nav-icon">🏠</span><span>总部</span></div>
+
+      <div class="group">
+        <div class="sec"><span class="sec-icon">🏭</span>生产部</div>
+        <div class="nav-list">
+          <div class="nav-item"><span class="nav-icon">🎬</span><span>做视频</span><span class="nav-badge">40</span></div>
+          <div class="nav-item"><span class="nav-icon">📝</span><span>公众号</span></div>
+          <div class="nav-item"><span class="nav-icon">📱</span><span>朋友圈</span></div>
+          <div class="nav-item on"><span class="nav-icon">✏️</span><span>写文案</span><span class="nav-badge">25</span></div>
+          <div class="nav-item"><span class="nav-icon">🎨</span><span>出图片</span></div>
+          <div class="nav-item"><span class="nav-icon">🧪</span><span>黑科技</span></div>
+        </div>
+      </div>
+
+      <div class="group">
+        <div class="sec"><span class="sec-icon">📦</span>档案部</div>
+        <div class="nav-list">
+          <div class="nav-item"><span class="nav-icon">📥</span><span>素材库</span></div>
+          <div class="nav-item"><span class="nav-icon">📂</span><span>作品库</span></div>
+          <div class="nav-item"><span class="nav-icon">📚</span><span>知识库</span></div>
+        </div>
+      </div>
+
+      <div class="group">
+        <div class="sec"><span class="sec-icon">🌙</span>夜班</div>
+        <div class="nav-list">
+          <div class="nav-item"><span class="nav-icon">🦉</span><span>小华夜班</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== 8 ========== -->
+  <div class="col">
+    <div class="label">8 · 撕开线 (锯齿)</div>
+    <div class="label-sub">部门 header 底部用小圆点锯齿模拟撕开痕迹<br>有"刚撕开露出工具"的实物感, 简洁不花哨.</div>
+    <div class="sidebar V8">
+      <div class="brand">
+        <div class="brand-icon">🏭</div>
+        <div class="brand-text">清华哥工厂</div>
+      </div>
+      <div class="standalone-home"><span class="nav-icon">🏠</span><span>总部</span></div>
+
+      <div class="group">
+        <div class="sec"><span class="sec-icon">🏭</span>生产部</div>
+        <div class="nav-list">
+          <div class="nav-item"><span class="nav-icon">🎬</span><span>做视频</span><span class="nav-badge">40</span></div>
+          <div class="nav-item"><span class="nav-icon">📝</span><span>公众号</span></div>
+          <div class="nav-item"><span class="nav-icon">📱</span><span>朋友圈</span></div>
+          <div class="nav-item on"><span class="nav-icon">✏️</span><span>写文案</span><span class="nav-badge">25</span></div>
+          <div class="nav-item"><span class="nav-icon">🎨</span><span>出图片</span></div>
+          <div class="nav-item"><span class="nav-icon">🧪</span><span>黑科技</span></div>
+        </div>
+      </div>
+
+      <div class="group">
+        <div class="sec"><span class="sec-icon">📦</span>档案部</div>
+        <div class="nav-list">
+          <div class="nav-item"><span class="nav-icon">📥</span><span>素材库</span></div>
+          <div class="nav-item"><span class="nav-icon">📂</span><span>作品库</span></div>
+          <div class="nav-item"><span class="nav-icon">📚</span><span>知识库</span></div>
+        </div>
+      </div>
+
+      <div class="group">
+        <div class="sec"><span class="sec-icon">🌙</span>夜班</div>
+        <div class="nav-list">
+          <div class="nav-item"><span class="nav-icon">🦉</span><span>小华夜班</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== 9 ========== -->
+  <div class="col">
+    <div class="label">9 · 文件夹标签</div>
+    <div class="label-sub">部门 = 文件夹标签 tab(浅绿小条 只占左半部分)<br>工具列表 = 标签下的"内容页", 圆角错位贴合, 文件夹质感.</div>
+    <div class="sidebar V9">
+      <div class="brand">
+        <div class="brand-icon">🏭</div>
+        <div class="brand-text">清华哥工厂</div>
+      </div>
+      <div class="standalone-home"><span class="nav-icon">🏠</span><span>总部</span></div>
+
+      <div class="group">
+        <div class="sec"><span class="sec-icon">🏭</span>生产部</div>
+        <div class="nav-list">
+          <div class="nav-item"><span class="nav-icon">🎬</span><span>做视频</span><span class="nav-badge">40</span></div>
+          <div class="nav-item"><span class="nav-icon">📝</span><span>公众号</span></div>
+          <div class="nav-item"><span class="nav-icon">📱</span><span>朋友圈</span></div>
+          <div class="nav-item on"><span class="nav-icon">✏️</span><span>写文案</span><span class="nav-badge">25</span></div>
+          <div class="nav-item"><span class="nav-icon">🎨</span><span>出图片</span></div>
+          <div class="nav-item"><span class="nav-icon">🧪</span><span>黑科技</span></div>
+        </div>
+      </div>
+
+      <div class="group">
+        <div class="sec"><span class="sec-icon">📦</span>档案部</div>
+        <div class="nav-list">
+          <div class="nav-item"><span class="nav-icon">📥</span><span>素材库</span></div>
+          <div class="nav-item"><span class="nav-icon">📂</span><span>作品库</span></div>
+          <div class="nav-item"><span class="nav-icon">📚</span><span>知识库</span></div>
+        </div>
+      </div>
+
+      <div class="group">
+        <div class="sec"><span class="sec-icon">🌙</span>夜班</div>
+        <div class="nav-list">
+          <div class="nav-item"><span class="nav-icon">🦉</span><span>小华夜班</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>

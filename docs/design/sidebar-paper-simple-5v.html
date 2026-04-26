@@ -1,0 +1,280 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8" />
+<title>侧栏折纸风简化 · 5 版</title>
+<style>
+:root {
+  --bg: #f7f5f0; --bg1: #ffffff; --bg2: #fcfaf6; --bg3: #f2efe7;
+  --border: #ece8df; --border-soft: #f2efe7;
+  --text: #1a1a1a; --text2: #3d3d3d; --muted: #6b6960; --muted2: #a19e93;
+  --brand: #2a6f4a; --brand-soft: #e8f3ed;
+}
+* { box-sizing: border-box; }
+body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif;
+  background: var(--bg); color: var(--text); font-size: 13.5px; -webkit-font-smoothing: antialiased; padding: 30px; }
+
+.row { display: flex; gap: 22px; align-items: flex-start; max-width: 1300px; margin: 0 auto; flex-wrap: wrap; }
+.col { width: 240px; }
+.label { font-size: 13.5px; font-weight: 700; margin-bottom: 4px; }
+.label-sub { font-size: 11.5px; color: var(--muted); margin-bottom: 10px; line-height: 1.55; min-height: 60px; }
+
+.sidebar { width: 220px; background: var(--bg1); border: 1px solid var(--border); border-radius: 16px;
+  padding: 12px 10px; min-height: 700px; }
+.brand { display: flex; align-items: center; gap: 10px; padding: 4px 6px 12px;
+  border-bottom: 1px solid var(--border-soft); margin-bottom: 6px; }
+.brand-icon { width: 28px; height: 28px; border-radius: 8px; background: var(--brand);
+  display: flex; align-items: center; justify-content: center; color: #fff; font-size: 15px; }
+.brand-text { font-size: 13.5px; font-weight: 600; }
+.nav-icon { font-size: 16px; flex-shrink: 0; width: 20px; text-align: center; }
+.nav-badge { margin-left: auto; font-size: 10.5px; padding: 1px 7px; border-radius: 100px;
+  background: var(--brand-soft); color: var(--brand); font-weight: 500; }
+.standalone-home { display: flex; align-items: center; gap: 10px; padding: 7px 12px; border-radius: 8px;
+  cursor: pointer; font-size: 13px; color: var(--text2); font-weight: 500; margin-bottom: 6px; }
+.standalone-home:hover { background: var(--bg2); }
+
+/* ======== A · 双层无边框: header 浅 bg + 工具透明 ======== */
+.A .group { margin-bottom: 14px; }
+.A .sec { display: flex; align-items: center; gap: 8px;
+  padding: 10px 14px; background: var(--bg2); border-radius: 10px;
+  font-size: 13.5px; font-weight: 700; color: var(--text); }
+.A .sec-icon { font-size: 16px; }
+.A .nav-list { padding: 4px 4px 0; }
+.A .nav-item { display: flex; align-items: center; gap: 10px; padding: 7px 10px;
+  border-radius: 8px; cursor: pointer; font-size: 13px; color: var(--text2);
+  font-weight: 500; }
+.A .nav-item:hover { background: var(--bg2); }
+.A .nav-item.on { background: var(--brand-soft); color: var(--brand); font-weight: 600; }
+
+/* ======== B · indent 单层: 部门是标题, 工具缩进 ======== */
+.B .group { margin-bottom: 14px; }
+.B .sec { display: flex; align-items: center; gap: 8px;
+  padding: 12px 6px 6px; font-size: 14px; font-weight: 700; color: var(--text); }
+.B .sec-icon { font-size: 17px; }
+.B .nav-list { padding-left: 14px; }
+.B .nav-item { display: flex; align-items: center; gap: 10px; padding: 6px 8px;
+  border-radius: 7px; cursor: pointer; font-size: 13px; color: var(--text2);
+  font-weight: 500; }
+.B .nav-item:hover { background: var(--bg2); }
+.B .nav-item.on { background: var(--brand-soft); color: var(--brand); font-weight: 600; }
+
+/* ======== C · 工具浅 bg + 部门透明 (反色折纸) ======== */
+.C .group { margin-bottom: 14px; }
+.C .sec { display: flex; align-items: center; gap: 8px;
+  padding: 12px 6px 8px; font-size: 13.5px; font-weight: 700; color: var(--text); }
+.C .sec-icon { font-size: 17px; }
+.C .nav-list { background: var(--bg2); border-radius: 10px; padding: 6px 4px; }
+.C .nav-item { display: flex; align-items: center; gap: 10px; padding: 7px 10px;
+  border-radius: 7px; cursor: pointer; font-size: 13px; color: var(--text2);
+  font-weight: 500; }
+.C .nav-item:hover { background: var(--bg1); }
+.C .nav-item.on { background: var(--brand-soft); color: var(--brand); font-weight: 600; }
+
+/* ======== D · 部门浅 bg + 大留白 + 工具透明 ======== */
+.D .group { margin-bottom: 18px; }
+.D .sec { display: flex; align-items: center; gap: 9px;
+  padding: 9px 12px;
+  background: var(--bg3);
+  border-radius: 8px;
+  font-size: 13px; font-weight: 700; color: var(--text);
+  margin-bottom: 6px; }
+.D .sec-icon { font-size: 15px; }
+.D .nav-list { padding: 0 2px; }
+.D .nav-item { display: flex; align-items: center; gap: 10px; padding: 7px 10px;
+  border-radius: 8px; cursor: pointer; font-size: 13px; color: var(--text2);
+  font-weight: 500; }
+.D .nav-item:hover { background: var(--bg2); }
+.D .nav-item.on { background: var(--brand-soft); color: var(--brand); font-weight: 600; }
+
+/* ======== E · 极简: 大字标题 + 工具列表无装饰 ======== */
+.E .group { margin-bottom: 6px; }
+.E .sec { display: flex; align-items: center; gap: 8px;
+  padding: 18px 8px 6px; font-size: 14.5px; font-weight: 700; color: var(--text);
+  letter-spacing: -0.2px; }
+.E .sec-icon { font-size: 18px; }
+.E .nav-list { padding: 0; }
+.E .nav-item { display: flex; align-items: center; gap: 10px; padding: 7px 10px;
+  border-radius: 8px; cursor: pointer; font-size: 13px; color: var(--text2);
+  font-weight: 500; }
+.E .nav-item:hover { background: var(--bg2); }
+.E .nav-item.on { background: var(--brand-soft); color: var(--brand); font-weight: 600; }
+</style>
+</head>
+<body>
+
+<div style="max-width: 1300px; margin: 0 auto 22px;">
+  <h1 style="font-size: 22px; margin: 0 0 4px;">侧栏折纸风简化 · 5 版</h1>
+  <p style="color: var(--muted); margin: 0; font-size: 13px;">基于双层纸叠简化, 5 个去装饰方向. 部门图标保留.</p>
+</div>
+
+<div class="row">
+
+  <!-- A -->
+  <div class="col">
+    <div class="label">A · 双层无边框</div>
+    <div class="label-sub">部门: 浅米 bg 圆角块<br>工具: 透明背景</div>
+    <div class="sidebar A">
+      <div class="brand"><div class="brand-icon">🏭</div><div class="brand-text">清华哥工厂</div></div>
+      <div class="standalone-home"><span class="nav-icon">🏠</span><span>总部</span></div>
+      <div class="group">
+        <div class="sec"><span class="sec-icon">🏭</span>生产部</div>
+        <div class="nav-list">
+          <div class="nav-item"><span class="nav-icon">🎬</span><span>做视频</span><span class="nav-badge">40</span></div>
+          <div class="nav-item"><span class="nav-icon">📝</span><span>公众号</span></div>
+          <div class="nav-item"><span class="nav-icon">📱</span><span>朋友圈</span></div>
+          <div class="nav-item on"><span class="nav-icon">✏️</span><span>写文案</span><span class="nav-badge">25</span></div>
+          <div class="nav-item"><span class="nav-icon">🎨</span><span>出图片</span></div>
+          <div class="nav-item"><span class="nav-icon">🧪</span><span>黑科技</span></div>
+        </div>
+      </div>
+      <div class="group">
+        <div class="sec"><span class="sec-icon">📦</span>档案部</div>
+        <div class="nav-list">
+          <div class="nav-item"><span class="nav-icon">📥</span><span>素材库</span></div>
+          <div class="nav-item"><span class="nav-icon">📂</span><span>作品库</span></div>
+          <div class="nav-item"><span class="nav-icon">📚</span><span>知识库</span></div>
+        </div>
+      </div>
+      <div class="group">
+        <div class="sec"><span class="sec-icon">🌙</span>夜班</div>
+        <div class="nav-list"><div class="nav-item"><span class="nav-icon">🦉</span><span>小华夜班</span></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- B -->
+  <div class="col">
+    <div class="label">B · 缩进单层</div>
+    <div class="label-sub">部门: 纯文字大粗字 + emoji<br>工具: 缩进 14px, 无装饰</div>
+    <div class="sidebar B">
+      <div class="brand"><div class="brand-icon">🏭</div><div class="brand-text">清华哥工厂</div></div>
+      <div class="standalone-home"><span class="nav-icon">🏠</span><span>总部</span></div>
+      <div class="group">
+        <div class="sec"><span class="sec-icon">🏭</span>生产部</div>
+        <div class="nav-list">
+          <div class="nav-item"><span class="nav-icon">🎬</span><span>做视频</span><span class="nav-badge">40</span></div>
+          <div class="nav-item"><span class="nav-icon">📝</span><span>公众号</span></div>
+          <div class="nav-item"><span class="nav-icon">📱</span><span>朋友圈</span></div>
+          <div class="nav-item on"><span class="nav-icon">✏️</span><span>写文案</span><span class="nav-badge">25</span></div>
+          <div class="nav-item"><span class="nav-icon">🎨</span><span>出图片</span></div>
+          <div class="nav-item"><span class="nav-icon">🧪</span><span>黑科技</span></div>
+        </div>
+      </div>
+      <div class="group">
+        <div class="sec"><span class="sec-icon">📦</span>档案部</div>
+        <div class="nav-list">
+          <div class="nav-item"><span class="nav-icon">📥</span><span>素材库</span></div>
+          <div class="nav-item"><span class="nav-icon">📂</span><span>作品库</span></div>
+          <div class="nav-item"><span class="nav-icon">📚</span><span>知识库</span></div>
+        </div>
+      </div>
+      <div class="group">
+        <div class="sec"><span class="sec-icon">🌙</span>夜班</div>
+        <div class="nav-list"><div class="nav-item"><span class="nav-icon">🦉</span><span>小华夜班</span></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- C -->
+  <div class="col">
+    <div class="label">C · 反色折纸</div>
+    <div class="label-sub">部门: 透明 大字标题<br>工具: 浅米 bg 包成"内容页"</div>
+    <div class="sidebar C">
+      <div class="brand"><div class="brand-icon">🏭</div><div class="brand-text">清华哥工厂</div></div>
+      <div class="standalone-home"><span class="nav-icon">🏠</span><span>总部</span></div>
+      <div class="group">
+        <div class="sec"><span class="sec-icon">🏭</span>生产部</div>
+        <div class="nav-list">
+          <div class="nav-item"><span class="nav-icon">🎬</span><span>做视频</span><span class="nav-badge">40</span></div>
+          <div class="nav-item"><span class="nav-icon">📝</span><span>公众号</span></div>
+          <div class="nav-item"><span class="nav-icon">📱</span><span>朋友圈</span></div>
+          <div class="nav-item on"><span class="nav-icon">✏️</span><span>写文案</span><span class="nav-badge">25</span></div>
+          <div class="nav-item"><span class="nav-icon">🎨</span><span>出图片</span></div>
+          <div class="nav-item"><span class="nav-icon">🧪</span><span>黑科技</span></div>
+        </div>
+      </div>
+      <div class="group">
+        <div class="sec"><span class="sec-icon">📦</span>档案部</div>
+        <div class="nav-list">
+          <div class="nav-item"><span class="nav-icon">📥</span><span>素材库</span></div>
+          <div class="nav-item"><span class="nav-icon">📂</span><span>作品库</span></div>
+          <div class="nav-item"><span class="nav-icon">📚</span><span>知识库</span></div>
+        </div>
+      </div>
+      <div class="group">
+        <div class="sec"><span class="sec-icon">🌙</span>夜班</div>
+        <div class="nav-list"><div class="nav-item"><span class="nav-icon">🦉</span><span>小华夜班</span></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- D -->
+  <div class="col">
+    <div class="label">D · 灰色 chip header</div>
+    <div class="label-sub">部门: 浅灰 bg 紧凑 chip<br>工具: 透明 + 较大留白</div>
+    <div class="sidebar D">
+      <div class="brand"><div class="brand-icon">🏭</div><div class="brand-text">清华哥工厂</div></div>
+      <div class="standalone-home"><span class="nav-icon">🏠</span><span>总部</span></div>
+      <div class="group">
+        <div class="sec"><span class="sec-icon">🏭</span>生产部</div>
+        <div class="nav-list">
+          <div class="nav-item"><span class="nav-icon">🎬</span><span>做视频</span><span class="nav-badge">40</span></div>
+          <div class="nav-item"><span class="nav-icon">📝</span><span>公众号</span></div>
+          <div class="nav-item"><span class="nav-icon">📱</span><span>朋友圈</span></div>
+          <div class="nav-item on"><span class="nav-icon">✏️</span><span>写文案</span><span class="nav-badge">25</span></div>
+          <div class="nav-item"><span class="nav-icon">🎨</span><span>出图片</span></div>
+          <div class="nav-item"><span class="nav-icon">🧪</span><span>黑科技</span></div>
+        </div>
+      </div>
+      <div class="group">
+        <div class="sec"><span class="sec-icon">📦</span>档案部</div>
+        <div class="nav-list">
+          <div class="nav-item"><span class="nav-icon">📥</span><span>素材库</span></div>
+          <div class="nav-item"><span class="nav-icon">📂</span><span>作品库</span></div>
+          <div class="nav-item"><span class="nav-icon">📚</span><span>知识库</span></div>
+        </div>
+      </div>
+      <div class="group">
+        <div class="sec"><span class="sec-icon">🌙</span>夜班</div>
+        <div class="nav-list"><div class="nav-item"><span class="nav-icon">🦉</span><span>小华夜班</span></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- E -->
+  <div class="col">
+    <div class="label">E · 极简纯字</div>
+    <div class="label-sub">部门: 大粗字 + emoji 无 bg<br>工具: 直接列表, 全靠空间分组</div>
+    <div class="sidebar E">
+      <div class="brand"><div class="brand-icon">🏭</div><div class="brand-text">清华哥工厂</div></div>
+      <div class="standalone-home"><span class="nav-icon">🏠</span><span>总部</span></div>
+      <div class="group">
+        <div class="sec"><span class="sec-icon">🏭</span>生产部</div>
+        <div class="nav-list">
+          <div class="nav-item"><span class="nav-icon">🎬</span><span>做视频</span><span class="nav-badge">40</span></div>
+          <div class="nav-item"><span class="nav-icon">📝</span><span>公众号</span></div>
+          <div class="nav-item"><span class="nav-icon">📱</span><span>朋友圈</span></div>
+          <div class="nav-item on"><span class="nav-icon">✏️</span><span>写文案</span><span class="nav-badge">25</span></div>
+          <div class="nav-item"><span class="nav-icon">🎨</span><span>出图片</span></div>
+          <div class="nav-item"><span class="nav-icon">🧪</span><span>黑科技</span></div>
+        </div>
+      </div>
+      <div class="group">
+        <div class="sec"><span class="sec-icon">📦</span>档案部</div>
+        <div class="nav-list">
+          <div class="nav-item"><span class="nav-icon">📥</span><span>素材库</span></div>
+          <div class="nav-item"><span class="nav-icon">📂</span><span>作品库</span></div>
+          <div class="nav-item"><span class="nav-icon">📚</span><span>知识库</span></div>
+        </div>
+      </div>
+      <div class="group">
+        <div class="sec"><span class="sec-icon">🌙</span>夜班</div>
+        <div class="nav-list"><div class="nav-item"><span class="nav-icon">🦉</span><span>小华夜班</span></div></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>

@@ -29,6 +29,7 @@ function PageWorks({ onNav }) {
   const [tab, setTab] = React.useState("all");
   const [sourceFilter, setSourceFilter] = React.useState("");      // "" = 全部
   const [sinceFilter, setSinceFilter] = React.useState("today");   // today / week / month / all  默认今天
+  const [autoFallback, setAutoFallback] = React.useState(false);   // D-066: 今天 0 条时自动 fallback 到 week, 提示一下
   const [works, setWorks] = React.useState([]);
   const [analytics, setAnalytics] = React.useState(null);
   const [sources, setSources] = React.useState({ by_type: {}, by_source: {}, total: 0 });
@@ -53,6 +54,12 @@ function PageWorks({ onNav }) {
         api.get("/api/works/analytics").catch(() => null),
         api.get("/api/works/sources").catch(() => null),
       ]);
+      // D-066: 今天没产出 → 自动切到本周 (只在 sinceFilter='today' 且没有人工切过时)
+      if (sinceFilter === "today" && (list || []).length === 0 && !autoFallback) {
+        setAutoFallback(true);
+        setSinceFilter("week");
+        return;
+      }
       setWorks(list || []);
       if (a) setAnalytics(a);
       if (s) setSources(s);
@@ -150,8 +157,11 @@ function PageWorks({ onNav }) {
           <span style={{ width: 14 }} />
           <span style={{ color: T.muted, marginRight: 4 }}>时间</span>
           {[["today","今天"],["week","本周"],["month","本月"],["all","全部"]].map(([k, label]) => (
-            <FilterChip key={k} on={sinceFilter === k} onClick={() => setSinceFilter(k)}>{label}</FilterChip>
+            <FilterChip key={k} on={sinceFilter === k} onClick={() => { setAutoFallback(false); setSinceFilter(k); }}>{label}</FilterChip>
           ))}
+          {autoFallback && (
+            <span style={{ fontSize: 11, color: T.muted2, marginLeft: 6 }}>· 今天没产出, 已自动切到本周</span>
+          )}
         </div>
       )}
 

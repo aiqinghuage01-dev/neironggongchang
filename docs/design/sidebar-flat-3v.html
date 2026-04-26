@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8" />
+<title>侧栏打通无圆角 · 3 版</title>
+<style>
+:root {
+  --bg: #f7f5f0; --bg1: #ffffff; --bg2: #fcfaf6; --bg3: #f2efe7;
+  --border: #ece8df; --border-soft: #f2efe7;
+  --text: #1a1a1a; --text2: #3d3d3d; --muted: #6b6960; --muted2: #a19e93;
+  --brand: #2a6f4a; --brand-soft: #e8f3ed;
+}
+* { box-sizing: border-box; }
+body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif;
+  background: var(--bg); color: var(--text); font-size: 13.5px; -webkit-font-smoothing: antialiased; padding: 30px; }
+
+.row { display: flex; gap: 30px; align-items: flex-start; max-width: 1100px; margin: 0 auto; }
+.col { flex: 1; }
+.label { font-size: 14px; font-weight: 700; margin-bottom: 4px; }
+.label-sub { font-size: 12px; color: var(--muted); margin-bottom: 12px; line-height: 1.55; min-height: 50px; }
+
+/* 共用 sidebar 外壳: 删掉外层 padding 让内容能"打通"到边 */
+.sidebar { width: 240px; background: var(--bg1); border: 1px solid var(--border); border-radius: 16px;
+  padding: 0; min-height: 720px; overflow: hidden; }
+.brand { display: flex; align-items: center; gap: 10px;
+  padding: 14px 18px; border-bottom: 1px solid var(--border-soft); }
+.brand-icon { width: 28px; height: 28px; border-radius: 8px; background: var(--brand);
+  display: flex; align-items: center; justify-content: center; color: #fff; font-size: 15px; }
+.brand-text { font-size: 13.5px; font-weight: 600; }
+.nav-icon { font-size: 16px; flex-shrink: 0; width: 20px; text-align: center; }
+.nav-badge { margin-left: auto; font-size: 10.5px; padding: 1px 7px; border-radius: 100px;
+  background: var(--brand-soft); color: var(--brand); font-weight: 500; }
+
+.standalone-home { display: flex; align-items: center; gap: 10px; padding: 9px 18px;
+  cursor: pointer; font-size: 13px; color: var(--text2); font-weight: 500; }
+.standalone-home:hover { background: var(--bg2); }
+
+/* ============ F1: C 打通版 ============
+ * 工具列表 bg 全宽 (顶到侧栏边缘), 无圆角
+ * 部门 header 透明大字
+ */
+.F1 .group { margin: 0; }
+.F1 .sec { display: flex; align-items: center; gap: 8px;
+  padding: 16px 18px 8px; font-size: 13.5px; font-weight: 700; color: var(--text); }
+.F1 .sec-icon { font-size: 17px; }
+.F1 .nav-list { background: var(--bg2); padding: 6px 8px; }
+.F1 .nav-item { display: flex; align-items: center; gap: 10px; padding: 7px 10px;
+  cursor: pointer; font-size: 13px; color: var(--text2); font-weight: 500;
+  border-radius: 0; }
+.F1 .nav-item:hover { background: var(--bg1); }
+.F1 .nav-item.on { background: var(--brand-soft); color: var(--brand); font-weight: 600; }
+
+/* ============ F2: 整 group 打通 ============
+ * 整个 group(部门 header + 工具) 一个浅色 bg 全宽
+ * 部门间用更浅 spacer 分开
+ */
+.F2 .group { background: var(--bg2); margin: 0; }
+.F2 .group + .group::before { content: ""; display: block; height: 8px; background: var(--bg1); }
+.F2 .sec { display: flex; align-items: center; gap: 8px;
+  padding: 14px 18px 8px; font-size: 13.5px; font-weight: 700; color: var(--text); }
+.F2 .sec-icon { font-size: 17px; }
+.F2 .nav-list { padding: 0 8px 10px; }
+.F2 .nav-item { display: flex; align-items: center; gap: 10px; padding: 7px 10px;
+  cursor: pointer; font-size: 13px; color: var(--text2); font-weight: 500;
+  border-radius: 0; }
+.F2 .nav-item:hover { background: var(--bg1); }
+.F2 .nav-item.on { background: var(--brand-soft); color: var(--brand); font-weight: 600; }
+
+/* ============ F3: 极简打通 (无 bg, 只用横线分隔) ============
+ * 没有任何 bg 块, 部门 header 加粗, 工具列表正常
+ * 部门之间用一条细线分隔
+ */
+.F3 .group { padding: 0; }
+.F3 .group + .group { border-top: 1px solid var(--border-soft); margin-top: 6px; padding-top: 6px; }
+.F3 .sec { display: flex; align-items: center; gap: 8px;
+  padding: 14px 18px 6px; font-size: 13.5px; font-weight: 700; color: var(--text); }
+.F3 .sec-icon { font-size: 17px; }
+.F3 .nav-list { padding: 0 8px 6px; }
+.F3 .nav-item { display: flex; align-items: center; gap: 10px; padding: 7px 10px;
+  cursor: pointer; font-size: 13px; color: var(--text2); font-weight: 500; }
+.F3 .nav-item:hover { background: var(--bg2); }
+.F3 .nav-item.on { background: var(--brand-soft); color: var(--brand); font-weight: 600; }
+</style>
+</head>
+<body>
+
+<div style="max-width: 1100px; margin: 0 auto 24px;">
+  <h1 style="font-size: 22px; margin: 0 0 6px;">打通无圆角 · 3 版</h1>
+  <p style="color: var(--muted); margin: 0;">工具列表 bg 撑满侧栏宽度. 三种打通方式.</p>
+</div>
+
+<div class="row">
+
+  <!-- F1 -->
+  <div class="col">
+    <div class="label">F1 · C 打通版</div>
+    <div class="label-sub">工具列表浅米 bg 全宽到边. 部门 header 透明大字.<br>(基于 C, 去圆角去边距)</div>
+    <div class="sidebar F1">
+      <div class="brand"><div class="brand-icon">🏭</div><div class="brand-text">清华哥工厂</div></div>
+      <div class="standalone-home"><span class="nav-icon">🏠</span><span>总部</span></div>
+
+      <div class="group">
+        <div class="sec"><span class="sec-icon">🏭</span>生产部</div>
+        <div class="nav-list">
+          <div class="nav-item"><span class="nav-icon">🎬</span><span>做视频</span><span class="nav-badge">40</span></div>
+          <div class="nav-item"><span class="nav-icon">📝</span><span>公众号</span></div>
+          <div class="nav-item"><span class="nav-icon">📱</span><span>朋友圈</span></div>
+          <div class="nav-item on"><span class="nav-icon">✏️</span><span>写文案</span><span class="nav-badge">25</span></div>
+          <div class="nav-item"><span class="nav-icon">🎨</span><span>出图片</span></div>
+          <div class="nav-item"><span class="nav-icon">🧪</span><span>黑科技</span></div>
+        </div>
+      </div>
+
+      <div class="group">
+        <div class="sec"><span class="sec-icon">📦</span>档案部</div>
+        <div class="nav-list">
+          <div class="nav-item"><span class="nav-icon">📥</span><span>素材库</span></div>
+          <div class="nav-item"><span class="nav-icon">📂</span><span>作品库</span></div>
+          <div class="nav-item"><span class="nav-icon">📚</span><span>知识库</span></div>
+        </div>
+      </div>
+
+      <div class="group">
+        <div class="sec"><span class="sec-icon">🌙</span>夜班</div>
+        <div class="nav-list">
+          <div class="nav-item"><span class="nav-icon">🦉</span><span>小华夜班</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- F2 -->
+  <div class="col">
+    <div class="label">F2 · 整 group 打通</div>
+    <div class="label-sub">整个部门(标题+工具)一个浅米色 bg 全宽<br>部门之间用白色 8px 间隙分开</div>
+    <div class="sidebar F2">
+      <div class="brand"><div class="brand-icon">🏭</div><div class="brand-text">清华哥工厂</div></div>
+      <div class="standalone-home"><span class="nav-icon">🏠</span><span>总部</span></div>
+
+      <div class="group">
+        <div class="sec"><span class="sec-icon">🏭</span>生产部</div>
+        <div class="nav-list">
+          <div class="nav-item"><span class="nav-icon">🎬</span><span>做视频</span><span class="nav-badge">40</span></div>
+          <div class="nav-item"><span class="nav-icon">📝</span><span>公众号</span></div>
+          <div class="nav-item"><span class="nav-icon">📱</span><span>朋友圈</span></div>
+          <div class="nav-item on"><span class="nav-icon">✏️</span><span>写文案</span><span class="nav-badge">25</span></div>
+          <div class="nav-item"><span class="nav-icon">🎨</span><span>出图片</span></div>
+          <div class="nav-item"><span class="nav-icon">🧪</span><span>黑科技</span></div>
+        </div>
+      </div>
+
+      <div class="group">
+        <div class="sec"><span class="sec-icon">📦</span>档案部</div>
+        <div class="nav-list">
+          <div class="nav-item"><span class="nav-icon">📥</span><span>素材库</span></div>
+          <div class="nav-item"><span class="nav-icon">📂</span><span>作品库</span></div>
+          <div class="nav-item"><span class="nav-icon">📚</span><span>知识库</span></div>
+        </div>
+      </div>
+
+      <div class="group">
+        <div class="sec"><span class="sec-icon">🌙</span>夜班</div>
+        <div class="nav-list">
+          <div class="nav-item"><span class="nav-icon">🦉</span><span>小华夜班</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- F3 -->
+  <div class="col">
+    <div class="label">F3 · 极简打通</div>
+    <div class="label-sub">完全无 bg 块, 部门间用细分隔线<br>最干净, 最像 macOS Finder 侧栏</div>
+    <div class="sidebar F3">
+      <div class="brand"><div class="brand-icon">🏭</div><div class="brand-text">清华哥工厂</div></div>
+      <div class="standalone-home"><span class="nav-icon">🏠</span><span>总部</span></div>
+
+      <div class="group">
+        <div class="sec"><span class="sec-icon">🏭</span>生产部</div>
+        <div class="nav-list">
+          <div class="nav-item"><span class="nav-icon">🎬</span><span>做视频</span><span class="nav-badge">40</span></div>
+          <div class="nav-item"><span class="nav-icon">📝</span><span>公众号</span></div>
+          <div class="nav-item"><span class="nav-icon">📱</span><span>朋友圈</span></div>
+          <div class="nav-item on"><span class="nav-icon">✏️</span><span>写文案</span><span class="nav-badge">25</span></div>
+          <div class="nav-item"><span class="nav-icon">🎨</span><span>出图片</span></div>
+          <div class="nav-item"><span class="nav-icon">🧪</span><span>黑科技</span></div>
+        </div>
+      </div>
+
+      <div class="group">
+        <div class="sec"><span class="sec-icon">📦</span>档案部</div>
+        <div class="nav-list">
+          <div class="nav-item"><span class="nav-icon">📥</span><span>素材库</span></div>
+          <div class="nav-item"><span class="nav-icon">📂</span><span>作品库</span></div>
+          <div class="nav-item"><span class="nav-icon">📚</span><span>知识库</span></div>
+        </div>
+      </div>
+
+      <div class="group">
+        <div class="sec"><span class="sec-icon">🌙</span>夜班</div>
+        <div class="nav-list">
+          <div class="nav-item"><span class="nav-icon">🦉</span><span>小华夜班</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>

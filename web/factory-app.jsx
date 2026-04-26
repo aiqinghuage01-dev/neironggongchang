@@ -36,6 +36,10 @@ function FactoryApp() {
       case "dreamina":   return <PageDreamina onNav={setPage} />;
       case "nightshift": return <PageNightShift onNav={setPage} />;
       case "dhv5":       return <PageDhv5 onNav={setPage} />;
+      // D-066: 三个二级页, 整合分散的子工具
+      case "write":      return <PageWrite onNav={setPage} />;
+      case "image":      return <PageImage onNav={setPage} />;
+      case "beta":       return <PageBeta onNav={setPage} />;
       default:           return <PageHome onNav={setPage} />;
     }
   };
