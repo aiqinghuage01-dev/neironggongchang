@@ -362,4 +362,91 @@ function ImageEngineChip({ engine, onChange, defaultEngine, isOverride, size = "
   );
 }
 
-Object.assign(window, { Spinning, SkeletonCard, TitlesSkeleton, SkillBadge, StepDots, StepHeader, SelfCheckChip, ImageEngineChip, useImageEngine, IMAGE_ENGINE_META });
+// ─── ImageWithLightbox (D-074) ─────────────────────────────
+// 通用图片组件: 点击展示全屏大图 + ESC/点空白关 + 复制 URL/下载.
+// 全站显示 AI 生成图都用这个 (出图/即梦/公众号封面/段间图/朋友圈封面/作品库).
+//
+// API:
+//   <ImageWithLightbox src={url} alt="..." style={{...}} caption="可选,大图底部显" downloadName="可选" />
+function ImageWithLightbox({ src, alt, style, caption, downloadName, ...rest }) {
+  const [open, setOpen] = React.useState(false);
+  const [copied, setCopied] = React.useState(false);
+  React.useEffect(() => {
+    if (!open) return;
+    const h = (e) => { if (e.key === "Escape") setOpen(false); };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, [open]);
+  function copyUrl(e) {
+    e.stopPropagation();
+    if (!src) return;
+    try { navigator.clipboard.writeText(src); } catch (_) {}
+    setCopied(true); setTimeout(() => setCopied(false), 1500);
+  }
+  function download(e) {
+    e.stopPropagation();
+    if (!src) return;
+    const a = document.createElement("a");
+    a.href = src;
+    a.download = downloadName || `image-${Date.now()}.png`;
+    a.click();
+  }
+  if (!src) return null;
+  return (
+    <>
+      <img
+        src={src} alt={alt || ""}
+        onClick={() => setOpen(true)}
+        style={{ cursor: "zoom-in", ...(style || {}) }}
+        {...rest}
+      />
+      {open && (
+        <div onClick={() => setOpen(false)} style={{
+          position: "fixed", inset: 0, background: "rgba(0,0,0,0.92)", zIndex: 1000,
+          display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+          cursor: "zoom-out", padding: 40,
+        }}>
+          <img
+            src={src} alt={alt || ""}
+            onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: "94vw", maxHeight: "82vh", objectFit: "contain", display: "block", cursor: "default" }}
+          />
+          <button onClick={(e) => { e.stopPropagation(); setOpen(false); }} style={{
+            position: "absolute", top: 20, right: 24, width: 40, height: 40,
+            background: "rgba(255,255,255,0.18)", border: "none", borderRadius: "50%",
+            color: "#fff", fontSize: 22, cursor: "pointer", fontFamily: "inherit",
+          }}>×</button>
+          <div onClick={(e) => e.stopPropagation()} style={{
+            marginTop: 18, display: "flex", alignItems: "center", gap: 12,
+          }}>
+            <button onClick={copyUrl} style={{
+              padding: "8px 18px", fontSize: 13, fontWeight: 600,
+              background: copied ? "#fff" : "rgba(255,255,255,0.18)",
+              color: copied ? "#000" : "#fff",
+              border: "none", borderRadius: 100, cursor: "pointer", fontFamily: "inherit",
+              transition: "background 0.15s",
+            }}>{copied ? "✓ 已复制 URL" : "📋 复制 URL"}</button>
+            <button onClick={download} style={{
+              padding: "8px 18px", fontSize: 13, fontWeight: 600,
+              background: "rgba(255,255,255,0.18)", color: "#fff",
+              border: "none", borderRadius: 100, cursor: "pointer", fontFamily: "inherit",
+            }}>⬇ 下载</button>
+          </div>
+          {caption && (
+            <div style={{
+              marginTop: 14, color: "rgba(255,255,255,0.7)",
+              fontSize: 12.5, maxWidth: "90vw", textAlign: "center",
+              lineHeight: 1.6, padding: "0 20px",
+            }}>{caption}</div>
+          )}
+          <div style={{
+            position: "absolute", bottom: 14, left: 0, right: 0, textAlign: "center",
+            color: "rgba(255,255,255,0.45)", fontSize: 11, fontFamily: "ui-monospace, monospace",
+          }}>ESC 或点击空白处关</div>
+        </div>
+      )}
+    </>
+  );
+}
+
+Object.assign(window, { Spinning, SkeletonCard, TitlesSkeleton, SkillBadge, StepDots, StepHeader, SelfCheckChip, ImageEngineChip, useImageEngine, IMAGE_ENGINE_META, ImageWithLightbox });

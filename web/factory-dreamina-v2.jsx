@@ -260,7 +260,7 @@ function DStepResult({ mode, submitResult, queryResult, loading, polling, onPoll
                   {isVid ? (
                     <video src={api.media(u)} controls style={{ width: "100%", borderRadius: 6 }} />
                   ) : (
-                    <img src={api.media(u)} style={{ width: "100%", borderRadius: 6, display: "block" }} />
+                    <ImageWithLightbox src={api.media(u)} downloadName={u.split("/").pop()} style={{ width: "100%", borderRadius: 6, display: "block" }} />
                   )}
                   <div style={{ fontSize: 10, color: T.muted2, marginTop: 4, fontFamily: "SF Mono, monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.split("/").pop()}</div>
                 </div>

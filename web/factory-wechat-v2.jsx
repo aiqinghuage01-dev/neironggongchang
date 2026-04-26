@@ -886,9 +886,15 @@ function WxStepImages({ plans, setPlans, onGen, loading, onPrev, onNext, onRegen
             {p.mmbiz_url ? (
               // D-039: 用 media_url 走本地 /media/ 避开 mmbiz.qpic.cn 防盗链;
               // 旧数据没有 media_url 时降级到 mmbiz_url (会显示"未经允许不可引用"占位)
+              // D-074: 包 ImageWithLightbox 让点击看大图
               <div style={{ aspectRatio: "16/9", borderRadius: 8, overflow: "hidden",
-                background: `url(${p.media_url ? api.media(p.media_url) : p.mmbiz_url}) center/cover`,
-                border: `1px solid ${T.borderSoft}` }} />
+                border: `1px solid ${T.borderSoft}` }}>
+                <ImageWithLightbox
+                  src={p.media_url ? api.media(p.media_url) : p.mmbiz_url}
+                  alt={`段间图 ${i+1}`}
+                  downloadName={`section-image-${i+1}.png`}
+                  style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+              </div>
             ) : (
               <div style={{
                 minHeight: 110, maxHeight: 140, borderRadius: 8,
@@ -1044,7 +1050,8 @@ function WxStepCover({ cover, title, loading, onPrev, onNext, onRegen, onSelect,
                 position: "relative",
               }}>
               {ok ? (
-                <img src={api.media(c.media_url)} alt={`cover ${i+1}`}
+                <ImageWithLightbox src={api.media(c.media_url)} alt={`cover ${i+1}`}
+                  downloadName={`wechat-cover-${i+1}.png`}
                   style={{ width: "100%", aspectRatio: "16/9", borderRadius: 6, objectFit: "cover", display: "block" }} />
               ) : (
                 <div style={{ aspectRatio: "16/9", borderRadius: 6, background: T.bg2, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, color: T.red, padding: 12, textAlign: "center" }}>

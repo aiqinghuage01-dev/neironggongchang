@@ -356,7 +356,12 @@ function ImageCard({ img, idx, prompt }) {
         aspectRatio: "16/9", display: "flex", alignItems: "center", justifyContent: "center",
       }}>
         {previewSrc ? (
-          <img src={previewSrc} alt={`#${idx + 1}`} style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+          <ImageWithLightbox
+            src={previewSrc} alt={`#${idx + 1}`}
+            caption={prompt ? `"${prompt.slice(0, 200)}"` : ""}
+            downloadName={`image-gen-${Date.now()}-${idx}.png`}
+            style={{ width: "100%", height: "100%", objectFit: "contain" }}
+          />
         ) : (
           <span style={{ color: T.muted, fontSize: 12 }}>(没有可预览图)</span>
         )}

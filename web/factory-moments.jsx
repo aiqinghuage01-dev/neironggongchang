@@ -261,9 +261,17 @@ function MStepCover({ items, coversMap, onGenCover, onPrev, onNext, imgEngine, s
           const c = coversMap[i];
           return (
             <div key={i} style={{ padding: 14, background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 12, display: "flex", gap: 12 }}>
-              <div style={{ width: 120, height: 120, borderRadius: 8, flexShrink: 0, background: c?.media_url ? `url(${api.media(c.media_url)}) center/cover` : T.bg2, border: `1px solid ${T.borderSoft}`, display: "flex", alignItems: "center", justifyContent: "center", color: T.muted, fontSize: 11 }}>
-                {!c && "(未配图)"}
-                {c && !c.media_url && (c.status === "failed" ? <span style={{ color: T.red }}>失败</span> : "生成中...")}
+              <div style={{ width: 120, height: 120, borderRadius: 8, flexShrink: 0, background: T.bg2, border: `1px solid ${T.borderSoft}`, display: "flex", alignItems: "center", justifyContent: "center", color: T.muted, fontSize: 11, overflow: "hidden", position: "relative" }}>
+                {c?.media_url ? (
+                  <ImageWithLightbox src={api.media(c.media_url)} alt={`朋友圈配图 ${i+1}`}
+                    downloadName={`moments-cover-${i+1}.png`}
+                    style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                ) : (
+                  <>
+                    {!c && "(未配图)"}
+                    {c && !c.media_url && (c.status === "failed" ? <span style={{ color: T.red }}>失败</span> : "生成中...")}
+                  </>
+                )}
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
@@ -326,7 +334,11 @@ function MStepCopy({ items, coversMap, onPrev, onDone, onNav, topic }) {
           return (
             <div key={i} style={{ padding: 14, background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 12, display: "flex", gap: 12 }}>
               {c?.media_url && (
-                <div style={{ width: 88, height: 88, borderRadius: 8, flexShrink: 0, background: `url(${api.media(c.media_url)}) center/cover` }} />
+                <div style={{ width: 88, height: 88, borderRadius: 8, flexShrink: 0, overflow: "hidden" }}>
+                  <ImageWithLightbox src={api.media(c.media_url)} alt={`朋友圈配图 ${i+1}`}
+                    downloadName={`moments-cover-${i+1}.png`}
+                    style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                </div>
               )}
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
