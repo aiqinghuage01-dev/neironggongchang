@@ -2051,10 +2051,23 @@ class ComplianceCheckReq(BaseModel):
     industry: str = Field("通用", description="行业 (通用 / 大健康 / 美业 / 教育 / 金融 / 医美) - 决定是否查敏感词库")
 
 
-@app.post("/api/compliance/check", tags=["违规审查"], summary="单 step 审查 + 必出 2 版改写")
+@app.post("/api/compliance/check", tags=["违规审查"], summary="提交审查任务 → 立即返 task_id (异步)")
 def compliance_check(req: ComplianceCheckReq):
-    """走 opus, 一次性出审核报告 + 保守/营销 2 版改写. 6 类行业敏感词库分行业激活."""
-    return compliance_pipeline.check_compliance(req.text, req.industry)
+    """D-037b3 异步化: 立即返 task_id, daemon thread 后台跑 3 段 (扫违规 → 保守版 → 营销版).
+
+    前端轮询 GET /api/tasks/{task_id} 看真进度 (progress_pct 0/5/15/50/80/95/100).
+    完成后 task.result = {industry, scan_scope, violations, stats, version_a, version_b, summary, tokens}.
+
+    破坏性变更: 旧前端按同步等返回的会拿到 {task_id, ...} 而不是结果. 工厂只清华哥一个用户,
+    前端同 commit 改造, 不留兼容路径.
+    """
+    task_id = compliance_pipeline.check_compliance_async(req.text, req.industry)
+    return {
+        "task_id": task_id,
+        "status": "running",
+        "estimated_seconds": 90,
+        "page_id": "compliance",
+    }
 
 
 # 保留 analyze/write 骨架路径以兼容 add_skill 统一约定

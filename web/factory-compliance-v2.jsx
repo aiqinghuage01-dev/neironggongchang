@@ -1,6 +1,7 @@
 // factory-compliance-v2.jsx — 违禁违规审查 skill (D-026 · 单 step)
 // Skill 源: ~/Desktop/skills/违禁违规审查-学员版/
-// 2 步: 输入文案 + 行业 → 一次性出审核报告 + 2 版改写
+// 2 步: 输入文案 + 行业 → 异步任务 → 报告 + 2 版改写
+// D-037b3: 异步化, /api/compliance/check 立即返 task_id, useTaskPoller 轮询真进度.
 
 const COMPLIANCE_STEPS = [
   { id: "input",   n: 1, label: "输入文案" },
@@ -18,44 +19,53 @@ const COMPLIANCE_INDUSTRIES = [
 
 function PageCompliance({ onNav }) {
   const [step, setStep] = React.useState("input");
-  const [loading, setLoading] = React.useState(false);
   const [err, setErr] = React.useState("");
   const [text, setText] = React.useState("");
   const [industry, setIndustry] = React.useState("通用");
   const [result, setResult] = React.useState(null);
   const [skillInfo, setSkillInfo] = React.useState(null);
+  const [taskId, setTaskId] = useTaskPersist("compliance");
   React.useEffect(() => { api.get("/api/compliance/skill-info").then(setSkillInfo).catch(() => {}); }, []);
 
-  async function runStep({ nextStep, rollbackStep, clearSetter, apiCall }) {
-    if (clearSetter) clearSetter(null);
-    setStep(nextStep);
-    setLoading(true); setErr("");
-    try { await apiCall(); }
-    catch (e) { setErr(e.message); if (rollbackStep) setStep(rollbackStep); }
-    finally { setLoading(false); }
+  // D-037b3 轮询任务状态. 完成回写 result + 清 taskId; 失败/取消保留 taskId 让 FailedRetry 显示.
+  const poller = useTaskPoller(taskId, {
+    onComplete: (r) => { setResult(r); setStep("result"); setTaskId(null); },
+    onError: (e) => { setErr(e || "任务失败"); setStep("result"); /* 留 taskId 让 FailedRetry 渲染 */ },
+  });
+
+  async function check() {
+    if (!text.trim()) return;
+    setErr("");
+    setResult(null);
+    try {
+      const r = await api.post("/api/compliance/check", { text: text.trim(), industry });
+      // 后端立即返 { task_id, status, estimated_seconds, page_id }
+      setTaskId(r.task_id);
+      setStep("result");
+    } catch (e) {
+      setErr(e.message || "提交失败");
+    }
   }
 
-  function check() {
-    if (!text.trim()) return;
-    return runStep({
-      nextStep: "result", rollbackStep: "input", clearSetter: setResult,
-      apiCall: async () => {
-        const r = await api.post("/api/compliance/check", { text: text.trim(), industry });
-        setResult(r);
-      },
-    });
-  }
   function reset() {
-    setStep("input"); setErr(""); setText(""); setResult(null);
+    setStep("input"); setErr(""); setText(""); setResult(null); setTaskId(null);
     clearWorkflow("compliance");
   }
 
-  const wfState = { step, text, industry, result };
+  function retry() {
+    setErr(""); setResult(null); setTaskId(null);
+    check();  // 重新提交
+  }
+
+  // D-016 wf state. 把 taskId 也存上, 切走再回来能续轮询.
+  // 老格式 wfState (没 taskId 但有 result) 仍兼容: wfRestore 直接还原 result.
+  const wfState = { step, text, industry, result, taskId };
   const wfRestore = (s) => {
-    if (s.step) setStep(s.step);
     if (s.text != null) setText(s.text);
     if (s.industry) setIndustry(s.industry);
     if (s.result) setResult(s.result);
+    if (s.taskId) setTaskId(s.taskId);
+    if (s.step) setStep(s.step);
   };
   const wf = useWorkflowPersist({ ns: "compliance", state: wfState, onRestore: wfRestore });
 
@@ -68,13 +78,33 @@ function PageCompliance({ onNav }) {
         <WfRestoreBanner show={wf.hasSnapshot} onDismiss={wf.dismissSnapshot}
           onClear={() => { reset(); wf.dismissSnapshot(); }}
           label="违规审查工作流" />
-        {err && (
+        {err && step === "input" && (
           <div style={{ maxWidth: 820, margin: "16px auto 0", padding: 12, background: T.redSoft, color: T.red, borderRadius: 10, fontSize: 13 }}>
             ⚠️ {err}
           </div>
         )}
-        {step === "input"  && <CStepInput text={text} setText={setText} industry={industry} setIndustry={setIndustry} onGo={check} loading={loading} />}
-        {step === "result" && <CStepResult result={result} loading={loading} onPrev={() => setStep("input")} onReset={reset} />}
+        {step === "input"  && <CStepInput text={text} setText={setText} industry={industry} setIndustry={setIndustry} onGo={check} loading={false} />}
+        {step === "result" && (
+          poller.isRunning ? (
+            <LoadingProgress
+              task={poller.task}
+              icon="🛡️"
+              title="小华正在审查违规..."
+              subtitle={`${industry} · ${text.length} 字 · 通用 + 敏感词库双层扫`}
+              onCancel={() => { poller.cancel(); setStep("input"); }}
+            />
+          ) : poller.isFailed || poller.isCancelled ? (
+            <FailedRetry
+              error={poller.error || err}
+              onRetry={retry}
+              onEdit={() => { setTaskId(null); setErr(""); setStep("input"); }}
+              icon="🛡️"
+              title={poller.isCancelled ? "任务已取消" : "这次没跑成功"}
+            />
+          ) : (
+            <CStepResult result={result} onPrev={() => setStep("input")} onReset={reset} />
+          )
+        )}
       </div>
     </div>
   );
@@ -123,14 +153,9 @@ function CStepInput({ text, setText, industry, setIndustry, onGo, loading }) {
   );
 }
 
-function CStepResult({ result, loading, onPrev, onReset }) {
-  if (loading || !result) return <Spinning icon="🛡️" phases={[
-    { text: "扫通用违禁词库", sub: "8 大类: 极限/虚假/刺激/欺骗/不文明/歧视/迷信/时限" },
-    { text: "扫敏感行业词库", sub: "如大健康/美业/教育/金融/医美" },
-    { text: "分级标记高/中/低危", sub: "" },
-    { text: "写保守版 · 100% 合规", sub: "高+中+低危全改" },
-    { text: "写营销版 · 合规+保留吸引力", sub: "高危必改,中危酌情" },
-  ]} />;
+function CStepResult({ result, onPrev, onReset }) {
+  // D-037b3: loading 状态由外层 LoadingProgress 显示, 这里只负责渲染完成态.
+  if (!result) return null;
 
   const stats = result.stats || {};
   const violations = result.violations || [];
