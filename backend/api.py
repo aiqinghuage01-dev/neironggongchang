@@ -289,6 +289,32 @@ def _recover_orphan_tasks():
         log.error(f"orphan/watchdog setup failed: {e}")
 
 
+# --------- 启动钩子: 远程长任务 watcher (D-078) ----------
+@app.on_event("startup")
+def _start_remote_jobs_watcher():
+    """启动 remote_jobs watcher daemon (60s 一 tick), 让即梦/数字人/出图等远程任务排队
+    不假 fail. 进程重启自动接管 last_status 不是终态的 row.
+
+    各 provider (dreamina/hedra/apimart) 在自家 service 里调 register_provider 注册.
+    这里只起 watcher 主循环, 没 provider 就 log warning + skip (安全降级).
+    """
+    import logging
+    log = logging.getLogger("remote_jobs")
+    try:
+        from backend.services import remote_jobs
+        # 触发 dreamina provider 注册 (D-078b 接入)
+        try:
+            from backend.services import dreamina_service as _ds
+            if hasattr(_ds, "register_with_watcher"):
+                _ds.register_with_watcher()
+        except Exception as e:
+            log.warning(f"dreamina register_with_watcher skipped: {e}")
+        if remote_jobs.start_watcher():
+            log.info(f"remote_jobs watcher started (60s tick), providers={remote_jobs.list_providers()}")
+    except Exception as e:
+        log.error(f"remote_jobs watcher setup failed: {e}")
+
+
 # --------- Endpoints ----------
 @app.get("/api/health", tags=["总部"], summary="健康检查 + 各依赖探活")
 def health():

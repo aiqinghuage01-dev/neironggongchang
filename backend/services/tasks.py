@@ -252,6 +252,8 @@ def sweep_stuck() -> int:
     """周期 watchdog 一次扫描: 把跑超时的 running 任务标 failed.
     超时 = max(estimated_seconds*5, 600s). 估时缺失按 600s 兜底.
     不动 pending (没起跑无所谓), 不动 ok/failed/cancelled (已收尾).
+    D-078: 不动 payload.remote_managed=true (远程任务由 remote_jobs watcher 接管,
+    可能合理排队 30min+, watchdog 别假杀). 那批由 remote_jobs.max_wait_sec 保护.
     返回这次扫到的过期任务数."""
     _ensure_schema()
     now = int(time.time())
@@ -259,7 +261,8 @@ def sweep_stuck() -> int:
     with closing(sqlite3.connect(DB_PATH)) as con:
         cur = con.execute(
             f"UPDATE tasks SET status='failed', error=?, finished_ts=?, updated_ts=? "
-            f"WHERE status='running' AND ? - COALESCE(started_ts, updated_ts) > {threshold_expr}",
+            f"WHERE status='running' AND ? - COALESCE(started_ts, updated_ts) > {threshold_expr} "
+            f"AND (payload IS NULL OR payload NOT LIKE '%\"remote_managed\": true%')",
             (
                 f"watchdog: 超时未完成(>{_WATCHDOG_MULTIPLIER}x 预估或 >{_WATCHDOG_MIN_TIMEOUT_SEC}s), 任务可能卡在 AI proxy",
                 now, now, now,
