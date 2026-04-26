@@ -37,18 +37,15 @@ function PageBeta({ onNav }) {
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14 }}>
             {BETA_DRAFTS.map((d, i) => (
-              <div key={i} style={{
-                background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 14,
-                padding: "18px 20px", opacity: 0.55, cursor: "not-allowed",
-                display: "flex", flexDirection: "column",
-              }}>
-                <div style={{ fontSize: 32, marginBottom: 10, filter: "grayscale(40%)" }}>{d.icon}</div>
-                <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 6 }}>{d.label}</div>
-                <div style={{ fontSize: 12.5, color: T.muted, lineHeight: 1.55, flex: 1, marginBottom: 12 }}>{d.desc}</div>
-                <div style={{ paddingTop: 10, borderTop: `1px solid ${T.borderSoft}` }}>
-                  <span style={{ padding: "2px 8px", borderRadius: 100, background: T.amberSoft, color: T.amber, fontSize: 11, fontWeight: 500 }}>未开发</span>
-                </div>
-              </div>
+              <BetaDraftCard key={i} draft={d} onTalk={() => {
+                // 跳到小华夜班, 让用户跟 AI 聊这个想法 (LiDock seed 暂存到 localStorage 给后续接力)
+                try {
+                  localStorage.setItem("beta_idea_seed", JSON.stringify({
+                    label: d.label, desc: d.desc, ts: Date.now(),
+                  }));
+                } catch (_) {}
+                onNav("nightshift");
+              }} />
             ))}
           </div>
 
@@ -56,6 +53,33 @@ function PageBeta({ onNav }) {
       </div>
 
       <LiDock context="黑科技" />
+    </div>
+  );
+}
+
+function BetaDraftCard({ draft, onTalk }) {
+  const [hover, setHover] = React.useState(false);
+  return (
+    <div onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)} style={{
+      background: "#fff", border: `1px solid ${hover ? T.amber : T.borderSoft}`, borderRadius: 14,
+      padding: "18px 20px",
+      transition: "all .15s",
+      boxShadow: hover ? "0 4px 16px rgba(0,0,0,0.06)" : "none",
+      display: "flex", flexDirection: "column",
+    }}>
+      <div style={{ fontSize: 32, marginBottom: 10, filter: hover ? "" : "grayscale(40%)", transition: "filter .15s" }}>{draft.icon}</div>
+      <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 6 }}>{draft.label}</div>
+      <div style={{ fontSize: 12.5, color: T.muted, lineHeight: 1.55, flex: 1, marginBottom: 12 }}>{draft.desc}</div>
+      <div style={{ paddingTop: 10, borderTop: `1px solid ${T.borderSoft}`, display: "flex", alignItems: "center", gap: 8 }}>
+        <span style={{ padding: "2px 8px", borderRadius: 100, background: T.amberSoft, color: T.amber, fontSize: 11, fontWeight: 500 }}>未开发</span>
+        <div style={{ flex: 1 }} />
+        <button onClick={onTalk} style={{
+          padding: "4px 10px", borderRadius: 6, background: hover ? T.brand : "transparent",
+          border: `1px solid ${hover ? T.brand : T.border}`,
+          color: hover ? "#fff" : T.muted, fontSize: 11.5, cursor: "pointer", fontFamily: "inherit",
+          transition: "all .15s",
+        }}>💬 跟小华说</button>
+      </div>
     </div>
   );
 }

@@ -506,19 +506,44 @@ function WorkInfoPanel({ work, onDel, onRemake }) {
 
 // D-065: 图片详情面板
 function ImageInfoPanel({ work, onDel }) {
+  const [lightbox, setLightbox] = React.useState(false);
   let meta = {};
   try { meta = work.metadata ? JSON.parse(work.metadata) : {}; } catch (_) {}
   const sizeKB = meta.size_bytes ? Math.round(meta.size_bytes / 1024) : null;
   const sizeText = sizeKB ? (sizeKB > 1024 ? `${(sizeKB / 1024).toFixed(1)} MB` : `${sizeKB} KB`) : "--";
+  // ESC 关 lightbox
+  React.useEffect(() => {
+    if (!lightbox) return;
+    const h = (e) => { if (e.key === "Escape") setLightbox(false); };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, [lightbox]);
   return (
     <>
       {work.thumb_url ? (
-        <a href={api.media(work.thumb_url)} target="_blank" rel="noreferrer">
-          <img src={api.media(work.thumb_url)} alt={work.title || ""}
-            style={{ width: "100%", maxHeight: 520, objectFit: "contain", borderRadius: 8, background: "#000", display: "block" }} />
-        </a>
+        <img src={api.media(work.thumb_url)} alt={work.title || ""}
+          onClick={() => setLightbox(true)}
+          style={{ width: "100%", maxHeight: 520, objectFit: "contain", borderRadius: 8, background: "#000", display: "block", cursor: "zoom-in" }} />
       ) : (
         <div style={{ aspectRatio: "16/10", background: T.bg3, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", color: T.muted2, fontSize: 32 }}>🖼️</div>
+      )}
+      {lightbox && work.thumb_url && (
+        <div onClick={() => setLightbox(false)} style={{
+          position: "fixed", inset: 0, background: "rgba(0,0,0,0.92)", zIndex: 1000,
+          display: "flex", alignItems: "center", justifyContent: "center", cursor: "zoom-out",
+        }}>
+          <img src={api.media(work.thumb_url)} alt={work.title || ""}
+            style={{ maxWidth: "94vw", maxHeight: "94vh", objectFit: "contain", display: "block" }} />
+          <button onClick={(e) => { e.stopPropagation(); setLightbox(false); }} style={{
+            position: "absolute", top: 20, right: 24, width: 36, height: 36,
+            background: "rgba(255,255,255,0.15)", border: "none", borderRadius: "50%",
+            color: "#fff", fontSize: 20, cursor: "pointer", fontFamily: "inherit",
+          }}>×</button>
+          <div style={{ position: "absolute", left: 24, bottom: 20, color: "#fff",
+            fontSize: 12, opacity: 0.7, fontFamily: "ui-monospace, monospace" }}>
+            ESC 或点击空白处关
+          </div>
+        </div>
       )}
       <div style={{ marginTop: 18 }}>
         <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 4 }}>{work.title || "(无标题)"}</div>
