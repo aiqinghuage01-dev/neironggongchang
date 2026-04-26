@@ -176,4 +176,66 @@ function StepHeader({ icon, title, steps, currentStep, skillInfo, autoBadge, onB
   );
 }
 
-Object.assign(window, { Spinning, SkeletonCard, TitlesSkeleton, SkillBadge, StepDots, StepHeader });
+// ─── SelfCheckChip (D-037 主次反转 · 替代右上 240px 自检卡) ──────
+// hero 行右挂的 1 行 chip + 点开 details 看分项. hotrewrite/voicerewrite/touliu 共享.
+function SelfCheckChip({ pass, score, max = 120, threshold, label, summary, dims, veto, detailRows }) {
+  const [open, setOpen] = React.useState(false);
+  const ok = pass !== false;
+  const color = ok ? T.brand : T.red;
+  const soft = ok ? T.brandSoft : T.redSoft;
+  const ico = ok ? "✓" : "❌";
+  const headLabel = label || (ok ? "自检通过" : "自检没过");
+  const scoreText = (typeof score === "number") ? ` ${score}/${max}` : "";
+  return (
+    <div style={{ position: "relative" }}>
+      <button onClick={() => setOpen(!open)} style={{
+        background: soft, border: `1px solid ${color}44`, color,
+        padding: "6px 12px", borderRadius: 8, fontSize: 12.5, fontWeight: 600,
+        cursor: "pointer", fontFamily: "inherit", display: "flex", alignItems: "center", gap: 6,
+      }}>
+        <span>{ico}</span>
+        <span>{headLabel}{scoreText}</span>
+        <span style={{ fontSize: 10, marginLeft: 4, transform: open ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}>▾</span>
+      </button>
+      {open && (
+        <div style={{
+          position: "absolute", top: "100%", right: 0, marginTop: 6, zIndex: 10,
+          background: "#fff", border: `1px solid ${T.border}`, borderRadius: 10,
+          boxShadow: "0 8px 24px rgba(0,0,0,0.08)", padding: 14, minWidth: 280, maxWidth: 380,
+          fontSize: 12, color: T.muted, lineHeight: 1.7,
+        }}>
+          {summary && <div style={{ color: T.text, marginBottom: 8, lineHeight: 1.6 }}>💬 {summary}</div>}
+          {threshold && typeof score === "number" && (
+            <div>评分: <b style={{ color }}>{score}/{max}</b> {score >= threshold ? "✓" : `(需 ≥${threshold})`}</div>
+          )}
+          {dims && Object.keys(dims).length > 0 && (
+            <div style={{ marginTop: 6 }}>
+              <div style={{ color: T.muted2, fontSize: 11, marginBottom: 4 }}>分项</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                {Object.entries(dims).map(([k, v]) => (
+                  <span key={k} style={{ background: T.bg2, padding: "2px 8px", borderRadius: 4, fontSize: 11 }}>
+                    {k} {v}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+          {veto && (
+            <div style={{ marginTop: 6 }}>
+              一票否决: <b style={{ color: veto.triggered ? T.red : T.brand }}>
+                {veto.triggered ? `触发: ${(veto.items || []).join('、')}` : "无"}
+              </b>
+            </div>
+          )}
+          {detailRows && detailRows.map((r, i) => (
+            <div key={i} style={{ marginTop: i ? 4 : 6 }}>
+              <span style={{ color: T.muted2 }}>{r.k}: </span><b style={{ color: T.text }}>{r.v}</b>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+Object.assign(window, { Spinning, SkeletonCard, TitlesSkeleton, SkillBadge, StepDots, StepHeader, SelfCheckChip });

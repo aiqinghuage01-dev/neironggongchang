@@ -250,18 +250,22 @@ function TLStepResult({ result, n, loading, onPrev, onRegen, onReset, onNav, pit
 
   return (
     <div style={{ padding: "32px 40px 120px", maxWidth: 1240, margin: "0 auto" }}>
-      <div style={{ marginBottom: 16, display: "flex", alignItems: "flex-start", gap: 16 }}>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 6 }}>批量生成完成 · {batch.length} 条 💰</div>
+      {/* Hero (1 行 + 终检 chip 右挂) */}
+      <div style={{ marginBottom: 16, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+        <div style={{ flex: 1, minWidth: 280 }}>
+          <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>批量生成完成 · {batch.length} 条 💰</div>
           <div style={{ fontSize: 12, color: T.muted }}>
             {Object.entries(structCounts).map(([k, v]) => `${k} ${v}`).join(" · ")} · {result.tokens} tokens
           </div>
         </div>
-        <div style={{ padding: 12, background: lint.passed ? T.brandSoft : lint.skipped ? T.bg2 : T.amberSoft, border: `1px solid ${lint.passed ? T.brand + "44" : T.amber + "44"}`, borderRadius: 10, fontSize: 11.5, color: lint.passed ? T.brand : T.amber, minWidth: 180 }}>
-          <div style={{ fontWeight: 700, marginBottom: 3 }}>📋 终检</div>
-          <div>{lint.skipped ? "跳过" : lint.passed ? "✓ 通过" : lint.ok === false ? "⚠️ 异常" : "⚠️ 没过 · 建议重写"}</div>
-          {lint.output && <details style={{ marginTop: 4 }}><summary style={{ cursor: "pointer", fontSize: 10 }}>查看技术细节</summary><pre style={{ fontSize: 9, margin: "4px 0 0", lineHeight: 1.5, whiteSpace: "pre-wrap" }}>{lint.output.slice(0, 400)}</pre></details>}
-        </div>
+        <SelfCheckChip
+          pass={lint.skipped ? true : (lint.passed === true)}
+          label={lint.skipped ? "终检跳过" : lint.passed ? "终检通过" : "终检没过"}
+          detailRows={[
+            { k: "状态", v: lint.skipped ? "跳过" : lint.passed ? "✓ 通过" : (lint.ok === false ? "⚠️ 异常" : "⚠️ 没过 · 建议重写") },
+            ...(lint.output ? [{ k: "输出", v: lint.output.slice(0, 240) + (lint.output.length > 240 ? "..." : "") }] : []),
+          ]}
+        />
       </div>
 
       {/* 风格对齐摘要 */}

@@ -521,25 +521,25 @@ function VStepWrite({ script, angle, loading, onPrev, onRewrite, onReset, onNav,
         </div>
       )}
 
-      <div style={{ marginBottom: 16, display: "flex", alignItems: "flex-start", gap: 16 }}>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 6 }}>改写完成 · {script.word_count} 字 🎙️</div>
+      {/* Hero (1 行 + 自检 chip 右挂) */}
+      <div style={{ marginBottom: 16, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+        <div style={{ flex: 1, minWidth: 280 }}>
+          <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>改写完成 · {script.word_count} 字 🎙️</div>
           <div style={{ fontSize: 12, color: T.muted }}>
-            角度: <b style={{ color: T.text }}>{angle?.label}</b> · {script.tokens?.total || "?"} tokens
+            角度: <b style={{ color: T.text }}>{angle?.label}</b>
             {script.mode_label && <> · 模式: <b style={{ color: T.text }}>{script.mode_label}</b></>}
           </div>
         </div>
-        <div style={{ padding: 12, background: sc.overall_pass ? T.brandSoft : T.redSoft, border: `1px solid ${sc.overall_pass ? T.brand + "44" : T.red + "44"}`, borderRadius: 10, fontSize: 12, color: sc.overall_pass ? T.brand : T.red, minWidth: 240 }}>
-          <div style={{ fontWeight: 700, marginBottom: 4 }}>📋 自检 {sc.overall_pass ? "✅" : "⚠️"}</div>
-          <div>{passed}/7 通过</div>
-          {sc.summary && <div style={{ fontSize: 11, marginTop: 4, opacity: 0.8 }}>{sc.summary}</div>}
-        </div>
+        <SelfCheckChip pass={sc.overall_pass} score={passed} max={7} threshold={5}
+          label="自检" summary={sc.summary}
+          dims={Object.fromEntries(checks.map(c => [c.label, sc[c.key] ? "✓" : "○"]))}
+        />
       </div>
 
       <div style={{ background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 12, padding: 20, marginBottom: 14 }}>
         <div style={{ fontSize: 11.5, color: T.muted2, fontWeight: 600, letterSpacing: "0.08em", marginBottom: 10 }}>可直接读稿版</div>
         <textarea value={script.content || ""} readOnly
-          style={{ width: "100%", border: "none", outline: "none", background: "transparent", fontSize: 14.5, fontFamily: "inherit", resize: "vertical", lineHeight: 1.9, color: T.text, minHeight: 300 }} />
+          style={{ width: "100%", border: "none", outline: "none", background: "transparent", fontSize: 14.5, fontFamily: "inherit", resize: "vertical", lineHeight: 1.9, color: T.text, minHeight: 360 }} />
       </div>
 
       {script.notes?.length > 0 && (
@@ -550,14 +550,6 @@ function VStepWrite({ script, angle, loading, onPrev, onRewrite, onReset, onNav,
           </ul>
         </div>
       )}
-
-      <div style={{ padding: 12, background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 10, marginBottom: 14, display: "flex", flexWrap: "wrap", gap: 12 }}>
-        {checks.map(c => (
-          <div key={c.key} style={{ fontSize: 11.5, color: sc[c.key] ? T.brand : T.muted2, display: "flex", alignItems: "center", gap: 4 }}>
-            {sc[c.key] ? "✓" : "○"} {c.label}
-          </div>
-        ))}
-      </div>
 
       {/* C5: 操作行 — 多版累积 + 切角度 */}
       <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", position: "relative" }}>

@@ -320,11 +320,31 @@ function PStepPlan({ plan, level, loading, onPrev, onReset, onNav, brief }) {
 }
 
 function PlanSection({ icon, data, sectionKey }) {
+  // D-037 主次反转 (2026-04-26): 每模块加 "📋 复制本模块" 按钮, 让用户分模块拷贝
+  const [copied, setCopied] = React.useState(false);
+  function copySection() {
+    const lines = [`## ${data.title || sectionKey}`, ""];
+    for (const [k, v] of Object.entries(data)) {
+      if (k === "title") continue;
+      lines.push(`### ${k}`);
+      lines.push(planFieldToText(v));
+      lines.push("");
+    }
+    try { navigator.clipboard.writeText(lines.join("\n").trim()); } catch (_) {}
+    setCopied(true); setTimeout(() => setCopied(false), 1500);
+  }
   return (
     <div style={{ padding: 16, background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 12 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
         <span style={{ fontSize: 18 }}>{icon}</span>
-        <div style={{ fontSize: 15, fontWeight: 600, color: T.text }}>{data.title || sectionKey}</div>
+        <div style={{ fontSize: 15, fontWeight: 600, color: T.text, flex: 1 }}>{data.title || sectionKey}</div>
+        <button onClick={copySection} style={{
+          padding: "4px 10px", fontSize: 11.5,
+          background: copied ? T.brandSoft : "#fff",
+          border: `1px solid ${copied ? T.brand : T.border}`,
+          color: copied ? T.brand : T.muted,
+          borderRadius: 6, cursor: "pointer", fontFamily: "inherit", fontWeight: 500,
+        }}>{copied ? "✓ 已复制" : "📋 复制本模块"}</button>
       </div>
       <div style={{ fontSize: 13, color: T.muted, lineHeight: 1.8 }}>
         {Object.entries(data).filter(([k]) => k !== "title").map(([k, v]) => (
@@ -336,6 +356,17 @@ function PlanSection({ icon, data, sectionKey }) {
       </div>
     </div>
   );
+}
+
+// 把 plan field 转成纯文本 (复制用)
+function planFieldToText(value, depth = 0) {
+  const ind = "  ".repeat(depth);
+  if (typeof value === "string") return ind + value;
+  if (Array.isArray(value)) return value.map(v => `${ind}- ${typeof v === "string" ? v : planFieldToText(v, depth + 1).trimStart()}`).join("\n");
+  if (value && typeof value === "object") {
+    return Object.entries(value).map(([k, v]) => `${ind}${k}: ${typeof v === "string" ? v : "\n" + planFieldToText(v, depth + 1)}`).join("\n");
+  }
+  return ind + String(value ?? "");
 }
 
 function PlanFieldValue({ value }) {

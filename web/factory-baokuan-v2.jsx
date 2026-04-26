@@ -329,6 +329,51 @@ function BkStepInput({ text, setText, mode, setMode, industry, setIndustry, targ
   );
 }
 
+// ─── BkVersionCard (D-037 主次反转: 多版网格中的单版卡) ────────
+function BkVersionCard({ version, onMakeVideo }) {
+  const [copied, setCopied] = React.useState(false);
+  function copy() {
+    if (!version?.content) return;
+    try { navigator.clipboard.writeText(version.content); } catch (_) {}
+    setCopied(true); setTimeout(() => setCopied(false), 1500);
+  }
+  return (
+    <div style={{
+      background: "#fff", border: `1.5px solid ${T.brand}`, borderRadius: 14,
+      padding: 16, boxShadow: `0 0 0 4px ${T.brandSoft}`,
+      display: "flex", flexDirection: "column",
+    }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10, paddingBottom: 10, borderBottom: `1px dashed ${T.borderSoft}` }}>
+        <span style={{ fontSize: 11.5, padding: "3px 8px", borderRadius: 4, background: T.brandSoft, color: T.brand, fontWeight: 600 }}>
+          {version.key}
+        </span>
+        <span style={{ fontSize: 13, fontWeight: 600, color: T.text, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {version.label}
+        </span>
+        <Tag size="xs" color="gray">{version.word_count || 0} 字</Tag>
+        <button onClick={copy} style={{
+          padding: "4px 10px", fontSize: 11.5, background: copied ? T.brandSoft : "#fff",
+          border: `1px solid ${copied ? T.brand : T.border}`, borderRadius: 6,
+          color: copied ? T.brand : T.muted, cursor: "pointer", fontFamily: "inherit", fontWeight: 500,
+        }}>{copied ? "✓ 已复制" : "📋 复制"}</button>
+      </div>
+      <div style={{
+        background: T.bg2, border: `1px solid ${T.borderSoft}`, borderRadius: 8,
+        padding: "12px 14px", fontSize: 13, lineHeight: 1.85, color: T.text,
+        whiteSpace: "pre-wrap", fontFamily: "ui-monospace, 'SF Mono', Menlo, monospace",
+        maxHeight: 360, overflow: "auto", flex: 1,
+      }}>{version.content || "(空)"}</div>
+      {onMakeVideo && (
+        <button onClick={onMakeVideo} style={{
+          marginTop: 10, padding: "8px 14px", fontSize: 13, fontWeight: 500,
+          background: T.brand, color: "#fff", border: "none",
+          borderRadius: 8, cursor: "pointer", fontFamily: "inherit",
+        }}>🎬 用这版做成视频 →</button>
+      )}
+    </div>
+  );
+}
+
 // ─── DNA 卡 (D-037b5 提出来共享: rewrite 异步跑时也能先显示) ────
 
 function BkDnaCard({ dna }) {
@@ -350,30 +395,10 @@ function BkDnaCard({ dna }) {
 // ─── Step 2 · 结果 (DNA 卡 + 多版 tab) ────────────────────
 
 function BkStepResult({ dna, versions, loading, activeVersionIdx, setActiveVersionIdx, onPrev, onReset, onNav }) {
-  const active = versions[activeVersionIdx] || null;
-
-  function copyContent() {
-    if (!active?.content) return;
-    try {
-      navigator.clipboard.writeText(active.content);
-    } catch (_) {}
-  }
-
-  function makeVideo() {
-    if (!active?.content) return;
-    try {
-      localStorage.setItem("make_v2_seed_script", active.content);
-      localStorage.setItem("make_v2_seed_from", JSON.stringify({
-        skill: "baokuan", title: `${active.key} · ${active.label}`,
-        ts: Date.now(),
-      }));
-    } catch (_) {}
-    onNav("make");
-  }
-
+  // D-037 主次反转 (2026-04-26): 多版从 tab 改成网格并排, N 版同框对比拷贝
   return (
-    <div style={{ padding: "32px 40px 60px", maxWidth: 820, margin: "0 auto" }}>
-      {/* DNA 卡 */}
+    <div style={{ padding: "32px 40px 60px", maxWidth: 1280, margin: "0 auto" }}>
+      {/* DNA 卡 (顶部薄薄一条, 80px) */}
       {dna && (
         <div style={{ background: "#fff", border: `1px solid ${T.brand}33`, borderLeft: `4px solid ${T.brand}`, borderRadius: 12, padding: "14px 18px", marginBottom: 16 }}>
           <div style={{ fontSize: 12.5, fontWeight: 600, color: T.brand, marginBottom: 8 }}>💡 爆款基因分析</div>
@@ -391,72 +416,38 @@ function BkStepResult({ dna, versions, loading, activeVersionIdx, setActiveVersi
         </div>
       )}
 
-      {/* 版本 tab */}
+      {/* 多版网格并排 (替代 tab 切换). 1 版全宽 / 2-4 版 auto-fit 双列 */}
       {versions.length > 0 && (
-        <div style={{ display: "flex", gap: 6, marginBottom: 12, flexWrap: "wrap" }}>
-          {versions.map((v, i) => {
-            const on = i === activeVersionIdx;
-            return (
-              <button key={v.gen_id || i} onClick={() => setActiveVersionIdx(i)} style={{
-                padding: "7px 14px", fontSize: 12.5, fontWeight: 600,
-                background: on ? T.brand : "#fff",
-                color: on ? "#fff" : T.text,
-                border: `1px solid ${on ? T.brand : T.borderSoft}`,
-                borderRadius: 100, cursor: "pointer", fontFamily: "inherit",
-              }}>{v.key} · {v.label}</button>
-            );
-          })}
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: versions.length === 1 ? "1fr" : "repeat(auto-fit, minmax(420px, 1fr))",
+          gap: 16, marginBottom: 16,
+        }}>
+          {versions.map((v, i) => <BkVersionCard key={v.gen_id || i} version={v} onMakeVideo={onNav ? () => {
+            try {
+              localStorage.setItem("make_v2_seed_script", v.content);
+              localStorage.setItem("make_v2_seed_from", JSON.stringify({
+                skill: "baokuan", title: `${v.key} · ${v.label}`, ts: Date.now(),
+              }));
+            } catch (_) {}
+            onNav("make");
+          } : null} />)}
         </div>
       )}
 
-      {/* 当前版本内容 (代码块风格, 方便念稿复制) */}
-      {active && (
-        <div style={{ background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 12, padding: 16, marginBottom: 16 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-            <div style={{ fontSize: 14, fontWeight: 600, color: T.text }}>{active.key} · {active.label}</div>
-            <Tag size="xs" color="gray">{active.word_count || 0} 字</Tag>
-            <div style={{ flex: 1 }} />
-            <button onClick={copyContent} style={{
-              padding: "5px 14px", fontSize: 11.5, background: T.bg2,
-              border: `1px solid ${T.borderSoft}`, borderRadius: 100,
-              color: T.text, cursor: "pointer", fontFamily: "inherit",
-            }}>📋 复制念稿</button>
-          </div>
-          <div style={{
-            background: T.bg2, border: `1px solid ${T.borderSoft}`, borderRadius: 8,
-            padding: "14px 16px", fontSize: 13.5, lineHeight: 1.85, color: T.text,
-            whiteSpace: "pre-wrap", fontFamily: "ui-monospace, 'SF Mono', Menlo, monospace",
-            maxHeight: 480, overflow: "auto",
-          }}>{active.content || "(空)"}</div>
-        </div>
-      )}
-
-      {!active && !loading && versions.length === 0 && (
+      {!loading && versions.length === 0 && (
         <div style={{ background: T.bg2, border: `1px dashed ${T.border}`, borderRadius: 12, padding: 32, textAlign: "center", color: T.muted, fontSize: 13 }}>
           没生成版本 · 回上一步重试
         </div>
       )}
 
-      {/* 完成态 CTA */}
-      {active && !loading && (
+      {/* 完成态 CTA (做视频按钮挪到每张卡内, 这里只剩导航) */}
+      {versions.length > 0 && !loading && (
         <div style={{ display: "flex", gap: 10, marginTop: 18, alignItems: "center", flexWrap: "wrap" }}>
-          <button onClick={onPrev} style={{
-            padding: "9px 18px", fontSize: 13, background: "#fff",
-            border: `1px solid ${T.borderSoft}`, borderRadius: 100,
-            color: T.text, cursor: "pointer", fontFamily: "inherit",
-          }}>← 改输入或换模式</button>
-          <button onClick={onReset} style={{
-            padding: "9px 18px", fontSize: 13, background: "#fff",
-            border: `1px solid ${T.borderSoft}`, borderRadius: 100,
-            color: T.muted, cursor: "pointer", fontFamily: "inherit",
-          }}>🔄 清空重来</button>
+          <Btn variant="outline" onClick={onPrev}>← 改输入或换模式</Btn>
+          <Btn variant="ghost" onClick={onReset}>🔄 清空重来</Btn>
           <div style={{ flex: 1 }} />
-          <button onClick={makeVideo} style={{
-            padding: "10px 24px", fontSize: 14, fontWeight: 600,
-            background: T.brand, color: "#fff", border: "none",
-            borderRadius: 100, cursor: "pointer", fontFamily: "inherit",
-            boxShadow: `0 4px 12px ${T.brand}40`,
-          }}>🎬 用这版做成视频 →</button>
+          <span style={{ fontSize: 12, color: T.muted2 }}>💡 每张卡都能独立"做视频" / "复制"</span>
         </div>
       )}
     </div>

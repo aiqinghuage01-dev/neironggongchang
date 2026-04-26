@@ -555,26 +555,22 @@ function HotStepWrite({ script, hotspot, angle, loading, onPrev, onRewrite, onRe
         </div>
       )}
 
-      <div style={{ marginBottom: 16, display: "flex", alignItems: "flex-start", gap: 16 }}>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 6 }}>热点口播正文 · {script.word_count} 字 ✍️</div>
+      {/* Hero (1 行 + 自检 chip 右挂, 替代 240px 抢戏卡) */}
+      <div style={{ marginBottom: 16, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+        <div style={{ flex: 1, minWidth: 280 }}>
+          <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>热点口播正文 · {script.word_count} 字 ✍️</div>
           <div style={{ fontSize: 12, color: T.muted }}>
-            角度: <b style={{ color: T.text }}>{angle?.label}</b> · write {script.tokens?.write} tok · check {script.tokens?.check} tok
+            角度: <b style={{ color: T.text }}>{angle?.label}</b>
             {script.mode_label && <> · 模式: <b style={{ color: T.text }}>{script.mode_label}</b></>}
           </div>
         </div>
-        <div style={{ padding: 12, background: sc.pass ? T.brandSoft : T.redSoft, border: `1px solid ${sc.pass ? T.brand + "44" : T.red + "44"}`, borderRadius: 10, fontSize: 12, color: sc.pass ? T.brand : T.red, minWidth: 240 }}>
-          <div style={{ fontWeight: 700, marginBottom: 4 }}>📋 六维自检 {sc.pass ? "✅" : "❌"}</div>
-          <div>六维评分: {total}/120 {total >= 105 ? "✓" : "(需 ≥105)"}</div>
-          <div>一票否决: {veto.triggered ? `触发: ${(veto.items || []).join('、')}` : "无"}</div>
-        </div>
+        <SelfCheckChip pass={sc.pass} score={total} max={120} threshold={105} veto={veto} summary={sc.summary} dims={dims} />
       </div>
 
       <div style={{ background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 12, padding: 20 }}>
         <textarea value={script.content || ""} readOnly
-          style={{ width: "100%", border: "none", outline: "none", background: "transparent", fontSize: 14.5, fontFamily: "inherit", resize: "vertical", lineHeight: 1.9, color: T.text, minHeight: 420 }} />
+          style={{ width: "100%", border: "none", outline: "none", background: "transparent", fontSize: 14.5, fontFamily: "inherit", resize: "vertical", lineHeight: 1.9, color: T.text, minHeight: 460 }} />
       </div>
-      {sc.summary && <div style={{ marginTop: 10, padding: 10, background: T.bg2, borderRadius: 8, fontSize: 12, color: T.muted, lineHeight: 1.6 }}>💬 <b>总评:</b> {sc.summary}</div>}
 
       {/* D-062nn-C4: 操作行 — 多版累积 + 切角度 + 复制 */}
       <div style={{ display: "flex", gap: 10, marginTop: 18, alignItems: "center", flexWrap: "wrap", position: "relative" }}>
