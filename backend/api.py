@@ -843,13 +843,29 @@ def chat_dock(req: ChatDockReq, background_tasks: "BackgroundTasks" = None):
     history = "\n".join(history_lines)
 
     system = (
-        "你是小华,清华哥的内容生产副驾。当前老板在看「" + (req.context or "首页") + "」页面。\n"
-        "对话规则:\n"
+        "你是小华,清华哥的内容生产副驾。当前老板在看「" + (req.context or "首页") + "」页面。\n\n"
+        "## 严格守则(D-067):\n"
+        "1. **不能撒谎说自己有能力**:你不能直接打开/查询/操作任何文件、文件夹、页面、知识库.\n"
+        "   你只是聊天的, 没有工具调用能力.\n"
+        "2. **不能编造不存在的功能或路径**:比如别说'我帮你打开 XX 文件夹', 别编'XX 追踪'这种实际没有的目录.\n"
+        "3. **老板问'我的 X 在哪'**: 直接告诉他从哪个真实页面进入, 不要假装你能帮他打开.\n\n"
+        "## 工厂的真实结构(只有这些是真的):\n"
+        "- **总部**(home): 老板的工作台首页\n"
+        "- **生产部**(6 个一级入口):\n"
+        "  · 做视频(make): 链接→文案→数字人→剪辑→发布\n"
+        "  · 公众号(wechat): 8 步出公众号长文\n"
+        "  · 朋友圈(moments): 一个话题→衍生 N 条\n"
+        "  · 写文案(write): 投流/热点改写/录音改写/爆款改写/内容策划/违规审查 6 个工具\n"
+        "  · 出图片(image): 直接出图 / 即梦 AIGC 2 个引擎\n"
+        "  · 黑科技(beta): 实验性功能(目前空)\n"
+        "- **档案部**(3 个): 素材库 / 作品库 / 知识库\n"
+        "- **值班室**: 小华值班 (夜里抓热点 + 总结产出)\n\n"
+        "## 对话规则:\n"
         "- 简短,口语,像跟兄弟聊天\n"
-        "- 老板提的工作问题(写文案/改写/查违规等),引导到对应 skill,不要自己写完整内容\n"
-        "- 老板没具体问题就轻松聊几句\n"
         "- 一次回复不超过 80 字\n"
-        "- 直接回答,不要前言"
+        "- 直接回答,不要前言\n"
+        "- 老板提工作问题(写文案/改写/查违规),告诉他去「写文案」二级页选对应工具\n"
+        "- 老板问知识库/作品库的某个东西在哪,告诉他从「档案部」对应入口手动找,不要假装你能直接打开"
     )
     prompt = (
         f"对话历史:\n{history}\n\n小华(回这条,用大白话,不超过 80 字):"
@@ -1186,6 +1202,38 @@ def works_delete(work_id: int, remove_file: bool = False):
     """remove_file=True 同时删本地视频/音频文件; False (默认) 只删 DB 记录留文件."""
     delete_work(work_id, remove_file=remove_file)
     return {"ok": True}
+
+
+# D-067 P3: 作品库采纳/否决信号 → 写到 metadata.user_action, 反过来喂记忆系统
+class WorkActionReq(BaseModel):
+    action: str = Field(..., description="kept | discarded | clear")
+
+
+@app.post("/api/works/{work_id}/action", tags=["档案部"], summary="标记作品被留下/删除 (D-067 喂记忆)")
+def works_action(work_id: int, req: WorkActionReq):
+    """老板在作品库点 👍 留这版 / 👎 删这版, 写到 metadata.user_action.
+
+    后续行为记忆抽取优先收 kept 的版本(高质量信号), discarded 的也记
+    (避免重蹈覆辙). clear 撤销标记.
+    """
+    w = next((x for x in list_works(limit=10000) if x.id == work_id), None)
+    if not w:
+        raise HTTPException(404, f"work {work_id} not found")
+    action = (req.action or "").strip().lower()
+    if action not in ("kept", "discarded", "clear"):
+        raise HTTPException(400, "action must be kept | discarded | clear")
+    try:
+        meta = json.loads(w.metadata) if w.metadata else {}
+    except Exception:
+        meta = {}
+    if action == "clear":
+        meta.pop("user_action", None)
+        meta.pop("user_action_at", None)
+    else:
+        meta["user_action"] = action
+        meta["user_action_at"] = int(time.time())
+    update_work(work_id, metadata=json.dumps(meta, ensure_ascii=False))
+    return {"ok": True, "work_id": work_id, "user_action": meta.get("user_action")}
 
 
 @app.get("/api/works/{work_id}/local-path", tags=["档案部"], summary="作品本地绝对路径 (D-059c 给 v5 视频用)")

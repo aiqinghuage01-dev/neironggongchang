@@ -400,6 +400,37 @@ function formatTime(ts) {
 }
 
 
+// D-067 P3: 采纳/否决按钮 — 喂行为记忆系统
+function KeepDiscardActions({ work, onChange }) {
+  let meta = {};
+  try { meta = work.metadata ? JSON.parse(work.metadata) : {}; } catch (_) {}
+  const cur = meta.user_action;  // kept / discarded / undefined
+  async function set(action) {
+    try {
+      await api.post(`/api/works/${work.id}/action`, { action });
+      onChange && onChange();
+    } catch (e) { alert("失败: " + e.message); }
+  }
+  return (
+    <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+      <button onClick={() => set(cur === "kept" ? "clear" : "kept")} title="标这版被采纳, 喂行为记忆 → AI 学风格"
+        style={{
+          padding: "5px 10px", fontSize: 12, fontFamily: "inherit", cursor: "pointer",
+          borderRadius: 7, border: `1px solid ${cur === "kept" ? T.brand : T.border}`,
+          background: cur === "kept" ? T.brandSoft : "#fff",
+          color: cur === "kept" ? T.brand : T.muted, fontWeight: cur === "kept" ? 600 : 500,
+        }}>👍 留这版{cur === "kept" ? " ✓" : ""}</button>
+      <button onClick={() => set(cur === "discarded" ? "clear" : "discarded")} title="标这版被否决, AI 下次避开类似风格"
+        style={{
+          padding: "5px 10px", fontSize: 12, fontFamily: "inherit", cursor: "pointer",
+          borderRadius: 7, border: `1px solid ${cur === "discarded" ? T.red : T.border}`,
+          background: cur === "discarded" ? T.redSoft : "#fff",
+          color: cur === "discarded" ? T.red : T.muted, fontWeight: cur === "discarded" ? 600 : 500,
+        }}>👎 删这版{cur === "discarded" ? " ✓" : ""}</button>
+    </div>
+  );
+}
+
 function WorkDrawer({ work, onClose, onDel, onRemake }) {
   const [tab, setTab] = React.useState("info");   // info / metrics
   const [metrics, setMetrics] = React.useState([]);
@@ -427,7 +458,8 @@ function WorkDrawer({ work, onClose, onDel, onRemake }) {
       }}>
         <div style={{ padding: "14px 22px", borderBottom: `1px solid ${T.borderSoft}`, display: "flex", alignItems: "center", gap: 10 }}>
           <div style={{ flex: 1, fontSize: 15, fontWeight: 600 }}>作品详情 #{work.id}</div>
-          <button onClick={onClose} style={{ background: "transparent", border: "none", color: T.muted, cursor: "pointer", fontSize: 22 }}>×</button>
+          <KeepDiscardActions work={work} onChange={() => { /* 重读单条; 简化用 reload 整体 */ window.dispatchEvent(new CustomEvent("works-action-changed")); }} />
+          <button onClick={onClose} style={{ background: "transparent", border: "none", color: T.muted, cursor: "pointer", fontSize: 22, marginLeft: 4 }}>×</button>
         </div>
         <div style={{ display: "flex", gap: 2, padding: "8px 22px 0", borderBottom: `1px solid ${T.borderSoft}` }}>
           {[

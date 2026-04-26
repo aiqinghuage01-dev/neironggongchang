@@ -38,14 +38,15 @@ def tmp_db(monkeypatch):
         pass
 
 
-def test_seed_defaults_creates_4_jobs(tmp_db):
+def test_seed_defaults_creates_5_jobs(tmp_db):
+    """D-067 加 '总结昨天的你' 后从 4 → 5 条"""
     from backend.services import night_runners, night_shift
     r = night_runners.seed_defaults()
-    assert len(r["created"]) == 4
+    assert len(r["created"]) == 5
     assert r["skipped"] == []
     jobs = night_shift.list_jobs()
     names = {j["name"] for j in jobs}
-    assert names == {"凌晨抓热点", "一鱼多吃", "知识库整理", "昨日复盘"}
+    assert names == {"凌晨抓热点", "一鱼多吃", "知识库整理", "昨日复盘", "总结昨天的你"}
     # 都默认禁用
     assert all(j["enabled"] is False for j in jobs)
 
@@ -54,9 +55,9 @@ def test_seed_defaults_idempotent(tmp_db):
     from backend.services import night_runners
     r1 = night_runners.seed_defaults()
     r2 = night_runners.seed_defaults()
-    assert len(r1["created"]) == 4
+    assert len(r1["created"]) == 5
     assert r2["created"] == []
-    assert len(r2["skipped"]) == 4
+    assert len(r2["skipped"]) == 5
 
 
 def test_seed_defaults_partial(tmp_db):
@@ -64,7 +65,7 @@ def test_seed_defaults_partial(tmp_db):
     # 手动建一条同名 job, seed 应该跳过它
     night_shift.create_job(name="昨日复盘", trigger_type="cron")
     r = night_runners.seed_defaults()
-    assert len(r["created"]) == 3
+    assert len(r["created"]) == 4
     assert r["skipped"] == ["昨日复盘"]
 
 

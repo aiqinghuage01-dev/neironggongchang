@@ -47,6 +47,9 @@ DEFAULTS: dict[str, Any] = {
     "image_n_default": 2,          # 一次出几张候选 (cover / 朋友圈 / 段间图都用)
     # 调试可见性 (外测反馈, 默认隐藏)
     "show_api_status_light": False,  # 顶栏 GET /api/... · 30ms 调试条
+    # D-067 行为记忆 + 偏好学习 (默认开 — 这是"越用越懂"的核心闭环)
+    "work_log_enabled": True,        # 每次 AI 调用追加摘要到 ~/Desktop/清华哥知识库/.../小华工作日志.md
+    "preference_learning_enabled": True,  # LiDock 对话抓"我喜欢/不要/记住"等关键词 → 写小华学到的偏好.md
 }
 
 

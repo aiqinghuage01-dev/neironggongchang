@@ -334,5 +334,60 @@ PROGRESS.md 行内的 1 行说明 + 这里的 1 句"为什么这么做"是日常
 - 作品库默认时间智能 fallback(今天 0 条 → 自动切本周, 加提示语)
 - 卡片 hover 高亮 / 详情抽屉图片 lightbox(仍待做)
 
+---
+
+## D-067 - "真正越用越懂" 闭环 + LiDock 不撒谎(2026-04-26)
+
+**背景**: 用户反思 — 当前 AI 真的越用越懂他了吗? 查后发现:
+- Layer 1 (静态人设, 4 份 Obsidian 文件) 真在每次 AI 调用注入 ✓
+- Layer 3 (行为记忆) — `work_log.py` D-023 + `preference.py` D-030 写入逻辑都已存在,
+  **但默认 disabled + 写出来的内容没读回 system prompt** = 半拉子, 完全没生效
+- LiDock 给的"我帮你打开 XX 文件夹"是纯文字编造 — `/api/chat` 没 tool calling 能力,
+  也没 system prompt 约束 AI "不能撒谎说自己有能力"
+
+**结论**: 闭环上 4 件事:
+
+**P1 读回闭环** (`backend/services/persona.py`):
+- 加 `_load_memory_block()` 读三个 Obsidian 文件:
+  · 优先 `昨天的你.md` (P4 夜班精炼摘要, ≤1000 字)
+  · `小华学到的偏好.md` (preference.py 写入, ≤1500 字, 取最新)
+  · `小华工作日志.md` 最近 30 行(只取 `## YYYY-MM-DD` 节里的真 entries, 跳过用户写的模板)
+- `load_persona(deep, include_memory=True)` 默认开 — 把 memory block 拼到 system prompt 末尾
+- `settings.work_log_enabled = True` + `preference_learning_enabled = True` 默认改成 True
+
+**P2 LiDock 不撒谎** (`/api/chat` system prompt):
+- 加严守则: 不能直接打开/查询/操作任何东西; 不能编不存在的功能或路径
+- 列出真实存在的 6 个一级入口 + 3 个档案部入口 + 值班室
+- 老板问"我的 X 在哪", 直接说从哪个真实页面进, 不假装能直接打开
+
+**P3 采纳/否决信号** (`/api/works/{id}/action`):
+- 作品库详情抽屉 header 加 👍 留这版 / 👎 删这版 按钮
+- 写到 `metadata.user_action = kept | discarded` + 时间戳
+- (后续) 行为记忆抽取优先收 kept 版本, discarded 进负向偏好库
+
+**P4 小华夜班"昨天的你"摘要** (`night_runners.yesterday_summary_runner`):
+- 凌晨 6:30 跑 (daily-recap 之后 30 min)
+- 读 work_log 最近 50 条 + preference 全部 → 调 AI 二筛精炼成 ~200 token 摘要
+- 写 `~/Desktop/清华哥知识库/00 🤖 AI清华哥/昨天的你.md`
+- persona.py 优先读这个摘要 (替代完整 work_log) 注入下次 prompt
+- 数据不足 5 条直接跳过, 不写空摘要
+
+**默认禁用 → 默认启用对照**:
+| 开关 | D-066 之前 | D-067 之后 |
+|---|---|---|
+| `work_log_enabled` | False | **True** |
+| `preference_learning_enabled` | False | **True** |
+| `yesterday-summary` 夜班 | (不存在) | seeded 但默认关 (等数据攒够) |
+
+**代价**:
+- system prompt 当前体量: 短人设 ~830 字 + 详细 ~10K 字 + 行为记忆最多 ~3K 字 = 总 ~14K 字 (~3500 token)
+  Opus 完全装得下, DeepSeek 也 OK. 后续 prompt 量级再大需要再压 (P4 摘要正是为这个准备)
+- LiDock 严格 system prompt 后, 它会更"老实"(说"你去 X 页找吧"), 牺牲一点拟人感换不撒谎
+
+**Follow-up(下次)**:
+- LiDock 加真 tool calling: search_kb / open_page 等, 让"我帮你打开"成真
+- 偏好抽取增强: 不光看关键词命中, 也分析 user_action=discarded 的版本特征
+- 行为日志 `## YYYY-MM-DD` 节按周做"周报"长摘要
+
 
 

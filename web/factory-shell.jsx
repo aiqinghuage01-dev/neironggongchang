@@ -39,7 +39,7 @@ const LEGACY_NAV_HIDDEN = [
 const SECTIONS = [
   { id: "main",   icon: "🏭", label: "生产部", items: NAV_MAIN },
   { id: "assets", icon: "📦", label: "档案部", items: NAV_ASSETS },
-  { id: "night",  icon: "🌙", label: "夜班",   items: NAV_NIGHT },
+  { id: "night",  icon: "🌙", label: "值班室", items: NAV_NIGHT },
 ];
 
 // D-066: 部门 header (双层纸叠风格) — 白卡 + emoji + 大粗字
@@ -109,7 +109,7 @@ function Sidebar({ active, onNav }) {
     >
       <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "4px 6px 14px", marginBottom: 6, borderBottom: `1px solid ${T.borderSoft}` }}>
         <div style={{ width: 30, height: 30, borderRadius: 8, background: T.brand, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 16 }}>🏭</div>
-        {hover && <div style={{ fontSize: 13, fontWeight: 600, color: T.text, whiteSpace: "nowrap" }}>清华哥工厂</div>}
+        {hover && <div style={{ fontSize: 13, fontWeight: 600, color: T.text, whiteSpace: "nowrap" }}>清华哥内容工厂</div>}
       </div>
 
       {NAV_TOP.map((n) => (

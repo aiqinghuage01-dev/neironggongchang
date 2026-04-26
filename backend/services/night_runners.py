@@ -60,6 +60,16 @@ DEFAULT_NIGHT_JOBS = [
         "output_target": "home",
         "enabled": False,
     },
+    # D-067 P4: 把行为日志 + 偏好精炼成 200 token "昨天的你" 摘要, 注入下次 prompt
+    {
+        "name": "总结昨天的你",
+        "icon": "🧠",
+        "skill_slug": "yesterday-summary",
+        "trigger_type": "cron",
+        "trigger_config": {"cron": "30 6 * * *", "timezone": "Asia/Shanghai"},  # 凌晨 6:30 (daily-recap 之后)
+        "output_target": "home",
+        "enabled": False,  # 默认关 — 等老板攒够 5 条产出再开
+    },
 ]
 
 
@@ -324,12 +334,90 @@ def _placeholder_with_msg(name: str, why: str):
 _REGISTERED = False
 
 
+# ─── D-067 P4: 昨天的你 — 把 work_log + preference 精炼成 200 token 摘要 ──────
+
+def yesterday_summary_runner(job: dict[str, Any]) -> dict[str, Any]:
+    """读 work_log 最近 30 行 + preference 全部 → 调 AI 二筛精炼成 ~200 token 摘要.
+
+    写到 ~/Desktop/清华哥知识库/00 🤖 AI清华哥/昨天的你.md
+    persona.py 优先读这个摘要 (而不是完整 work_log) 注入 system prompt.
+
+    数据不足(< 5 条 entries)直接跳过, 不写空摘要.
+    """
+    from pathlib import Path
+    import os, re
+
+    log_path = Path(os.path.expanduser("~/Desktop/清华哥知识库/00 🤖 AI清华哥/小华工作日志.md"))
+    pref_path = Path(os.path.expanduser("~/Desktop/清华哥知识库/00 🤖 AI清华哥/小华学到的偏好.md"))
+    summary_path = Path(os.path.expanduser("~/Desktop/清华哥知识库/00 🤖 AI清华哥/昨天的你.md"))
+
+    log_text = log_path.read_text(encoding="utf-8") if log_path.exists() else ""
+    pref_text = pref_path.read_text(encoding="utf-8") if pref_path.exists() else ""
+
+    # 只取 "## YYYY-MM-DD" 节里的实际 entries
+    entries: list[str] = []
+    in_dated = False
+    for ln in log_text.splitlines():
+        s = ln.strip()
+        if s.startswith("## ") and len(s) > 6 and s[3].isdigit():
+            in_dated = True
+            entries.append(ln)
+        elif s.startswith("## "):
+            in_dated = False
+        elif in_dated and (s.startswith("- ") or s.startswith("### ")):
+            entries.append(ln)
+
+    if len(entries) < 5:
+        return {
+            "output_summary": f"work_log 数据不足 ({len(entries)} 条 < 5), 跳过总结",
+            "output_refs": [],
+            "log": "等老板用一段时间积累更多产出再总结",
+        }
+
+    log_brief = "\n".join(entries[-50:])  # 最近 50 条
+    pref_brief = pref_text[-2000:] if pref_text else "(暂无明确偏好)"
+
+    prompt = (
+        "下面是清华哥(老板)最近的内容产出记录 + 已表达过的偏好.\n"
+        "请你精炼成一段 ~200 token 的'昨天的你'摘要, 用第二人称'你'写, "
+        "用大白话总结他的风格倾向 / 高频选择 / 已知禁忌. "
+        "不要重复列表, 概括风格特征. 严禁编造记录里没有的内容.\n\n"
+        f"## 工作日志(最近 50 条):\n{log_brief}\n\n"
+        f"## 偏好(自动抓的):\n{pref_brief}\n\n"
+        "现在请输出'昨天的你'摘要(纯正文, 无标题):"
+    )
+
+    from shortvideo.ai import get_ai_client
+    ai = get_ai_client(route_key="memory.summarize")
+    r = ai.chat(prompt, system="你是清华哥的内容副驾, 精炼总结他的风格倾向", deep=False, temperature=0.3, max_tokens=500)
+    summary = (r.text or "").strip()
+
+    if not summary or len(summary) < 50:
+        return {
+            "output_summary": "AI 返回空 / 太短, 跳过写文件",
+            "output_refs": [],
+            "log": f"raw output (len={len(summary)}):\n{summary}",
+        }
+
+    summary_path.parent.mkdir(parents=True, exist_ok=True)
+    from datetime import datetime
+    header = f"# 昨天的你\n\n> 由小华夜班 D-067 自动总结 · 注入到每次 AI 调用的 system prompt\n> 上次更新: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n\n"
+    summary_path.write_text(header + summary + "\n", encoding="utf-8")
+
+    return {
+        "output_summary": f"精炼了 {len(entries)} 条产出 + 偏好 → {len(summary)} 字摘要",
+        "output_refs": [{"kind": "yesterday_summary", "path": str(summary_path)}],
+        "log": f"写入 {summary_path}\n字数: {len(summary)}\ntoken: {r.total_tokens}\n\n摘要预览:\n{summary[:300]}",
+    }
+
+
 def register_all() -> None:
     """把 4 条 runner 注册到 night_executor. 幂等."""
     global _REGISTERED
     if _REGISTERED:
         return
     night_executor.register_runner("daily-recap", daily_recap_runner)
+    night_executor.register_runner("yesterday-summary", yesterday_summary_runner)
     night_executor.register_runner("content-planner", content_planner_runner)
     night_executor.register_runner(
         "one-fish-many-meals",

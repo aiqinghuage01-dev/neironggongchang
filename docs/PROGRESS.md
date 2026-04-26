@@ -4,7 +4,52 @@
 
 ---
 
-## 当前状态(2026-04-26 · D-066 侧栏整合 6 个一级入口)
+## 当前状态(2026-04-26 · D-067 真正越用越懂闭环)
+
+**版本**: v0.3.6 — 行为记忆 + 偏好回读注入 + LiDock 不撒谎守则 + 采纳/否决信号
+
+**用户痛点**: 反思"现在每天的内容有真正实现越用越懂我吗?" 查后发现:
+- Layer 1 静态人设 ✓ 真生效
+- Layer 3 行为记忆 ✗ 写入代码都在但默认关 + 写了不读回
+- LiDock 「我帮你打开 XX 文件夹」是纯文字编造 (没 tool calling)
+
+**本次完成**(4 phase):
+
+1. **P1 读回闭环** (`persona.py`)
+   - `_load_memory_block()` 读 3 个 Obsidian 文件: 昨天的你.md / 小华学到的偏好.md / 小华工作日志.md(最近 30 行)
+   - `load_persona(include_memory=True)` 默认开
+   - settings 默认 `work_log_enabled=True` + `preference_learning_enabled=True`
+
+2. **P2 LiDock 不撒谎** (`/api/chat` system prompt)
+   - 加严守则: 不能打开/查询/操作; 不能编不存在路径
+   - 列真实 6 个一级入口 + 3 档案部 + 值班室
+   - 老板问位置直接说真实路径
+
+3. **P3 采纳/否决信号** (`/api/works/{id}/action`)
+   - 作品库详情抽屉加 👍 留 / 👎 删 按钮
+   - 写 `metadata.user_action = kept|discarded`
+
+4. **P4 夜班"昨天的你"摘要** (`yesterday_summary_runner`)
+   - 凌晨 6:30 cron(daily-recap 之后)
+   - 读 work_log+preference → AI 精炼 ~200 token 摘要
+   - 写 `昨天的你.md`, persona 优先读这个
+
+5. **侧栏文案** (用户当面要求)
+   - "清华哥工厂" → "清华哥**内容**工厂"
+   - "夜班" → "**值班室**" (部门 label)
+
+**端到端**: pytest 268 通过 (新增 1 测试 + 改 3 个旧 night_runners 测试断言数 4→5).
+当前 work_log 是空模板(用户还没真用过) → memory_inject_chars=0, AI 行为暂未变化.
+等老板用一段时间产出累积, 再看"是否真懂".
+
+**下一步**:
+1. LiDock 加真 tool calling (search_kb / open_page)
+2. 偏好抽取增强(看 discarded 版本特征)
+3. 周报长摘要
+
+---
+
+## 上一个 session(2026-04-26 · D-066 侧栏整合 6 个一级入口)
 
 **版本**: v0.3.5 — 生产部从 11 入口收到 6 个 + 双层纸叠侧栏 + 写文案/出图片二级页
 
