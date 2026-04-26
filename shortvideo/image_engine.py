@@ -58,6 +58,7 @@ def generate(
     refs: list[str] | None = None,
     label: str = "图",
     output_dir: Path | str | None = None,
+    source_skill: str = "image-gen",
 ) -> dict[str, Any]:
     """统一图生成入口.
 
@@ -68,6 +69,7 @@ def generate(
     refs: 参考图 URL (apimart 支持, dreamina 暂不传给 CLI)
     label: 文件名前缀
     output_dir: 本地图片保存目录 (默认 data/image-gen/)
+    source_skill: D-065 入库时的来源标识 (image-gen / wechat-cover / wechat-section-image / ...)
     """
     engine = (engine or get_default_engine()).lower()
     if engine not in SUPPORTED_ENGINES:
@@ -84,6 +86,32 @@ def generate(
         images = _generate_dreamina(prompt, size=size, n=n, label=label, output_dir=output_dir)
     else:
         raise ValueError(engine)
+
+    # D-065: 每张成功生成的图回写 works 表 (作品库统一入口)
+    try:
+        from shortvideo.works import insert_work
+        import json as _json
+        for img in images:
+            if img.get("error") or not img.get("local_path"):
+                continue
+            try:
+                insert_work(
+                    type="image",
+                    source_skill=source_skill,
+                    title=(prompt or "")[:60] or None,
+                    local_path=img["local_path"],
+                    thumb_path=img["local_path"],
+                    status="ready",
+                    metadata=_json.dumps({
+                        "prompt": prompt, "size": size, "engine": engine,
+                        "url": img.get("url"),
+                        "elapsed_sec": img.get("elapsed_sec"),
+                    }, ensure_ascii=False),
+                )
+            except Exception:
+                pass  # 回写失败不阻断主流程
+    except Exception:
+        pass
 
     return {
         "images": images,

@@ -1,7 +1,21 @@
 // factory-app.jsx — 顶级路由
 
 function FactoryApp() {
-  const [page, setPage] = React.useState("home");
+  // D-065: 支持 ?page=works 这类 URL 深链(便于截图验证 + 直接分享)
+  const [page, setPage] = React.useState(() => {
+    try {
+      const p = new URLSearchParams(window.location.search).get("page");
+      return p || "home";
+    } catch (_) { return "home"; }
+  });
+  React.useEffect(() => {
+    try {
+      const url = new URL(window.location.href);
+      if (page === "home") url.searchParams.delete("page");
+      else url.searchParams.set("page", page);
+      window.history.replaceState(null, "", url.toString());
+    } catch (_) {}
+  }, [page]);
   const render = () => {
     switch (page) {
       case "home":       return <PageHome onNav={setPage} />;

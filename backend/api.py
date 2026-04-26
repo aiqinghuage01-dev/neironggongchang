@@ -1061,12 +1061,44 @@ def stats_home():
 
 
 # ---- 作品库 ----
-@app.get("/api/works", tags=["档案部"], summary="作品库列表")
-def works_list(limit: int = 50):
-    items = list_works(limit=limit)
+@app.get("/api/works", tags=["档案部"], summary="作品库列表 (D-065: 三类统一)")
+def works_list(
+    limit: int = 200,
+    type: Optional[str] = None,
+    source_skill: Optional[str] = None,
+    since: Optional[str] = None,  # today / week / month / all
+    q: Optional[str] = None,
+):
+    """D-065: 支持按 type / source_skill / since / 关键词筛选.
+
+    type:           text / image / video (None = 全部)
+    source_skill:   image-gen / wechat-cover / baokuan / ... (None = 全部)
+    since:          today / week / month / all (None = 全部)
+    q:              在 title / final_text / metadata 里模糊搜
+    """
+    since_ts: Optional[int] = None
+    if since and since != "all":
+        now = time.time()
+        if since == "today":
+            t = time.localtime(now)
+            since_ts = int(time.mktime((t.tm_year, t.tm_mon, t.tm_mday, 0, 0, 0, 0, 0, -1)))
+        elif since == "week":
+            since_ts = int(now - 7 * 86400)
+        elif since == "month":
+            since_ts = int(now - 30 * 86400)
+    items = list_works(limit=limit, type=type, source_skill=source_skill, since_ts=since_ts)
+    if q:
+        kw = q.strip().lower()
+        items = [
+            w for w in items
+            if kw in (w.title or "").lower()
+            or kw in (w.final_text or "").lower()
+            or kw in (w.metadata or "").lower()
+        ]
     out = []
     for w in items:
         local_url = None
+        thumb_url = None
         if w.local_path:
             p = Path(w.local_path)
             if p.exists():
@@ -1074,18 +1106,54 @@ def works_list(limit: int = 50):
                     local_url = media_url(p)
                 except Exception:
                     pass
+        if w.thumb_path:
+            p2 = Path(w.thumb_path)
+            if p2.exists():
+                try:
+                    thumb_url = media_url(p2)
+                except Exception:
+                    pass
+        # 图片类:缩略图 = 原图(没单独抽缩略)
+        if not thumb_url and w.type == "image" and local_url:
+            thumb_url = local_url
         out.append({
             "id": w.id,
+            "type": w.type,
+            "source_skill": w.source_skill,
             "title": w.title,
             "created_at": w.created_at,
             "status": w.status,
-            "final_text": w.final_text[:120] if w.final_text else "",
+            "final_text": w.final_text[:200] if w.final_text else "",
             "avatar_id": w.avatar_id,
             "speaker_id": w.speaker_id,
             "shiliu_video_id": w.shiliu_video_id,
+            "duration_sec": w.duration_sec,
             "local_url": local_url,
+            "thumb_url": thumb_url,
+            "metadata": w.metadata,  # 前端可 JSON.parse
+            "tokens_used": w.tokens_used,
         })
     return out
+
+
+@app.get("/api/works/sources", tags=["档案部"], summary="可选来源 + 各类型计数 (D-065 给筛选条用)")
+def works_sources():
+    """返回:
+      - by_type:   {video: N, image: N, text: N}
+      - by_source: {image-gen: N, wechat-cover: N, ...}
+    """
+    items = list_works(limit=10000)
+    by_type: dict[str, int] = {}
+    by_source: dict[str, int] = {}
+    for w in items:
+        by_type[w.type] = by_type.get(w.type, 0) + 1
+        if w.source_skill:
+            by_source[w.source_skill] = by_source.get(w.source_skill, 0) + 1
+    return {
+        "total": len(items),
+        "by_type": by_type,
+        "by_source": by_source,
+    }
 
 
 @app.delete("/api/works/{work_id}", tags=["档案部"], summary="删作品 (可选删本地文件)")

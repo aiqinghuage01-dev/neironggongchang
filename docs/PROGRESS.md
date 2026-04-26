@@ -4,7 +4,78 @@
 
 ---
 
-## 当前状态（2026-04-25 · DoD 制度上线）
+## 当前状态（2026-04-26 · D-065 作品库扩为统一资产库)
+
+**版本**: v0.3.4 — works 表升级,文字/图片/视频统一管理
+
+**用户痛点**: 用 "🖼️ 直接出图" 生成 4 张图后**找不到去哪了**。原作品库只列短视频,
+图片散在 6 个目录(image-gen / covers / wechat-cover / wechat-cover-batch /
+wechat-images / dreamina) 共 46 张,文字根本不入库。
+
+**本次 session 完成**(单 commit):
+
+1. **Schema 升级** (`shortvideo/works.py`) — works 表加 4 列(向前兼容)
+   - `type TEXT NOT NULL DEFAULT 'video'` (text / image / video / audio)
+   - `source_skill TEXT` (image-gen / wechat-cover / baokuan / ...)
+   - `thumb_path TEXT` / `metadata TEXT` (JSON)
+   - `_migrate_works()` 给老库 ALTER TABLE 加列(幂等)
+   - `list_works(type=, source_skill=, since_ts=)` 加过滤
+
+2. **API 升级** (`backend/api.py`)
+   - `/api/works` 加 query: `type` / `source_skill` / `since` (today/week/month/all) / `q`
+   - 新 `/api/works/sources` — 返回 by_type / by_source 计数(给前端筛选条用)
+
+3. **历史回灌** (`scripts/migrate_assets.py`) — 一次性扫 6 个图目录 + data/videos
+   - 167 条入库: 121 视频 + 46 图(image-gen 4 / wechat-cover 26 /
+     wechat-cover-batch 8 / wechat-section-image 7 / dreamina 1)
+   - 同 local_path 跳过(幂等)
+
+4. **前端 V1 实装** (`web/factory-works.jsx`) — 设计走 V1 mockup 风格
+   - 主 tab: 全部 / 文字 / 图片 / 视频 / 数据看板 / 发布矩阵
+   - 来源 chip 行(按 tab 动态过滤可用来源) + 时间 chip 行(默认"今天")
+   - inline `renderCard(w, onPick)` 三类卡片样式自适应
+     · 图片: 16:10 缩略图 + 来源徽标 + 大小徽标 + 标题 + 时间
+     · 视频: 沿用 9:16 + status Tag
+     · 文字: 来源 chip + 标题 + 文案预览(WebkitLineClamp 4) + 字数
+   - 详情抽屉根据 `work.type` 路由 ImageInfoPanel / TextInfoPanel / WorkInfoPanel
+
+5. **直接出图自动回写** (`shortvideo/image_engine.py`)
+   - `generate()` 新增 `source_skill` 参数,生图成功后 insert_work
+   - 失败兜底: 回写失败不阻断主流程
+
+6. **URL 深链** (`web/factory-app.jsx`)
+   - `?page=works` 支持(便于截图 / 验证 / 分享)
+   - history.replaceState 跟 page state 同步
+
+**踩过的坑**(同名函数 bug):
+- `factory-image-gen.jsx` 已有 `function ImageCard({img,idx})`,我新写的
+  `function ImageCard({w,onPick})` 跟它**同名**。babel-in-browser 把所有 jsx
+  合并到同一全局 scope, **后定义覆盖前定义** — PageWorks 里 `<ImageCard w=>`
+  实际调到 image-gen 那版,它访问 `img.error` 但 `img` 是 undefined,
+  console 反复爆 `Cannot read properties of undefined (reading 'error')`。
+- 解决: 改 inline `renderCard(w, onPick)` 函数,不抽 React 组件,绕开同名冲突。
+  教训: 跨文件同名 React 组件在 babel inline 模式下危险,以后命名加 page 前缀
+  (e.g. `WorksImageCard`)。
+
+**端到端验证**(CDP 抓真 chrome):
+- 默认 tab="全部" + 时间="今天",177 条入库,今天有产出渲染:
+  - 4 张 直接出图 (gen_177717xxx)
+  - 1 张 dreamina (test 字样)
+  - 多张 数字人视频 (shiliu_xxx)
+- console 干净(无 error)
+- 后端 pytest 266 通过(无回归)
+
+**下一步**(Follow-up,下次 session):
+1. 其他 5 个生成点回写 works:
+   - `/api/wechat/cover` / `/api/wechat/section-image` / `/api/dreamina/text2image`
+   - 文字 skill: `/api/baokuan` / `/api/hotrewrite` / `/api/voicerewrite` /
+     `/api/touliu` / `/api/wechat/write` / `/api/planner`
+2. 卡片 hover 高亮(目前为静态)
+3. 详情抽屉细节优化(图片放大查看 / 文字一键复制)
+
+---
+
+## 上一个 session（2026-04-25 · DoD 制度上线）
 
 **版本**：v0.3.3 — Definition of Done 三层制度落地
 

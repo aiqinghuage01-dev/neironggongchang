@@ -1,47 +1,96 @@
-// factory-works.jsx — 作品库:网格 + 详情抽屉
-// 视觉对齐 docs/design_v3/factory3-pages.jsx V3Works
+// factory-works.jsx — 作品库 V1 (D-065 三类统一)
+// 主 tab: 全部 / 文字 / 图片 / 视频 / 数据看板 / 发布矩阵
+// 来源 chip: 按当前 type 动态过滤
+// 时间 chip: 今天 / 本周 / 本月 / 全部 (默认今天)
+// 卡片: 视频沿用 WorkCard, 图片新做 ImageCard, 文字新做 TextCard
+
+// D-065: source_skill → 友好名 + 类型对应表
+const SOURCE_LABELS = {
+  "image-gen": "🖼️ 直接出图",
+  "wechat-cover": "📄 公众号封面",
+  "wechat-cover-batch": "📄 封面批量",
+  "wechat-section-image": "📄 段间图",
+  "dreamina": "🎬 即梦 AIGC",
+  "shortvideo": "🎥 数字人视频",
+  "baokuan": "💥 爆款改写",
+  "hotrewrite": "🔥 热点改写",
+  "voicerewrite": "🎙️ 录音改写",
+  "touliu": "💰 投流文案",
+  "wechat": "📄 公众号长文",
+  "planner": "🗓️ 内容策划",
+  "compliance": "🛡️ 违规审查",
+  "moments": "🌟 朋友圈",
+};
+
+function sourceLabel(k) { return SOURCE_LABELS[k] || k || "未知来源"; }
 
 function PageWorks({ onNav }) {
-  const [view, setView] = React.useState("grid");     // grid / analytics
+  // 主 tab: all / text / image / video / analytics / publish
+  const [tab, setTab] = React.useState("all");
+  const [sourceFilter, setSourceFilter] = React.useState("");      // "" = 全部
+  const [sinceFilter, setSinceFilter] = React.useState("today");   // today / week / month / all  默认今天
   const [works, setWorks] = React.useState([]);
   const [analytics, setAnalytics] = React.useState(null);
+  const [sources, setSources] = React.useState({ by_type: {}, by_source: {}, total: 0 });
   const [loading, setLoading] = React.useState(true);
   const [q, setQ] = React.useState("");
   const [picked, setPicked] = React.useState(null);
 
+  // tab 跟 type 的映射
+  const tabType = (t) => (t === "text" || t === "image" || t === "video") ? t : null;
+
   async function load() {
     setLoading(true);
+    const t = tabType(tab);
+    const params = new URLSearchParams({ limit: "300" });
+    if (t) params.set("type", t);
+    if (sourceFilter) params.set("source_skill", sourceFilter);
+    if (sinceFilter && sinceFilter !== "all") params.set("since", sinceFilter);
+    if (q.trim()) params.set("q", q.trim());
     try {
-      const [list, a] = await Promise.all([
-        api.get("/api/works?limit=100"),
+      const [list, a, s] = await Promise.all([
+        api.get(`/api/works?${params.toString()}`),
         api.get("/api/works/analytics").catch(() => null),
+        api.get("/api/works/sources").catch(() => null),
       ]);
-      setWorks(list);
+      setWorks(list || []);
       if (a) setAnalytics(a);
-    } catch {}
+      if (s) setSources(s);
+    } catch (e) { console.warn("[works] load failed", e); }
     setLoading(false);
   }
-  React.useEffect(() => { load(); }, []);
+  React.useEffect(() => {
+    const id = setTimeout(load, q ? 280 : 0);
+    return () => clearTimeout(id);
+  }, [tab, sourceFilter, sinceFilter, q]);
 
   async function delOne(id) {
-    if (!confirm("删除这条作品?(本地视频文件也一并删除)")) return;
+    if (!confirm("删除这条作品?(本地视频/图片文件也一并删除)")) return;
     await api.del(`/api/works/${id}?remove_file=true`).catch(() => {});
     setPicked(null);
     load();
   }
 
-  const visible = works.filter(w => {
-    if (!q.trim()) return true;
-    const k = q.trim().toLowerCase();
-    return (w.title || "").toLowerCase().includes(k)
-        || (w.final_text || "").toLowerCase().includes(k);
-  });
+  // 当前 tab 下展示的来源 chip 列表(按 type 过滤 by_source)
+  // 由于 by_source 不带 type 信息, 用 SOURCE_LABELS 的语义 + 一个简单分类
+  const SOURCE_TYPE = {
+    "image-gen": "image", "wechat-cover": "image", "wechat-cover-batch": "image",
+    "wechat-section-image": "image", "dreamina": "image",
+    "shortvideo": "video",
+    "baokuan": "text", "hotrewrite": "text", "voicerewrite": "text", "touliu": "text",
+    "wechat": "text", "planner": "text", "compliance": "text", "moments": "text",
+  };
+  const t = tabType(tab);
+  const visibleSources = Object.entries(sources.by_source || {})
+    .filter(([k]) => !t || SOURCE_TYPE[k] === t)
+    .sort((a, b) => b[1] - a[1]);
 
-  const statusCount = {
-    all: works.length,
-    published: works.filter(w => w.status === "published").length,
-    ready: works.filter(w => w.status === "ready").length,
-    generating: works.filter(w => w.status === "generating").length,
+  const totalByType = sources.by_type || {};
+  const tabCount = (id) => {
+    if (id === "all") return sources.total || 0;
+    if (id === "analytics") return analytics?.total_works_with_data || 0;
+    if (id === "publish") return countPublishMarks();
+    return totalByType[id] || 0;
   };
 
   return (
@@ -49,63 +98,91 @@ function PageWorks({ onNav }) {
       <div style={{ padding: "22px 32px 0", background: "#fff", borderBottom: `1px solid ${T.border}` }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <div style={{ fontSize: 20, fontWeight: 600 }}>🗂️ 作品库</div>
-          <Tag color="gray">{statusCount.all} 条</Tag>
-          {statusCount.published > 0 && <Tag color="green">已发 {statusCount.published}</Tag>}
-          {statusCount.ready > 0 && <Tag color="blue">待发 {statusCount.ready}</Tag>}
-          {statusCount.generating > 0 && <Tag color="amber">合成中 {statusCount.generating}</Tag>}
+          <Tag color="gray">{sources.total} 条</Tag>
+          {totalByType.text > 0 && <Tag color="amber">📝 文字 {totalByType.text}</Tag>}
+          {totalByType.image > 0 && <Tag color="blue">🖼️ 图片 {totalByType.image}</Tag>}
+          {totalByType.video > 0 && <Tag color="green">🎥 视频 {totalByType.video}</Tag>}
           <div style={{ flex: 1 }} />
-          {view === "grid" && (
+          {(tab === "all" || tabType(tab)) && (
             <input
-              placeholder="🔍 搜标题 / 文案"
+              placeholder="🔍 搜标题 / 文案 / prompt"
               value={q} onChange={e => setQ(e.target.value)}
               style={{ width: 260, padding: "8px 14px", fontSize: 13, border: `1px solid ${T.border}`, borderRadius: 100, outline: "none", background: T.bg2, fontFamily: "inherit" }}
             />
           )}
           <Btn size="sm" onClick={load}>↻ 刷新</Btn>
         </div>
-        <div style={{ fontSize: 12.5, color: T.muted, marginTop: 8 }}>你做过的全部视频 · 点卡片看详情 / 录入各平台数据 · 看数据视图知道什么类型爆</div>
+        <div style={{ fontSize: 12.5, color: T.muted, marginTop: 8 }}>
+          你做过的全部产出 · 文字 / 图片 / 视频统一管理 · 按来源、时间筛选
+        </div>
         <div style={{ display: "flex", gap: 2, marginTop: 14 }}>
           {[
-            { id: "grid", label: "📄 作品网格", n: works.length },
-            { id: "analytics", label: "📊 数据看板", n: analytics?.total_works_with_data || 0 },
-            { id: "publish", label: "📤 发布矩阵", n: countPublishMarks() },  // D-062z
-          ].map(t => {
-            const on = view === t.id;
+            { id: "all", label: "📦 全部" },
+            { id: "text", label: "📝 文字" },
+            { id: "image", label: "🖼️ 图片" },
+            { id: "video", label: "🎥 视频" },
+            { id: "analytics", label: "📊 数据看板" },
+            { id: "publish", label: "📤 发布矩阵" },
+          ].map(item => {
+            const on = tab === item.id;
             return (
-              <button key={t.id} onClick={() => setView(t.id)} style={{
+              <button key={item.id} onClick={() => setTab(item.id)} style={{
                 padding: "9px 14px", background: "transparent", border: "none", cursor: "pointer", fontFamily: "inherit",
                 color: on ? T.text : T.muted, fontWeight: on ? 600 : 500, fontSize: 13,
                 borderBottom: `2px solid ${on ? T.brand : "transparent"}`,
                 display: "flex", alignItems: "center", gap: 5,
-              }}>{t.label} <span style={{ fontSize: 11, color: T.muted2 }}>{t.n}</span></button>
+              }}>{item.label} <span style={{ fontSize: 11, color: T.muted2 }}>{tabCount(item.id)}</span></button>
             );
           })}
         </div>
       </div>
 
+      {/* D-065: 来源 + 时间筛选条 (analytics/publish 不显示) */}
+      {(tab === "all" || tabType(tab)) && (
+        <div style={{ padding: "12px 32px", background: T.bg2, borderBottom: `1px solid ${T.borderSoft}`, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", fontSize: 12.5 }}>
+          <span style={{ color: T.muted, marginRight: 4 }}>来源</span>
+          <FilterChip on={sourceFilter === ""} onClick={() => setSourceFilter("")}>全部</FilterChip>
+          {visibleSources.map(([k, n]) => (
+            <FilterChip key={k} on={sourceFilter === k} onClick={() => setSourceFilter(sourceFilter === k ? "" : k)}>
+              {sourceLabel(k)} · {n}
+            </FilterChip>
+          ))}
+          <span style={{ width: 14 }} />
+          <span style={{ color: T.muted, marginRight: 4 }}>时间</span>
+          {[["today","今天"],["week","本周"],["month","本月"],["all","全部"]].map(([k, label]) => (
+            <FilterChip key={k} on={sinceFilter === k} onClick={() => setSinceFilter(k)}>{label}</FilterChip>
+          ))}
+        </div>
+      )}
+
       <div style={{ flex: 1, overflow: "auto", padding: "20px 32px", background: T.bg }}>
-        <div style={{ maxWidth: 1200, margin: "0 auto" }}>
+        <div style={{ maxWidth: 1240, margin: "0 auto" }}>
           {loading && (
             <div style={{ textAlign: "center", padding: 40, color: T.muted2 }}>加载中...</div>
           )}
-          {!loading && view === "grid" && visible.length === 0 && (
-            <EmptyWorks onGo={() => onNav("make")} />
+          {!loading && (tab === "all" || tabType(tab)) && works.length === 0 && (
+            <EmptyByTab tab={tab} sinceFilter={sinceFilter} onGo={() => onNav("make")} onClearFilter={() => { setSinceFilter("all"); setSourceFilter(""); setQ(""); }} />
           )}
-          {!loading && view === "grid" && visible.length > 0 && (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14 }}>
-              {visible.map(w => (
-                <WorkCard key={w.id} w={w} onPick={() => setPicked(w)} />
-              ))}
+
+          {/* D-065: 三类作品网格 (inline 渲染避开 React dev 误报) */}
+          {!loading && (tab === "all" || tabType(tab)) && works.length > 0 && (
+            <div style={{
+              display: "grid",
+              gridTemplateColumns: tab === "text" ? "repeat(2, 1fr)" : "repeat(4, 1fr)",
+              gap: 14,
+            }}>
+              {works.map(w => renderCard(w, () => setPicked(w)))}
             </div>
           )}
-          {!loading && view === "analytics" && (
+
+          {!loading && tab === "analytics" && (
             <AnalyticsView a={analytics} onOpen={(wid) => {
               const w = works.find(x => x.id === wid);
               if (w) setPicked(w);
             }} />
           )}
           {/* D-062z: 多平台发布矩阵 (跨视频聚合 publish_marks::* localStorage) */}
-          {!loading && view === "publish" && (
+          {!loading && tab === "publish" && (
             <PublishMatrix works={works} onOpenWork={setPicked} onMake={() => onNav("make")} />
           )}
         </div>
@@ -144,74 +221,171 @@ function EmptyWorks({ onGo }) {
   );
 }
 
-function WorkCard({ w, onPick }) {
-  const statusMap = {
-    published: { color: "green", text: "已发" },
-    ready: { color: "blue", text: "待发" },
-    generating: { color: "amber", text: "合成中" },
-    pending: { color: "gray", text: "等待" },
-    failed: { color: "red", text: "失败" },
-  };
-  const st = statusMap[w.status] || { color: "gray", text: w.status };
-  const [hover, setHover] = React.useState(false);
-
+// D-065: 按当前 tab/筛选给出空状态文案
+function EmptyByTab({ tab, sinceFilter, onGo, onClearFilter }) {
+  const sinceLabel = { today: "今天", week: "本周", month: "本月", all: "" }[sinceFilter] || "";
+  const typeLabel = { all: "产出", text: "文字", image: "图片", video: "视频" }[tab] || "产出";
+  const isFiltered = sinceFilter !== "all";
   return (
-    <div onClick={onPick}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
-      style={{
-        background: "#fff",
-        border: `1px solid ${hover ? T.brand : T.borderSoft}`,
-        boxShadow: hover ? `0 4px 16px rgba(47,122,82,0.12)` : "0 1px 2px rgba(0,0,0,0.03)",
-        borderRadius: 12, overflow: "hidden",
-        cursor: "pointer", transition: "all 0.15s",
-      }}>
-      <div style={{
-        aspectRatio: "9 / 16",
-        background: w.local_url ? "#000" : "linear-gradient(135deg, #1e293b 0%, #475569 100%)",
-        display: "flex", alignItems: "flex-end", padding: 12, color: "#fff", fontSize: 11,
-        position: "relative", overflow: "hidden",
-      }}>
-        {w.local_url ? (
-          <video src={api.media(w.local_url)} muted preload="metadata"
-            style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
-        ) : (
-          <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", fontSize: 36, opacity: 0.5 }}>▶</div>
-        )}
-        {/* 顶部状态 + 时长 */}
-        <div style={{ position: "absolute", top: 10, right: 10 }}>
-          <Tag size="xs" color={st.color}>{st.text}</Tag>
-        </div>
-        {w.duration_sec ? (
-          <div style={{ position: "absolute", top: 10, left: 10,
-                        padding: "2px 8px", borderRadius: 100,
-                        background: "rgba(0,0,0,0.55)", color: "#fff",
-                        fontSize: 10.5, fontFamily: "SF Mono, monospace", fontWeight: 600 }}>
-            {Math.round(w.duration_sec)}s
-          </div>
-        ) : null}
-        {/* 底部水印 */}
-        <div style={{ position: "relative", zIndex: 1, textShadow: "0 1px 3px rgba(0,0,0,0.6)" }}>
-          <div style={{ opacity: 0.85, fontWeight: 500 }}>@清华哥聊私域</div>
-        </div>
+    <div style={{ maxWidth: 480, margin: "60px auto", padding: 32, textAlign: "center",
+                  background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 16 }}>
+      <div style={{ fontSize: 56, marginBottom: 14 }}>{tab === "image" ? "🖼️" : tab === "text" ? "📝" : tab === "video" ? "🎬" : "📦"}</div>
+      <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 8, color: T.text }}>
+        {isFiltered ? `${sinceLabel}还没有${typeLabel}` : `还没有${typeLabel}`}
       </div>
-      <div style={{ padding: "12px 14px" }}>
-        <div style={{
-          fontSize: 13, color: T.text, fontWeight: 500, lineHeight: 1.5,
-          marginBottom: 8, display: "-webkit-box", WebkitLineClamp: 2,
-          WebkitBoxOrient: "vertical", overflow: "hidden", minHeight: 39,
-        }}>
-          {w.title || (w.final_text || "").slice(0, 40)}
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 10.5, color: T.muted2 }}>
-          <span>📅 {new Date(w.created_at * 1000).toLocaleDateString("zh-CN", { month: "2-digit", day: "2-digit" })}</span>
-          <div style={{ flex: 1 }} />
-          {hover && <span style={{ color: T.brand, fontWeight: 500 }}>看详情 →</span>}
-        </div>
+      <div style={{ fontSize: 13.5, marginBottom: 22, color: T.muted, lineHeight: 1.6 }}>
+        {isFiltered ? "把时间放宽试试,或者去生产部做一条新的" : "去生产部做一条吧"}
+      </div>
+      <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
+        {isFiltered && <Btn onClick={onClearFilter}>看全部</Btn>}
+        <Btn variant="primary" onClick={onGo}>🎬 去做一条 →</Btn>
       </div>
     </div>
   );
 }
+
+// D-065: 来源/时间筛选 chip
+function FilterChip({ on, onClick, children }) {
+  return (
+    <button onClick={onClick} style={{
+      padding: "5px 11px", borderRadius: 100,
+      background: on ? T.text : "transparent",
+      color: on ? "#fff" : T.text2,
+      border: `1px solid ${on ? T.text : T.border}`,
+      cursor: "pointer", fontSize: 12, fontFamily: "inherit",
+      transition: "all .12s",
+    }}>{children}</button>
+  );
+}
+
+// D-065: inline 卡片渲染 — 不抽组件避免 React 18.3 dev build 在大量同名子组件 reconcile 时的 .error 误报
+function renderCard(w, onPick) {
+  if (!w) return null;
+  let meta = {};
+  try { meta = w.metadata ? JSON.parse(w.metadata) : {}; } catch (_) {}
+  const sizeKB = meta.size_bytes ? Math.round(meta.size_bytes / 1024) : null;
+  const sizeText = sizeKB ? (sizeKB > 1024 ? `${(sizeKB / 1024).toFixed(1)} MB` : `${sizeKB} KB`) : null;
+
+  // 文字卡
+  if (w.type === "text") {
+    const wordCount = (w.final_text || "").length;
+    return (
+      <div key={w.id} onClick={onPick} style={{
+        background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 12, padding: 16,
+        cursor: "pointer", transition: "all 0.15s",
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+          <span style={{ padding: "3px 10px", borderRadius: 100, background: T.amberSoft, color: T.amber, fontSize: 11.5, fontWeight: 500 }}>
+            {sourceLabel(w.source_skill)}
+          </span>
+          {w.tokens_used > 0 && <span style={{ fontSize: 11, color: T.muted2 }}>{w.tokens_used} token</span>}
+          <div style={{ flex: 1 }} />
+          <span style={{ fontSize: 11, color: T.muted2 }}>{formatTime(w.created_at)}</span>
+        </div>
+        {w.title && <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8, lineHeight: 1.4 }}>{w.title}</div>}
+        <div style={{
+          fontSize: 12.5, color: T.text2, lineHeight: 1.65, background: T.bg2,
+          padding: "10px 12px", borderRadius: 6, borderLeft: `3px solid ${T.border}`,
+          display: "-webkit-box", WebkitLineClamp: 4, WebkitBoxOrient: "vertical", overflow: "hidden",
+        }}>{w.final_text || "(空内容)"}</div>
+        <div style={{ marginTop: 10, fontSize: 11, color: T.muted }}>{wordCount} 字</div>
+      </div>
+    );
+  }
+
+  // 图片卡
+  if (w.type === "image") {
+    return (
+      <div key={w.id} onClick={onPick} style={{
+        background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 12, overflow: "hidden",
+        cursor: "pointer", transition: "all 0.15s",
+      }}>
+        <div style={{ position: "relative", aspectRatio: "16/10", background: T.bg3, overflow: "hidden" }}>
+          {w.thumb_url ? (
+            <img src={api.media(w.thumb_url)} alt={w.title || ""} loading="lazy"
+              style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+          ) : (
+            <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", color: T.muted2, fontSize: 32 }}>🖼️</div>
+          )}
+          <div style={{ position: "absolute", top: 8, left: 8 }}>
+            <span style={{ padding: "3px 9px", borderRadius: 100, background: "rgba(255,255,255,0.92)", color: T.text, fontSize: 11, fontWeight: 500, border: "1px solid rgba(0,0,0,0.04)" }}>
+              {sourceLabel(w.source_skill)}
+            </span>
+          </div>
+          {sizeText && (
+            <div style={{ position: "absolute", bottom: 8, right: 8, padding: "2px 7px", borderRadius: 5, background: "rgba(0,0,0,0.6)", color: "#fff", fontSize: 10.5 }}>
+              {sizeText}
+            </div>
+          )}
+        </div>
+        <div style={{ padding: "10px 12px" }}>
+          <div style={{ fontSize: 12.5, color: T.text, fontWeight: 500, lineHeight: 1.4, marginBottom: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {w.title || "(无标题)"}
+          </div>
+          <div style={{ fontSize: 10.5, color: T.muted2 }}>{formatTime(w.created_at)}</div>
+        </div>
+      </div>
+    );
+  }
+
+  // 视频卡(默认)
+  const statusMap = {
+    published: { color: "green", text: "已发" }, ready: { color: "blue", text: "待发" },
+    generating: { color: "amber", text: "合成中" }, pending: { color: "gray", text: "等待" },
+    failed: { color: "red", text: "失败" },
+  };
+  const st = statusMap[w.status] || { color: "gray", text: w.status };
+  return (
+    <div key={w.id} onClick={onPick} style={{
+      background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 12, overflow: "hidden",
+      cursor: "pointer", transition: "all 0.15s",
+    }}>
+      <div style={{
+        aspectRatio: "9 / 16",
+        background: w.local_url ? "#000" : "linear-gradient(135deg, #1e293b 0%, #475569 100%)",
+        position: "relative", overflow: "hidden",
+      }}>
+        {w.local_url && (
+          <video src={api.media(w.local_url)} muted preload="metadata"
+            style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
+        )}
+        <div style={{ position: "absolute", top: 10, right: 10 }}>
+          <Tag size="xs" color={st.color}>{st.text}</Tag>
+        </div>
+        {w.duration_sec ? (
+          <div style={{ position: "absolute", top: 10, left: 10, padding: "2px 8px", borderRadius: 100, background: "rgba(0,0,0,0.55)", color: "#fff", fontSize: 10.5, fontWeight: 600 }}>
+            {Math.round(w.duration_sec)}s
+          </div>
+        ) : null}
+      </div>
+      <div style={{ padding: "12px 14px" }}>
+        <div style={{ fontSize: 13, color: T.text, fontWeight: 500, lineHeight: 1.4, marginBottom: 6,
+          display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", minHeight: 36 }}>
+          {w.title || (w.final_text || "").slice(0, 40)}
+        </div>
+        <div style={{ fontSize: 10.5, color: T.muted2 }}>{formatTime(w.created_at)}</div>
+      </div>
+    </div>
+  );
+}
+
+// D-065: 时间格式化(今天 → "今天 12:07", 否则 "04-25 09:11")
+function formatTime(ts) {
+  if (!ts) return "";
+  const d = new Date(ts * 1000);
+  const now = new Date();
+  const sameDay = d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  if (sameDay) return `今天 ${hh}:${mm}`;
+  const yest = new Date(now); yest.setDate(now.getDate() - 1);
+  const sameYest = d.getFullYear() === yest.getFullYear() && d.getMonth() === yest.getMonth() && d.getDate() === yest.getDate();
+  if (sameYest) return `昨天 ${hh}:${mm}`;
+  const M = String(d.getMonth() + 1).padStart(2, "0");
+  const D = String(d.getDate()).padStart(2, "0");
+  return `${M}-${D} ${hh}:${mm}`;
+}
+
 
 function WorkDrawer({ work, onClose, onDel, onRemake }) {
   const [tab, setTab] = React.useState("info");   // info / metrics
@@ -262,7 +436,13 @@ function WorkDrawer({ work, onClose, onDel, onRemake }) {
         </div>
 
         <div style={{ flex: 1, overflow: "auto", padding: 22 }}>
-          {tab === "info" && (
+          {tab === "info" && work.type === "image" && (
+            <ImageInfoPanel work={work} onDel={onDel} />
+          )}
+          {tab === "info" && work.type === "text" && (
+            <TextInfoPanel work={work} onDel={onDel} />
+          )}
+          {tab === "info" && (work.type === "video" || !work.type) && (
             <WorkInfoPanel work={work} onDel={onDel} onRemake={onRemake} />
           )}
           {tab === "metrics" && (
@@ -304,6 +484,94 @@ function WorkInfoPanel({ work, onDel, onRemake }) {
           </a>
         )}
         <Btn size="sm" onClick={onRemake}>✨ 再做一条类似的</Btn>
+        <div style={{ flex: 1 }} />
+        <Btn size="sm" variant="danger" onClick={onDel}>🗑 删除</Btn>
+      </div>
+    </>
+  );
+}
+
+// D-065: 图片详情面板
+function ImageInfoPanel({ work, onDel }) {
+  let meta = {};
+  try { meta = work.metadata ? JSON.parse(work.metadata) : {}; } catch (_) {}
+  const sizeKB = meta.size_bytes ? Math.round(meta.size_bytes / 1024) : null;
+  const sizeText = sizeKB ? (sizeKB > 1024 ? `${(sizeKB / 1024).toFixed(1)} MB` : `${sizeKB} KB`) : "--";
+  return (
+    <>
+      {work.thumb_url ? (
+        <a href={api.media(work.thumb_url)} target="_blank" rel="noreferrer">
+          <img src={api.media(work.thumb_url)} alt={work.title || ""}
+            style={{ width: "100%", maxHeight: 520, objectFit: "contain", borderRadius: 8, background: "#000", display: "block" }} />
+        </a>
+      ) : (
+        <div style={{ aspectRatio: "16/10", background: T.bg3, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", color: T.muted2, fontSize: 32 }}>🖼️</div>
+      )}
+      <div style={{ marginTop: 18 }}>
+        <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 4 }}>{work.title || "(无标题)"}</div>
+        <div style={{ fontSize: 11.5, color: T.muted2, display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <span>{new Date(work.created_at * 1000).toLocaleString("zh-CN")}</span>
+          <span>·</span>
+          <span>{sourceLabel(work.source_skill)}</span>
+          <span>·</span>
+          <span>{sizeText}</span>
+        </div>
+      </div>
+      {meta.filename && (
+        <div style={{ marginTop: 16, fontSize: 11, color: T.muted, fontFamily: "SF Mono, monospace", padding: "8px 12px", background: T.bg2, borderRadius: 6, wordBreak: "break-all" }}>
+          📁 {meta.filename}
+        </div>
+      )}
+      <div style={{ marginTop: 16, display: "flex", gap: 10 }}>
+        {work.local_url && (
+          <a href={api.media(work.local_url)} download style={{ textDecoration: "none" }}>
+            <Btn size="sm">⬇ 下载原图</Btn>
+          </a>
+        )}
+        <div style={{ flex: 1 }} />
+        <Btn size="sm" variant="danger" onClick={onDel}>🗑 删除</Btn>
+      </div>
+    </>
+  );
+}
+
+// D-065: 文字详情面板
+function TextInfoPanel({ work, onDel }) {
+  const [copied, setCopied] = React.useState(false);
+  function copy() {
+    navigator.clipboard.writeText(work.final_text || "").then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1600);
+    }).catch(() => {});
+  }
+  return (
+    <>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+        <span style={{ padding: "4px 12px", borderRadius: 100, background: T.amberSoft, color: T.amber, fontSize: 12, fontWeight: 500 }}>
+          {sourceLabel(work.source_skill)}
+        </span>
+        <span style={{ fontSize: 11.5, color: T.muted2 }}>
+          {new Date(work.created_at * 1000).toLocaleString("zh-CN")}
+        </span>
+        <span style={{ fontSize: 11.5, color: T.muted2 }}>·</span>
+        <span style={{ fontSize: 11.5, color: T.muted2 }}>{(work.final_text || "").length} 字</span>
+        {work.tokens_used > 0 && (
+          <>
+            <span style={{ fontSize: 11.5, color: T.muted2 }}>·</span>
+            <span style={{ fontSize: 11.5, color: T.muted2 }}>{work.tokens_used} token</span>
+          </>
+        )}
+      </div>
+      {work.title && (
+        <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 12, lineHeight: 1.4 }}>{work.title}</div>
+      )}
+      <div style={{ fontSize: 13.5, lineHeight: 1.85, color: T.text, background: T.bg2, padding: "16px 20px", borderRadius: 8, whiteSpace: "pre-wrap", border: `1px solid ${T.borderSoft}` }}>
+        {work.final_text || "(空内容)"}
+      </div>
+      <div style={{ marginTop: 16, display: "flex", gap: 10 }}>
+        <Btn size="sm" variant={copied ? "soft" : "default"} onClick={copy}>
+          {copied ? "✓ 已复制" : "📄 复制全文"}
+        </Btn>
         <div style={{ flex: 1 }} />
         <Btn size="sm" variant="danger" onClick={onDel}>🗑 删除</Btn>
       </div>

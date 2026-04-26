@@ -25,10 +25,16 @@ CREATE TABLE IF NOT EXISTS works (
     duration_sec REAL,
     status TEXT NOT NULL,
     error TEXT,
-    tokens_used INTEGER DEFAULT 0
+    tokens_used INTEGER DEFAULT 0,
+    type TEXT NOT NULL DEFAULT 'video',
+    source_skill TEXT,
+    thumb_path TEXT,
+    metadata TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_works_created_at ON works(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_works_status ON works(status);
+-- D-065 索引(idx_works_type, idx_works_source_skill) 在 _migrate_works() 中创建,
+-- 因为老库 ALTER 加列必须发生在创建对应索引之前.
 
 CREATE TABLE IF NOT EXISTS materials (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -165,9 +171,14 @@ class Work:
     shiliu_video_id: int | None
     local_path: str | None
     duration_sec: float | None
-    status: str  # pending / generating / ready / failed
+    status: str  # pending / generating / ready / failed / published
     error: str | None
     tokens_used: int = 0
+    # D-065: 统一资产库扩展
+    type: str = "video"  # text / image / video / audio
+    source_skill: str | None = None  # image-gen / wechat-cover / baokuan / ...
+    thumb_path: str | None = None  # 缩略图路径(图片直接用原文件)
+    metadata: str | None = None  # JSON 字符串, type-specific 字段
 
 
 def _conn() -> sqlite3.Connection:
@@ -176,13 +187,30 @@ def _conn() -> sqlite3.Connection:
     return conn
 
 
+def _migrate_works(c: sqlite3.Connection) -> None:
+    """D-065: 给老库 works 表加 type / source_skill / thumb_path / metadata 4 列(幂等)."""
+    cols = {row["name"] for row in c.execute("PRAGMA table_info(works)").fetchall()}
+    if "type" not in cols:
+        c.execute("ALTER TABLE works ADD COLUMN type TEXT NOT NULL DEFAULT 'video'")
+    if "source_skill" not in cols:
+        c.execute("ALTER TABLE works ADD COLUMN source_skill TEXT")
+    if "thumb_path" not in cols:
+        c.execute("ALTER TABLE works ADD COLUMN thumb_path TEXT")
+    if "metadata" not in cols:
+        c.execute("ALTER TABLE works ADD COLUMN metadata TEXT")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_works_type ON works(type)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_works_source_skill ON works(source_skill)")
+
+
 def init_db() -> None:
     with closing(_conn()) as c:
         c.executescript(SCHEMA)
+        _migrate_works(c)
         c.commit()
 
 
 def _row_to_work(row: sqlite3.Row) -> Work:
+    keys = row.keys()
     return Work(
         id=row["id"],
         created_at=row["created_at"],
@@ -198,28 +226,48 @@ def _row_to_work(row: sqlite3.Row) -> Work:
         status=row["status"],
         error=row["error"],
         tokens_used=row["tokens_used"] or 0,
+        type=(row["type"] if "type" in keys else None) or "video",
+        source_skill=row["source_skill"] if "source_skill" in keys else None,
+        thumb_path=row["thumb_path"] if "thumb_path" in keys else None,
+        metadata=row["metadata"] if "metadata" in keys else None,
     )
 
 
 def insert_work(
     *,
-    final_text: str,
+    final_text: str = "",
     title: str | None = None,
     source_url: str | None = None,
     original_text: str | None = None,
     avatar_id: int | None = None,
     speaker_id: int | None = None,
     status: str = "pending",
+    type: str = "video",
+    source_skill: str | None = None,
+    thumb_path: str | None = None,
+    metadata: str | None = None,
+    local_path: str | None = None,
+    created_at: int | None = None,
 ) -> int:
+    """插入一条产物记录.
+
+    D-065: 支持三类(text/image/video). 默认 type='video' 保持旧行为.
+    final_text 默认空串(图/视频可不传, schema NOT NULL 兜底).
+    """
     init_db()
     with closing(_conn()) as c:
         cur = c.execute(
             """INSERT INTO works
                (created_at, title, source_url, original_text, final_text,
-                avatar_id, speaker_id, status)
-               VALUES (?,?,?,?,?,?,?,?)""",
-            (int(time.time()), title, source_url, original_text, final_text,
-             avatar_id, speaker_id, status),
+                avatar_id, speaker_id, status, type, source_skill,
+                thumb_path, metadata, local_path)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (
+                created_at if created_at is not None else int(time.time()),
+                title, source_url, original_text, final_text,
+                avatar_id, speaker_id, status, type, source_skill,
+                thumb_path, metadata, local_path,
+            ),
         )
         c.commit()
         return cur.lastrowid
@@ -241,12 +289,33 @@ def get_work(work_id: int) -> Work | None:
         return _row_to_work(r) if r else None
 
 
-def list_works(limit: int = 100) -> list[Work]:
+def list_works(
+    limit: int = 100,
+    *,
+    type: str | None = None,
+    source_skill: str | None = None,
+    since_ts: int | None = None,
+) -> list[Work]:
+    """D-065: 加 type / source_skill / since_ts 过滤."""
     init_db()
+    where: list[str] = []
+    params: list[Any] = []
+    if type:
+        where.append("type = ?")
+        params.append(type)
+    if source_skill:
+        where.append("source_skill = ?")
+        params.append(source_skill)
+    if since_ts is not None:
+        where.append("created_at >= ?")
+        params.append(since_ts)
+    sql = "SELECT * FROM works"
+    if where:
+        sql += " WHERE " + " AND ".join(where)
+    sql += " ORDER BY created_at DESC LIMIT ?"
+    params.append(limit)
     with closing(_conn()) as c:
-        rows = c.execute(
-            "SELECT * FROM works ORDER BY created_at DESC LIMIT ?", (limit,)
-        ).fetchall()
+        rows = c.execute(sql, tuple(params)).fetchall()
         return [_row_to_work(r) for r in rows]
 
 

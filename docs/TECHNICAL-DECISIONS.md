@@ -233,3 +233,44 @@ PROGRESS.md 行内的 1 行说明 + 这里的 1 句"为什么这么做"是日常
 - 🛡️ 违规审查 (D-026, 2 步, 学员版 OK)
 - 🎨 即梦 AIGC (D-028, CLI 工具型 · 非 SKILL.md 范式)
 
+---
+
+## D-065 - 作品库扩展为统一资产库 / works 表加 type+metadata(2026-04-26)
+
+**背景**:用户实测痛点 — 用"直接出图"生成 4 张图后**找不到去哪了**。原因:
+- `works` 表是短视频专用(字段 avatar_id / shiliu_video_id / duration_sec)
+- 图片产出散在 6 个目录(image-gen / covers / wechat-cover / wechat-cover-batch / wechat-images / dreamina),46 张图
+- 文字产出(改写/投流/朋友圈/公众号长文)根本不入库,只走前端临时展示
+- 前端"作品库"页只列短视频,看不到图和文字
+
+**结论**:works 表升级为通用资产库,不另起 artifacts 表(避免双表合并的复杂度,且现有 metrics 表已与 works 联动)。
+
+**Schema 变更**(SQLite ALTER TABLE 加列,向前兼容):
+- `type TEXT NOT NULL DEFAULT 'video'` — text / image / video / audio
+- `source_skill TEXT` — image-gen / wechat-cover / wechat-section-image / wechat-cover-batch / dreamina / shortvideo / baokuan / hotrewrite / voicerewrite / touliu / wechat / planner
+- `thumb_path TEXT` — 图/视频缩略图(图直接用原文件,视频后续抽帧)
+- `metadata TEXT` — JSON 字符串,装 type-specific 字段(prompt / size / engine / token / version 等)
+- `final_text` 列保留 NOT NULL — 图/视频 insert 时给空串 `""` 兜底,避免改列约束(SQLite 改 NOT NULL 要重建表)
+
+**API 变更** (`/api/works`):
+- 新增 query: `type` / `source_skill` / `since` (today/week/month/all) / `q` (搜索)
+- 返回: 加 `type` / `source_skill` / `thumb_url` / `metadata` / `local_url`
+
+**接入点改造**(在每个生图/出文 endpoint 落盘后插入 works 行):
+- 6 个图入口: `/api/image-gen` / `/api/wechat/cover` / `/api/wechat/section-image` / `/api/wechat/cover-batch` / `/api/dreamina/text2image` / `/api/dreamina/image2video`
+- 6 个文字 skill: 改写 / 投流 / 朋友圈 / 公众号长文 / 选题 / 标题
+- 短视频走原来的 insert_work + type='video'(默认值,旧代码不改)
+
+**历史回灌**:`scripts/migrate_assets.py` 一次性扫 6 个目录,按 mtime + 文件名规则倒灌已有的 46 张图入库。文字产出无法回灌(没存盘),从 D-065 之后开始累积。
+
+**前端**:V1 mockup 风格(`docs/design/works-gallery-mockup.html`)— 顶部 6 个主 tab(全部 / 文字 / 图片 / 视频 / 数据看板 / 发布矩阵)+ 来源 chip 行 + 时间 chip 行(默认今天)+ 卡片底部可见标题。视频视图复用旧 `WorkCard`,图视图新做,文字视图新做。
+
+**代价**:
+- works 表语义从"作品(=视频)"扩为"产物(三类)",老代码读到的字段不变(default type='video')
+- 文字产出需各 skill endpoint 改 insert_work + 决定写入哪段为 final_text(选 200 字摘要 vs 全文)— 选**全文**,展示时再截断
+- 历史文字内容不可回灌(用户接受)
+
+**替代被否**:新建 `artifacts` 表 — 短视频与 metrics 表的联动会断,两表 union 查询繁琐,得不偿失。
+
+
+
