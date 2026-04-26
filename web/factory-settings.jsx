@@ -30,8 +30,9 @@ function PageSettings({ onNav }) {
   React.useEffect(() => { load(); }, []);
 
   async function reping() {
+    // 用户主动点 ↻ 重探 → fresh=1 跳过缓存, 真打 AI
     setAiHealth(null);
-    const ai = await api.get("/api/ai/health").catch(() => null);
+    const ai = await api.get("/api/ai/health?fresh=1").catch(() => null);
     setAiHealth(ai);
     const m = await api.get("/api/ai/models").catch(() => ({ models: [] }));
     setOpusModels(m?.models || []);

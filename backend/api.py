@@ -474,9 +474,22 @@ def publish(req: PublishReq):
 
 # ---- 首页统计 ----
 # ---- AI 引擎 ----
-@app.get("/api/ai/health", tags=["AI"], summary="AI 引擎元信息 + 探活 (ping 一次)")
-def ai_health():
-    return get_ai_info()
+# AI 探活 60s 缓存: 真打 AI 要 5-7s, 设置页加载 / 多 page 同时进会重复打.
+# fresh=1 query 强制重探.
+_AI_HEALTH_CACHE: dict = {"data": None, "ts": 0}
+_AI_HEALTH_TTL = 60  # 秒
+
+
+@app.get("/api/ai/health", tags=["AI"], summary="AI 引擎元信息 + 探活 (60s 缓存, fresh=1 强探)")
+def ai_health(fresh: int = 0):
+    """实测 ping 一次 AI 引擎要 5-7s, 设置页首屏会感觉卡. 60s 内复用结果, 用户点 '↻ 重探' 时传 fresh=1."""
+    now = time.time()
+    if not fresh and _AI_HEALTH_CACHE["data"] and (now - _AI_HEALTH_CACHE["ts"]) < _AI_HEALTH_TTL:
+        return {**_AI_HEALTH_CACHE["data"], "_cached_age_sec": round(now - _AI_HEALTH_CACHE["ts"], 1)}
+    info = get_ai_info()
+    _AI_HEALTH_CACHE["data"] = info
+    _AI_HEALTH_CACHE["ts"] = now
+    return {**info, "_cached_age_sec": 0}
 
 
 @app.get("/api/ai/models", tags=["AI"], summary="可用 Opus 模型列表 (settings 切换用)")
