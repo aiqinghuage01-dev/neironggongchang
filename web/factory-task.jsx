@@ -255,6 +255,221 @@ function fmtSec(s) {
   return r ? `${m} 分 ${r} 秒` : `${m} 分`;
 }
 
+function fmtRelativeTs(unixSec) {
+  if (!unixSec) return "";
+  const diff = Math.max(0, Math.floor(Date.now() / 1000 - unixSec));
+  if (diff < 60) return "刚刚";
+  if (diff < 3600) return `${Math.floor(diff / 60)} 分前`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)} 小时前`;
+  return `${Math.floor(diff / 86400)} 天前`;
+}
+
+// kind → icon 映射 (顶栏 chip / 抽屉任务卡用)
+const TASK_KIND_ICONS = {
+  "compliance.check":   "🛡️",
+  "wechat.write":       "📄",
+  "wechat.cover":       "📄",
+  "wechat.section-image": "📄",
+  "wechat.plan-images": "📄",
+  "wechat.titles":      "📄",
+  "wechat.outline":     "📄",
+  "hotrewrite.write":   "🔥",
+  "voicerewrite.write": "🎙️",
+  "baokuan.rewrite":    "💥",
+  "touliu.generate":    "💰",
+  "planner.write":      "📋",
+  "moments.derive":     "💬",
+  "topics.generate":    "💡",
+  "rewrite":            "✏️",
+  "dhv5.render":        "🎬",
+  "compliance.write":   "🛡️",
+  "compliance.analyze": "🛡️",
+};
+function taskIcon(kind) {
+  if (!kind) return "⚙️";
+  if (TASK_KIND_ICONS[kind]) return TASK_KIND_ICONS[kind];
+  // fallback: 取 ns (kind 第一段)
+  const ns = kind.split(".")[0];
+  for (const k of Object.keys(TASK_KIND_ICONS)) {
+    if (k.startsWith(ns + ".")) return TASK_KIND_ICONS[k];
+  }
+  return "⚙️";
+}
+
+// ─── TaskBar (顶栏 chip + 抽屉) ───────────────────────────
+function TaskBar({ onNav }) {
+  const [open, setOpen] = React.useState(false);
+  const [tasks, setTasks] = React.useState([]);
+  const [counts, setCounts] = React.useState({ running: 0, ok: 0, failed: 0 });
+
+  // 拉数据: 抽屉关时 30s 一次, 抽屉开时 3s 一次, 进行中存在时 3s
+  React.useEffect(() => {
+    let stop = false;
+    async function pull() {
+      try {
+        const r = await api.get("/api/tasks?limit=30");
+        if (stop) return;
+        setTasks(r.tasks || []);
+        setCounts(r.counts || { running: 0, ok: 0, failed: 0 });
+      } catch (e) {}
+    }
+    pull();
+    const running = counts.running > 0 || (counts.pending || 0) > 0;
+    const interval = (open || running) ? 3000 : 30000;
+    const timer = setInterval(pull, interval);
+    return () => { stop = true; clearInterval(timer); };
+  }, [open, counts.running, counts.pending]);
+
+  const running = (counts.running || 0) + (counts.pending || 0);
+  const today0 = (() => { const d = new Date(); d.setHours(0,0,0,0); return Math.floor(d.getTime()/1000); })();
+  const todayOk = tasks.filter(t => t.status === "ok" && (t.finished_ts || 0) >= today0);
+  const todayFailed = tasks.filter(t => t.status === "failed" && (t.finished_ts || 0) >= today0);
+  const runningTasks = tasks.filter(t => t.status === "running" || t.status === "pending");
+
+  function go(t) {
+    if (t.page_id && onNav) onNav(t.page_id);
+    setOpen(false);
+  }
+
+  return (
+    <React.Fragment>
+      {/* chip */}
+      <button
+        onClick={() => setOpen(!open)}
+        style={{
+          position: "fixed", top: 14, right: 16, zIndex: 50,
+          background: running ? T.brandSoft : "#fff",
+          color: running ? T.brand : T.muted,
+          border: `1px solid ${running ? T.brand + "55" : T.border}`,
+          borderRadius: 8, padding: "5px 12px", fontSize: 12, fontWeight: 600,
+          cursor: "pointer", display: "flex", alignItems: "center", gap: 8,
+          fontFamily: "inherit",
+          boxShadow: running ? `0 2px 8px ${T.brand}22` : "0 1px 3px rgba(0,0,0,0.04)",
+        }}
+        title={running ? `${running} 个任务进行中` : "没有进行中的任务"}
+      >
+        <span style={{
+          width: 7, height: 7, borderRadius: "50%",
+          background: running ? T.brand : T.muted3,
+          animation: running ? "qltaskpulse 1.5s infinite" : "none",
+        }} />
+        {running > 0 ? `${running} 个进行中 · ${todayOk.length} 完成` : `没有进行中 · ${todayOk.length} 完成`}
+      </button>
+
+      {/* 抽屉 */}
+      {open && (
+        <React.Fragment>
+          <div onClick={() => setOpen(false)} style={{
+            position: "fixed", inset: 0, background: "rgba(0,0,0,0.06)", zIndex: 49,
+          }} />
+          <div style={{
+            position: "fixed", top: 0, right: 0, bottom: 0, width: 380,
+            background: "#fff", borderLeft: `1px solid ${T.border}`,
+            boxShadow: "-4px 0 20px rgba(0,0,0,0.06)", zIndex: 51,
+            padding: "18px 18px 24px", overflow: "auto",
+            display: "flex", flexDirection: "column", gap: 10,
+          }}>
+            <div style={{
+              display: "flex", alignItems: "center",
+              paddingBottom: 12, borderBottom: `1px solid ${T.borderSoft}`,
+            }}>
+              <div style={{ fontSize: 15, fontWeight: 600, flex: 1 }}>🌟 我的任务</div>
+              <button onClick={() => setOpen(false)} style={{
+                background: "transparent", border: "none", cursor: "pointer", fontSize: 16,
+                color: T.muted, padding: 4,
+              }}>✕</button>
+            </div>
+
+            {runningTasks.length > 0 && (
+              <React.Fragment>
+                <div style={{ fontSize: 11, color: T.muted2, letterSpacing: 0.5, marginTop: 4 }}>
+                  进行中 ({runningTasks.length})
+                </div>
+                {runningTasks.map(t => <TaskCard key={t.id} task={t} onClick={() => go(t)} />)}
+              </React.Fragment>
+            )}
+
+            {todayOk.length > 0 && (
+              <React.Fragment>
+                <div style={{ fontSize: 11, color: T.muted2, letterSpacing: 0.5, marginTop: 8 }}>
+                  今日完成 ({todayOk.length})
+                </div>
+                {todayOk.slice(0, 8).map(t => <TaskCard key={t.id} task={t} onClick={() => go(t)} compact />)}
+              </React.Fragment>
+            )}
+
+            {todayFailed.length > 0 && (
+              <React.Fragment>
+                <div style={{ fontSize: 11, color: T.muted2, letterSpacing: 0.5, marginTop: 8 }}>
+                  失败 ({todayFailed.length})
+                </div>
+                {todayFailed.map(t => <TaskCard key={t.id} task={t} onClick={() => go(t)} />)}
+              </React.Fragment>
+            )}
+
+            {runningTasks.length === 0 && todayOk.length === 0 && todayFailed.length === 0 && (
+              <div style={{
+                color: T.muted2, fontSize: 13, textAlign: "center", padding: "60px 0",
+              }}>
+                今天还没跑过任务<br />
+                <span style={{ fontSize: 12 }}>去生产部任意 skill 开个活吧</span>
+              </div>
+            )}
+          </div>
+        </React.Fragment>
+      )}
+    </React.Fragment>
+  );
+}
+
+// ─── TaskCard (抽屉里的单个任务卡) ───────────────────────
+function TaskCard({ task, onClick, compact }) {
+  const failed = task.status === "failed";
+  const cancelled = task.status === "cancelled";
+  const ok = task.status === "ok";
+  const running = task.status === "running" || task.status === "pending";
+  const pct = typeof task.progress_pct === "number" ? task.progress_pct : null;
+  const elapsedDisplay = running ? fmtSec(task.elapsed_sec || 0)
+                       : ok ? fmtRelativeTs(task.finished_ts)
+                       : fmtRelativeTs(task.finished_ts);
+
+  return (
+    <div onClick={onClick} style={{
+      background: failed ? T.redSoft : (ok ? T.bg2 : T.bg2),
+      border: `1px solid ${failed ? T.red + "44" : T.borderSoft}`,
+      borderRadius: 10, padding: compact ? "8px 12px" : 12,
+      cursor: "pointer", opacity: ok ? 0.75 : 1,
+      transition: "all 0.15s",
+    }}
+    onMouseEnter={(e) => { e.currentTarget.style.background = failed ? T.redSoft : "#fff"; e.currentTarget.style.borderColor = failed ? T.red + "66" : T.brand + "55"; }}
+    onMouseLeave={(e) => { e.currentTarget.style.background = failed ? T.redSoft : T.bg2; e.currentTarget.style.borderColor = failed ? T.red + "44" : T.borderSoft; }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>
+        <span style={{ fontSize: 15 }}>{taskIcon(task.kind)}</span>
+        <span style={{ flex: 1, color: failed ? T.red : T.text, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {task.label || task.kind}
+        </span>
+        <span style={{ color: T.muted2, fontSize: 11 }}>
+          {ok ? "✓ " : ""}{cancelled ? "⊘ " : ""}{elapsedDisplay}
+        </span>
+      </div>
+      {running && pct !== null && (
+        <div style={{ marginTop: 8, height: 4, background: T.bg3, borderRadius: 2, overflow: "hidden" }}>
+          <div style={{ height: "100%", width: `${pct}%`, background: T.brand, borderRadius: 2, transition: "width 0.4s" }} />
+        </div>
+      )}
+      {running && task.progress_text && (
+        <div style={{ fontSize: 11.5, color: T.muted, marginTop: 6 }}>{task.progress_text}</div>
+      )}
+      {failed && task.error && (
+        <div style={{ fontSize: 11.5, color: T.red, marginTop: 6, lineHeight: 1.5, fontFamily: "ui-monospace, monospace" }}>
+          {task.error.length > 100 ? task.error.slice(0, 100) + "..." : task.error}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── CSS keyframe (注入一次) ─────────────────────────────
 (function injectTaskCss() {
   if (typeof document === "undefined") return;
@@ -266,6 +481,10 @@ function fmtSec(s) {
       0% { margin-left: -30%; }
       50% { margin-left: 50%; }
       100% { margin-left: 100%; }
+    }
+    @keyframes qltaskpulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
     }
   `;
   document.head.appendChild(s);
