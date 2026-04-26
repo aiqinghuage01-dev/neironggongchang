@@ -391,6 +391,54 @@ def generate_broll(
     }
 
 
+def _render_sync(
+    template_id: str,
+    digital_human_video: str,
+    output_path: Path,
+    scenes_override: list[dict] | None = None,
+) -> Path:
+    """同步渲染 (PIL+ffmpeg, 阻塞 3-10 min). 返实际产物 Path. 不管 task.
+    给 render_async 和 batch_render (D-077) 共用."""
+    _ensure_skill_path()
+    from core import load_template, render_video  # type: ignore
+
+    p_template = TEMPLATES_DIR / f"{template_id}.yaml"
+    if not p_template.exists():
+        raise Dhv5Error(f"模板不存在: {template_id}")
+    p_dhv = Path(digital_human_video)
+    if not p_dhv.exists():
+        raise Dhv5Error(f"数字人 mp4 不存在: {digital_human_video}")
+
+    tpl = load_template(p_template)
+    if scenes_override:
+        from core.models import Scene, SceneType  # type: ignore
+        tpl.scenes = [
+            Scene(
+                type=SceneType(s.get("type", "A")),
+                start=float(s.get("start", 0.0)),
+                end=float(s.get("end", 0.0)),
+                subtitle=s.get("subtitle", ""),
+                big_text=s.get("big_text", ""),
+                top_image=s.get("top_image", ""),
+                top_image_prompt=s.get("top_image_prompt", ""),
+                screen_image=s.get("screen_image", ""),
+                screen_image_prompt=s.get("screen_image_prompt", ""),
+                sticker_image=s.get("sticker_image", ""),
+                sticker_label=s.get("sticker_label", ""),
+                sticker_prompt=s.get("sticker_prompt", ""),
+            )
+            for s in scenes_override
+        ]
+
+    OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
+    return render_video(
+        tpl=tpl,
+        digital_human_video=p_dhv,
+        output_path=output_path,
+        skill_root=SKILL_ROOT,
+    )
+
+
 def render_async(
     template_id: str,
     digital_human_video: str,
@@ -436,38 +484,9 @@ def render_async(
 
     def _worker():
         try:
-            _ensure_skill_path()
-            from core import load_template, render_video  # type: ignore
-
-            tpl = load_template(p_template)
-            if scenes_override:
-                # 覆盖 scenes — D-059c 文案对齐结果走这里
-                from core.models import Scene, SceneType  # type: ignore
-                tpl.scenes = [
-                    Scene(
-                        type=SceneType(s.get("type", "A")),
-                        start=float(s.get("start", 0.0)),
-                        end=float(s.get("end", 0.0)),
-                        subtitle=s.get("subtitle", ""),
-                        big_text=s.get("big_text", ""),
-                        top_image=s.get("top_image", ""),
-                        top_image_prompt=s.get("top_image_prompt", ""),
-                        screen_image=s.get("screen_image", ""),
-                        screen_image_prompt=s.get("screen_image_prompt", ""),
-                        sticker_image=s.get("sticker_image", ""),
-                        sticker_label=s.get("sticker_label", ""),
-                        sticker_prompt=s.get("sticker_prompt", ""),
-                    )
-                    for s in scenes_override
-                ]
-
             tasks_service.update_progress(task_id, "渲染中 · plate + ffmpeg 合成 (3-10 分钟)")
-            OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
-            actual_path = render_video(
-                tpl=tpl,
-                digital_human_video=p_dhv,
-                output_path=output_path,
-                skill_root=SKILL_ROOT,
+            actual_path = _render_sync(
+                template_id, str(p_dhv), output_path, scenes_override,
             )
         except Exception as e:
             tasks_service.finish_task(

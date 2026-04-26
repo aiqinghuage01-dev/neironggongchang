@@ -2580,6 +2580,78 @@ def dhv5_render(req: Dhv5RenderReq):
     return {"task_id": task_id, "template_id": req.template_id}
 
 
+class Dhv5BatchRenderReq(BaseModel):
+    template_id: str = Field(..., description="模板 id (templates/<id>.yaml 不带后缀)")
+    digital_human_video: str = Field(..., description="共享数字人 mp4 绝对路径 (所有 transcript 共用)")
+    transcripts: list[str] = Field(..., min_length=1, max_length=8,
+        description="多段文案 (≤8, 防 GPU 爆). 每段独立起 task: 内部先 align 再 render.")
+    align_mode: str = Field("auto", description="align_script 的 mode: auto / placeholder / manual")
+
+
+@app.post("/api/dhv5/batch-render", tags=["v5 视频"], summary="批量渲染数字人视频 (D-077)")
+def dhv5_batch_render(req: Dhv5BatchRenderReq):
+    """场景: 老板有 N 段文案要做 N 个数字人视频, 共享同一个数字人 mp4 + 同一个模板.
+    每条独立起 task: sync_fn 内部 align_script (3-5s) + _render_sync (3-10min).
+    上限 8 条防 GPU 爆 (8 条串行约 24-80min, 并发约 1 条耗时).
+    跟 /api/dhv5/render 区分: 那个是单条 + 已 align 好的 scenes; 这个是多条 + 内部 align."""
+    from backend.services import dhv5_pipeline, tasks as tasks_service
+
+    transcripts = [t.strip() for t in req.transcripts if t and t.strip()]
+    if not transcripts:
+        raise HTTPException(400, "transcripts 全为空")
+    if not Path(req.digital_human_video).exists():
+        raise HTTPException(400, f"数字人 mp4 不存在: {req.digital_human_video}")
+    p_template = dhv5_pipeline.TEMPLATES_DIR / f"{req.template_id}.yaml"
+    if not p_template.exists():
+        raise HTTPException(400, f"模板不存在: {req.template_id}")
+
+    out_tasks = []
+    for i, transcript in enumerate(transcripts):
+        def _make_sync(t=transcript, idx=i):
+            def _sync():
+                align = dhv5_pipeline.align_script(req.template_id, t, mode=req.align_mode)
+                scenes = align.get("scenes", [])
+                name = f"batch_{req.template_id}_{int(time.time())}_{idx}"
+                output_path = dhv5_pipeline.OUTPUTS_DIR / f"{name}.mp4"
+                actual = dhv5_pipeline._render_sync(
+                    req.template_id, req.digital_human_video, output_path, scenes,
+                )
+                return {
+                    "output_path": str(actual),
+                    "output_url": f"/skills/dhv5/outputs/{actual.name}",
+                    "size_bytes": actual.stat().st_size if actual.exists() else 0,
+                    "scenes_count": len(scenes),
+                    "transcript_chars": len(t),
+                    "template_id": req.template_id,
+                }
+            return _sync
+
+        task_id = tasks_service.run_async(
+            kind="dhv5.batch-render",
+            label=f"批量 v5 · {transcript[:24]}",
+            ns="dhv5",
+            page_id="dhv5",
+            step="batch-render",
+            payload={
+                "template_id": req.template_id,
+                "transcript_preview": transcript[:200],
+                "transcript_chars": len(transcript),
+            },
+            estimated_seconds=300,  # ~5min/条 (align 5s + render 3-5min 平均)
+            progress_text="对齐文案 + 渲染中 (3-10min)...",
+            sync_fn=_make_sync(),
+        )
+        out_tasks.append({"task_id": task_id, "transcript": transcript})
+
+    return {
+        "tasks": out_tasks,
+        "template_id": req.template_id,
+        "transcripts_count": len(transcripts),
+        "estimated_seconds": 300,
+        "page_id": "dhv5",
+    }
+
+
 # ═══════════════════════════════════════════════════════════════════
 # D-064b · 直接生图独立入口 (sidebar "🖼️ 直接出图")
 # 不绑定业务流程, prompt + size + n + engine → 出 N 张候选

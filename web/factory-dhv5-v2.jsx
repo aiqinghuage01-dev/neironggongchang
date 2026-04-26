@@ -160,6 +160,51 @@ function PageDhv5({ onNav }) {
   const [renderTask, setRenderTask] = React.useState(null);  // 整个 task 对象
   const [rendering, setRendering] = React.useState(false);
 
+  // D-077: 批量数字人 (N 段文案 → N 个视频, 共享 dh + template)
+  const [batchMode, setBatchMode] = React.useState(false);
+  const [batchTranscriptList, setBatchTranscriptList] = React.useState([{ id: `bt-${Date.now()}`, text: "" }]);
+  const [batchTasks, setBatchTasks] = React.useState([]); // [{task_id, transcript}]
+  const BATCH_MAX = 8;
+  function addBatchTranscript() {
+    setBatchTranscriptList(prev => prev.length >= BATCH_MAX ? prev : [...prev, { id: `bt-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, text: "" }]);
+  }
+  function removeBatchTranscript(id) {
+    setBatchTranscriptList(prev => prev.length > 1 ? prev.filter(p => p.id !== id) : prev);
+  }
+  function dupBatchTranscript(id) {
+    setBatchTranscriptList(prev => {
+      if (prev.length >= BATCH_MAX) return prev;
+      const idx = prev.findIndex(p => p.id === id);
+      if (idx < 0) return prev;
+      const copy = { id: `bt-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, text: prev[idx].text };
+      return [...prev.slice(0, idx + 1), copy, ...prev.slice(idx + 1)];
+    });
+  }
+  function updateBatchTranscript(id, text) {
+    setBatchTranscriptList(prev => prev.map(p => p.id === id ? { ...p, text } : p));
+  }
+  const validBatchTranscripts = batchTranscriptList.map(p => (p.text || "").trim()).filter(Boolean);
+
+  async function startBatchRender() {
+    if (validBatchTranscripts.length === 0) { setErr("至少填一条文案"); return; }
+    if (!dhVideoPath.trim() || !selectedTemplateId) { setErr("先选数字人 + 模板"); return; }
+    setErr(""); setRendering(true);
+    try {
+      const r = await api.post("/api/dhv5/batch-render", {
+        template_id: selectedTemplateId,
+        digital_human_video: dhVideoPath,
+        transcripts: validBatchTranscripts,
+        align_mode: "auto",
+      });
+      setBatchTasks(r.tasks || []);
+      setStep("review");
+    } catch (e) {
+      setErr(e.message || "批量提交失败");
+    } finally {
+      setRendering(false);
+    }
+  }
+
   async function startRender() {
     if (!alignedScenes || alignedScenes.length === 0) {
       setErr("没有 aligned scenes 可渲染"); return;
@@ -344,6 +389,56 @@ function PageDhv5({ onNav }) {
             {/* 错误提示 */}
             {err && <div style={{ padding: 12, background: T.redSoft, color: T.red, borderRadius: 10, fontSize: 13, marginBottom: 14 }}>⚠️ {err}</div>}
 
+            {/* D-077: 单 / 批量 文案 toggle */}
+            <div style={{ display: "flex", justifyContent: "center", marginBottom: 14 }}>
+              <div style={{ display: "inline-flex", gap: 4, padding: 4, background: T.bg2, borderRadius: 100, border: `1px solid ${T.borderSoft}` }}>
+                <button onClick={() => setBatchMode(false)} style={dhvPillStyle(!batchMode)}>📝 单文案</button>
+                <button onClick={() => setBatchMode(true)} style={dhvPillStyle(batchMode)}>📦 批量文案</button>
+              </div>
+            </div>
+
+            {/* 批量模式: 文案卡片列表 + 共享数字人/模板 + 直接提交 */}
+            {batchMode && (
+              <div style={{ background: "#fff", border: `1.5px solid ${T.brand}`, boxShadow: `0 0 0 5px ${T.brandSoft}`, borderRadius: 14, padding: 14, marginBottom: 16 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+                  <div style={{ fontSize: 11.5, color: T.muted2, fontWeight: 600, letterSpacing: "0.08em" }}>📝 文案列表</div>
+                  <span style={{ fontSize: 11, color: T.muted2 }}>{batchTranscriptList.length} 条 · 上限 {BATCH_MAX}</span>
+                  <div style={{ flex: 1 }} />
+                  <span style={{ fontSize: 11, color: T.muted2 }}>共享数字人 + 共享模板 ({selectedTemplate?.id})</span>
+                </div>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {batchTranscriptList.map((bt, idx) => (
+                    <DhvTranscriptCard key={bt.id} idx={idx + 1} text={bt.text}
+                      onChange={t => updateBatchTranscript(bt.id, t)}
+                      onDup={() => dupBatchTranscript(bt.id)}
+                      onRemove={batchTranscriptList.length > 1 ? () => removeBatchTranscript(bt.id) : null} />
+                  ))}
+                  {batchTranscriptList.length < BATCH_MAX && (
+                    <div onClick={addBatchTranscript} style={{
+                      padding: 10, border: `1.5px dashed ${T.border}`, borderRadius: 10,
+                      textAlign: "center", color: T.muted, fontSize: 12.5, cursor: "pointer", background: T.bg2,
+                      fontFamily: "inherit",
+                    }}>+ 添加文案</div>
+                  )}
+                </div>
+
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 12, paddingTop: 12, borderTop: `1px solid ${T.borderSoft}` }}>
+                  <div style={{ fontSize: 11.5, color: T.muted2 }}>
+                    共 {validBatchTranscripts.length} 条有内容 · 每条 ~3-10min · 并发起 ≈ 1 条耗时
+                  </div>
+                  <div style={{ flex: 1 }} />
+                  <Btn variant="outline" onClick={backToSelect}>← 改模板</Btn>
+                  <Btn variant="primary" onClick={startBatchRender} disabled={rendering || validBatchTranscripts.length === 0}>
+                    {rendering ? "提交中…" : `▶ 批量起渲染 ${validBatchTranscripts.length} 条`}
+                  </Btn>
+                </div>
+              </div>
+            )}
+
+            {/* 单文案模式: 现有 align UI (mode 选择 + transcript 输入) */}
+            {!batchMode && (<>
+
             {/* mode 选择 + transcript 输入 */}
             <div style={{ background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 12, padding: 16, marginBottom: 16 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
@@ -422,6 +517,7 @@ function PageDhv5({ onNav }) {
                 </div>
               </div>
             )}
+            </>)}
           </div>
         </div>
       </div>
@@ -429,6 +525,38 @@ function PageDhv5({ onNav }) {
   }
 
   function renderReview() {
+    // D-077: 批量模式专属 review (N 个 task 卡片)
+    if (batchMode && batchTasks.length > 0) {
+      return (
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", background: T.bg, position: "relative", overflow: "hidden" }}>
+          <Dhv5Header step="review" template={selectedTemplate} dhVideoPath={dhVideoPath}
+            onBack={() => setStep("align")} />
+          <div style={{ flex: 1, overflow: "auto", padding: "24px 32px 80px" }}>
+            <div style={{ maxWidth: 1200, margin: "0 auto" }}>
+              <div style={{ marginBottom: 16, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 20, fontWeight: 700 }}>📦 批量数字人渲染中 · {batchTasks.length} 个 task</div>
+                  <div style={{ fontSize: 12, color: T.muted, marginTop: 4 }}>
+                    每个 ~3-10min · 并发起跑 · 完成后自动入作品库
+                  </div>
+                </div>
+                <Btn variant="outline" onClick={() => { setBatchTasks([]); setStep("align"); }}>← 改文案</Btn>
+                <Btn variant="primary" onClick={() => {
+                  setBatchTasks([]); setStep("align");
+                  setBatchTranscriptList([{ id: `bt-${Date.now()}`, text: "" }]);
+                }}>📦 再来一批</Btn>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(360px, 1fr))", gap: 14 }}>
+                {batchTasks.map((t, i) => (
+                  <DhvBatchTaskCard key={t.task_id} taskId={t.task_id} transcript={t.transcript} idx={i + 1} />
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     const status = renderTask?.status || "running";
     const result = renderTask?.result || null;
     const errLog = renderTask?.error;
@@ -782,6 +910,114 @@ function Dhv5SceneRow({ idx, scene, onChange, expanded, onToggleExpand, brollUrl
                 </Btn>
               )}
             </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+// ─── D-077: 批量数字人 helpers + 组件 ───────────────────────
+
+function dhvPillStyle(active) {
+  return {
+    padding: "5px 14px", fontSize: 12, fontWeight: 600,
+    background: active ? "#fff" : "transparent",
+    color: active ? T.brand : T.muted,
+    border: "none", borderRadius: 100, cursor: "pointer",
+    fontFamily: "inherit",
+    boxShadow: active ? "0 1px 3px rgba(0,0,0,0.08)" : "none",
+  };
+}
+
+function DhvTranscriptCard({ idx, text, onChange, onDup, onRemove }) {
+  const charCount = (text || "").length;
+  return (
+    <div style={{
+      background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 10, padding: 10,
+    }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+        <div style={{
+          width: 22, height: 22, borderRadius: "50%", background: T.brandSoft,
+          color: T.brand, fontSize: 11, fontWeight: 700,
+          display: "flex", alignItems: "center", justifyContent: "center",
+        }}>{idx}</div>
+        <div style={{ fontSize: 10.5, color: T.muted, fontFamily: "SF Mono, monospace" }}>
+          {charCount} 字 · 预计 ~3-10min
+        </div>
+        <div style={{ flex: 1 }} />
+        <button onClick={onDup} title="复制" style={{
+          cursor: "pointer", padding: "2px 6px", borderRadius: 4,
+          fontSize: 12, color: T.muted, lineHeight: 1,
+          background: "transparent", border: "none", fontFamily: "inherit",
+        }}>📋</button>
+        {onRemove && <button onClick={onRemove} title="删除" style={{
+          cursor: "pointer", padding: "2px 6px", borderRadius: 4,
+          fontSize: 12, color: T.muted, lineHeight: 1,
+          background: "transparent", border: "none", fontFamily: "inherit",
+        }}>✕</button>}
+      </div>
+      <textarea rows={3} value={text} onChange={e => onChange(e.target.value)}
+        placeholder={`第 ${idx} 段文案 · 数字人念的整段 transcript`}
+        style={{
+          width: "100%", border: "none", outline: "none", resize: "vertical",
+          background: "transparent", fontSize: 12.5, fontFamily: "inherit",
+          color: T.text, lineHeight: 1.6, padding: 0, minHeight: 60,
+        }} />
+    </div>
+  );
+}
+
+function DhvBatchTaskCard({ taskId, transcript, idx }) {
+  const poller = useTaskPoller(taskId);
+  const result = poller.task?.result || null;
+  const elapsed = poller.elapsedSec || 0;
+  const pct = poller.progressPct || (poller.isRunning ? 15 : 0);
+
+  return (
+    <div style={{
+      background: "#fff",
+      border: `1px solid ${poller.isOk ? T.brand : poller.isFailed ? T.red : T.borderSoft}`,
+      borderRadius: 12, padding: 12, display: "flex", flexDirection: "column", gap: 10,
+    }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <div style={{
+          width: 24, height: 24, borderRadius: "50%", background: T.brandSoft,
+          color: T.brand, fontSize: 11, fontWeight: 700,
+          display: "flex", alignItems: "center", justifyContent: "center",
+        }}>{idx}</div>
+        <div style={{ fontSize: 11, color: T.muted2 }}>
+          {result?.scenes_count ? `${result.scenes_count} scenes` : "对齐中"}
+        </div>
+        <div style={{ flex: 1 }} />
+        <div style={{ fontSize: 11, color: T.muted }}>{elapsed}s</div>
+      </div>
+
+      <div style={{ fontSize: 12, color: T.text, lineHeight: 1.5, maxHeight: 60, overflow: "hidden", textOverflow: "ellipsis" }}>
+        {transcript}
+      </div>
+
+      {poller.isRunning && (
+        <div>
+          <div style={{ fontSize: 11, color: T.muted, marginBottom: 4 }}>{poller.progressText || "排队中..."}</div>
+          <div style={{ height: 4, background: T.bg2, borderRadius: 2, overflow: "hidden" }}>
+            <div style={{ height: "100%", width: `${pct}%`, background: T.brand, transition: "width 0.5s" }} />
+          </div>
+        </div>
+      )}
+
+      {poller.isFailed && (
+        <div style={{ fontSize: 11, color: T.red, padding: 8, background: T.redSoft, borderRadius: 6 }}>
+          ⚠ {poller.error || "渲染失败"}
+        </div>
+      )}
+
+      {poller.isOk && result?.output_url && (
+        <div style={{ background: T.bg2, borderRadius: 6, overflow: "hidden" }}>
+          <video src={result.output_url} controls style={{ width: "100%", display: "block" }} />
+          <div style={{ fontSize: 10, color: T.muted2, padding: "4px 8px", fontFamily: "SF Mono, monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {(result.output_path || "").split("/").pop()} · {Math.round((result.size_bytes || 0) / 1024)} KB
           </div>
         </div>
       )}
