@@ -831,7 +831,9 @@ def dreamina_query(req: DreaminaQueryReq):
                         urls.append(str(pp))
             result["media_urls"] = urls
         # D-065: 即梦产物入作品库 (done 时一次性写入). prompt/title 没保留, 用 submit_id.
-        if result.get("status") == "done" and result.get("downloaded"):
+        # D-075 patch: CLI 实际字段是 gen_status, 多字段兜底.
+        _gen_status = (result.get("gen_status") or result.get("status") or result.get("Status") or "").lower()
+        if (_gen_status in ("done", "succeed", "success") or result.get("downloaded")) and result.get("downloaded"):
             try:
                 from shortvideo.works import insert_work
                 import json as _json
@@ -948,7 +950,7 @@ def dreamina_batch_video(req: DreaminaBatchVideoReq):
                     ratio=req.ratio,
                     video_resolution=req.video_resolution,
                     model_version=req.model_version,
-                    timeout_sec=600,
+                    timeout_sec=900,
                 )
             return _sync
 
@@ -2022,6 +2024,54 @@ def wechat_cover(req: WechatCoverReq):
         raise HTTPException(500, str(e))
 
 
+class WechatCoverBatchReq(BaseModel):
+    titles: list[str] = Field(..., min_length=1, max_length=10,
+        description="多个标题, ≤10. 每个标题独立起 task 出 n 张候选封面.")
+    n: int = Field(2, ge=1, le=8, description="每个标题出几张候选")
+    engine: str | None = Field(None, description="apimart | dreamina · None 用 settings 默认")
+
+
+@app.post("/api/wechat/cover-batch", tags=["公众号"], summary="批量出多标题封面 (D-076)")
+def wechat_cover_batch(req: WechatCoverBatchReq):
+    """场景: 老板攒一周 5 篇文章, 一次出齐封面.
+    每个标题独立起 task 调 gen_cover_batch, N×n 张. 跟单标题 wechat/cover 区分:
+    那个是 1 标题 N 候选 (选 1 张), 这个是 N 标题各 n 张 (各篇文章选自己的)."""
+    from backend.services import tasks as tasks_service
+
+    titles = [t.strip() for t in req.titles if t and t.strip()]
+    if not titles:
+        raise HTTPException(400, "titles 全为空")
+
+    est_per = 30 * req.n  # apimart ~30s/张
+    out_tasks = []
+    for title in titles:
+        def _make_sync(t=title):
+            def _sync():
+                return wechat_scripts.gen_cover_batch(t, n=req.n, engine=req.engine)
+            return _sync
+
+        task_id = tasks_service.run_async(
+            kind="wechat.cover-batch",
+            label=f"批量封面 · {title[:24]} · {req.n} 张",
+            ns="wechat",
+            page_id="wechat",
+            step="cover-batch",
+            payload={"title": title, "n": req.n, "engine": req.engine},
+            estimated_seconds=est_per,
+            progress_text=f"出 {req.n} 张封面候选...",
+            sync_fn=_make_sync(),
+        )
+        out_tasks.append({"task_id": task_id, "title": title})
+
+    return {
+        "tasks": out_tasks,
+        "n_per_title": req.n,
+        "engine": req.engine,
+        "estimated_seconds": est_per,
+        "page_id": "wechat",
+    }
+
+
 # ─── Phase 5 · 推送草稿箱 ────────────────────────────────────
 
 class WechatPushReq(BaseModel):
@@ -2579,6 +2629,70 @@ def image_generate(req: ImageGenReq):
         ),
     )
     return {"task_id": task_id, "status": "running", "estimated_seconds": est_sec, "page_id": "imagegen", "engine": actual_engine}
+
+
+class ImageBatchGenReq(BaseModel):
+    prompts: list[str] = Field(..., min_length=1, max_length=20,
+        description="一条或多条 prompt, ≤20. 每条独立起一个异步 task 出 n 张候选.")
+    size: str = Field("16:9")
+    n: int = Field(2, ge=1, le=8, description="每条 prompt 出几张候选")
+    engine: str | None = Field(None, description="apimart | dreamina · None 用 settings 默认")
+    label: str = Field("gen")
+    refs: list[str] = Field(default_factory=list, max_length=4,
+        description="参考图 data URL list, 共享给所有 prompt. 仅 apimart 引擎接.")
+
+
+@app.post("/api/image/batch-generate", tags=["生图"], summary="批量出图 (D-076 N prompt × n 张)")
+def image_batch_generate(req: ImageBatchGenReq):
+    """每条 prompt 独立起一个异步 task, 立即返 N 个 task_id.
+    跟 D-075 即梦视频对称: N 个 prompt × n 张候选 = N×n 张图. 共享 size/engine/refs.
+    单 prompt × n 张走旧 /api/image/generate, 这个 endpoint 专门做 N>1 prompt 场景.
+    """
+    from shortvideo import image_engine
+    from backend.services import tasks as tasks_service
+
+    prompts = [p.strip() for p in req.prompts if p and p.strip()]
+    if not prompts:
+        raise HTTPException(400, "prompts 全为空")
+    actual_engine = (req.engine or image_engine.get_default_engine()).lower()
+    refs = req.refs or None
+    est_per = (30 if actual_engine == "apimart" else 90) * req.n
+
+    out_tasks = []
+    for prompt in prompts:
+        def _make_sync(p=prompt):
+            def _sync():
+                return image_engine.generate(
+                    prompt=p, size=req.size, n=req.n,
+                    engine=req.engine, label=req.label, refs=refs,
+                )
+            return _sync
+
+        task_id = tasks_service.run_async(
+            kind="image.generate",
+            label=f"批量生图 · {prompt[:30]} · {req.n} 张" + (f" · {len(refs)} 张参考图" if refs else ""),
+            ns="image",
+            page_id="imagegen",
+            step="batch",
+            payload={
+                "prompt_preview": prompt[:200], "size": req.size, "n": req.n,
+                "engine": actual_engine, "refs_count": len(refs) if refs else 0,
+            },
+            estimated_seconds=est_per,
+            progress_text=f"{actual_engine} 生 {req.n} 张图 ({req.size})..." + (" · 基于参考图" if refs else ""),
+            sync_fn=_make_sync(),
+        )
+        out_tasks.append({"task_id": task_id, "prompt": prompt})
+
+    return {
+        "tasks": out_tasks,
+        "n_per_prompt": req.n,
+        "size": req.size,
+        "engine": actual_engine,
+        "refs_count": len(refs) if refs else 0,
+        "estimated_seconds": est_per,
+        "page_id": "imagegen",
+    }
 
 
 # D-073: 参考图上传 — 接本地文件, 转 base64 data URL 返回给前端,

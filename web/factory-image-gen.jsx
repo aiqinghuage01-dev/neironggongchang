@@ -19,6 +19,33 @@ function PageImageGen({ onNav }) {
   const [result, setResult] = React.useState(null);
   const [err, setErr] = React.useState("");
 
+  // D-076: 批量模式 (N prompt × n 张). 单跑保持原状.
+  const [batchMode, setBatchMode] = React.useState(false);
+  // D-076 preset: general (通用 prompts) / wechat-cover (公众号标题 → 封面批量)
+  const [batchPreset, setBatchPreset] = React.useState("general");
+  const [promptList, setPromptList] = React.useState([{ id: `p-${Date.now()}`, text: "" }]);
+  const [batchTasks, setBatchTasks] = React.useState([]); // [{task_id, prompt}]
+  const PROMPT_MAX = 20;
+  const isCoverPreset = batchPreset === "wechat-cover";
+  function addPrompt() {
+    setPromptList(prev => prev.length >= PROMPT_MAX ? prev : [...prev, { id: `p-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, text: "" }]);
+  }
+  function removePrompt(id) {
+    setPromptList(prev => prev.length > 1 ? prev.filter(p => p.id !== id) : prev);
+  }
+  function duplicatePrompt(id) {
+    setPromptList(prev => {
+      if (prev.length >= PROMPT_MAX) return prev;
+      const idx = prev.findIndex(p => p.id === id);
+      if (idx < 0) return prev;
+      const copy = { id: `p-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, text: prev[idx].text };
+      return [...prev.slice(0, idx + 1), copy, ...prev.slice(idx + 1)];
+    });
+  }
+  function updatePrompt(id, text) {
+    setPromptList(prev => prev.map(p => p.id === id ? { ...p, text } : p));
+  }
+
   // D-073: 参考图 — 最多 4 张, 上传后转 base64 data URL 跟生图请求一起传
   // 每条结构: { id, data_url, name, size_bytes, uploading?, error? }
   const [refs, setRefs] = React.useState([]);
@@ -58,36 +85,64 @@ function PageImageGen({ onNav }) {
     onError: (e) => { setErr(e || "生图失败"); },
   });
 
+  const readyRefs = refs.filter(r => r.data_url && !r.error).map(r => r.data_url);
+
   async function generate() {
     if (!prompt.trim()) return;
     setErr(""); setResult(null); setTaskId(null);
     try {
-      // D-073: refs 只取上传成功的 (filter out uploading + error)
-      const ready = refs.filter(r => r.data_url && !r.error).map(r => r.data_url);
-      // dreamina 暂不支持参考图, 老板传了图但选了即梦 → 提示
-      if (ready.length > 0 && imgEngine === "dreamina") {
+      if (readyRefs.length > 0 && imgEngine === "dreamina") {
         setErr("即梦引擎暂不支持参考图, 切回 apimart 试试");
         return;
       }
       const r = await api.post("/api/image/generate", {
         prompt: prompt.trim(), size, n, engine: imgEngine, label: "gen",
-        refs: ready,
+        refs: readyRefs,
       });
       setTaskId(r.task_id);
     } catch (e) { setErr(e.message); }
   }
 
+  // D-076: 批量提交 — N prompt × n 张, 立即返 N 个 task_id
+  const batchPrompts = promptList.map(p => (p.text || "").trim()).filter(Boolean);
+  async function generateBatch() {
+    if (batchPrompts.length === 0) { setErr("至少填一条" + (isCoverPreset ? "标题" : "prompt")); return; }
+    setErr(""); setBatchTasks([]); setResult(null); setTaskId(null);
+    try {
+      if (isCoverPreset) {
+        // 公众号封面批量: 调 /api/wechat/cover-batch (titles + n + engine, 锁 16:9, 不接参考图)
+        const r = await api.post("/api/wechat/cover-batch", {
+          titles: batchPrompts, n, engine: imgEngine,
+        });
+        setBatchTasks((r.tasks || []).map(t => ({ task_id: t.task_id, prompt: t.title })));
+        return;
+      }
+      if (readyRefs.length > 0 && imgEngine === "dreamina") {
+        setErr("即梦引擎暂不支持参考图, 切回 apimart 试试");
+        return;
+      }
+      const r = await api.post("/api/image/batch-generate", {
+        prompts: batchPrompts, size, n, engine: imgEngine, label: "gen",
+        refs: readyRefs,
+      });
+      setBatchTasks(r.tasks || []);
+    } catch (e) { setErr(e.message); }
+  }
+
   function retry() { setErr(""); setResult(null); setTaskId(null); generate(); }
-  function reset() { setResult(null); setTaskId(null); setErr(""); }
+  function reset() { setResult(null); setTaskId(null); setErr(""); setBatchTasks([]); }
 
   // wfState (refs 不持久化 — 临时素材, 切页就该丢)
-  const wfState = { prompt, size, n, result, taskId };
+  const wfState = { prompt, size, n, result, taskId, batchMode, promptList, batchTasks };
   const wfRestore = (s) => {
     if (s.prompt != null) setPrompt(s.prompt);
     if (s.size) setSize(s.size);
     if (typeof s.n === "number") setN(s.n);
     if (s.result) setResult(s.result);
     if (s.taskId) setTaskId(s.taskId);
+    if (typeof s.batchMode === "boolean") setBatchMode(s.batchMode);
+    if (Array.isArray(s.promptList) && s.promptList.length > 0) setPromptList(s.promptList);
+    if (Array.isArray(s.batchTasks)) setBatchTasks(s.batchTasks);
   };
   const wf = useWorkflowPersist({ ns: "imagegen", state: wfState, onRestore: wfRestore });
 
@@ -114,39 +169,100 @@ function PageImageGen({ onNav }) {
           </div>
         )}
 
-        {/* 输入 + 提交 */}
-        {!poller.isRunning && !poller.isFailed && !poller.isCancelled && (
+        {/* 输入 + 提交 (单跑 vs 批量 用不同 visibility 条件) */}
+        {((!batchMode && !poller.isRunning && !poller.isFailed && !poller.isCancelled) || (batchMode && batchTasks.length === 0)) && (
           <div style={{ padding: "32px 40px 20px", maxWidth: 860, margin: "0 auto" }}>
-            <div style={{ textAlign: "center", marginBottom: 20 }}>
+            <div style={{ textAlign: "center", marginBottom: 16 }}>
               <div style={{ fontSize: 28, fontWeight: 700, color: T.text, marginBottom: 6 }}>
                 想要张什么图? 🖼️
               </div>
-              <div style={{ fontSize: 13, color: T.muted, lineHeight: 1.6 }}>
-                贴 prompt · 选比例 · 选张数 · 默认 apimart, 旁边 chip 切即梦
+              <div style={{ fontSize: 13, color: T.muted, lineHeight: 1.6, marginBottom: 12 }}>
+                {batchMode
+                  ? "N 个 prompt 一次跑 · 共享比例/张数/引擎/参考图 · ≤20 条"
+                  : "贴 prompt · 选比例 · 选张数 · 默认 apimart, 旁边 chip 切即梦"}
               </div>
+              <div style={{ display: "inline-flex", gap: 4, padding: 4, background: T.bg2, borderRadius: 100, border: `1px solid ${T.borderSoft}` }}>
+                <button onClick={() => setBatchMode(false)} style={imgPillStyle(!batchMode)}>📷 单跑</button>
+                <button onClick={() => setBatchMode(true)} style={imgPillStyle(batchMode)}>📦 批量</button>
+              </div>
+              {batchMode && (
+                <div style={{ marginTop: 10, display: "flex", gap: 6, justifyContent: "center" }}>
+                  <button onClick={() => setBatchPreset("general")} style={imgChipStyle(batchPreset === "general")}>通用</button>
+                  <button onClick={() => setBatchPreset("wechat-cover")} style={imgChipStyle(batchPreset === "wechat-cover")}>📄 公众号封面</button>
+                </div>
+              )}
             </div>
 
-            <div style={{ background: "#fff", border: `1.5px solid ${T.brand}`, boxShadow: `0 0 0 5px ${T.brandSoft}`, borderRadius: 16, padding: 18, marginBottom: 14 }}>
-              <textarea rows={5} value={prompt} onChange={e => setPrompt(e.target.value)}
-                placeholder={"描述你要的画面, 越具体越好...\n\n例:\n- 老板娘站在 18 年的米线店门口, 暖色调, 怀旧氛围, 真实感照片\n- 餐饮老板对着手机看数据, 背景是空荡荡的店面, 暗调"}
-                style={{ width: "100%", border: "none", outline: "none", background: "transparent", fontSize: 14, fontFamily: "inherit", resize: "vertical", lineHeight: 1.7, color: T.text, minHeight: 120 }}
-              />
-              <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 10, paddingTop: 12, borderTop: `1px solid ${T.borderSoft}`, flexWrap: "wrap" }}>
-                <div style={{ fontSize: 11.5, color: T.muted2 }}>🖼️ {prompt.length} 字</div>
-                <div style={{ flex: 1 }} />
-                <ImageEngineChip engine={imgEngine} onChange={setImgEngine} defaultEngine={defaultImgEngine} isOverride={isImgOverride} />
-                <button onClick={generate} disabled={!prompt.trim()} style={{
-                  padding: "8px 22px", fontSize: 13, fontWeight: 600,
-                  background: prompt.trim() ? T.brand : T.muted3, color: "#fff",
-                  border: "none", borderRadius: 100, cursor: prompt.trim() ? "pointer" : "not-allowed", fontFamily: "inherit",
-                }}>
-                  ✨ 出图 ({n} 张) →
-                </button>
+            {!batchMode && (
+              <div style={{ background: "#fff", border: `1.5px solid ${T.brand}`, boxShadow: `0 0 0 5px ${T.brandSoft}`, borderRadius: 16, padding: 18, marginBottom: 14 }}>
+                <textarea rows={5} value={prompt} onChange={e => setPrompt(e.target.value)}
+                  placeholder={"描述你要的画面, 越具体越好...\n\n例:\n- 老板娘站在 18 年的米线店门口, 暖色调, 怀旧氛围, 真实感照片\n- 餐饮老板对着手机看数据, 背景是空荡荡的店面, 暗调"}
+                  style={{ width: "100%", border: "none", outline: "none", background: "transparent", fontSize: 14, fontFamily: "inherit", resize: "vertical", lineHeight: 1.7, color: T.text, minHeight: 120 }}
+                />
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 10, paddingTop: 12, borderTop: `1px solid ${T.borderSoft}`, flexWrap: "wrap" }}>
+                  <div style={{ fontSize: 11.5, color: T.muted2 }}>🖼️ {prompt.length} 字</div>
+                  <div style={{ flex: 1 }} />
+                  <ImageEngineChip engine={imgEngine} onChange={setImgEngine} defaultEngine={defaultImgEngine} isOverride={isImgOverride} />
+                  <button onClick={generate} disabled={!prompt.trim()} style={{
+                    padding: "8px 22px", fontSize: 13, fontWeight: 600,
+                    background: prompt.trim() ? T.brand : T.muted3, color: "#fff",
+                    border: "none", borderRadius: 100, cursor: prompt.trim() ? "pointer" : "not-allowed", fontFamily: "inherit",
+                  }}>
+                    ✨ 出图 ({n} 张) →
+                  </button>
+                </div>
               </div>
-            </div>
+            )}
 
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-              {/* 比例选择 */}
+            {batchMode && (
+              <div style={{ background: "#fff", border: `1.5px solid ${T.brand}`, boxShadow: `0 0 0 5px ${T.brandSoft}`, borderRadius: 16, padding: 14, marginBottom: 14 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+                  <div style={{ fontSize: 11.5, color: T.muted2, fontWeight: 600, letterSpacing: "0.08em" }}>
+                    {isCoverPreset ? "📰 标题列表" : "📝 PROMPT 列表"}
+                  </div>
+                  <span style={{ fontSize: 11, color: T.muted2 }}>{promptList.length} 条 · 上限 {PROMPT_MAX}</span>
+                  <div style={{ flex: 1 }} />
+                  <span style={{ fontSize: 11, color: T.muted2 }}>
+                    {isCoverPreset ? `每个标题出 ${n} 张候选 · 共 ${batchPrompts.length * n} 张` : `每条出 ${n} 张 · 共 ${batchPrompts.length * n} 张`}
+                  </span>
+                </div>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {promptList.map((p, idx) => (
+                    <ImgPromptCard key={p.id} idx={idx + 1} text={p.text} n={n}
+                      engine={isCoverPreset ? "公众号封面" : imgEngine}
+                      placeholderHint={isCoverPreset ? `第 ${idx + 1} 个标题 · 例: AI 才是实体老板的救命稻草` : null}
+                      onChange={t => updatePrompt(p.id, t)}
+                      onDup={() => duplicatePrompt(p.id)}
+                      onRemove={promptList.length > 1 ? () => removePrompt(p.id) : null} />
+                  ))}
+                  {promptList.length < PROMPT_MAX && (
+                    <div onClick={addPrompt} style={{
+                      padding: 10, border: `1.5px dashed ${T.border}`, borderRadius: 10,
+                      textAlign: "center", color: T.muted, fontSize: 12.5, cursor: "pointer", background: T.bg2,
+                      fontFamily: "inherit",
+                    }}>+ 添加{isCoverPreset ? "标题" : " prompt"}</div>
+                  )}
+                </div>
+
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 12, paddingTop: 12, borderTop: `1px solid ${T.borderSoft}`, flexWrap: "wrap" }}>
+                  <div style={{ fontSize: 11.5, color: T.muted2 }}>共 {batchPrompts.length} 条有内容</div>
+                  <div style={{ flex: 1 }} />
+                  <ImageEngineChip engine={imgEngine} onChange={setImgEngine} defaultEngine={defaultImgEngine} isOverride={isImgOverride} />
+                  <button onClick={generateBatch} disabled={batchPrompts.length === 0} style={{
+                    padding: "8px 22px", fontSize: 13, fontWeight: 600,
+                    background: batchPrompts.length > 0 ? T.brand : T.muted3, color: "#fff",
+                    border: "none", borderRadius: 100, cursor: batchPrompts.length > 0 ? "pointer" : "not-allowed", fontFamily: "inherit",
+                  }}>
+                    ✨ 批量出 {batchPrompts.length * n} 张{isCoverPreset ? "封面" : ""} →
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <div style={{ display: "grid", gridTemplateColumns: isCoverPreset ? "1fr" : "1fr 1fr", gap: 14 }}>
+              {/* 比例选择 (cover preset 锁 16:9 不显示) */}
+              {!isCoverPreset && (
               <div style={{ padding: 14, background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 10 }}>
                 <div style={{ fontSize: 11.5, color: T.muted2, fontWeight: 600, letterSpacing: "0.08em", marginBottom: 10 }}>比例</div>
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
@@ -161,6 +277,7 @@ function PageImageGen({ onNav }) {
                   ))}
                 </div>
               </div>
+              )}
 
               {/* 张数 */}
               <div style={{ padding: 14, background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 10 }}>
@@ -182,7 +299,8 @@ function PageImageGen({ onNav }) {
               </div>
             </div>
 
-            {/* D-073: 📷 参考图 (可选, 最多 4 张, 仅 apimart) */}
+            {/* D-073: 📷 参考图 (可选, 最多 4 张, 仅 apimart) · cover preset 不显示 */}
+            {!isCoverPreset && (
             <div style={{ marginTop: 14, padding: 14, background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 10 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
                 <div style={{ fontSize: 11.5, color: T.muted2, fontWeight: 600, letterSpacing: "0.08em" }}>📷 参考图</div>
@@ -244,6 +362,7 @@ function PageImageGen({ onNav }) {
                 }}
               />
             </div>
+            )}
 
             {result && (
               <div style={{ marginTop: 16, fontSize: 12, color: T.muted, textAlign: "center" }}>
@@ -253,8 +372,8 @@ function PageImageGen({ onNav }) {
           </div>
         )}
 
-        {/* 跑中 */}
-        {poller.isRunning && (
+        {/* 单跑: 跑中 */}
+        {!batchMode && poller.isRunning && (
           <LoadingProgress
             task={poller.task}
             icon="🖼️"
@@ -264,8 +383,8 @@ function PageImageGen({ onNav }) {
           />
         )}
 
-        {/* 失败 */}
-        {(poller.isFailed || poller.isCancelled) && (
+        {/* 单跑: 失败 */}
+        {!batchMode && (poller.isFailed || poller.isCancelled) && (
           <FailedRetry
             error={poller.error || err}
             onRetry={retry}
@@ -275,9 +394,30 @@ function PageImageGen({ onNav }) {
           />
         )}
 
-        {/* 结果 (只在不在跑且有结果时显, 因为输入区是 toggle 的) */}
-        {result && !poller.isRunning && !poller.isFailed && !poller.isCancelled && (
+        {/* 单跑: 结果 */}
+        {!batchMode && result && !poller.isRunning && !poller.isFailed && !poller.isCancelled && (
           <ImageGenResults result={result} prompt={prompt} onAgain={generate} onReset={() => { setPrompt(""); reset(); }} />
+        )}
+
+        {/* 批量: N 个 task 卡片网格 */}
+        {batchMode && batchTasks.length > 0 && (
+          <div style={{ padding: "32px 40px 60px", maxWidth: 1280, margin: "0 auto" }}>
+            <div style={{ marginBottom: 16, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 20, fontWeight: 700 }}>📦 批量出图中 · {batchTasks.length} 个 task</div>
+                <div style={{ fontSize: 12, color: T.muted, marginTop: 4 }}>
+                  每条 prompt 出 {n} 张, 共 {batchTasks.length * n} 张. 并行起跑.
+                </div>
+              </div>
+              <Btn variant="outline" onClick={() => setBatchTasks([])}>← 改 prompt</Btn>
+              <Btn variant="primary" onClick={() => { setBatchTasks([]); setPromptList([{ id: `p-${Date.now()}`, text: "" }]); }}>📦 再来一批</Btn>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(360px, 1fr))", gap: 14 }}>
+              {batchTasks.map((t, i) => (
+                <ImgBatchTaskCard key={t.task_id} taskId={t.task_id} prompt={t.prompt} idx={i + 1} n={n} />
+              ))}
+            </div>
+          </div>
         )}
       </div>
     </div>
@@ -381,6 +521,128 @@ function ImageCard({ img, idx, prompt }) {
           color: T.muted, cursor: "pointer", fontFamily: "inherit", fontWeight: 500,
         }}>⬇ 下载</button>
       </div>
+    </div>
+  );
+}
+
+// ─── D-076: 批量出图所需 helpers + 组件 ───────────────────
+
+function imgPillStyle(active) {
+  return {
+    padding: "5px 14px", fontSize: 12, fontWeight: 600,
+    background: active ? "#fff" : "transparent",
+    color: active ? T.brand : T.muted,
+    border: "none", borderRadius: 100, cursor: "pointer",
+    fontFamily: "inherit",
+    boxShadow: active ? "0 1px 3px rgba(0,0,0,0.08)" : "none",
+  };
+}
+
+function imgChipStyle(active) {
+  return {
+    padding: "5px 12px", fontSize: 11.5, fontWeight: active ? 600 : 500,
+    background: active ? T.brandSoft : "#fff",
+    color: active ? T.brand : T.muted,
+    border: `1px solid ${active ? T.brand : T.borderSoft}`,
+    borderRadius: 100, cursor: "pointer", fontFamily: "inherit",
+  };
+}
+
+function ImgPromptCard({ idx, text, n, engine, placeholderHint, onChange, onDup, onRemove }) {
+  return (
+    <div style={{
+      background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 10, padding: 10,
+    }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+        <div style={{
+          width: 22, height: 22, borderRadius: "50%", background: T.brandSoft,
+          color: T.brand, fontSize: 11, fontWeight: 700,
+          display: "flex", alignItems: "center", justifyContent: "center",
+        }}>{idx}</div>
+        <div style={{ fontSize: 10.5, color: T.muted, fontFamily: "SF Mono, monospace" }}>
+          {engine || "apimart"} · {n} 张
+        </div>
+        <div style={{ flex: 1 }} />
+        <button onClick={onDup} title="复制" style={{
+          cursor: "pointer", padding: "2px 6px", borderRadius: 4,
+          fontSize: 12, color: T.muted, lineHeight: 1,
+          background: "transparent", border: "none", fontFamily: "inherit",
+        }}>📋</button>
+        {onRemove && <button onClick={onRemove} title="删除" style={{
+          cursor: "pointer", padding: "2px 6px", borderRadius: 4,
+          fontSize: 12, color: T.muted, lineHeight: 1,
+          background: "transparent", border: "none", fontFamily: "inherit",
+        }}>✕</button>}
+      </div>
+      <textarea rows={2} value={text} onChange={e => onChange(e.target.value)}
+        placeholder={placeholderHint || `第 ${idx} 条 · 描述要画的图...`}
+        style={{
+          width: "100%", border: "none", outline: "none", resize: "none",
+          background: "transparent", fontSize: 12.5, fontFamily: "inherit",
+          color: T.text, lineHeight: 1.6, padding: 0,
+        }} />
+    </div>
+  );
+}
+
+function ImgBatchTaskCard({ taskId, prompt, idx, n }) {
+  const poller = useTaskPoller(taskId);
+  const result = poller.task?.result || null;
+  // 兼容两种格式: image_engine.generate (images) / wechat gen_cover_batch (covers)
+  const images = result?.images || result?.covers || [];
+  const okImages = images.filter(i => !i.error && (i.media_url || i.local_path || i.url));
+  const elapsed = poller.elapsedSec || 0;
+  const pct = poller.progressPct || (poller.isRunning ? 15 : 0);
+
+  return (
+    <div style={{
+      background: "#fff",
+      border: `1px solid ${poller.isOk ? T.brand : poller.isFailed ? T.red : T.borderSoft}`,
+      borderRadius: 12, padding: 12, display: "flex", flexDirection: "column", gap: 10,
+    }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <div style={{
+          width: 24, height: 24, borderRadius: "50%", background: T.brandSoft,
+          color: T.brand, fontSize: 11, fontWeight: 700,
+          display: "flex", alignItems: "center", justifyContent: "center",
+        }}>{idx}</div>
+        <div style={{ fontSize: 11, color: T.muted2 }}>{n} 张候选</div>
+        <div style={{ flex: 1 }} />
+        <div style={{ fontSize: 11, color: T.muted }}>{elapsed}s</div>
+      </div>
+
+      <div style={{ fontSize: 12, color: T.text, lineHeight: 1.5, maxHeight: 50, overflow: "hidden", textOverflow: "ellipsis" }}>
+        {prompt}
+      </div>
+
+      {poller.isRunning && (
+        <div>
+          <div style={{ fontSize: 11, color: T.muted, marginBottom: 4 }}>{poller.progressText || "跑中..."}</div>
+          <div style={{ height: 4, background: T.bg2, borderRadius: 2, overflow: "hidden" }}>
+            <div style={{ height: "100%", width: `${pct}%`, background: T.brand, transition: "width 0.5s" }} />
+          </div>
+        </div>
+      )}
+
+      {poller.isFailed && (
+        <div style={{ fontSize: 11, color: T.red, padding: 8, background: T.redSoft, borderRadius: 6 }}>
+          ⚠ {poller.error || "出图失败"}
+        </div>
+      )}
+
+      {poller.isOk && okImages.length > 0 && (
+        <div style={{ display: "grid", gridTemplateColumns: okImages.length === 1 ? "1fr" : "1fr 1fr", gap: 6 }}>
+          {okImages.map((img, j) => {
+            const src = img.media_url ? api.media(img.media_url) : img.url;
+            return (
+              <div key={j} style={{ background: T.bg2, borderRadius: 6, overflow: "hidden", aspectRatio: "16/9" }}>
+                {src && <ImageWithLightbox src={src} downloadName={`batch-${idx}-${j}.png`} caption={prompt.slice(0, 100)}
+                  style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

@@ -275,7 +275,7 @@ def submit_and_wait(
     video_resolution: str | None = None,
     model_version: str | None = None,
     poll_interval: int = 8,
-    timeout_sec: int = 600,
+    timeout_sec: int = 900,
     is_cancelled=None,
 ) -> dict[str, Any]:
     """submit + 内部轮询 + 下载, 给 tasks.run_async 的 sync_fn 用.
@@ -328,12 +328,20 @@ def submit_and_wait(
         if not q.get("ok"):
             continue
         result = q.get("result") or {}
-        last_status = (result.get("status") or result.get("Status") or "").lower()
+        # CLI 实际返回字段是 gen_status (querying / done / failed 等),
+        # 不是 status 也不是 Status. D-075 patch: 多字段兜底.
+        last_status = (
+            result.get("gen_status")
+            or result.get("status")
+            or result.get("Status")
+            or ""
+        ).lower()
         downloaded = q.get("downloaded") or []
-        if last_status in ("done", "succeed", "success") and downloaded:
+        # downloaded 非空就视为成功 (即使 status 字段抓不到, 文件已落地就一定成功)
+        if downloaded:
             _autoinsert_works(downloaded, submit_id, route, prompt)
             return {
-                "submit_id": submit_id, "route": route, "status": "done",
+                "submit_id": submit_id, "route": route, "status": last_status or "done",
                 "downloaded": downloaded,
                 "media_urls": [_to_media_url(p) for p in downloaded],
                 "raw_result": result,

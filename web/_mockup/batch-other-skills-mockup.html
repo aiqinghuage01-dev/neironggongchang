@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>举一反三 · 其他 skill 批量化交互稿</title>
+<style>
+  :root {
+    --bg: #f7f5f0; --bg2: #fcfaf6; --bg3: #f0ebe1;
+    --text: #1a1a1a; --muted: #6b6960; --muted2: #8a877e; --muted3: #b8b5ac;
+    --borderSoft: #f2efe7; --border: #e3dfd5;
+    --brand: #2a6f4a; --brandSoft: #e8f3ed;
+    --amber: #c47a1f; --amberSoft: #fdf4e3;
+    --red: #b8422e; --redSoft: #f8e7e2;
+    --blue: #2a6f9c; --blueSoft: #e8f0f5;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 24px; background: var(--bg); color: var(--text);
+    font: 14px/1.6 -apple-system, "SF Pro Text", "PingFang SC", sans-serif; }
+  h1 { font-size: 24px; margin: 0 0 6px; font-weight: 700; }
+  .sub { color: var(--muted); font-size: 13px; margin-bottom: 28px; }
+
+  .scenario { max-width: 920px; margin: 0 auto 32px; background: #fff;
+    border: 1px solid var(--borderSoft); border-radius: 14px; padding: 22px; }
+  .scenario h2 { font-size: 18px; margin: 0 0 4px; font-weight: 700; display: flex; align-items: center; gap: 10px; }
+  .badge { padding: 3px 10px; border-radius: 100px; font-size: 11px; font-weight: 600; }
+  .badge.high { background: var(--brandSoft); color: var(--brand); }
+  .badge.mid { background: var(--amberSoft); color: var(--amber); }
+  .scenario .tagline { color: var(--muted); font-size: 12.5px; margin: 4px 0 16px; }
+  .stage { background: var(--bg); padding: 14px; border-radius: 10px; border: 1px solid var(--borderSoft); margin: 10px 0; }
+
+  /* 场景背景元数据 */
+  .meta-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px; font-size: 12.5px; }
+  .meta-box { padding: 10px 12px; background: var(--bg); border-radius: 8px; border-left: 3px solid var(--brand); }
+  .meta-box.amber { border-left-color: var(--amber); }
+  .meta-box .meta-label { font-size: 10.5px; color: var(--muted2); font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 4px; }
+
+  /* 通用 mockup 元素 */
+  .field-label { font-size: 10.5px; font-weight: 600; color: var(--muted2); letter-spacing: 0.06em; margin-bottom: 6px; text-transform: uppercase; }
+  .small-text { font-size: 11px; color: var(--muted2); }
+
+  .ref-grid { display: flex; flex-wrap: wrap; gap: 6px; }
+  .ref-thumb { width: 56px; height: 56px; border-radius: 6px; background: linear-gradient(135deg, #c8d4cb, #a8c4b3); border: 1px solid var(--borderSoft); flex-shrink: 0; }
+  .ref-thumb.alt { background: linear-gradient(135deg, #e0d4c4, #c4b59a); }
+  .ref-thumb.alt2 { background: linear-gradient(135deg, #d8c4d4, #c0a8b8); }
+  .ref-add { width: 56px; height: 56px; border-radius: 6px; border: 1.5px dashed var(--border); background: var(--bg2);
+    display: flex; align-items: center; justify-content: center; font-size: 14px; color: var(--muted); }
+
+  /* 提示卡片 (统一 D-075 样式) */
+  .pcard { background: #fff; border: 1px solid var(--borderSoft); border-radius: 10px; padding: 10px; }
+  .pcard-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .pcard-num { width: 22px; height: 22px; border-radius: 50%; background: var(--brandSoft); color: var(--brand);
+    font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+  .pcard-route { font-size: 10.5px; color: var(--muted); font-family: "SF Mono", monospace; }
+  .pcard-actions { margin-left: auto; display: flex; gap: 4px; font-size: 11px; color: var(--muted); }
+  .pcard-actions span { cursor: pointer; padding: 2px 5px; border-radius: 4px; }
+  .pcard textarea, .pcard input { width: 100%; border: none; outline: none; resize: none; background: transparent;
+    font: inherit; font-size: 12.5px; color: var(--text); line-height: 1.6; padding: 0; }
+  .pcard-extras { display: flex; gap: 8px; margin-top: 6px; padding-top: 6px; border-top: 1px dashed var(--borderSoft); font-size: 11px; color: var(--muted2); align-items: center; }
+
+  .add-prompt { padding: 8px; border: 1.5px dashed var(--border); border-radius: 10px; text-align: center;
+    color: var(--muted); font-size: 12px; cursor: pointer; background: var(--bg2); }
+
+  .submit { padding: 7px 16px; font-size: 12px; font-weight: 600; background: var(--brand); color: #fff;
+    border: none; border-radius: 100px; }
+
+  .footer-bar { display: flex; align-items: center; gap: 8px; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--borderSoft); font-size: 11.5px; color: var(--muted2); }
+
+  /* 共享配置区 (上方) */
+  .shared-config { background: #fff; border: 1px solid var(--borderSoft); border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; }
+
+  /* 实现要点 */
+  .impl { font-size: 12.5px; line-height: 1.7; padding: 12px 14px; background: var(--bg); border-radius: 8px; margin-top: 10px; }
+  .impl strong { color: var(--text); }
+  .impl ul { margin: 6px 0 0; padding: 0 0 0 18px; }
+
+  /* 选择器/标签的视觉 */
+  .chip-row { display: flex; gap: 6px; flex-wrap: wrap; }
+  .chip { padding: 4px 10px; background: #fff; border: 1px solid var(--borderSoft); border-radius: 100px; font-size: 11.5px; color: var(--muted); cursor: pointer; }
+  .chip.active { background: var(--brandSoft); border-color: var(--brand); color: var(--brand); font-weight: 600; }
+
+  /* 大数字人头像占位 */
+  .dh-avatar { width: 36px; height: 36px; border-radius: 6px; background: linear-gradient(135deg, #d4c4b8, #b89a7e); flex-shrink: 0; border: 1px solid var(--borderSoft); }
+  .dh-row { display: flex; align-items: center; gap: 8px; }
+
+  .ranking { background: #fff; border: 1px solid var(--borderSoft); border-radius: 12px; padding: 16px 20px; max-width: 920px; margin: 0 auto 24px; }
+  .ranking h3 { margin: 0 0 12px; font-size: 14px; font-weight: 700; }
+  .ranking table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  .ranking th, .ranking td { padding: 7px 8px; text-align: left; border-bottom: 1px solid var(--borderSoft); }
+  .ranking th { color: var(--muted2); font-weight: 600; font-size: 11px; }
+  .ranking tr:last-child td { border-bottom: none; }
+  .ranking td.skip { color: var(--muted3); }
+</style>
+</head>
+<body>
+
+<h1>举一反三 · 其他 skill 批量化交互稿</h1>
+<div class="sub">
+  D-075 即梦视频已落卡片堆叠. 基于"价值 × 实现成本", 我筛出 3 个最值得做的场景, 都用同一套卡片堆叠模板特化. 下面有总览表 + 3 个场景的 mockup.
+</div>
+
+<!-- ===== 总览表 ===== -->
+<div class="ranking">
+  <h3>📊 全 skill 批量化盘点</h3>
+  <table>
+    <thead>
+      <tr><th>Skill</th><th>当前模式</th><th>批量价值</th><th>实现成本</th><th>是否做</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><strong>直接出图</strong> (image.generate)</td><td>1 prompt × n 张</td><td>🔥 高 (公众号长文配图常需 6 个不同主题)</td><td>低 (~30min)</td><td><span class="badge high">A · 出 mockup</span></td></tr>
+      <tr><td><strong>公众号封面</strong> (wechat.cover)</td><td>1 标题 × n 张 (默认 2)</td><td>🔥 高 (一周 5 篇时一次出齐)</td><td>低 (~30min)</td><td><span class="badge high">B · 出 mockup</span></td></tr>
+      <tr><td><strong>数字人 v5</strong> (dhv5.render)</td><td>1 文案 → 1 视频 (3-10min)</td><td>🔥🔥 极高 (单条慢, 并发省最多)</td><td>中 (~1h)</td><td><span class="badge high">C · 出 mockup</span></td></tr>
+      <tr><td>爆款改写 (baokuan.rewrite)</td><td>1 原文 → N 版本</td><td>🟡 中 (老板攒一批文案润色时)</td><td>低</td><td class="skip">先不做, 等真有需求</td></tr>
+      <tr><td>投流 (touliu.generate)</td><td>1 pitch → n 条</td><td>🟡 中 (A/B 测不同卖点)</td><td>低</td><td class="skip">先不做</td></tr>
+      <tr><td>热点改写 (hotrewrite)</td><td>1 hotspot → 1 文案</td><td>🟡 中 (多热点同跑)</td><td>中</td><td class="skip">先不做</td></tr>
+      <tr><td>朋友圈/选题/策划</td><td>已批量 (n=N) 或天然单条</td><td>🔵 低</td><td>-</td><td class="skip">不做</td></tr>
+      <tr><td>录音改写 / 违规审查</td><td>单条 (lint_batch 已局部批量)</td><td>🔵 低</td><td>-</td><td class="skip">不做</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ============== A. 出图批量 ============== -->
+<div class="scenario">
+  <h2>A · 直接出图批量化 <span class="badge high">价值 高 · 成本 低</span></h2>
+  <div class="tagline">跟即梦视频 1:1 对称 · 卡片堆叠原样套 · ~30min 工时</div>
+
+  <div class="meta-row">
+    <div class="meta-box">
+      <div class="meta-label">用户场景</div>
+      公众号长文写完, 一次给 6 个段落分别出图. 当前要切回出图页 6 次, 输入 6 次 prompt.
+    </div>
+    <div class="meta-box amber">
+      <div class="meta-label">改造</div>
+      prompt 变 list (≤20), 共享参考图 + 共享比例 + 共享引擎, 每条独立出 n 张候选.
+    </div>
+  </div>
+
+  <div class="stage">
+    <!-- 共享参考图 -->
+    <div class="shared-config">
+      <div class="field-label">📷 共享参考图 · 2 张 · 仅 apimart</div>
+      <div class="ref-grid">
+        <div class="ref-thumb"></div>
+        <div class="ref-thumb alt"></div>
+        <div class="ref-add">+</div>
+      </div>
+    </div>
+
+    <!-- 共享配置 (引擎/比例/张数) -->
+    <div class="shared-config">
+      <div class="field-label" style="margin-bottom: 8px">⚙️ 共享配置</div>
+      <div style="display: flex; gap: 16px; align-items: center; font-size: 12px; flex-wrap: wrap">
+        <div><span style="color: var(--muted)">引擎:</span> <span class="chip active" style="display:inline-block">apimart</span> <span class="chip" style="display:inline-block">即梦</span></div>
+        <div><span style="color: var(--muted)">比例:</span> <span class="chip" style="display:inline-block">16:9</span> <span class="chip active" style="display:inline-block">9:16</span> <span class="chip" style="display:inline-block">1:1</span></div>
+        <div><span style="color: var(--muted)">每条出:</span> <span class="chip active" style="display:inline-block">2 张</span></div>
+      </div>
+    </div>
+
+    <!-- prompt 卡片列表 -->
+    <div style="background: #fff; border: 1.5px solid var(--brand); box-shadow: 0 0 0 5px var(--brandSoft); border-radius: 14px; padding: 14px;">
+      <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
+        <div class="field-label" style="margin-bottom: 0">📝 PROMPT 列表</div>
+        <span class="small-text">3 条 · 上限 20</span>
+        <div style="flex:1"></div>
+        <span class="small-text">每条出 2 张, 共 6 张</span>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 8px">
+        <div class="pcard">
+          <div class="pcard-head">
+            <div class="pcard-num">1</div>
+            <div class="pcard-route">apimart · 9:16 · 2 张</div>
+            <div class="pcard-actions"><span>📋</span><span>✕</span></div>
+          </div>
+          <textarea rows="2">实体老板坐在店门口数硬币, 焦虑神情, 黄昏暖光</textarea>
+        </div>
+        <div class="pcard">
+          <div class="pcard-head">
+            <div class="pcard-num">2</div>
+            <div class="pcard-route">apimart · 9:16 · 2 张</div>
+            <div class="pcard-actions"><span>📋</span><span>✕</span></div>
+          </div>
+          <textarea rows="2">同一个老板对着电脑学习 AI, 表情专注, 屏幕反光</textarea>
+        </div>
+        <div class="pcard">
+          <div class="pcard-head">
+            <div class="pcard-num">3</div>
+            <div class="pcard-route">apimart · 9:16 · 2 张</div>
+            <div class="pcard-actions"><span>📋</span><span>✕</span></div>
+          </div>
+          <textarea rows="2">老板 1 个月后店里挂满订单, 笑容自信, 客流满满</textarea>
+        </div>
+        <div class="add-prompt">+ 添加 prompt</div>
+      </div>
+
+      <div class="footer-bar">
+        共 3 条 · 预计 ~1.5min (并发)
+        <div style="flex:1"></div>
+        <button class="submit">批量出 6 张 →</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="impl">
+    <strong>实现要点</strong>:
+    <ul>
+      <li>后端: <code>/api/image/batch-generate</code>, prompts list + 共享配置, 每条走 <code>tasks.run_async(image_engine.generate)</code> 拿 N 个 task_id</li>
+      <li>前端: PageImageGen 加卡片堆叠组件 (复用 D-075 的 DPromptCard)</li>
+      <li>结果页: N×n 张图组成 mosaic (按 prompt 分组), ImageWithLightbox 已有</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ============== B. 公众号封面批量 ============== -->
+<div class="scenario">
+  <h2>B · 公众号封面批量化 <span class="badge high">价值 高 · 成本 低</span></h2>
+  <div class="tagline">老板一周 5 篇公众号 · 一次出齐封面 · ~30min 工时</div>
+
+  <div class="meta-row">
+    <div class="meta-box">
+      <div class="meta-label">用户场景</div>
+      老板有一批待发的公众号文章 (从作品库选/手填标题), 一次性出齐封面. 当前 1 篇 1 篇出, 来回切换累.
+    </div>
+    <div class="meta-box amber">
+      <div class="meta-label">改造</div>
+      标题列表 (可从作品库批量带入), 共享风格 + 共享 n=2 候选, 出 N×2 张封面.
+    </div>
+  </div>
+
+  <div class="stage">
+    <!-- 共享风格 -->
+    <div class="shared-config">
+      <div class="field-label" style="margin-bottom: 8px">🎨 共享风格 (所有标题套同一风格)</div>
+      <div class="chip-row">
+        <span class="chip active">朴素手写</span>
+        <span class="chip">实拍场景</span>
+        <span class="chip">商务现代</span>
+        <span class="chip">复古港风</span>
+        <span class="chip">上传参考图</span>
+      </div>
+    </div>
+
+    <!-- 标题卡片列表 -->
+    <div style="background: #fff; border: 1.5px solid var(--brand); box-shadow: 0 0 0 5px var(--brandSoft); border-radius: 14px; padding: 14px;">
+      <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
+        <div class="field-label" style="margin-bottom: 0">📰 标题列表</div>
+        <span class="small-text">3 条 · 上限 10</span>
+        <div style="flex:1"></div>
+        <span class="chip">+ 从作品库批量导入</span>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 8px">
+        <div class="pcard">
+          <div class="pcard-head">
+            <div class="pcard-num">1</div>
+            <div class="pcard-route">每条出 2 张</div>
+            <div class="pcard-actions"><span>📋</span><span>✕</span></div>
+          </div>
+          <input value="实体老板别再硬扛了, AI 才是你的救命稻草" />
+        </div>
+        <div class="pcard">
+          <div class="pcard-head">
+            <div class="pcard-num">2</div>
+            <div class="pcard-route">每条出 2 张</div>
+            <div class="pcard-actions"><span>📋</span><span>✕</span></div>
+          </div>
+          <input value="开店 8 年我才悟透: 不是流量没了, 是你不会留客" />
+        </div>
+        <div class="pcard">
+          <div class="pcard-head">
+            <div class="pcard-num">3</div>
+            <div class="pcard-route">每条出 2 张</div>
+            <div class="pcard-actions"><span>📋</span><span>✕</span></div>
+          </div>
+          <input value="我用 ChatGPT 半个月, 文案产出从 1 篇变 10 篇" />
+        </div>
+        <div class="add-prompt">+ 添加标题</div>
+      </div>
+
+      <div class="footer-bar">
+        共 3 条 · 风格"朴素手写" · 预计 ~2min
+        <div style="flex:1"></div>
+        <button class="submit">批量出 6 张封面 →</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="impl">
+    <strong>实现要点</strong>:
+    <ul>
+      <li>后端: <code>/api/wechat/cover-batch</code>, titles list + style + n, 每条走 <code>tasks.run_async</code> 调现有 wechat.cover 逻辑</li>
+      <li>前端: PageWechat 加 "封面批量" 子页, 或在 Step 7 cover 上加 toggle "批量模式"</li>
+      <li>"+ 从作品库批量导入" 复用 works.list 接口, 多选已发的草稿 → 自动填标题</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ============== C. 数字人批量 ============== -->
+<div class="scenario">
+  <h2>C · 数字人 v5 批量化 <span class="badge high">价值 极高 · 成本 中</span></h2>
+  <div class="tagline">单条 3-10min, 并发起 5 条 ≈ 1 条耗时 · 这是大头价值 · ~1h 工时</div>
+
+  <div class="meta-row">
+    <div class="meta-box">
+      <div class="meta-label">用户场景</div>
+      老板录了 1 段文案分成 5 段, 或同主题 5 个不同切入点的文案, 一次跑 5 个数字人视频. 现在 1 个 1 个跑要 25-50min 真等.
+    </div>
+    <div class="meta-box amber">
+      <div class="meta-label">改造</div>
+      文案列表 (≤8 条), 共享数字人模板 + 共享 v5 模板, 并发起 N 个渲染 task.
+    </div>
+  </div>
+
+  <div class="stage">
+    <!-- 共享数字人 + v5 模板 -->
+    <div class="shared-config">
+      <div class="dh-row" style="gap: 12px; margin-bottom: 10px">
+        <div class="field-label" style="margin-bottom: 0; min-width: 100px">🎭 数字人</div>
+        <div class="dh-avatar"></div>
+        <div style="font-size: 12.5px">
+          <div style="font-weight: 600">实体老板·标准男声</div>
+          <div class="small-text">v3 · 50fps · 已克隆声音</div>
+        </div>
+        <div style="flex:1"></div>
+        <span class="chip">换数字人</span>
+      </div>
+      <div class="dh-row" style="gap: 12px">
+        <div class="field-label" style="margin-bottom: 0; min-width: 100px">🎬 v5 模板</div>
+        <div style="font-size: 12.5px">
+          <div style="font-weight: 600">"焦虑 → 解决方案" 12 段模板</div>
+          <div class="small-text">9:16 · 适合卖点拆解 · 30s±</div>
+        </div>
+        <div style="flex:1"></div>
+        <span class="chip">换模板</span>
+      </div>
+    </div>
+
+    <!-- 文案卡片列表 -->
+    <div style="background: #fff; border: 1.5px solid var(--brand); box-shadow: 0 0 0 5px var(--brandSoft); border-radius: 14px; padding: 14px;">
+      <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
+        <div class="field-label" style="margin-bottom: 0">📝 文案列表</div>
+        <span class="small-text">3 条 · 上限 8 (避免 dreamina credits 爆)</span>
+        <div style="flex:1"></div>
+        <span class="chip">+ 从作品库导入</span>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 8px">
+        <div class="pcard">
+          <div class="pcard-head">
+            <div class="pcard-num">1</div>
+            <div class="pcard-route">~3min · seedance2.0fast</div>
+            <div class="pcard-actions"><span>📋</span><span>✕</span></div>
+          </div>
+          <textarea rows="3">很多实体老板跟我说做不下去了. 我问他们一句: 你最近一次主动学新东西是什么时候? 90% 答不上来. 这就是问题.</textarea>
+          <div class="pcard-extras">⏱ 28s · 预计 ~3min · 28s × seedance2.0fast</div>
+        </div>
+        <div class="pcard">
+          <div class="pcard-head">
+            <div class="pcard-num">2</div>
+            <div class="pcard-route">~3min · seedance2.0fast</div>
+            <div class="pcard-actions"><span>📋</span><span>✕</span></div>
+          </div>
+          <textarea rows="3">AI 不是来替代你的, 是来给你打工的. 一个能用好 AI 的老板, 抵 5 个员工的产出. 关键是你愿不愿意花 1 小时学.</textarea>
+          <div class="pcard-extras">⏱ 30s · 预计 ~3min</div>
+        </div>
+        <div class="pcard">
+          <div class="pcard-head">
+            <div class="pcard-num">3</div>
+            <div class="pcard-route">~3min · seedance2.0fast</div>
+            <div class="pcard-actions"><span>📋</span><span>✕</span></div>
+          </div>
+          <textarea rows="3">我用 ChatGPT 三步: 1 喂业务背景, 2 让它当顾问问问题, 3 用它的答案再迭代. 你也试试.</textarea>
+          <div class="pcard-extras">⏱ 26s · 预计 ~3min</div>
+        </div>
+        <div class="add-prompt">+ 添加文案</div>
+      </div>
+
+      <div class="footer-bar">
+        共 3 条 · 并发 ~3min 出齐 · 串行要 ~9min
+        <div style="flex:1"></div>
+        <button class="submit">批量起渲染 3 条 →</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="impl">
+    <strong>实现要点</strong>:
+    <ul>
+      <li>后端: <code>/api/dhv5/batch-render</code>, scripts list + 共享 dh + 共享 template, 每条走 <code>dhv5_pipeline.render_async</code></li>
+      <li>前端: PageMake 加 "批量数字人" 子页, 或在 dhv5 那步加 toggle</li>
+      <li>结果页: N 个 task 卡片 (复用 D-075 的 DTaskCard), 每张完成后 video tag</li>
+      <li><strong>注意上限 ≤8</strong>: 数字人 + 视频合成对 GPU 重, 太多并发可能撑不住. 8 条 24min, 老板等得起又不至于卡死</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ============== 优先级 + 拍板 ============== -->
+<div class="ranking">
+  <h3>🎯 我的建议优先级</h3>
+  <table>
+    <thead><tr><th>顺序</th><th>场景</th><th>工时</th><th>理由</th></tr></thead>
+    <tbody>
+      <tr><td><strong>1</strong></td><td>A · 出图批量</td><td>~30min</td><td>实现最快, 跟 D-075 即梦视频对称, 复用最多, 立即可用</td></tr>
+      <tr><td><strong>2</strong></td><td>B · 公众号封面批量</td><td>~30min</td><td>高频场景, 一周 5 篇时省时间最多</td></tr>
+      <tr><td><strong>3</strong></td><td>C · 数字人批量</td><td>~1h</td><td>单条最慢, 批量并发省时间最大. 但实现复杂度高一档, 放后面</td></tr>
+    </tbody>
+  </table>
+
+  <div style="margin-top: 14px; padding: 10px 14px; background: var(--brandSoft); border-radius: 8px; font-size: 12.5px;">
+    <strong>提议</strong>: 一次 commit 干 A + B (都 ~30min, 共 1h, 复用 D-075 组件), 数字人 C 单独开一个 D 编号干. 你拍板做哪几个 + 顺序.
+  </div>
+</div>
+
+</body>
+</html>
