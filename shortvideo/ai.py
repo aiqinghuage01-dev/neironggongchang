@@ -48,18 +48,27 @@ class PersonaInjectedAI:
         max_tokens: int = 2048,
     ) -> LLMResult:
         from backend.services import persona as persona_service
+        from backend.services import guest_mode as _gm
         import time as _t
 
-        persona = persona_service.load_persona(deep=deep)
-        # D-031: deep=True 时附加行为记忆(默认 disabled,settings 开关)
-        if deep:
-            try:
-                from backend.services import memory_inject
-                mem = memory_inject.load_recent_memory()
-                if mem:
-                    persona = (persona or "") + "\n\n---\n\n" + mem
-            except Exception:
-                pass
+        # D-070: 访客模式 — 不注入"清华哥"人设, 走中性写作助手 system
+        if _gm.is_guest():
+            persona = (
+                "你是一位专业的中文写作助手, 帮老板的朋友/合作方/客户产出内容. "
+                "保持中性、专业、口语化, 不强加任何特定人设或业务植入. "
+                "按用户要求写, 不主动说'我是清华哥'之类身份."
+            )
+        else:
+            persona = persona_service.load_persona(deep=deep)
+            # D-031: deep=True 时附加行为记忆(默认 disabled,settings 开关)
+            if deep:
+                try:
+                    from backend.services import memory_inject
+                    mem = memory_inject.load_recent_memory()
+                    if mem:
+                        persona = (persona or "") + "\n\n---\n\n" + mem
+                except Exception:
+                    pass
         if persona and system:
             merged = f"{persona}\n\n---\n\n# 本次任务\n\n{system}"
         elif persona:

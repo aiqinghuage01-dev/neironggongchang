@@ -106,6 +106,10 @@ def maybe_log(
             return
         if tokens < 50:  # ping 等小调用不记
             return
+        # D-070: 访客模式不记录 (帮朋友写不算自己档案)
+        from backend.services import guest_mode
+        if guest_mode.is_guest():
+            return
         if not _is_enabled():
             return
         if not _passes_throttle(route_key or ""):

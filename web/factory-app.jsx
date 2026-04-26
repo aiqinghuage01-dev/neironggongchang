@@ -22,6 +22,13 @@ function FactoryApp() {
     window.addEventListener("ql-nav", h);
     return () => window.removeEventListener("ql-nav", h);
   }, []);
+  // D-070: 访客模式 banner 状态
+  const [guest, setGuest] = React.useState(() => api.isGuest());
+  React.useEffect(() => {
+    const h = (e) => setGuest(!!e.detail?.guest);
+    window.addEventListener("guest-mode-change", h);
+    return () => window.removeEventListener("guest-mode-change", h);
+  }, []);
   const render = () => {
     switch (page) {
       case "home":       return <PageHome onNav={setPage} />;
@@ -58,6 +65,26 @@ function FactoryApp() {
     }}>
       <Sidebar active={page} onNav={setPage} />
       <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", position: "relative" }}>
+        {/* D-070: 访客模式 banner — 提醒老板当前不在自己工作流, 防忘 */}
+        {guest && (
+          <div style={{
+            background: "#FFF4E5", color: "#B55B00",
+            borderBottom: "1px solid #FFB066",
+            padding: "8px 16px", fontSize: 12.5, fontWeight: 500,
+            display: "flex", alignItems: "center", gap: 10,
+          }}>
+            <span style={{ fontSize: 14 }}>🕶</span>
+            <span style={{ flex: 1 }}>
+              <b>访客模式</b> · 这次产出不进你的作品库 / 不学进偏好 / AI 走中性写作助手
+            </span>
+            <button onClick={() => api.setGuest(false)} style={{
+              background: "#fff", color: "#B55B00",
+              border: "1px solid #FFB066", borderRadius: 6,
+              padding: "3px 12px", fontSize: 12, fontWeight: 600,
+              cursor: "pointer", fontFamily: "inherit",
+            }}>切回我自己</button>
+          </div>
+        )}
         {render()}
       </div>
       {/* D-069: 顶栏 TaskBar 已删, 任务状态全部融入小华按钮徽章 + LiDock 任务 tab */}

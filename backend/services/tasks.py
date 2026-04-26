@@ -386,7 +386,14 @@ def run_async(
         payload=payload, estimated_seconds=estimated_seconds,
     )
 
+    # D-070: 访客模式跨 daemon thread 传递. capture 当前 request 的 guest 值,
+    # 在 worker 里 set_guest(captured) — 否则 daemon thread 起来时 contextvar
+    # 默认是 False, work_log/preference 又开始记录, 失去访客意义.
+    from backend.services import guest_mode
+    captured_guest = guest_mode.capture()
+
     def _worker():
+        guest_token = guest_mode.set_guest(captured_guest)
         try:
             update_progress(task_id, "准备 prompt...", pct=5)
             update_progress(task_id, progress_text, pct=15)
@@ -402,6 +409,8 @@ def run_async(
                 error=f"{type(e).__name__}: {e}",
                 status="failed",
             )
+        finally:
+            guest_mode.reset(guest_token)
 
     threading.Thread(target=_worker, daemon=True).start()
     return task_id
@@ -460,6 +469,10 @@ def _extract_tokens(r):
 
 def _autoinsert_text_work(*, kind: str, label: str | None, task_id: str, result: Any) -> None:
     """D-065: 文字 skill 完成时自动 insert_work(type=text). 失败吃掉."""
+    # D-070: 访客模式不入作品库 (朋友项目不该混进清华哥的作品)
+    from backend.services import guest_mode
+    if guest_mode.is_guest():
+        return
     skill = None
     for prefix, name in _KIND_TO_SKILL:
         if kind.startswith(prefix):

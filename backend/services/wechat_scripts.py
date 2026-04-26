@@ -119,7 +119,9 @@ def gen_section_image(prompt: str, size: str = "16:9", engine: str | None = None
                 pass  # 拷贝失败不影响主流程, 退化到只回 mmbiz_url
 
     # D-065: 段间图入作品库
-    if local_path:
+    # D-070: 访客模式跳过 (帮朋友写不入清华哥作品)
+    from backend.services import guest_mode as _gm
+    if local_path and not _gm.is_guest():
         try:
             from shortvideo.works import insert_work
             import json as _json

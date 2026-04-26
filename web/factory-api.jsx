@@ -2,6 +2,17 @@
 
 const API_BASE = (typeof localStorage !== "undefined" && localStorage.getItem("api_base")) || "http://127.0.0.1:8000";
 
+// D-070: 访客模式 — 各 fetch 自动带 X-Guest-Mode header, 后端 middleware 接收并写 contextvar
+function _isGuestMode() {
+  try { return localStorage.getItem("guest_mode") === "1"; }
+  catch (_) { return false; }
+}
+function _baseHeaders(extra) {
+  const h = Object.assign({}, extra || {});
+  if (_isGuestMode()) h["X-Guest-Mode"] = "1";
+  return h;
+}
+
 window.__apiLast = null;
 function _emitApi(info) {
   window.__apiLast = info;
@@ -55,30 +66,38 @@ async function _handleErrorResponse(r) {
 
 const api = {
   base: API_BASE,
+  isGuest: _isGuestMode,  // D-070: 暴露给 UI 用
+  setGuest(flag) {
+    try {
+      if (flag) localStorage.setItem("guest_mode", "1");
+      else localStorage.removeItem("guest_mode");
+      window.dispatchEvent(new CustomEvent("guest-mode-change", { detail: { guest: !!flag } }));
+    } catch (_) {}
+  },
   get(path) {
     return _trace("GET", path, async () => {
-      const r = await fetch(`${API_BASE}${path}`);
+      const r = await fetch(`${API_BASE}${path}`, { headers: _baseHeaders() });
       if (!r.ok) throw await _handleErrorResponse(r);
       return r.json();
     });
   },
   post(path, body) {
     return _trace("POST", path, async () => {
-      const r = await fetch(`${API_BASE}${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
+      const r = await fetch(`${API_BASE}${path}`, { method: "POST", headers: _baseHeaders({ "Content-Type": "application/json" }), body: JSON.stringify(body || {}) });
       if (!r.ok) throw await _handleErrorResponse(r);
       return r.json();
     });
   },
   patch(path, body) {
     return _trace("PATCH", path, async () => {
-      const r = await fetch(`${API_BASE}${path}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
+      const r = await fetch(`${API_BASE}${path}`, { method: "PATCH", headers: _baseHeaders({ "Content-Type": "application/json" }), body: JSON.stringify(body || {}) });
       if (!r.ok) throw await _handleErrorResponse(r);
       return r.json();
     });
   },
   del(path) {
     return _trace("DELETE", path, async () => {
-      const r = await fetch(`${API_BASE}${path}`, { method: "DELETE" });
+      const r = await fetch(`${API_BASE}${path}`, { method: "DELETE", headers: _baseHeaders() });
       if (!r.ok) throw await _handleErrorResponse(r);
       return r.json();
     });
@@ -87,7 +106,7 @@ const api = {
     return _trace("UPLOAD", path, async () => {
       const fd = new FormData();
       fd.append(fieldName, file);
-      const r = await fetch(`${API_BASE}${path}`, { method: "POST", body: fd });
+      const r = await fetch(`${API_BASE}${path}`, { method: "POST", headers: _baseHeaders(), body: fd });
       if (!r.ok) throw await _handleErrorResponse(r);
       return r.json();
     });

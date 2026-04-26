@@ -167,10 +167,44 @@ function Sidebar({ active, onNav }) {
       ))}
 
       <div style={{ flex: 1 }} />
+      {/* D-070: 访客模式开关 (侧栏底部, 设置上面) */}
+      <GuestToggle expanded={hover} />
       {NAV_BOTTOM.map((n) => (
         <NavItem key={n.id} item={n} active={active === n.id} expanded={hover} onClick={() => onNav(n.id)} />
       ))}
     </aside>
+  );
+}
+
+// D-070: 访客模式切换 — 默认 off, 切 on 主区上方出 banner + 不写档案
+function GuestToggle({ expanded }) {
+  const [guest, setGuest] = React.useState(() => api.isGuest());
+  React.useEffect(() => {
+    const h = (e) => setGuest(!!e.detail?.guest);
+    window.addEventListener("guest-mode-change", h);
+    return () => window.removeEventListener("guest-mode-change", h);
+  }, []);
+  function toggle() {
+    api.setGuest(!guest);
+    setGuest(!guest);
+  }
+  return (
+    <div
+      onClick={toggle}
+      title={guest ? "访客模式开启 · 这次不会记进你档案 · 点击关闭" : "访客模式 · 帮朋友写时打开, 不污染你的人设"}
+      style={{
+        display: "flex", alignItems: "center", gap: 10,
+        padding: "9px 10px", borderRadius: 8, cursor: "pointer",
+        background: guest ? "#FFF4E5" : "transparent",
+        color: guest ? "#B55B00" : T.muted,
+        fontSize: 13, fontWeight: guest ? 600 : 500,
+        marginBottom: 2, whiteSpace: "nowrap", overflow: "hidden",
+        border: guest ? `1px solid #FFB066` : "1px solid transparent",
+      }}
+    >
+      <span style={{ fontSize: 16, lineHeight: 1, flexShrink: 0 }}>🕶</span>
+      {expanded && <span style={{ flex: 1 }}>{guest ? "访客模式 (开)" : "访客模式"}</span>}
+    </div>
   );
 }
 

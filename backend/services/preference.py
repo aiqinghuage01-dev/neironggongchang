@@ -83,6 +83,10 @@ def _append(line: str) -> None:
 def maybe_learn(messages: list[dict[str, Any]], context: str = "") -> dict[str, Any]:
     """异步钩子 · 由 /api/chat 在返回后调用。失败吃掉。"""
     try:
+        # D-070: 访客模式不学偏好 (帮朋友聊不算自己档案)
+        from backend.services import guest_mode
+        if guest_mode.is_guest():
+            return {"skipped": "guest_mode"}
         if not _is_enabled():
             return {"skipped": "disabled"}
         if not messages:

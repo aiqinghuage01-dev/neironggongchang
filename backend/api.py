@@ -125,6 +125,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+# D-070: 访客模式中间件 — 读 X-Guest-Mode header → 写 contextvar.
+# 各服务 (work_log/preference/insert_work/persona) 自己读 contextvar 决定写不写.
+@app.middleware("http")
+async def _guest_mode_middleware(request, call_next):
+    from backend.services import guest_mode
+    flag = request.headers.get("X-Guest-Mode", "").strip() in ("1", "true", "yes")
+    token = guest_mode.set_guest(flag)
+    try:
+        return await call_next(request)
+    finally:
+        guest_mode.reset(token)
+
 # 静态资源 — 让前端拿到本地生成的图/音频/视频
 app.mount("/media", StaticFiles(directory=str(DATA_DIR)), name="media")
 
