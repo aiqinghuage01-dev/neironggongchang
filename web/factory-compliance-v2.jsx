@@ -155,31 +155,29 @@ function CStepInput({ text, setText, industry, setIndustry, onGo, loading }) {
 
 function CStepResult({ result, onPrev, onReset }) {
   // D-037b3: loading 状态由外层 LoadingProgress 显示, 这里只负责渲染完成态.
+  // 主次反转 (A 方案 · 2026-04-26): 改写 hero 顶部并排 + 违规清单可折叠
   if (!result) return null;
 
   const stats = result.stats || {};
   const violations = result.violations || [];
   const hasAny = (stats.total || 0) > 0;
-  const [tab, setTab] = React.useState("A");
-  const version = tab === "A" ? (result.version_a || {}) : (result.version_b || {});
-  const [copied, setCopied] = React.useState(false);
-  function copy() {
-    navigator.clipboard?.writeText(version.content || "");
-    setCopied(true); setTimeout(() => setCopied(false), 1500);
-  }
+  const versionA = result.version_a || {};
+  const versionB = result.version_b || {};
+  const [foldOpen, setFoldOpen] = React.useState(true);  // 默认展开 (有信息价值, 但能折叠)
 
   return (
-    <div style={{ padding: "32px 40px 120px", maxWidth: 1180, margin: "0 auto" }}>
-      <div style={{ marginBottom: 16, display: "flex", alignItems: "flex-start", gap: 16 }}>
+    <div style={{ padding: "32px 40px 120px", maxWidth: 1280, margin: "0 auto" }}>
+      {/* Hero (薄薄一条) */}
+      <div style={{ marginBottom: 16, display: "flex", alignItems: "flex-start", gap: 16, paddingBottom: 14, borderBottom: `1px solid ${T.borderSoft}` }}>
         <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 6 }}>
-            {hasAny ? "🛡️ 审查完成 · 发现违规" : "✅ 审查完成 · 无违规"}
+          <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 4 }}>
+            {hasAny ? `🛡️ 审查完成 · 发现 ${stats.total || 0} 处违规` : "✅ 审查完成 · 无违规"}
           </div>
           <div style={{ fontSize: 12, color: T.muted }}>
             扫描范围: {result.scan_scope || "通用审查"} · {result.tokens?.total || "?"} tokens
           </div>
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
+        <div style={{ display: "flex", gap: 6 }}>
           <StatBadge color={T.red}   count={stats.high || 0}   label="高危" />
           <StatBadge color={T.amber} count={stats.medium || 0} label="中危" />
           <StatBadge color={T.brand} count={stats.low || 0}    label="低危" />
@@ -187,56 +185,96 @@ function CStepResult({ result, onPrev, onReset }) {
       </div>
 
       {result.summary && (
-        <div style={{ padding: 14, background: hasAny ? T.redSoft : T.brandSoft, border: `1px solid ${hasAny ? T.red + "44" : T.brand + "44"}`, borderRadius: 10, marginBottom: 14, fontSize: 13.5, color: hasAny ? T.red : T.brand, fontWeight: 500, lineHeight: 1.7 }}>
+        <div style={{ padding: 12, background: hasAny ? T.redSoft : T.brandSoft, borderRadius: 8, marginBottom: 16, fontSize: 13, color: hasAny ? T.red : T.brand, fontWeight: 500, lineHeight: 1.6 }}>
           💬 {result.summary}
         </div>
       )}
 
+      {/* 2 版改写并排 (A 方案核心: hero 双卡, 主行动) */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
+        <RewriteCard variant="A" version={versionA} />
+        <RewriteCard variant="B" version={versionB} />
+      </div>
+
+      {/* 违规清单 (可折叠, 默认展开) */}
       {violations.length > 0 && (
-        <div style={{ background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 12, padding: 18, marginBottom: 14 }}>
-          <div style={{ fontSize: 15, fontWeight: 600, color: T.text, marginBottom: 12 }}>📋 违规清单</div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {violations.map((v, i) => <ViolationRow key={i} v={v} />)}
+        <div style={{ background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 12, marginBottom: 16, overflow: "hidden" }}>
+          <div onClick={() => setFoldOpen(!foldOpen)}
+            style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 18px", cursor: "pointer", userSelect: "none" }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = T.bg2; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = "#fff"; }}
+          >
+            <span style={{ fontSize: 14, fontWeight: 600, color: T.text }}>📋 违规清单 · {violations.length} 处</span>
+            <span style={{ fontSize: 11.5, color: T.muted2 }}>(点击{foldOpen ? "折叠" : "展开"})</span>
+            <span style={{ flex: 1 }} />
+            <span style={{ color: T.muted, fontSize: 12, transform: foldOpen ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s" }}>▼</span>
           </div>
+          {foldOpen && (
+            <div style={{ padding: "0 18px 16px", display: "flex", flexDirection: "column", gap: 6, borderTop: `1px solid ${T.borderSoft}`, paddingTop: 12 }}>
+              {violations.map((v, i) => <ViolationRow key={i} v={v} />)}
+            </div>
+          )}
         </div>
       )}
-
-      {/* 2 版改写 Tab */}
-      <div style={{ background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 12, padding: 18, marginBottom: 14 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12, borderBottom: `1px solid ${T.bg3}`, paddingBottom: 10 }}>
-          <div style={{ fontSize: 15, fontWeight: 600, color: T.text, flex: 1 }}>✍️ 2 版改写</div>
-          <div style={{ display: "flex", gap: 2, background: T.bg2, padding: 3, borderRadius: 100 }}>
-            {["A", "B"].map(t => (
-              <button key={t} onClick={() => setTab(t)} style={{
-                padding: "5px 14px", fontSize: 12, borderRadius: 100, border: "none", cursor: "pointer", fontFamily: "inherit",
-                background: tab === t ? "#fff" : "transparent",
-                color: tab === t ? T.text : T.muted,
-                fontWeight: tab === t ? 600 : 500,
-              }}>
-                {t === "A" ? "保守版 · 100% 合规" : "营销版 · 保留吸引力"}
-              </button>
-            ))}
-          </div>
-          <Btn size="sm" variant={copied ? "soft" : "outline"} onClick={copy}>{copied ? "✓ 已复制" : "📋 复制版本 " + tab}</Btn>
-        </div>
-
-        <div style={{ fontSize: 11.5, color: T.muted, marginBottom: 10 }}>
-          合规度 {version.compliance || 0}% · {version.word_count || (version.content || "").length} 字 · {version.description || ""}
-        </div>
-        {version.kept_marketing?.length > 0 && (
-          <div style={{ fontSize: 11.5, color: T.brand, background: T.brandSoft, padding: "6px 10px", borderRadius: 6, marginBottom: 10 }}>
-            ✨ 保留的营销点: {version.kept_marketing.join(" · ")}
-          </div>
-        )}
-        <textarea value={version.content || ""} readOnly
-          style={{ width: "100%", border: "none", outline: "none", background: T.bg2, borderRadius: 6, padding: 14, fontSize: 14, fontFamily: "inherit", resize: "vertical", lineHeight: 1.9, color: T.text, minHeight: 280 }} />
-      </div>
 
       <div style={{ display: "flex", gap: 10 }}>
         <Btn variant="outline" onClick={onPrev}>← 改输入</Btn>
         <div style={{ flex: 1 }} />
         <Btn variant="primary" onClick={onReset}>再查一段</Btn>
       </div>
+    </div>
+  );
+}
+
+// 改写卡 (并排 hero · A 方案 2026-04-26)
+function RewriteCard({ variant, version }) {
+  const isA = variant === "A";
+  const accent = isA ? T.brand : T.amber;
+  const accentSoft = isA ? T.brandSoft : T.amberSoft;
+  const title = isA ? "保守版" : "营销版";
+  const subtitle = isA ? "100% 合规 / 怕封号选这个" : "保留吸引力 / 有权重号选这个";
+  const [copied, setCopied] = React.useState(false);
+  function copy() {
+    navigator.clipboard?.writeText(version.content || "");
+    setCopied(true); setTimeout(() => setCopied(false), 1500);
+  }
+  const compliance = version.compliance || 0;
+  const wc = version.word_count || (version.content || "").length;
+  return (
+    <div style={{
+      background: "#fff", border: `1.5px solid ${accent}`, borderRadius: 14,
+      padding: 18, boxShadow: `0 0 0 4px ${accentSoft}`,
+      display: "flex", flexDirection: "column",
+    }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, paddingBottom: 10, borderBottom: `1px dashed ${T.borderSoft}`, marginBottom: 12 }}>
+        <span style={{ fontSize: 11.5, padding: "3px 8px", borderRadius: 4, background: accentSoft, color: accent, fontWeight: 600 }}>
+          {title} · {compliance} 分
+        </span>
+        <span style={{ fontSize: 13, fontWeight: 600, color: T.text, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {subtitle}
+        </span>
+        <button onClick={copy} style={{
+          background: copied ? accentSoft : "#fff", border: `1px solid ${copied ? accent : T.border}`,
+          color: copied ? accent : T.muted, padding: "4px 10px", borderRadius: 6,
+          fontSize: 11.5, cursor: "pointer", fontFamily: "inherit", fontWeight: 500,
+        }}>{copied ? "✓ 已复制" : `📋 复制 ${variant}`}</button>
+      </div>
+      <div style={{ fontSize: 11, color: T.muted, marginBottom: 8 }}>
+        {wc} 字 · {version.description || ""}
+      </div>
+      <textarea value={version.content || ""} readOnly
+        style={{
+          width: "100%", border: "none", outline: "none",
+          background: T.bg2, borderRadius: 6, padding: 12,
+          fontSize: 13.5, fontFamily: "inherit", resize: "vertical",
+          lineHeight: 1.9, color: T.text, minHeight: 220, flex: 1,
+        }}
+      />
+      {!isA && version.kept_marketing?.length > 0 && (
+        <div style={{ fontSize: 11.5, color: accent, background: accentSoft, padding: "6px 10px", borderRadius: 5, marginTop: 8, lineHeight: 1.6 }}>
+          ✨ 保留: {version.kept_marketing.join(" · ")}
+        </div>
+      )}
     </div>
   );
 }

@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>违规审查 · 主次倒置 mockup</title>
+<style>
+  :root{
+    --brand:#2a6f4a; --brand-soft:#e8f3ed; --brand-deep:#1e4f34;
+    --text:#1a1a1a; --text2:#3d3d3d; --muted:#6b6960; --muted2:#a19e93;
+    --bg:#f7f5f0; --bg1:#fff; --bg2:#fcfaf6; --bg3:#f2efe7;
+    --border:#ece8df; --border-soft:#f2efe7;
+    --red:#b8422e; --red-soft:#f8e7e2;
+    --amber:#c47a1f; --amber-soft:#fdf4e3;
+  }
+  *{box-sizing:border-box} body{margin:0; font:14px/1.6 -apple-system, "PingFang SC", sans-serif; background:var(--bg); color:var(--text)}
+  h1,h2,h3{margin:0}
+  .wrap{max-width:1280px; margin:24px auto; padding:0 20px}
+  .h1{font-size:22px; font-weight:700; margin-bottom:6px}
+  .subtitle{color:var(--muted); font-size:13px; margin-bottom:24px}
+
+  .scene{background:var(--bg1); border:1px solid var(--border); border-radius:14px; margin-bottom:24px; overflow:hidden}
+  .scene-head{padding:14px 18px; border-bottom:1px solid var(--border-soft); background:#fafbfc; display:flex; align-items:center; gap:10px}
+  .scene-head .num{background:var(--brand); color:#fff; width:24px; height:24px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; font-size:12px; font-weight:700}
+  .scene-head .title{font-weight:600; font-size:15px}
+  .scene-head .why{color:var(--muted); font-size:12.5px; margin-left:auto}
+  .scene-body{padding:24px 32px}
+
+  /* ==== A 方案: 改写 hero + 违规折叠 ==== */
+  .a-hero{display:flex; align-items:flex-start; gap:14px; margin-bottom:20px; padding-bottom:14px; border-bottom:1px solid var(--border-soft)}
+  .a-hero .h-title{font-size:20px; font-weight:700}
+  .a-hero .h-meta{font-size:12px; color:var(--muted); margin-top:4px}
+  .a-hero .h-stats{display:flex; gap:6px; margin-left:auto}
+  .stat-pill{padding:4px 10px; border-radius:6px; text-align:center; min-width:50px; font-size:11px}
+  .stat-pill .num{font-size:15px; font-weight:700; display:block}
+  .stat-pill.red{background:#f8e7e244; border:1px solid var(--red); color:var(--red)}
+  .stat-pill.amber{background:#fdf4e344; border:1px solid var(--amber); color:var(--amber)}
+  .stat-pill.green{background:var(--brand-soft); border:1px solid var(--brand); color:var(--brand)}
+
+  .a-summary{background:#f8e7e2; color:var(--red); padding:10px 14px; border-radius:8px; font-size:13px; margin-bottom:18px; line-height:1.6}
+
+  .a-grid{display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px}
+  .a-card{background:#fff; border:1.5px solid var(--brand); border-radius:14px; padding:18px; box-shadow:0 0 0 4px var(--brand-soft)}
+  .a-card.b{border-color:var(--amber); box-shadow:0 0 0 4px var(--amber-soft)}
+  .a-card .card-head{display:flex; align-items:center; gap:10px; padding-bottom:10px; border-bottom:1px dashed var(--border-soft); margin-bottom:12px}
+  .a-card .card-head .badge{font-size:11px; padding:3px 8px; border-radius:4px; background:var(--brand-soft); color:var(--brand-deep); font-weight:600}
+  .a-card.b .card-head .badge{background:var(--amber-soft); color:var(--amber)}
+  .a-card .card-head .title{font-weight:600; font-size:14px; flex:1}
+  .a-card .card-head .copy{background:#fff; border:1px solid var(--border); padding:4px 10px; border-radius:6px; font-size:11.5px; color:var(--muted); cursor:pointer}
+  .a-card .meta{font-size:11px; color:var(--muted); margin-bottom:8px}
+  .a-card .content{background:var(--bg2); border-radius:6px; padding:12px; font-size:13px; line-height:1.85; min-height:140px}
+  .a-card .kept{font-size:11.5px; color:var(--brand); background:var(--brand-soft); padding:5px 10px; border-radius:5px; margin-top:8px; line-height:1.6}
+
+  .a-fold{background:#fff; border:1px solid var(--border-soft); border-radius:10px; padding:14px 18px; cursor:pointer}
+  .a-fold .fold-head{display:flex; align-items:center; gap:10px; font-weight:600; font-size:14px}
+  .a-fold .fold-head .arrow{margin-left:auto; color:var(--muted)}
+  .a-fold .fold-body{display:none; margin-top:14px; padding-top:12px; border-top:1px solid var(--border-soft); flex-direction:column; gap:8px}
+  .a-fold.open .fold-body{display:flex}
+  .a-fold:hover{border-color:var(--brand)}
+
+  .v-row{padding:10px 12px; border-left:3px solid; border-radius:5px; font-size:12.5px; line-height:1.6}
+  .v-row.high{border-color:var(--red); background:#f8e7e2}
+  .v-row.medium{border-color:var(--amber); background:#fdf4e3}
+  .v-row.low{border-color:var(--brand); background:var(--brand-soft)}
+  .v-row .ll{font-weight:600; margin-right:6px}
+  .v-row.high .ll{color:var(--red)}
+  .v-row.medium .ll{color:var(--amber)}
+  .v-row.low .ll{color:var(--brand)}
+  .v-row .orig{color:var(--text); margin-left:6px}
+  .v-row .fix{color:var(--brand); font-weight:500; margin-left:8px}
+
+  .a-actions{display:flex; gap:10px; margin-top:18px}
+  .btn{background:#fff; border:1px solid var(--border); color:var(--text2); padding:7px 14px; border-radius:8px; font-size:13px; cursor:pointer}
+  .btn.primary{background:var(--brand); color:#fff; border-color:var(--brand); font-weight:500}
+
+  /* ==== B 方案: 上下叠 + 违规中等位置 ==== */
+  .b-stacked{display:flex; flex-direction:column; gap:16px}
+
+  /* ==== C 方案: 三栏 ==== */
+  .c-grid{display:grid; grid-template-columns:1.2fr 1fr 1fr; gap:14px}
+  .c-col{background:#fff; border:1px solid var(--border-soft); border-radius:12px; padding:16px}
+  .c-col .col-title{font-weight:600; font-size:13px; margin-bottom:10px}
+  .c-col.violations{border-left:4px solid var(--red)}
+  .c-col.cons{border-left:4px solid var(--brand)}
+  .c-col.mkt{border-left:4px solid var(--amber)}
+
+  .anno{background:#fffbeb; border-left:3px solid var(--amber); padding:10px 14px; margin:18px 0 0; font-size:12.5px; color:var(--amber); border-radius:0 6px 6px 0; font-family: ui-monospace, monospace}
+
+  .vote{margin-top:24px; padding:18px; background:#fff; border:1.5px dashed var(--brand); border-radius:12px}
+  .vote h2{font-size:16px; margin-bottom:10px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1 class="h1">违规审查 · 信息架构反转</h1>
+  <div class="subtitle">现状: 违规清单 9 条占 720px, 改写文案被压底部 tab 只露 1 版. 改写才是终极产出, 违规是辅助参考. 下面 3 个候选给你拍.</div>
+
+  <!-- A 方案 -->
+  <div class="scene">
+    <div class="scene-head"><span class="num">A</span><span class="title">改写并排 hero + 违规折叠 (推荐)</span><span class="why">改写顶部并排、违规折叠 / 一进来直接拷贝</span></div>
+    <div class="scene-body">
+      <!-- 顶部 hero (薄薄一条) -->
+      <div class="a-hero">
+        <div>
+          <div class="h-title">🛡️ 审查完成 · 发现 9 处违规</div>
+          <div class="h-meta">扫描范围: 通用审查 · 8184 tokens</div>
+        </div>
+        <div class="h-stats">
+          <div class="stat-pill red"><span class="num">2</span>高危</div>
+          <div class="stat-pill amber"><span class="num">4</span>中危</div>
+          <div class="stat-pill green"><span class="num">3</span>低危</div>
+        </div>
+      </div>
+      <div class="a-summary">💬 共 9 处违规, 2 处高危必改否则大概率限流, 4 处中危建议改. 主要风险集中在不文明用语和迷信类词汇.</div>
+
+      <!-- 改写并排 -->
+      <div class="a-grid">
+        <div class="a-card">
+          <div class="card-head">
+            <span class="badge">保守版 · 97 分</span>
+            <span class="title">100% 合规 / 怕封号选这个</span>
+            <button class="copy">📋 复制 A</button>
+          </div>
+          <div class="meta">68 字 · 100% 合规 · 适合: 敏感行业/新号</div>
+          <div class="content">关注我, 了解一款日常体重管理方案, 温和辅助身材管理, 适合长期坚持, 不少朋友反馈体验不错. 目前有优惠活动, 截止到 2026 年 5 月 15 日, 感兴趣的可以私信我咨询.</div>
+        </div>
+        <div class="a-card b">
+          <div class="card-head">
+            <span class="badge">营销版 · 87 分</span>
+            <span class="title">保留吸引力 / 有权重号选这个</span>
+            <button class="copy">📋 复制 B</button>
+          </div>
+          <div class="meta">47 字 · 高危全改 · 中危酌情保留</div>
+          <div class="content">私信我, 了解这款口碑很好的轻体好物, 身边好多朋友用了都说惊喜, 限时优惠价 (截止 5 月 15 日), 想试试的别犹豫.</div>
+          <div class="kept">✨ 保留: 紧迫感引导 · 社交证言 · 价格吸引力</div>
+        </div>
+      </div>
+
+      <!-- 违规清单 (折叠) -->
+      <div class="a-fold open">
+        <div class="fold-head">
+          <span>📋 违规清单 (9 处, 点击折叠)</span>
+          <span class="arrow">▼</span>
+        </div>
+        <div class="fold-body">
+          <div class="v-row high"><span class="ll">🔴 高危</span><span class="orig">"路飞狗屁天选人选" / "狗屁不通的"</span><span class="fix">→ 删除或替换为 "站不住脚"</span></div>
+          <div class="v-row high"><span class="ll">🔴 高危</span><span class="orig">"神棍学" / "研究神棍学的资深人士"</span><span class="fix">→ "伪学说" / "忽悠学" / "江湖套路"</span></div>
+          <div class="v-row medium"><span class="ll">🟡 中危</span><span class="orig">"你都要遭到报应嘛"</span><span class="fix">→ "吃亏" / "翻车" / "踩坑"</span></div>
+          <div class="v-row medium"><span class="ll">🟡 中危</span><span class="orig">"我就是想死" / "濒死的感觉"</span><span class="fix">→ "用生命去体验极限" / "不惜一切代价"</span></div>
+          <div class="v-row medium"><span class="ll">🟡 中危</span><span class="orig">"易经八卦" / "气功"</span><span class="fix">→ 弱化处理</span></div>
+          <div class="v-row low"><span class="ll">🟢 低危</span><span class="orig">"... 还有 4 条 ..."</span></div>
+        </div>
+      </div>
+
+      <div class="a-actions">
+        <button class="btn">← 改输入</button>
+        <div style="flex:1"></div>
+        <button class="btn primary">再查一段</button>
+      </div>
+
+      <div class="anno">设计要点: 1) 改写并排两列, 用户进来一眼看到两个文案能直接拷贝. 2) 违规清单可折叠, 默认展开 (有信息价值, 但不抢主舞台). 3) hero 1 行薄, 不占空间. 4) 高危用红边框 / 中危橙 / 低危绿, 一眼能扫.</div>
+    </div>
+  </div>
+
+  <!-- B 方案 -->
+  <div class="scene">
+    <div class="scene-head"><span class="num">B</span><span class="title">改写上下叠 + 违规中间</span><span class="why">改写顶部, 违规中间夹层, 顺序读</span></div>
+    <div class="scene-body">
+      <div class="a-hero">
+        <div>
+          <div class="h-title">🛡️ 审查完成 · 9 处违规</div>
+        </div>
+        <div class="h-stats">
+          <div class="stat-pill red"><span class="num">2</span>高危</div>
+          <div class="stat-pill amber"><span class="num">4</span>中危</div>
+          <div class="stat-pill green"><span class="num">3</span>低危</div>
+        </div>
+      </div>
+
+      <div class="b-stacked">
+        <div class="a-card" style="margin-bottom:0">
+          <div class="card-head">
+            <span class="badge">保守版 · 97 分</span>
+            <span class="title">100% 合规 / 怕封号</span>
+            <button class="copy">📋 复制</button>
+          </div>
+          <div class="content">关注我, 了解一款日常体重管理方案, 温和辅助身材管理...</div>
+        </div>
+        <div class="a-card b" style="margin-bottom:0">
+          <div class="card-head">
+            <span class="badge">营销版 · 87 分</span>
+            <span class="title">保留吸引力 / 有权重</span>
+            <button class="copy">📋 复制</button>
+          </div>
+          <div class="content">私信我, 了解这款口碑很好的轻体好物...</div>
+          <div class="kept">✨ 保留: 紧迫感 · 社交证言 · 价格</div>
+        </div>
+        <div class="a-fold open">
+          <div class="fold-head"><span>📋 违规清单 (9 处)</span><span class="arrow">▼</span></div>
+          <div class="fold-body">
+            <div class="v-row high"><span class="ll">🔴</span><span class="orig">不文明用语 (2)</span></div>
+            <div class="v-row medium"><span class="ll">🟡</span><span class="orig">迷信类 (3)</span></div>
+            <div class="v-row low"><span class="ll">🟢</span><span class="orig">其他 (4)</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="anno">A 是横排, B 是竖排. 横屏宽屏 A 更好, 窄屏 B 不挤. 工厂电脑端用就 A, 兼容窄屏可走 B.</div>
+    </div>
+  </div>
+
+  <!-- C 方案 -->
+  <div class="scene">
+    <div class="scene-head"><span class="num">C</span><span class="title">三栏并排 (违规摘要 + A + B)</span><span class="why">一眼看全, 但每栏窄</span></div>
+    <div class="scene-body">
+      <div class="a-hero">
+        <div><div class="h-title">🛡️ 审查完成 · 9 处违规</div></div>
+        <div class="h-stats">
+          <div class="stat-pill red"><span class="num">2</span>高危</div>
+          <div class="stat-pill amber"><span class="num">4</span>中危</div>
+          <div class="stat-pill green"><span class="num">3</span>低危</div>
+        </div>
+      </div>
+      <div class="c-grid">
+        <div class="c-col violations">
+          <div class="col-title">📋 违规摘要</div>
+          <div class="v-row high" style="margin-bottom:6px"><span class="ll">🔴 不文明 ×2</span></div>
+          <div class="v-row medium" style="margin-bottom:6px"><span class="ll">🟡 迷信 ×3</span></div>
+          <div class="v-row medium" style="margin-bottom:6px"><span class="ll">🟡 死亡 ×1</span></div>
+          <div class="v-row low" style="margin-bottom:6px"><span class="ll">🟢 其他 ×3</span></div>
+          <button class="btn" style="margin-top:6px; width:100%">看详细修改建议</button>
+        </div>
+        <div class="c-col cons">
+          <div class="col-title">📝 保守版 · 97 分</div>
+          <div class="content" style="background:var(--bg2); padding:10px; border-radius:6px; font-size:12.5px; line-height:1.7; min-height:160px">关注我, 了解一款日常体重管理方案, 温和辅助身材管理...</div>
+          <button class="btn primary" style="width:100%; margin-top:8px">📋 复制保守版</button>
+        </div>
+        <div class="c-col mkt">
+          <div class="col-title">🚀 营销版 · 87 分</div>
+          <div class="content" style="background:var(--bg2); padding:10px; border-radius:6px; font-size:12.5px; line-height:1.7; min-height:160px">私信我, 了解这款口碑很好的轻体好物...</div>
+          <button class="btn primary" style="width:100%; margin-top:8px">📋 复制营销版</button>
+        </div>
+      </div>
+      <div class="anno">三栏一眼看全, 但每栏会窄. 1280px 屏幕勉强, 1440px 舒服. 不适合短文案 (空间浪费).</div>
+    </div>
+  </div>
+
+  <div class="vote">
+    <h2>你拍 → 我开干</h2>
+    <div style="line-height:2">
+      <div><b>A · 改写并排 + 违规折叠</b> (我推荐): 改写双卡顶部, 违规清单可折叠, 主次清楚, 进来就能拷贝</div>
+      <div><b>B · 改写上下 + 违规夹中间</b>: 单列竖排, 顺序: 保守 → 营销 → 违规. 适合窄屏</div>
+      <div><b>C · 三栏并排</b>: 一屏全览, 但每栏窄. 适合宽屏 1440+</div>
+    </div>
+    <div style="margin-top:12px; color:var(--muted); font-size:12.5px">想要别的就直接说. 速度排查 (Opus 跑 3 段 271s) 这一轮先放放, 你说 "跑 Opus 没问题" 我就先做 UI.</div>
+  </div>
+
+</div>
+</body>
+</html>
