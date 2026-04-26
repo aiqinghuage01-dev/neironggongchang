@@ -75,6 +75,9 @@ DEFAULT_STRUCTURE_ALLOC = {
     10: {"痛点型": 3, "对比型": 2, "步骤型": 2, "对话型": 2, "创新型": 1},
     5:  {"痛点型": 2, "对比型": 1, "步骤型": 1, "对话型": 1, "创新型": 0},
     3:  {"痛点型": 1, "对比型": 1, "步骤型": 1, "对话型": 0, "创新型": 0},
+    # D-068c: 支持 1/2 条快出 (前端默认就是 1, D-062e 求速度)
+    2:  {"痛点型": 1, "对比型": 1, "步骤型": 0, "对话型": 0, "创新型": 0},
+    1:  {"痛点型": 1, "对比型": 0, "步骤型": 0, "对话型": 0, "创新型": 0},
 }
 
 
@@ -104,7 +107,8 @@ def generate_batch(
 ) -> dict[str, Any]:
     """一次生成 n 条投流文案 + 风格对齐摘要 + lint 结果。"""
     context = _load_prompt_context()
-    alloc = _alloc_for(max(3, min(n, 15)))
+    # D-068c: 之前 max(3, ...) 让前端 n=1 实际生成 3 条 → 用户被骗。改 max(1, ...)
+    alloc = _alloc_for(max(1, min(n, 15)))
     alloc_desc = " + ".join(f"{v}条{k}" for k, v in alloc.items() if v > 0)
 
     system = f"""你在执行 touliu-agent skill · Step 2-3 批量生成。
@@ -253,7 +257,7 @@ def generate_batch_async(
     n: int = 5, channel: str = "douyin", run_lint: bool = True,
 ) -> str:
     """异步触发 generate_batch + 可选 lint, 立即返 task_id. 真跑 2-3 分钟 (Opus 6K system)."""
-    n = max(3, min(int(n), 15))
+    n = max(1, min(int(n), 15))  # D-068c: 同 generate_batch, 支持 1/2 条快出
     target_map = {"点头像进直播间": "live", "留资": "reserve", "加私域": "private", "到店": "visit"}
     ta = target_map.get(target_action, "live")
 

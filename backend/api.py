@@ -2165,7 +2165,7 @@ class TouliuGenerateReq(BaseModel):
     industry: str = Field("通用老板", description="行业 (大健康/美业/教育/金融/医美/通用老板)")
     target_action: str = Field("点头像进直播间",
         description="转化目标: 点头像进直播间 / 留资 / 加私域 / 到店")
-    n: int = Field(10, ge=3, le=15, description="出几条, 默认 10. 后端按结构自动分配 (痛/对/步/话/创)")
+    n: int = Field(10, ge=1, le=15, description="出几条 (1-15). 后端按结构自动分配 (痛/对/步/话/创). D-068c: 前端默认 1 求速度.")
     channel: str = Field("直播间", description="发布渠道, 例 '直播间' / '抖音正片' / '私信首条'")
     run_lint: bool = Field(True, description="是否顺手跑 lint 终检 (6 维: 字数/钩子/数据/Call/口语/禁忌)")
 
@@ -2180,7 +2180,7 @@ def touliu_generate(req: TouliuGenerateReq):
         pitch=req.pitch,
         industry=req.industry,
         target_action=req.target_action,
-        n=max(3, min(req.n, 15)),
+        n=max(1, min(req.n, 15)),
         channel=req.channel,
         run_lint=req.run_lint,
     )

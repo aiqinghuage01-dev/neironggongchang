@@ -73,6 +73,18 @@ def test_touliu_alloc_3_exact():
     assert sum(a.values()) == 3
 
 
+# D-068c: 支持 1/2 条快出 (前端默认 1)
+def test_touliu_alloc_1_exact():
+    a = touliu_pipeline._alloc_for(1)
+    assert sum(a.values()) == 1
+    assert a["痛点型"] == 1
+
+
+def test_touliu_alloc_2_exact():
+    a = touliu_pipeline._alloc_for(2)
+    assert sum(a.values()) == 2
+
+
 @pytest.mark.parametrize("n", [6, 7, 8, 11, 12, 15])
 def test_touliu_alloc_nonstandard_totals_match(n):
     """非标准 n 的缩放分配总数等于 n。"""
