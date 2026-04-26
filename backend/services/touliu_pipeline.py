@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Any
 
 from backend.services import skill_loader
+from backend.services import tasks as tasks_service
 from shortvideo.ai import get_ai_client
 
 SKILL_SLUG = "touliu-agent"
@@ -243,3 +244,36 @@ def lint_batch(batch: list[dict[str, Any]], target_action: str = "live") -> dict
             Path(tmp_path).unlink(missing_ok=True)
         except Exception:
             pass
+
+
+# ─── 异步 (D-037b6) ─────────────────────────────────────
+
+def generate_batch_async(
+    pitch: str, industry: str, target_action: str,
+    n: int = 5, channel: str = "douyin", run_lint: bool = True,
+) -> str:
+    """异步触发 generate_batch + 可选 lint, 立即返 task_id. 真跑 2-3 分钟 (Opus 6K system)."""
+    n = max(3, min(int(n), 15))
+    target_map = {"点头像进直播间": "live", "留资": "reserve", "加私域": "private", "到店": "visit"}
+    ta = target_map.get(target_action, "live")
+
+    def _run():
+        result = generate_batch(pitch=pitch, industry=industry, target_action=target_action, n=n, channel=channel)
+        if run_lint and result.get("batch"):
+            try:
+                result["lint"] = lint_batch(result["batch"], target_action=ta)
+            except Exception as e:
+                result["lint"] = {"ok": False, "error": f"lint 失败: {type(e).__name__}: {e}", "skipped": False}
+        return result
+
+    return tasks_service.run_async(
+        kind="touliu.generate",
+        label=f"投流 · {n} 条 · {pitch[:30]}",
+        ns="touliu",
+        page_id="ad",
+        step="generate",
+        payload={"pitch_preview": pitch[:200], "industry": industry, "n": n, "channel": channel},
+        estimated_seconds=150,
+        progress_text=f"AI 写 {n} 条投流文案 (按结构分配 + 6 维终检)...",
+        sync_fn=_run,
+    )

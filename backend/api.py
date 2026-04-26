@@ -1575,11 +1575,14 @@ class WechatWriteReq(BaseModel):
     outline: dict[str, Any] = Field(default_factory=dict, description="Step 3 输出的大纲 JSON")
 
 
-@app.post("/api/wechat/write", tags=["公众号"], summary="Step 4 写长文")
+@app.post("/api/wechat/write", tags=["公众号"], summary="Step 4 写长文 (异步, 立即返 task_id)")
 def wechat_write(req: WechatWriteReq):
-    """2000-3000 字方法论长文. 走 opus 路由 (质量优先, 慢 30-60s)."""
-    result = wechat_pipeline.write_article(req.topic, req.title, req.outline)
-    return result
+    """D-037b6 异步化: 立即返 task_id, daemon thread 跑 30-60s (Opus 长文 + DeepSeek 自检).
+
+    完成后 task.result = {article, self_check, tokens}.
+    """
+    task_id = wechat_pipeline.write_article_async(req.topic, req.title, req.outline)
+    return {"task_id": task_id, "status": "running", "estimated_seconds": 50, "page_id": "wechat"}
 
 
 # ─── 局部重写 (D-036) ────────────────────────────────────
@@ -1620,14 +1623,15 @@ class WechatSectionImageReq(BaseModel):
     size: str = Field("16:9", description="尺寸: 16:9 (横版默认) / 9:16 / 1:1")
 
 
-@app.post("/api/wechat/section-image", tags=["公众号"], summary="Step 5 真生一张段间图")
+@app.post("/api/wechat/section-image", tags=["公众号"], summary="Step 5 真生一张段间图 (异步, 立即返 task_id)")
 def wechat_section_image(req: WechatSectionImageReq):
-    """调 apimart GPT-Image-2 生图 + 自动上传微信图床.
-    耗时 30-60s. 返回 {mmbiz_url, media_url, local_path, prompt, size, elapsed_sec}."""
-    try:
-        return wechat_scripts.gen_section_image(req.prompt, size=req.size)
-    except wechat_scripts.WechatScriptError as e:
-        raise HTTPException(500, str(e))
+    """D-037b6 异步化: 立即返 task_id, daemon thread 跑 30-60s.
+
+    完成后 task.result = {mmbiz_url, media_url, local_path, prompt, size, elapsed_sec}.
+    autoFlow 用 apiPostThenWait 自动轮询.
+    """
+    task_id = wechat_scripts.gen_section_image_async(req.prompt, size=req.size)
+    return {"task_id": task_id, "status": "running", "estimated_seconds": 45, "page_id": "wechat"}
 
 
 # ─── Phase 3 · HTML 拼装 ─────────────────────────────────────
@@ -1971,23 +1975,21 @@ class TouliuGenerateReq(BaseModel):
     run_lint: bool = Field(True, description="是否顺手跑 lint 终检 (6 维: 字数/钩子/数据/Call/口语/禁忌)")
 
 
-@app.post("/api/touliu/generate", tags=["投流"], summary="一次出 n 条投流文案 (批量)")
+@app.post("/api/touliu/generate", tags=["投流"], summary="一次出 n 条投流文案 (异步, 立即返 task_id)")
 def touliu_generate(req: TouliuGenerateReq):
-    """走 opus 一次大批量出, 含 6K token system. 首跑 2-3 分钟, 缓存命中后快.
-    返回 {batch: [...], lint: {...}} (lint 是 run_lint=True 时附)."""
-    result = touliu_pipeline.generate_batch(
+    """D-037b6 异步化: 立即返 task_id, daemon thread 跑 2-3 分钟 (Opus 6K system + lint).
+
+    完成后 task.result = {batch, lint, alloc, style_summary, tokens}.
+    """
+    task_id = touliu_pipeline.generate_batch_async(
         pitch=req.pitch,
         industry=req.industry,
         target_action=req.target_action,
         n=max(3, min(req.n, 15)),
         channel=req.channel,
+        run_lint=req.run_lint,
     )
-    # 顺手 lint 一下,失败不阻塞返回
-    if req.run_lint and result.get("batch"):
-        target_map = {"点头像进直播间": "live", "留资": "reserve", "加私域": "private", "到店": "visit"}
-        ta = target_map.get(req.target_action, "live")
-        result["lint"] = touliu_pipeline.lint_batch(result["batch"], target_action=ta)
-    return result
+    return {"task_id": task_id, "status": "running", "estimated_seconds": 150, "page_id": "ad"}
 
 
 class TouliuLintReq(BaseModel):

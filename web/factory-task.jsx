@@ -246,6 +246,33 @@ function FailedRetry({ error, onRetry, onEdit, icon, title }) {
   );
 }
 
+// ─── pollUntilComplete + apiPostThenWait (autoFlow 用) ───────────
+// autoFlow (一气呵成的链, 如 wechat 8 步) 内部要 await 任务完成才能进下一步.
+// pollUntilComplete: 阻塞轮询某个 task_id 直到 ok/failed/cancelled.
+// apiPostThenWait: api.post + (如果返回 task_id 就轮询拿 result, 否则原样返回).
+//   这样 autoFlow 代码不用区分同步/异步 endpoint, 一律 await apiPostThenWait().
+async function pollUntilComplete(taskId, opts) {
+  opts = opts || {};
+  const interval = opts.interval || 3000;
+  const onProgress = opts.onProgress;
+  while (true) {
+    const t = await api.get(`/api/tasks/${taskId}`);
+    if (onProgress) try { onProgress(t); } catch (_) {}
+    if (t.status === "ok") return t.result;
+    if (t.status === "failed") throw new Error(t.error || "任务失败");
+    if (t.status === "cancelled") throw new Error("任务已取消");
+    await new Promise(r => setTimeout(r, interval));
+  }
+}
+
+async function apiPostThenWait(path, body, opts) {
+  const r = await api.post(path, body || {});
+  if (r && typeof r === "object" && r.task_id && r.status === "running") {
+    return pollUntilComplete(r.task_id, opts);
+  }
+  return r;
+}
+
 // ─── 工具 ────────────────────────────────────────────────
 function fmtSec(s) {
   s = Math.max(0, Math.floor(s || 0));

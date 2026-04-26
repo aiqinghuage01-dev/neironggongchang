@@ -22,46 +22,48 @@ function PageTouliu({ onNav }) {
   const [channel, setChannel] = React.useState("直播间");
 
   const [result, setResult] = React.useState(null);
+  const [taskId, setTaskId] = useTaskPersist("touliu");  // D-037b6
   const [skillInfo, setSkillInfo] = React.useState(null);
   React.useEffect(() => { api.get("/api/touliu/skill-info").then(setSkillInfo).catch(() => {}); }, []);
 
-  async function runStep({ nextStep, rollbackStep, clearSetter, apiCall }) {
-    if (clearSetter) clearSetter(null);
-    setStep(nextStep);
-    setLoading(true); setErr("");
-    try { await apiCall(); }
-    catch (e) { setErr(e.message); if (rollbackStep) setStep(rollbackStep); }
-    finally { setLoading(false); }
-  }
+  // D-037b6: 轮询 generate 任务
+  const poller = useTaskPoller(taskId, {
+    onComplete: (r) => { setResult(r); setTaskId(null); },
+    onError: (e) => { setErr(e || "生成失败"); /* 留 taskId 让 FailedRetry 渲染 */ },
+  });
 
-  function generate() {
+  async function generate() {
     if (!pitch.trim()) return;
-    return runStep({
-      nextStep: "result", rollbackStep: "input", clearSetter: setResult,
-      apiCall: async () => {
-        const r = await api.post("/api/touliu/generate", {
-          pitch: pitch.trim(), industry, target_action: targetAction, n, channel, run_lint: true,
-        });
-        setResult(r);
-      },
-    });
+    setErr(""); setResult(null); setTaskId(null);
+    setStep("result");
+    try {
+      const r = await api.post("/api/touliu/generate", {
+        pitch: pitch.trim(), industry, target_action: targetAction, n, channel, run_lint: true,
+      });
+      setTaskId(r.task_id);
+    } catch (e) { setErr(e.message); setStep("input"); }
+  }
+  function retry() {
+    setErr(""); setResult(null); setTaskId(null);
+    generate();
   }
   function reset() {
     setStep("input"); setErr("");
-    setResult(null);
+    setResult(null); setTaskId(null);
     clearWorkflow("touliu");
   }
 
-  // 工作流持久化 (D-016)
-  const wfState = { step, pitch, industry, targetAction, n, channel, result };
+  // 工作流持久化 (D-016 + D-037b6 加 taskId)
+  const wfState = { step, pitch, industry, targetAction, n, channel, result, taskId };
   const wfRestore = (s) => {
-    if (s.step) setStep(s.step);
     if (s.pitch != null) setPitch(s.pitch);
     if (s.industry != null) setIndustry(s.industry);
     if (s.targetAction != null) setTargetAction(s.targetAction);
     if (s.n != null) setN(s.n);
     if (s.channel != null) setChannel(s.channel);
     if (s.result) setResult(s.result);
+    if (s.taskId) setTaskId(s.taskId);
+    if (s.step) setStep(s.step);
   };
   const wf = useWorkflowPersist({ ns: "touliu", state: wfState, onRestore: wfRestore });
 
@@ -84,7 +86,27 @@ function PageTouliu({ onNav }) {
         {step === "input"  && <TLStepInput pitch={pitch} setPitch={setPitch} industry={industry} setIndustry={setIndustry}
           targetAction={targetAction} setTargetAction={setTargetAction} n={n} setN={setN} channel={channel} setChannel={setChannel}
           loading={loading} onGo={generate} skillInfo={skillInfo} />}
-        {step === "result" && <TLStepResult result={result} n={n} loading={loading} onPrev={() => setStep("input")} onRegen={generate} onReset={reset} onNav={onNav} pitch={pitch} />}
+        {step === "result" && (
+          poller.isRunning ? (
+            <LoadingProgress
+              task={poller.task}
+              icon="💰"
+              title="小华正在批量出投流..."
+              subtitle={`${pitch.slice(0, 40)} · ${n} 条 · ${industry}`}
+              onCancel={() => { poller.cancel(); setStep("input"); }}
+            />
+          ) : poller.isFailed || poller.isCancelled ? (
+            <FailedRetry
+              error={poller.error || err}
+              onRetry={retry}
+              onEdit={() => { setTaskId(null); setErr(""); setStep("input"); }}
+              icon="💰"
+              title={poller.isCancelled ? "任务已取消" : "投流没生成出来"}
+            />
+          ) : (
+            <TLStepResult result={result} n={n} loading={false} onPrev={() => setStep("input")} onRegen={generate} onReset={reset} onNav={onNav} pitch={pitch} />
+          )
+        )}
       </div>
     </div>
   );

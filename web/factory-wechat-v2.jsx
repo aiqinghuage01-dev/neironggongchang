@@ -113,7 +113,8 @@ function PageWechat({ onNav }) {
         setOutline(r); return r;
       });
       const writeR = await runStep_("write", async () => {
-        const r = await api.post("/api/wechat/write", { topic: topic.trim(), title, outline: outlineR });
+        // D-037b6: write 异步化, autoFlow 用 apiPostThenWait 自动轮询 task 完成
+        const r = await apiPostThenWait("/api/wechat/write", { topic: topic.trim(), title, outline: outlineR });
         setArticle(r); return r;
       });
 
@@ -129,7 +130,8 @@ function PageWechat({ onNav }) {
           const key = `img${i + 1}`;
           try {
             const imgR = await runStep_(key, async () => {
-              return await api.post("/api/wechat/section-image", { prompt: finalPlans[i].image_prompt, size: "16:9" });
+              // D-037b6: section-image 异步化, autoFlow 用 apiPostThenWait 自动等任务完成
+              return await apiPostThenWait("/api/wechat/section-image", { prompt: finalPlans[i].image_prompt, size: "16:9" });
             });
             finalPlans[i] = { ...finalPlans[i], status: "done", mmbiz_url: imgR.mmbiz_url, media_url: imgR.media_url, elapsed_sec: imgR.elapsed_sec };
             setImagePlans([...finalPlans]);
@@ -189,7 +191,8 @@ function PageWechat({ onNav }) {
     return runStep({
       nextStep: "write", rollbackStep: "outline", clearSetter: setArticle,
       apiCall: async () => {
-        const r = await api.post("/api/wechat/write", { topic: topic.trim(), title: pickedTitle, outline });
+        // D-037b6: write 异步化, 用 apiPostThenWait 自动等任务完成 (后台真在 daemon thread 跑, 浏览器轻量轮询不会被节流断)
+        const r = await apiPostThenWait("/api/wechat/write", { topic: topic.trim(), title: pickedTitle, outline });
         setArticle(r);
       },
     });
@@ -228,7 +231,8 @@ function PageWechat({ onNav }) {
     const plan = imagePlans[idx];
     setImagePlans(prev => prev.map((p, i) => i === idx ? { ...p, status: "running" } : p));
     try {
-      const r = await api.post("/api/wechat/section-image", { prompt: plan.image_prompt, size: "16:9" });
+      // D-037b6: section-image 异步化, 用 apiPostThenWait 自动轮询任务完成
+      const r = await apiPostThenWait("/api/wechat/section-image", { prompt: plan.image_prompt, size: "16:9" });
       setImagePlans(prev => prev.map((p, i) => i === idx ? { ...p, status: "done", mmbiz_url: r.mmbiz_url, media_url: r.media_url, elapsed_sec: r.elapsed_sec } : p));
     } catch (e) {
       setImagePlans(prev => prev.map((p, i) => i === idx ? { ...p, status: "failed", error: e.message } : p));

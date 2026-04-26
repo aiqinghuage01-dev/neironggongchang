@@ -297,3 +297,20 @@ def rewrite_section(full_article: str, selected: str, instruction: str = "") -> 
         "new_length": len(new_text),
         "tokens": r.total_tokens,
     }
+
+
+# ─── 异步 (D-037b6) ─────────────────────────────────────
+
+def write_article_async(topic: str, title: str, outline: dict) -> str:
+    """异步触发 write_article, 立即返 task_id. 真跑 30-60s (Opus 长文 + DeepSeek 自检)."""
+    return tasks_service.run_async(
+        kind="wechat.write",
+        label=f"公众号长文 · {(title or topic)[:40]}",
+        ns="wechat",
+        page_id="wechat",
+        step="write",
+        payload={"topic_preview": topic[:100], "title": title, "outline_keys": list((outline or {}).keys())},
+        estimated_seconds=50,
+        progress_text="AI 写长文 (2000-3000 字) + 三层自检...",
+        sync_fn=lambda: write_article(topic, title, outline),
+    )

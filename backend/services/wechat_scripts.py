@@ -23,6 +23,8 @@ import time
 from pathlib import Path
 from typing import Any
 
+from backend.services import tasks as tasks_service  # D-037b6 异步化
+
 from backend.services import skill_loader
 
 SKILL_SLUG = "公众号文章"
@@ -826,3 +828,20 @@ def push_to_wechat(
         "sanitized_html_path": str(sanitized_path),
         "avatar": avatar_meta,
     }
+
+
+# ─── 异步 (D-037b6) ─────────────────────────────────────
+
+def gen_section_image_async(prompt: str, size: str = "16:9") -> str:
+    """异步触发 gen_section_image, 立即返 task_id. 30-60s (apimart GPT-Image-2 + 微信图床上传)."""
+    return tasks_service.run_async(
+        kind="wechat.section-image",
+        label=f"段间图 · {prompt[:32]}",
+        ns="wechat",
+        page_id="wechat",
+        step="section-image",
+        payload={"prompt_preview": prompt[:200], "size": size},
+        estimated_seconds=45,
+        progress_text="apimart 生图 (16:9, GPT-Image-2) + 微信图床上传...",
+        sync_fn=lambda: gen_section_image(prompt, size=size),
+    )
