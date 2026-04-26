@@ -59,6 +59,24 @@ function PageVoicerewrite({ onNav }) {
   const [skillInfo, setSkillInfo] = React.useState(null);
   React.useEffect(() => { api.get("/api/voicerewrite/skill-info").then(setSkillInfo).catch(() => {}); }, []);
 
+  // D-037b5: write 异步任务. ref 存当前 task 的 angle/modeLabel 给 onComplete 用.
+  const [taskId, setTaskId] = useTaskPersist("voicerewrite");
+  const taskMetaRef = React.useRef({ angle: null, modeLabel: "" });
+  const poller = useTaskPoller(taskId, {
+    onComplete: (r) => {
+      const meta = taskMetaRef.current;
+      const v = { ...r, angle: meta.angle, mode_label: meta.modeLabel, ts: Date.now() };
+      setVersions((vs) => {
+        const next = [...vs, v];
+        setActiveVersionIdx(next.length - 1);
+        return next;
+      });
+      setScript(v);
+      setTaskId(null);
+    },
+    onError: (e) => { setErr(e || "改写失败"); },
+  });
+
   // D-062mm: 检测 make 那边丢过来的 voicerewrite_seed_transcript, 自动填 textarea
   // ⚠ 关键: 必须同步删 wf snap, 避免 D-016 useWorkflowPersist 的 restore effect
   // (注册顺序在我们后面, mount 时跑得晚) 把 transcript 覆盖回老的空值
@@ -93,45 +111,41 @@ function PageVoicerewrite({ onNav }) {
       },
     });
   }
-  // C5: 抽 callWrite 复用, 加 modes 字段 (backend 暂未读, 不破坏 schema)
+  // D-037b5: callWrite 异步, 返 task_id (不再返结果). 结果走 useTaskPoller onComplete.
   async function callWrite(angle, modeLabel) {
+    taskMetaRef.current = { angle, modeLabel };
     const r = await api.post("/api/voicerewrite/write", {
       transcript: transcript.trim(),
       skeleton: analyze?.skeleton || {},
       angle,
       modes: { with_biz: withBiz, pure_rewrite: pureRewrite },
     });
-    return { ...r, angle, mode_label: modeLabel, ts: Date.now() };
+    setTaskId(r.task_id);
   }
-  function pickAngle(angle) {
+  async function pickAngle(angle) {
     setPickedAngle(angle);
-    setVersions([]);
-    return runStep({
-      nextStep: "write", rollbackStep: "angles", clearSetter: setScript,
-      apiCall: async () => {
-        const modeLabel = withBiz ? (pureRewrite ? "结合业务+纯改写" : "结合业务") : "纯改写";
-        const v = await callWrite(angle, modeLabel);
-        setScript(v);
-        setVersions([v]);
-        setActiveVersionIdx(0);
-      },
-    });
+    setVersions([]); setScript(null); setErr(""); setTaskId(null);
+    setStep("write");
+    try {
+      const modeLabel = withBiz ? (pureRewrite ? "结合业务+纯改写" : "结合业务") : "纯改写";
+      await callWrite(angle, modeLabel);
+    } catch (e) { setErr(e.message); setStep("angles"); }
   }
-  // C5: 同/换角度再写一版 (复用 hotrewrite C4 的 versions[] 模式)
   async function addAnotherVersion(sameAngle = true, newAngle = null) {
     const angle = sameAngle ? pickedAngle : newAngle;
     if (!angle) return;
+    if (poller.isRunning) return;  // 防 race
     if (!sameAngle) setPickedAngle(newAngle);
-    setAppendingVersion(true); setErr("");
+    setErr("");
     try {
       const modeLabel = withBiz ? (pureRewrite ? "结合业务+纯改写" : "结合业务") : "纯改写";
-      const v = await callWrite(angle, modeLabel + (sameAngle ? " · 再来一版" : " · 换角度"));
-      const nv = [...versions, v];
-      setVersions(nv);
-      setActiveVersionIdx(nv.length - 1);
-      setScript(v);
+      await callWrite(angle, modeLabel + (sameAngle ? " · 再来一版" : " · 换角度"));
     } catch (e) { setErr(e.message); }
-    finally { setAppendingVersion(false); }
+  }
+  function retry() {
+    if (!pickedAngle) { setStep("angles"); return; }
+    setErr(""); setTaskId(null);
+    pickAngle(pickedAngle);
   }
   function switchVersion(idx) {
     setActiveVersionIdx(idx);
@@ -141,18 +155,21 @@ function PageVoicerewrite({ onNav }) {
     setStep("input"); setErr("");
     setTranscript(""); setAnalyze(null);
     setPickedAngle(null); setScript(null);
-    setVersions([]); setActiveVersionIdx(0);
+    setVersions([]); setActiveVersionIdx(0); setTaskId(null);
     clearWorkflow("voicerewrite");
   }
 
-  // 工作流持久化 (D-016)
-  const wfState = { step, transcript, analyze, pickedAngle, script };
+  // 工作流持久化 (D-016 + D-037b5 加 taskId/versions)
+  const wfState = { step, transcript, analyze, pickedAngle, script, versions, activeVersionIdx, taskId };
   const wfRestore = (s) => {
-    if (s.step) setStep(s.step);
     if (s.transcript != null) setTranscript(s.transcript);
     if (s.analyze) setAnalyze(s.analyze);
     if (s.pickedAngle) setPickedAngle(s.pickedAngle);
     if (s.script) setScript(s.script);
+    if (Array.isArray(s.versions)) setVersions(s.versions);
+    if (typeof s.activeVersionIdx === "number") setActiveVersionIdx(s.activeVersionIdx);
+    if (s.taskId) setTaskId(s.taskId);
+    if (s.step) setStep(s.step);
   };
   const wf = useWorkflowPersist({ ns: "voicerewrite", state: wfState, onRestore: wfRestore });
 
@@ -175,13 +192,33 @@ function PageVoicerewrite({ onNav }) {
         {step === "input"  && <VStepInput transcript={transcript} setTranscript={setTranscript} onGo={doAnalyze} loading={loading} skillInfo={skillInfo} />}
         {step === "angles" && <VStepAngles analyze={analyze} loading={loading} onPick={pickAngle} onPrev={() => setStep("input")} onRegen={doAnalyze}
           withBiz={withBiz} setWithBiz={setWithBiz} pureRewrite={pureRewrite} setPureRewrite={setPureRewrite} />}
-        {step === "write"  && <VStepWrite script={script} angle={pickedAngle} loading={loading} onPrev={() => setStep("angles")} onRewrite={() => pickAngle(pickedAngle)} onReset={reset} onNav={onNav}
-          versions={versions} activeVersionIdx={activeVersionIdx} onSwitchVersion={switchVersion}
-          allAngles={analyze?.angles || []}
-          onAddSameAngle={() => addAnotherVersion(true)}
-          onAddOtherAngle={(a) => addAnotherVersion(false, a)}
-          appendingVersion={appendingVersion}
-        />}
+        {step === "write"  && (
+          poller.isRunning && versions.length === 0 ? (
+            <LoadingProgress
+              task={poller.task}
+              icon="🎙️"
+              title="小华正在改写..."
+              subtitle={`${pickedAngle?.label || pickedAngle?.angle_id || ""} · ${transcript.length} 字`}
+              onCancel={() => { poller.cancel(); setStep("angles"); }}
+            />
+          ) : (poller.isFailed || poller.isCancelled) && versions.length === 0 ? (
+            <FailedRetry
+              error={poller.error || err}
+              onRetry={retry}
+              onEdit={() => { setTaskId(null); setErr(""); setStep("angles"); }}
+              icon="🎙️"
+              title={poller.isCancelled ? "任务已取消" : "改写没跑成功"}
+            />
+          ) : (
+            <VStepWrite script={script} angle={pickedAngle} loading={false} onPrev={() => setStep("angles")} onRewrite={() => pickAngle(pickedAngle)} onReset={reset} onNav={onNav}
+              versions={versions} activeVersionIdx={activeVersionIdx} onSwitchVersion={switchVersion}
+              allAngles={analyze?.angles || []}
+              onAddSameAngle={() => addAnotherVersion(true)}
+              onAddOtherAngle={(a) => addAnotherVersion(false, a)}
+              appendingVersion={poller.isRunning}
+            />
+          )
+        )}
       </div>
     </div>
   );

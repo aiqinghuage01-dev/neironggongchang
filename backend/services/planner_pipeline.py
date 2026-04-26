@@ -17,6 +17,7 @@ import re
 from typing import Any
 
 from backend.services import skill_loader
+from backend.services import tasks as tasks_service
 from shortvideo.ai import get_ai_client
 
 SKILL_SLUG = "content-planner"
@@ -182,6 +183,24 @@ def write_plan(brief: str, detected: dict[str, Any], level: dict[str, Any]) -> d
         "plan": obj,
         "tokens": {"total": r.total_tokens},
     }
+
+
+# ─── 异步 (D-037b5) ─────────────────────────────────────
+
+def write_plan_async(brief: str, detected: dict[str, Any], level: dict[str, Any]) -> str:
+    """异步触发 write_plan, 立即返 task_id. 真跑 30-60s."""
+    level_label = (level or {}).get("label") or (level or {}).get("name") or ""
+    return tasks_service.run_async(
+        kind="planner.write",
+        label=f"内容策划 · {level_label}" if level_label else "内容策划",
+        ns="planner",
+        page_id="planner",
+        step="write",
+        payload={"brief_preview": brief[:100], "level_label": level_label},
+        estimated_seconds=50,
+        progress_text="AI 写 6 模块完整方案...",
+        sync_fn=lambda: write_plan(brief, detected, level),
+    )
 
 
 # 兼容 add_skill.py 骨架命名 + 旧 API 调用

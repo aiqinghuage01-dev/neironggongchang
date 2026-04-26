@@ -17,6 +17,7 @@ import re
 from typing import Any
 
 from backend.services import skill_loader
+from backend.services import tasks as tasks_service
 from shortvideo.ai import get_ai_client
 
 SKILL_SLUG = "录音文案改写"
@@ -162,3 +163,21 @@ def write_script(transcript: str, skeleton: dict[str, Any], angle: dict[str, Any
         "self_check": obj.get("self_check") or {"overall_pass": False, "summary": "自检解析失败"},
         "tokens": {"total": r.total_tokens},
     }
+
+
+# ─── 异步 (D-037b5) ─────────────────────────────────────
+
+def write_script_async(transcript: str, skeleton: dict[str, Any], angle: dict[str, Any], **kwargs) -> str:
+    """异步触发 write_script, 立即返 task_id. 真跑 30-60s."""
+    angle_label = (angle or {}).get("label") or (angle or {}).get("angle_id") or ""
+    return tasks_service.run_async(
+        kind="voicerewrite.write",
+        label=f"录音改写 · {angle_label}" if angle_label else "录音改写",
+        ns="voicerewrite",
+        page_id="voicerewrite",
+        step="write",
+        payload={"transcript_len": len(transcript), "angle_label": angle_label},
+        estimated_seconds=50,
+        progress_text="AI 改写 + 自检 (保留口吻和经历)...",
+        sync_fn=lambda: write_script(transcript, skeleton, angle),
+    )

@@ -1838,10 +1838,15 @@ class HotrewriteWriteReq(BaseModel):
     angle: dict[str, Any] = Field(default_factory=dict, description="挑定的切入角度 JSON")
 
 
-@app.post("/api/hotrewrite/write", tags=["热点改写"], summary="Step 2 写口播文案 1800-2600 字")
+@app.post("/api/hotrewrite/write", tags=["热点改写"], summary="Step 2 写口播文案 (异步, 立即返 task_id)")
 def hotrewrite_write(req: HotrewriteWriteReq):
-    """走 opus 出长口播 + 六维自检 (开头钩子/数据/反差/金句/Call to action/字数)."""
-    return hotrewrite_pipeline.write_script(req.hotspot, req.breakdown, req.angle)
+    """D-037b5 异步化: 立即返 task_id, daemon thread 跑 30-60s.
+
+    走 opus 出长口播 + 六维自检 (开头钩子/数据/反差/金句/Call to action/字数).
+    完成后 task.result = {content, word_count, self_check, tokens}.
+    """
+    task_id = hotrewrite_pipeline.write_script_async(req.hotspot, req.breakdown, req.angle)
+    return {"task_id": task_id, "status": "running", "estimated_seconds": 50, "page_id": "hotrewrite"}
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -1877,10 +1882,15 @@ class VoicerewriteWriteReq(BaseModel):
     angle: dict[str, Any] = Field(default_factory=dict, description="挑定的语气锚点")
 
 
-@app.post("/api/voicerewrite/write", tags=["录音改写"], summary="Step 2 改写 + 自检一次性")
+@app.post("/api/voicerewrite/write", tags=["录音改写"], summary="Step 2 改写 + 自检一次性 (异步, 立即返 task_id)")
 def voicerewrite_write(req: VoicerewriteWriteReq):
-    """走 opus, 改写 + 自检一次出. 保留口播感, 修语序去口头禅, 不删核心观点."""
-    return voicerewrite_pipeline.write_script(req.transcript, req.skeleton, req.angle)
+    """D-037b5 异步化: 立即返 task_id, daemon thread 跑 30-60s.
+
+    走 opus 改写 + 自检一次出. 保留口播感, 修语序去口头禅, 不删核心观点.
+    完成后 task.result = {content, word_count, notes, self_check, tokens}.
+    """
+    task_id = voicerewrite_pipeline.write_script_async(req.transcript, req.skeleton, req.angle)
+    return {"task_id": task_id, "status": "running", "estimated_seconds": 50, "page_id": "voicerewrite"}
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -2026,11 +2036,16 @@ class PlannerWriteReq(BaseModel):
     level: dict[str, Any] = Field(default_factory=dict, description="挑定的目标档次 (保底/标准/最大化)")
 
 
-@app.post("/api/planner/write", tags=["内容策划"], summary="Step 2 出 6 模块完整方案")
+@app.post("/api/planner/write", tags=["内容策划"], summary="Step 2 出 6 模块完整方案 (异步, 立即返 task_id)")
 def planner_write(req: PlannerWriteReq):
-    """走 opus. 输出 6 模块: 准备清单 / 现场动作 / 稀缺素材机会 / 角色分工 /
-    发布节奏 / 总产出预估."""
-    return planner_pipeline.write_plan(req.brief, req.detected, req.level)
+    """D-037b5 异步化: 立即返 task_id, daemon thread 跑 30-60s.
+
+    走 opus 输出 6 模块: 准备清单 / 现场动作 / 稀缺素材机会 / 角色分工 /
+    发布节奏 / 总产出预估.
+    完成后 task.result = {plan, tokens}.
+    """
+    task_id = planner_pipeline.write_plan_async(req.brief, req.detected, req.level)
+    return {"task_id": task_id, "status": "running", "estimated_seconds": 50, "page_id": "planner"}
 
 
 

@@ -14,6 +14,7 @@ import re
 from typing import Any
 
 from backend.services import skill_loader
+from backend.services import tasks as tasks_service
 from shortvideo.ai import get_ai_client
 
 SKILL_SLUG = "热点文案改写V2"
@@ -169,3 +170,21 @@ def write_script(hotspot: str, breakdown: dict[str, Any], angle: dict[str, Any])
             "check": check_r.total_tokens,
         },
     }
+
+
+# ─── 异步 (D-037b5) ─────────────────────────────────────
+
+def write_script_async(hotspot: str, breakdown: dict[str, Any], angle: dict[str, Any], **kwargs) -> str:
+    """异步触发 write_script, 立即返 task_id. 真跑 30-60s (write + self-check 两次 AI)."""
+    angle_label = (angle or {}).get("label") or (angle or {}).get("angle_id") or ""
+    return tasks_service.run_async(
+        kind="hotrewrite.write",
+        label=f"热点改写 · {angle_label}" if angle_label else "热点改写",
+        ns="hotrewrite",
+        page_id="hotrewrite",
+        step="write",
+        payload={"hotspot_preview": hotspot[:100], "angle_label": angle_label},
+        estimated_seconds=50,
+        progress_text="AI 写口播文案 + 自检 (1800-2600 字)...",
+        sync_fn=lambda: write_script(hotspot, breakdown, angle),
+    )

@@ -16,8 +16,15 @@ function PagePlanner({ onNav }) {
   const [analysis, setAnalysis] = React.useState(null);
   const [pickedLevel, setPickedLevel] = React.useState(null);
   const [planResult, setPlanResult] = React.useState(null);
+  const [taskId, setTaskId] = useTaskPersist("planner");  // D-037b5
   const [skillInfo, setSkillInfo] = React.useState(null);
   React.useEffect(() => { api.get("/api/planner/skill-info").then(setSkillInfo).catch(() => {}); }, []);
+
+  // D-037b5 轮询 write_plan 任务
+  const poller = useTaskPoller(taskId, {
+    onComplete: (r) => { setPlanResult(r); setTaskId(null); },
+    onError: (e) => { setErr(e || "策划失败"); /* 留 taskId 让 FailedRetry 渲染 */ },
+  });
 
   async function runStep({ nextStep, rollbackStep, clearSetter, apiCall }) {
     if (clearSetter) clearSetter(null);
@@ -38,31 +45,35 @@ function PagePlanner({ onNav }) {
       },
     });
   }
-  function pickLevel(level) {
+  async function pickLevel(level) {
     setPickedLevel(level);
-    return runStep({
-      nextStep: "plan", rollbackStep: "levels", clearSetter: setPlanResult,
-      apiCall: async () => {
-        const r = await api.post("/api/planner/write", {
-          brief: brief.trim(), detected: analysis?.detected || {}, level,
-        });
-        setPlanResult(r);
-      },
-    });
+    setStep("plan"); setErr(""); setPlanResult(null); setTaskId(null);
+    try {
+      const r = await api.post("/api/planner/write", {
+        brief: brief.trim(), detected: analysis?.detected || {}, level,
+      });
+      setTaskId(r.task_id);  // 后端立即返 task_id, useTaskPoller 接着轮
+    } catch (e) { setErr(e.message); setStep("levels"); }
+  }
+  function retry() {
+    if (!pickedLevel) { setStep("levels"); return; }
+    setErr(""); setPlanResult(null); setTaskId(null);
+    pickLevel(pickedLevel);
   }
   function reset() {
     setStep("input"); setErr(""); setBrief(""); setAnalysis(null);
-    setPickedLevel(null); setPlanResult(null);
+    setPickedLevel(null); setPlanResult(null); setTaskId(null);
     clearWorkflow("planner");
   }
 
-  const wfState = { step, brief, analysis, pickedLevel, planResult };
+  const wfState = { step, brief, analysis, pickedLevel, planResult, taskId };
   const wfRestore = (s) => {
-    if (s.step) setStep(s.step);
     if (s.brief != null) setBrief(s.brief);
     if (s.analysis) setAnalysis(s.analysis);
     if (s.pickedLevel) setPickedLevel(s.pickedLevel);
     if (s.planResult) setPlanResult(s.planResult);
+    if (s.taskId) setTaskId(s.taskId);
+    if (s.step) setStep(s.step);
   };
   const wf = useWorkflowPersist({ ns: "planner", state: wfState, onRestore: wfRestore });
 
@@ -82,7 +93,27 @@ function PagePlanner({ onNav }) {
         )}
         {step === "input"  && <PStepInput brief={brief} setBrief={setBrief} onGo={doAnalyze} loading={loading} />}
         {step === "levels" && <PStepLevels analysis={analysis} loading={loading} onPick={pickLevel} onPrev={() => setStep("input")} onRegen={doAnalyze} />}
-        {step === "plan"   && <PStepPlan plan={planResult} level={pickedLevel} loading={loading} onPrev={() => setStep("levels")} onReset={reset} onNav={onNav} brief={brief} />}
+        {step === "plan"   && (
+          poller.isRunning ? (
+            <LoadingProgress
+              task={poller.task}
+              icon="🗓️"
+              title="小华正在写策划..."
+              subtitle={`${pickedLevel?.label || pickedLevel?.name || ""} · ${brief.length} 字`}
+              onCancel={() => { poller.cancel(); setStep("levels"); }}
+            />
+          ) : poller.isFailed || poller.isCancelled ? (
+            <FailedRetry
+              error={poller.error || err}
+              onRetry={retry}
+              onEdit={() => { setTaskId(null); setErr(""); setStep("levels"); }}
+              icon="🗓️"
+              title={poller.isCancelled ? "任务已取消" : "策划没跑成功"}
+            />
+          ) : (
+            <PStepPlan plan={planResult} level={pickedLevel} loading={false} onPrev={() => setStep("levels")} onReset={reset} onNav={onNav} brief={brief} />
+          )
+        )}
       </div>
     </div>
   );
