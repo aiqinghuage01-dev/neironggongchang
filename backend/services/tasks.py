@@ -277,6 +277,58 @@ def counts() -> dict[str, int]:
     return out
 
 
+def run_async(
+    *,
+    kind: str,
+    label: str | None = None,
+    ns: str | None = None,
+    page_id: str | None = None,
+    step: str | None = None,
+    payload: Any = None,
+    estimated_seconds: int | None = None,
+    progress_text: str = "AI 处理中...",
+    sync_fn,
+) -> str:
+    """D-037b5 helper: 把一个同步函数包成异步任务, 立即返 task_id.
+
+    spawn daemon thread 跑 sync_fn(), 推 5%/15%/95%/100% 真里程碑:
+      - 5%  "准备 prompt..."
+      - 15% progress_text (AI 真活的开始)
+      - sync_fn() 跑 (这段 AI 黑盒, 进度条卡 15% 不动 = 真进度: AI 在想)
+      - is_cancelled 检查
+      - 95% "整理结果..."
+      - finish_task(result, status=ok)
+
+    异常路径: sync_fn 抛 → finish_task(error=..., status=failed)
+
+    适用场景: 单次 AI 调用 + 不拆段的 skill (baokuan / hotrewrite / voicerewrite / planner / ...).
+    复杂场景 (如 compliance 拆 3 段) 仍要自己写 worker.
+    """
+    task_id = create_task(
+        kind=kind, label=label, ns=ns, page_id=page_id, step=step,
+        payload=payload, estimated_seconds=estimated_seconds,
+    )
+
+    def _worker():
+        try:
+            update_progress(task_id, "准备 prompt...", pct=5)
+            update_progress(task_id, progress_text, pct=15)
+            result = sync_fn()
+            if is_cancelled(task_id):
+                return
+            update_progress(task_id, "整理结果...", pct=95)
+            finish_task(task_id, result=result)
+        except Exception as e:
+            finish_task(
+                task_id,
+                error=f"{type(e).__name__}: {e}",
+                status="failed",
+            )
+
+    threading.Thread(target=_worker, daemon=True).start()
+    return task_id
+
+
 def cleanup_old(days: int = 7) -> int:
     """清掉 N 天前已结束的任务, 返回删除行数。建议在 cron 或启动时调。"""
     _ensure_schema()

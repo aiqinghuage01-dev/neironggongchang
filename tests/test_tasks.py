@@ -240,3 +240,60 @@ def test_update_progress_without_pct_keeps_old(tmp_db):
     rec = t.get_task(tid)
     assert rec["progress_text"] == "step2"
     assert rec["progress_pct"] == 40  # 旧值保留
+
+
+# ─── D-037b5 run_async helper ────────────────────────────
+
+def test_run_async_happy_path(tmp_db):
+    """run_async 同步函数成功 → status=ok + result 正确."""
+    import time
+    from backend.services import tasks as t
+    def fn(): return {"answer": 42}
+    tid = t.run_async(kind="test.kind", label="test", sync_fn=fn, estimated_seconds=10)
+    # 等 worker 跑完 (sync_fn 立即返, daemon thread 应在 50ms 内完成)
+    for _ in range(20):
+        rec = t.get_task(tid)
+        if rec["status"] != "running": break
+        time.sleep(0.05)
+    rec = t.get_task(tid)
+    assert rec["status"] == "ok"
+    assert rec["result"] == {"answer": 42}
+    assert rec["estimated_seconds"] == 10
+
+
+def test_run_async_failure_path(tmp_db):
+    """run_async sync_fn 抛 → status=failed + error 字段."""
+    import time
+    from backend.services import tasks as t
+    def fn(): raise ValueError("boom")
+    tid = t.run_async(kind="test.kind", sync_fn=fn)
+    for _ in range(20):
+        rec = t.get_task(tid)
+        if rec["status"] != "running": break
+        time.sleep(0.05)
+    rec = t.get_task(tid)
+    assert rec["status"] == "failed"
+    assert "ValueError" in rec["error"]
+    assert "boom" in rec["error"]
+
+
+def test_run_async_pushes_milestones(tmp_db, monkeypatch):
+    """run_async 推 5%→15%→95%→100% 里程碑 (检查最终状态)."""
+    import time
+    from backend.services import tasks as t
+    def slow_fn():
+        time.sleep(0.1)
+        return {"x": 1}
+    tid = t.run_async(kind="test", progress_text="思考中...", sync_fn=slow_fn)
+    # 立刻拉一次 — 应已推 15% (worker 启动后 1ms 内推 2 个 update_progress)
+    time.sleep(0.02)
+    mid = t.get_task(tid)
+    assert mid["status"] == "running"
+    assert mid["progress_pct"] in (5, 15)
+    # 等完成
+    for _ in range(30):
+        rec = t.get_task(tid)
+        if rec["status"] != "running": break
+        time.sleep(0.05)
+    rec = t.get_task(tid)
+    assert rec["status"] == "ok"

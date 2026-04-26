@@ -1918,14 +1918,19 @@ class BaokuanRewriteReq(BaseModel):
     dna: dict[str, Any] = Field(default_factory=dict, description="Step 1 输出的爆款基因 (可选, 传了改写更准)")
 
 
-@app.post("/api/baokuan/rewrite", tags=["爆款改写"], summary="Step 2 按模式改写出 N 版 (V1/V2/V3/V4)")
+@app.post("/api/baokuan/rewrite", tags=["爆款改写"], summary="Step 2 按模式改写出 N 版 (异步, 立即返 task_id)")
 def baokuan_rewrite(req: BaokuanRewriteReq):
-    """走 opus 一次出 N 版. SKILL.md 严禁项硬约束: 前 5 秒不动 / 不超原文 30% / 无 AI 味."""
-    return baokuan_pipeline.rewrite(
+    """D-037b5 异步化: 立即返 task_id, daemon thread 跑 30-60s.
+
+    SKILL.md 严禁项硬约束: 前 5 秒不动 / 不超原文 30% / 无 AI 味.
+    前端轮询 GET /api/tasks/{id} 看进度, 完成后 task.result = {versions, mode, tokens}.
+    """
+    task_id = baokuan_pipeline.rewrite_async(
         text=req.text, mode=req.mode,
         industry=req.industry, target_action=req.target_action,
         dna=req.dna,
     )
+    return {"task_id": task_id, "status": "running", "estimated_seconds": 45, "page_id": "baokuan"}
 
 
 # ═══════════════════════════════════════════════════════════════════

@@ -22,6 +22,7 @@ import time
 from typing import Any
 
 from backend.services import skill_loader
+from backend.services import tasks as tasks_service
 from shortvideo.ai import get_ai_client
 
 SKILL_SLUG = "爆款改写-学员版"
@@ -231,3 +232,26 @@ def rewrite(
         "mode": mode,
         "tokens": {"total": r.total_tokens},
     }
+
+
+# ─── 异步 (D-037b5) ─────────────────────────────────────
+
+def rewrite_async(
+    text: str,
+    mode: str = "pure",
+    industry: str = "",
+    target_action: str = "",
+    dna: dict[str, Any] | None = None,
+) -> str:
+    """异步触发 rewrite, 立即返 task_id. 真跑 30-60s."""
+    return tasks_service.run_async(
+        kind="baokuan.rewrite",
+        label=f"爆款改写 · {mode} · {len(text)}字",
+        ns="baokuan",
+        page_id="baokuan",
+        step="rewrite",
+        payload={"text_preview": text[:200], "mode": mode, "text_len": len(text)},
+        estimated_seconds=45,
+        progress_text="AI 写改写文案 (V1/V2/V3/V4)...",
+        sync_fn=lambda: rewrite(text, mode, industry, target_action, dna),
+    )

@@ -28,9 +28,21 @@ function PageBaokuan({ onNav }) {
   const [dna, setDna] = React.useState(null);
   const [versions, setVersions] = React.useState([]);
   const [activeVersionIdx, setActiveVersionIdx] = React.useState(0);
+  const [taskId, setTaskId] = useTaskPersist("baokuan");  // D-037b5
 
   const [skillInfo, setSkillInfo] = React.useState(null);
   React.useEffect(() => { api.get("/api/baokuan/skill-info").then(setSkillInfo).catch(() => {}); }, []);
+
+  // D-037b5: 轮询 rewrite 任务状态
+  const poller = useTaskPoller(taskId, {
+    onComplete: (r) => {
+      if (r?.error) { setErr(r.error); }
+      setVersions(r?.versions || []);
+      setActiveVersionIdx(0);
+      setTaskId(null);
+    },
+    onError: (e) => { setErr(e || "改写失败"); /* 留 taskId 让 FailedRetry 渲染 */ },
+  });
 
   // 检测 make 那边丢的 baokuan_seed_text, 自动填 textarea
   // ⚠ 同 voicerewrite/hotrewrite: 必须同步删 wf snap, 防 D-016 restore 覆盖
@@ -68,24 +80,19 @@ function PageBaokuan({ onNav }) {
       setErr(`选了"${m.label}"模式, 需要填"行业"和"转化动作" (例: 餐饮老板 + 加微信)`);
       return;
     }
-    setLoading(true); setErr(""); setStep("result"); setDna(null); setVersions([]);
+    setLoading(true); setErr(""); setDna(null); setVersions([]); setTaskId(null);
     try {
-      // 串行: analyze 先出 DNA, 再 rewrite 用 dna 做参考
+      // analyze 同步 (5-7s) — 先出 DNA, 立即可显示
       const a = await api.post("/api/baokuan/analyze", { text: text.trim() });
       setDna(a.dna || null);
+      setStep("result");
+      // rewrite 异步 (D-037b5) — 立即拿 task_id, useTaskPoller 监听
       const r = await api.post("/api/baokuan/rewrite", {
         text: text.trim(), mode,
         industry: industry.trim(), target_action: targetAction.trim(),
         dna: a.dna || {},
       });
-      if (r.error) {
-        setErr(r.error);
-        setStep("input");
-        return;
-      }
-      const vs = r.versions || [];
-      setVersions(vs);
-      setActiveVersionIdx(0);
+      setTaskId(r.task_id);
     } catch (e) {
       setErr(e.message);
       setStep("input");
@@ -94,16 +101,20 @@ function PageBaokuan({ onNav }) {
     }
   }
 
+  function retry() {
+    setErr(""); setVersions([]); setTaskId(null);
+    doRewrite();
+  }
+
   function reset() {
     setStep("input"); setErr("");
-    setText(""); setDna(null); setVersions([]); setActiveVersionIdx(0);
+    setText(""); setDna(null); setVersions([]); setActiveVersionIdx(0); setTaskId(null);
     clearWorkflow("baokuan");
   }
 
-  // 工作流持久化 (D-016)
-  const wfState = { step, text, mode, industry, targetAction, dna, versions, activeVersionIdx };
+  // 工作流持久化 (D-016 + D-037b5 加 taskId)
+  const wfState = { step, text, mode, industry, targetAction, dna, versions, activeVersionIdx, taskId };
   const wfRestore = (s) => {
-    if (s.step) setStep(s.step);
     if (s.text != null) setText(s.text);
     if (s.mode) setMode(s.mode);
     if (s.industry != null) setIndustry(s.industry);
@@ -111,6 +122,8 @@ function PageBaokuan({ onNav }) {
     if (s.dna) setDna(s.dna);
     if (s.versions) setVersions(s.versions);
     if (typeof s.activeVersionIdx === "number") setActiveVersionIdx(s.activeVersionIdx);
+    if (s.taskId) setTaskId(s.taskId);
+    if (s.step) setStep(s.step);
   };
   const wf = useWorkflowPersist({ ns: "baokuan", state: wfState, onRestore: wfRestore });
 
@@ -140,11 +153,32 @@ function PageBaokuan({ onNav }) {
           />
         )}
         {step === "result" && (
-          <BkStepResult
-            dna={dna} versions={versions} loading={loading}
-            activeVersionIdx={activeVersionIdx} setActiveVersionIdx={setActiveVersionIdx}
-            onPrev={() => setStep("input")} onReset={reset} onNav={onNav}
-          />
+          poller.isRunning ? (
+            <React.Fragment>
+              {dna && <BkDnaCard dna={dna} />}
+              <LoadingProgress
+                task={poller.task}
+                icon="💥"
+                title="小华正在改写爆款..."
+                subtitle={`${BK_MODES.find(m => m.id === mode)?.label || mode} · ${text.length} 字`}
+                onCancel={() => { poller.cancel(); setStep("input"); }}
+              />
+            </React.Fragment>
+          ) : poller.isFailed || poller.isCancelled ? (
+            <FailedRetry
+              error={poller.error || err}
+              onRetry={retry}
+              onEdit={() => { setTaskId(null); setErr(""); setStep("input"); }}
+              icon="💥"
+              title={poller.isCancelled ? "任务已取消" : "这次没改写出来"}
+            />
+          ) : (
+            <BkStepResult
+              dna={dna} versions={versions} loading={false}
+              activeVersionIdx={activeVersionIdx} setActiveVersionIdx={setActiveVersionIdx}
+              onPrev={() => setStep("input")} onReset={reset} onNav={onNav}
+            />
+          )
         )}
       </div>
     </div>
@@ -290,6 +324,24 @@ function BkStepInput({ text, setText, mode, setMode, industry, setIndustry, targ
         }}>
           {loading ? "改写中..." : "✨ 分析爆款基因 + 改写"}
         </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── DNA 卡 (D-037b5 提出来共享: rewrite 异步跑时也能先显示) ────
+
+function BkDnaCard({ dna }) {
+  if (!dna) return null;
+  return (
+    <div style={{ maxWidth: 820, margin: "20px auto 16px", padding: "0 40px" }}>
+      <div style={{ background: "#fff", border: `1px solid ${T.brand}33`, borderLeft: `4px solid ${T.brand}`, borderRadius: 12, padding: "14px 18px" }}>
+        <div style={{ fontSize: 12.5, fontWeight: 600, color: T.brand, marginBottom: 8 }}>💡 爆款基因分析</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 12.5, color: T.text, lineHeight: 1.6 }}>
+          <div><span style={{ color: T.muted2 }}>为什么火 · </span>{dna.why_hot || "(空)"}</div>
+          <div><span style={{ color: T.muted2 }}>情绪钩子 · </span>{dna.emotion_hook || "(空)"}</div>
+          <div><span style={{ color: T.muted2 }}>结构节奏 · </span>{dna.structure || "(空)"}</div>
+        </div>
       </div>
     </div>
   );
