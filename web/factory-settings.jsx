@@ -107,6 +107,9 @@ function PageSettings({ onNav }) {
 
           {/* D-069: "开发调试" section 删除. 顶栏 API 调用条已硬关, 只 localStorage.show_api_status=1 才开 (录视频不会误显) */}
 
+          {/* D-071: 访客模式 — 帮朋友写时打开. 从侧栏挪进来 (不常用). */}
+          <GuestModeSection />
+
           {/* 小华偏好 */}
           <SettingsSection icon="🤖" title="小华偏好" desc="调小华的性格、主动性、默认风格">
             <ChoiceRow label="语气" current={s.li_tone} onChange={v => saveOne("li_tone", v)} options={[
@@ -266,6 +269,41 @@ function PageSettings({ onNav }) {
       </div>
       <LiDock context="设置" />
     </div>
+  );
+}
+
+// D-071: 访客模式 — 帮朋友写时打开, 这次产出不进作品库 / 不学进偏好 / AI 走中性写作助手
+function GuestModeSection() {
+  const [guest, setGuest] = React.useState(() => api.isGuest());
+  React.useEffect(() => {
+    const h = (e) => setGuest(!!e.detail?.guest);
+    window.addEventListener("guest-mode-change", h);
+    return () => window.removeEventListener("guest-mode-change", h);
+  }, []);
+  function set(flag) {
+    api.setGuest(flag);
+    setGuest(flag);
+  }
+  return (
+    <SettingsSection
+      icon="🕶"
+      title="访客模式"
+      desc="给朋友/合作方/客户写内容时打开. 5 个口子全短路: 不写工作日志 / 不学偏好 / 不入作品库 / 公众号产出不入库 / AI 不注入'清华哥'人设, 走中性写作助手."
+    >
+      <ChoiceRow label="当前状态" current={guest ? "on" : "off"} onChange={v => set(v === "on")} options={[
+        { v: "off", label: "🙋 我自己", hint: "默认 · 一切照常记录, 越用越懂" },
+        { v: "on",  label: "🕶 帮朋友", hint: "本次产出不污染你的人设 · 主区会显警示 banner" },
+      ]} />
+      {guest && (
+        <div style={{
+          marginTop: 10, padding: "10px 12px", background: "#FFF4E5",
+          border: "1px solid #FFB066", borderRadius: 8,
+          fontSize: 12, color: "#B55B00", lineHeight: 1.6,
+        }}>
+          ⚠ 访客模式已开. 跨 session 持久 (关浏览器再开还在), 写完朋友项目记得切回来.
+        </div>
+      )}
+    </SettingsSection>
   );
 }
 
