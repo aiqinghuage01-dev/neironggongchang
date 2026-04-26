@@ -237,17 +237,7 @@ function TLStepInput({ pitch, setPitch, industry, setIndustry, targetAction, set
         <ParamRow label="📺 适用渠道" items={CHANNELS} value={channel} onChange={setChannel} />
       </div>
 
-      {skillInfo && (
-        <details style={{ padding: "10px 14px", background: T.bg2, borderRadius: 8, fontSize: 11.5, color: T.muted2, cursor: "pointer" }}>
-          <summary>skill 资源 (开发用 · 默认折叠)</summary>
-          <div style={{ marginTop: 8, lineHeight: 1.6 }}>
-            <div>SKILL.md · {skillInfo.skill_md_chars} 字符</div>
-            {Object.entries(skillInfo.references || {}).slice(0, 6).map(([k, v]) => (
-              <div key={k}>references/{k}.md · {v} 字符</div>
-            ))}
-          </div>
-        </details>
-      )}
+      {/* D-069: 删 "skill 资源" 调试面板 (短视频露馅) */}
     </div>
   );
 }
@@ -277,7 +267,7 @@ function TLStepResult({ result, n, loading, onPrev, onRegen, onReset, onNav, pit
         <div style={{ flex: 1, minWidth: 280 }}>
           <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>批量生成完成 · {batch.length} 条 💰</div>
           <div style={{ fontSize: 12, color: T.muted }}>
-            {Object.entries(structCounts).map(([k, v]) => `${k} ${v}`).join(" · ")} · {result.tokens} tokens
+            {Object.entries(structCounts).map(([k, v]) => `${k} ${v}`).join(" · ")}
           </div>
         </div>
         <SelfCheckChip

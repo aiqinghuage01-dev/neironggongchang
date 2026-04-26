@@ -254,7 +254,7 @@ function PStepPlan({ plan, level, loading, onPrev, onReset, onNav, brief }) {
       <div style={{ marginBottom: 16, display: "flex", alignItems: "flex-start", gap: 16 }}>
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 6 }}>策划方案 · {level?.name} 档 ({level?.total} 条)</div>
-          <div style={{ fontSize: 12, color: T.muted }}>{plan.tokens?.total || "?"} tokens · 6 个模块,实际执行可分发给团队</div>
+          <div style={{ fontSize: 12, color: T.muted }}>6 个模块,实际执行可分发给团队</div>
         </div>
         <Btn onClick={copyAll} variant={copied ? "soft" : "outline"}>{copied ? "✓ 已复制 JSON" : "📋 复制全部 JSON"}</Btn>
       </div>

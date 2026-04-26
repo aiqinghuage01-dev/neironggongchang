@@ -16,6 +16,12 @@ function FactoryApp() {
       window.history.replaceState(null, "", url.toString());
     } catch (_) {}
   }, [page]);
+  // D-069: LiDock 任务 tab 用 window event 跳页, 这里挂 listener
+  React.useEffect(() => {
+    const h = (e) => { if (e.detail?.page) setPage(e.detail.page); };
+    window.addEventListener("ql-nav", h);
+    return () => window.removeEventListener("ql-nav", h);
+  }, []);
   const render = () => {
     switch (page) {
       case "home":       return <PageHome onNav={setPage} />;
@@ -54,7 +60,7 @@ function FactoryApp() {
       <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", position: "relative" }}>
         {render()}
       </div>
-      <TaskBar onNav={setPage} />
+      {/* D-069: 顶栏 TaskBar 已删, 任务状态全部融入小华按钮徽章 + LiDock 任务 tab */}
     </div>
   );
 }

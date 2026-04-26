@@ -360,15 +360,7 @@ function VStepInput({ transcript, setTranscript, onGo, loading, skillInfo }) {
         </div>
       </div>
 
-      {skillInfo && (
-        <div style={{ padding: 14, background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 10, fontSize: 12, color: T.muted, lineHeight: 1.8 }}>
-          <div style={{ fontWeight: 600, color: T.text, marginBottom: 6 }}>skill 资源</div>
-          <div>SKILL.md · {skillInfo.skill_md_chars} 字符</div>
-          {Object.entries(skillInfo.references || {}).map(([k, v]) => (
-            <div key={k}>references/{k}.md · {v} 字符</div>
-          ))}
-        </div>
-      )}
+      {/* D-069: 删 "skill 资源" 调试面板 (短视频露馅) */}
     </div>
   );
 }

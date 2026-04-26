@@ -254,7 +254,7 @@ function BkStepInput({ text, setText, mode, setMode, industry, setIndustry, targ
           {len > 0 ? (
             <>
               <Tag size="xs" color="gray">{len} 字</Tag>
-              {len < 100 && <span style={{ fontSize: 11, color: T.amber }}>偏短 · skill 提示 100+ 字效果更好</span>}
+              {len < 100 && <span style={{ fontSize: 11, color: T.amber }}>字数偏短 · 100+ 字效果更好</span>}
               {len >= 100 && <span style={{ fontSize: 11, color: T.muted2 }}>· 前 5 秒不动 · 不加广告 (纯改写) · 不带 AI 味</span>}
             </>
           ) : (

@@ -543,7 +543,7 @@ function StepScript({ original, initialFinal, author, sourceUrl, onNext, onPrev 
         <div style={{ flex: 1.1, background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 12, padding: 18 }}>
           <div style={{ display: "flex", alignItems: "center", marginBottom: 10 }}>
             <div style={{ fontSize: 11.5, color: T.text, fontWeight: 600, letterSpacing: "0.08em" }}>
-              改写结果 · {final.length} 字 · 约 {Math.round(final.length / 4.5)} 秒 {tokens ? `· ${tokens} tokens` : ""}
+              改写结果 · {final.length} 字 · 约 {Math.round(final.length / 4.5)} 秒
             </div>
             <div style={{ flex: 1 }} />
             <button onClick={rewrite} disabled={sending || !original} style={{ fontSize: 11.5, color: T.brand, background: "transparent", border: "none", cursor: sending ? "wait" : "pointer", fontFamily: "inherit" }}>

@@ -511,17 +511,7 @@ function WxStepTopic({ topic, setTopic, onGo, onAuto, loading, skillInfo, skipIm
         <span>跳过段间配图 (省 3 分钟 · 但文章会缺中段插图)</span>
       </label>
 
-      {skillInfo && (
-        <details style={{ padding: "10px 14px", background: T.bg2, borderRadius: 8, fontSize: 11.5, color: T.muted2, cursor: "pointer" }}>
-          <summary>skill 资源 (开发用 · 默认折叠)</summary>
-          <div style={{ marginTop: 8, lineHeight: 1.6 }}>
-            <div>SKILL.md · {skillInfo.skill_md_chars} 字符</div>
-            {Object.entries(skillInfo.references || {}).map(([k, v]) => (
-              <div key={k}>references/{k}.md · {v} 字符</div>
-            ))}
-          </div>
-        </details>
-      )}
+      {/* D-069: 删 "skill 资源" 调试面板 (短视频露馅) */}
     </div>
   );
 }
@@ -593,7 +583,7 @@ function WxStepOutline({ outline, setOutline, title, topic, loading, onPrev, onN
       <div style={{ marginBottom: 16 }}>
         <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 6 }}>确认大纲 · 再动笔 📐</div>
         <div style={{ fontSize: 13, color: T.muted }}>标题: <b style={{ color: T.text }}>{title}</b></div>
-        <div style={{ fontSize: 12, color: T.muted2, marginTop: 4 }}>想改哪行直接改。满意后点"写长文"——skill 的 Phase 2,约 30-60s 出 2000+ 字。</div>
+        <div style={{ fontSize: 12, color: T.muted2, marginTop: 4 }}>想改哪行直接改。满意后点"写长文",约 30-60 秒出 2000+ 字。</div>
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
         <OutlineField label="开场切入" value={outline.opening} onChange={v => update("opening", v)} multi />

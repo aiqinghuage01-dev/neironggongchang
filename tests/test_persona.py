@@ -42,7 +42,8 @@ def _clear_cache():
 
 
 def test_persona_short_exists_and_reasonable():
-    s = persona.load_persona(deep=False)
+    # D-069: 关 include_memory, 单测精简版本身大小 (D-067 后默认会注入 work_log/preference 行为记忆)
+    s = persona.load_persona(deep=False, include_memory=False)
     # 精简版不应为空,且体积落在预期区间
     assert s, "persona-prompt.md 空或不存在"
     assert 400 < len(s) < 2000, f"精简版长度异常: {len(s)}"
@@ -50,9 +51,9 @@ def test_persona_short_exists_and_reasonable():
 
 
 def test_persona_deep_much_larger_than_short():
-    short = persona.load_persona(deep=False)
+    short = persona.load_persona(deep=False, include_memory=False)
     persona.clear_cache()
-    full = persona.load_persona(deep=True)
+    full = persona.load_persona(deep=True, include_memory=False)
     # 详细版体积应显著大于精简版
     assert len(full) >= len(short) * 5, f"deep 版没注入详细人设: {len(full)} vs {len(short)}"
 

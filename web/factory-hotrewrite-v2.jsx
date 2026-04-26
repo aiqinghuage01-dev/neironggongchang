@@ -390,13 +390,7 @@ function HotStepInput({ hotspot, setHotspot, onGo, loading, skillInfo }) {
         )}
       </div>
 
-      {skillInfo && (
-        <div style={{ padding: 14, background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 10, fontSize: 12, color: T.muted, lineHeight: 1.8 }}>
-          <div style={{ fontWeight: 600, color: T.text, marginBottom: 6 }}>skill 资源</div>
-          <div>SKILL.md · {skillInfo.skill_md_chars} 字符</div>
-          <div style={{ marginTop: 6, color: T.muted2 }}>在 {skillInfo.root} 改 SKILL.md,下次调用自动同步</div>
-        </div>
-      )}
+      {/* D-069: 删 "skill 资源" 调试面板 — 短视频露馅, 老板自己改方法论走文件 */}
     </div>
   );
 }
@@ -507,7 +501,7 @@ function HotStepAngles({ analyze, loading, onPick, onPrev, onRegen, withBiz, set
 function HotStepWrite({ script, hotspot, angle, loading, onPrev, onRewrite, onReset, onNav,
   versions, activeVersionIdx, onSwitchVersion, allAngles, onAddSameAngle, onAddOtherAngle, appendingVersion }) {
   if (loading || !script) return <Spinning icon="✍️" phases={[
-    { text: "读 skill 完整方法论", sub: "Step 2-5 · 流量骨架 + 人设 + 业务植入" },
+    { text: "理顺方法论", sub: "流量骨架 + 人设 + 业务植入" },
     { text: "3 秒判词开场", sub: "直接态度,不先背景" },
     { text: "30 秒画面还原", sub: "人物 + 动作 + 关键话" },
     { text: "底层机制解释", sub: "易记理论词 / 比喻" },

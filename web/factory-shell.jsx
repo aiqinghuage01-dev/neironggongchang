@@ -220,13 +220,55 @@ function NavItem({ item, active, expanded, onClick, count, flat }) {
 
 // 每页底部小华 dock (D-027 接通真实 /api/chat 多轮对话)
 function LiDock({ context }) {
+  // D-069: 通过 window event 触发顶层导航, 避免每个 page 都得给 LiDock 传 onNav
+  const onNav = React.useCallback((p) => {
+    window.dispatchEvent(new CustomEvent("ql-nav", { detail: { page: p } }));
+  }, []);
   const [open, setOpen] = React.useState(false);
+  const [tab, setTab] = React.useState("chat");  // D-069: chat | tasks
   const [input, setInput] = React.useState("");
   const [loading, setLoading] = React.useState(false);
   const [messages, setMessages] = React.useState([
     { role: "assistant", text: `老板在看「${context || "这一页"}」,需要帮忙吗?` }
   ]);
   const scrollRef = React.useRef(null);
+
+  // D-069: 任务状态融合 (原顶栏 TaskBar 已删, 信息走小华按钮徽章 + 任务 tab)
+  const [tasks, setTasks] = React.useState([]);
+  const [counts, setCounts] = React.useState({ running: 0, ok: 0, failed: 0 });
+  const [refreshTick, setRefreshTick] = React.useState(0);
+  React.useEffect(() => {
+    let stop = false;
+    async function pull() {
+      try {
+        const r = await api.get("/api/tasks?limit=30");
+        if (stop) return;
+        setTasks(r.tasks || []);
+        setCounts(r.counts || { running: 0, ok: 0, failed: 0 });
+      } catch (_) {}
+    }
+    pull();
+    const running = (counts.running || 0) + (counts.pending || 0);
+    const interval = ((open && tab === "tasks") || running) ? 3000 : 30000;
+    const t = setInterval(pull, interval);
+    return () => { stop = true; clearInterval(t); };
+  }, [open, tab, counts.running, counts.pending, refreshTick]);
+
+  const runningTasks = tasks.filter(t => t.status === "running" || t.status === "pending");
+  const staleCount = runningTasks.filter(isTaskStale).length;
+  const today0 = (() => { const d = new Date(); d.setHours(0,0,0,0); return Math.floor(d.getTime()/1000); })();
+  const todayOk = tasks.filter(t => t.status === "ok" && (t.finished_ts || 0) >= today0);
+  const todayFailed = tasks.filter(t => t.status === "failed" && (t.finished_ts || 0) >= today0);
+
+  async function handleCancelTask(taskId) {
+    try { await api.post(`/api/tasks/${taskId}/cancel`, {}); } catch (_) {}
+    setRefreshTick(x => x + 1);
+  }
+
+  function goTask(t) {
+    if (t.page_id && onNav) onNav(t.page_id);
+    setOpen(false);
+  }
 
   // 切页时重置开场白(messages 不持久化跨页)
   const ctxKey = context || "这一页";
@@ -265,11 +307,15 @@ function LiDock({ context }) {
     setMessages([{ role: "assistant", text: `老板在看「${ctxKey}」,需要帮忙吗?` }]);
   }
 
+  // D-069: 按钮徽章颜色 — 卡死红 > 进行中蓝 > 0 透明
+  const badgeNum = runningTasks.length;
+  const badgeColor = staleCount > 0 ? "#E07A1A" : (badgeNum > 0 ? T.brand : null);
+
   return (
     <>
       {open && (
         <div style={{
-          position: "fixed", right: 20, bottom: 70, width: 400, maxHeight: 520,
+          position: "fixed", right: 20, bottom: 70, width: 420, maxHeight: 560,
           background: "#fff", borderRadius: 14, border: `1px solid ${T.border}`,
           boxShadow: "0 12px 40px rgba(0,0,0,0.12)", display: "flex", flexDirection: "column",
           zIndex: 100, overflow: "hidden",
@@ -278,52 +324,104 @@ function LiDock({ context }) {
             <div style={{ width: 26, height: 26, borderRadius: "50%", background: T.brandSoft, color: T.brand, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 600 }}>华</div>
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 13, fontWeight: 600 }}>小华 · {context || "随时说"}</div>
-              <div style={{ fontSize: 10.5, color: T.muted2 }}>多轮对话 · DeepSeek · 不持久化</div>
+              <div style={{ fontSize: 10.5, color: T.muted2 }}>对话不会被保存</div>
             </div>
-            <button onClick={clearChat} title="清空对话" style={{ background: "transparent", border: "none", color: T.muted2, cursor: "pointer", fontSize: 13, padding: "4px 6px" }}>↻</button>
+            {tab === "chat" && (
+              <button onClick={clearChat} title="清空对话" style={{ background: "transparent", border: "none", color: T.muted2, cursor: "pointer", fontSize: 13, padding: "4px 6px" }}>↻</button>
+            )}
             <button onClick={() => setOpen(false)} style={{ background: "transparent", border: "none", color: T.muted, cursor: "pointer", fontSize: 18 }}>×</button>
           </div>
-          <div ref={scrollRef} style={{ flex: 1, overflow: "auto", padding: 14, display: "flex", flexDirection: "column", gap: 10, minHeight: 200 }}>
-            {messages.map((m, i) => (
-              <div key={i} style={{
-                padding: "10px 12px",
-                background: m.role === "assistant" ? T.bg2 : T.brand,
-                color: m.role === "assistant" ? T.text : "#fff",
-                borderRadius: 10, fontSize: 13, lineHeight: 1.6,
-                alignSelf: m.role === "assistant" ? "flex-start" : "flex-end",
-                maxWidth: "85%", whiteSpace: "pre-wrap",
-              }}>
-                {m.text}
-              </div>
-            ))}
-            {loading && (
-              <div style={{
-                padding: "10px 12px", background: T.bg2, color: T.muted,
-                borderRadius: 10, fontSize: 13, alignSelf: "flex-start", maxWidth: "70%",
-              }}>
-                <span style={{ animation: "qldot 1.2s ease-in-out infinite" }}>·</span>
-                <span style={{ animation: "qldot 1.2s ease-in-out 0.3s infinite", marginLeft: 3 }}>·</span>
-                <span style={{ animation: "qldot 1.2s ease-in-out 0.6s infinite", marginLeft: 3 }}>·</span>
-              </div>
-            )}
-          </div>
-          <div style={{ padding: 12, borderTop: `1px solid ${T.borderSoft}`, display: "flex", gap: 8 }}>
-            <input
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
-              placeholder={loading ? "小华在想..." : "跟小华说... (回车发送)"}
-              disabled={loading}
-              style={{ flex: 1, border: `1px solid ${T.border}`, borderRadius: 8, padding: "8px 12px", fontSize: 13, fontFamily: "inherit", outline: "none", background: loading ? T.bg2 : "#fff" }}
+
+          {/* D-069: tab 切换 */}
+          <div style={{ display: "flex", borderBottom: `1px solid ${T.borderSoft}`, padding: "0 8px", gap: 2, background: T.bg2 }}>
+            <LiDockTab label="对话" active={tab === "chat"} onClick={() => setTab("chat")} />
+            <LiDockTab
+              label={badgeNum > 0 ? `任务 · ${badgeNum}` : "任务"}
+              active={tab === "tasks"}
+              onClick={() => setTab("tasks")}
+              accent={staleCount > 0 ? "#E07A1A" : null}
             />
-            <button onClick={send} disabled={loading || !input.trim()}
-              style={{
-                width: 34, height: 34, borderRadius: 8,
-                background: loading || !input.trim() ? T.muted3 : T.brand,
-                color: "#fff", border: "none",
-                cursor: loading || !input.trim() ? "not-allowed" : "pointer",
-              }}>➤</button>
           </div>
+
+          {tab === "chat" ? (
+            <>
+              <div ref={scrollRef} style={{ flex: 1, overflow: "auto", padding: 14, display: "flex", flexDirection: "column", gap: 10, minHeight: 200 }}>
+                {messages.map((m, i) => (
+                  <div key={i} style={{
+                    padding: "10px 12px",
+                    background: m.role === "assistant" ? T.bg2 : T.brand,
+                    color: m.role === "assistant" ? T.text : "#fff",
+                    borderRadius: 10, fontSize: 13, lineHeight: 1.6,
+                    alignSelf: m.role === "assistant" ? "flex-start" : "flex-end",
+                    maxWidth: "85%", whiteSpace: "pre-wrap",
+                  }}>
+                    {m.text}
+                  </div>
+                ))}
+                {loading && (
+                  <div style={{
+                    padding: "10px 12px", background: T.bg2, color: T.muted,
+                    borderRadius: 10, fontSize: 13, alignSelf: "flex-start", maxWidth: "70%",
+                  }}>
+                    <span style={{ animation: "qldot 1.2s ease-in-out infinite" }}>·</span>
+                    <span style={{ animation: "qldot 1.2s ease-in-out 0.3s infinite", marginLeft: 3 }}>·</span>
+                    <span style={{ animation: "qldot 1.2s ease-in-out 0.6s infinite", marginLeft: 3 }}>·</span>
+                  </div>
+                )}
+              </div>
+              <div style={{ padding: 12, borderTop: `1px solid ${T.borderSoft}`, display: "flex", gap: 8 }}>
+                <input
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
+                  placeholder={loading ? "小华在想..." : "跟小华说... (回车发送)"}
+                  disabled={loading}
+                  style={{ flex: 1, border: `1px solid ${T.border}`, borderRadius: 8, padding: "8px 12px", fontSize: 13, fontFamily: "inherit", outline: "none", background: loading ? T.bg2 : "#fff" }}
+                />
+                <button onClick={send} disabled={loading || !input.trim()}
+                  style={{
+                    width: 34, height: 34, borderRadius: 8,
+                    background: loading || !input.trim() ? T.muted3 : T.brand,
+                    color: "#fff", border: "none",
+                    cursor: loading || !input.trim() ? "not-allowed" : "pointer",
+                  }}>➤</button>
+              </div>
+            </>
+          ) : (
+            // D-069: 任务 tab — 复用 TaskCard
+            <div style={{ flex: 1, overflow: "auto", padding: "12px 14px 14px", display: "flex", flexDirection: "column", gap: 8, minHeight: 200 }}>
+              {runningTasks.length === 0 && todayOk.length === 0 && todayFailed.length === 0 && (
+                <div style={{ color: T.muted2, fontSize: 13, textAlign: "center", padding: "60px 0" }}>
+                  今天还没干过活<br />
+                  <span style={{ fontSize: 12 }}>左边挑个工具开始干吧</span>
+                </div>
+              )}
+              {runningTasks.length > 0 && (
+                <>
+                  <div style={{ fontSize: 11, color: T.muted2, letterSpacing: 0.5, marginTop: 2 }}>
+                    在跑 ({runningTasks.length})
+                  </div>
+                  {runningTasks.map(t => <TaskCard key={t.id} task={t} onClick={() => goTask(t)} onCancel={handleCancelTask} />)}
+                </>
+              )}
+              {todayOk.length > 0 && (
+                <>
+                  <div style={{ fontSize: 11, color: T.muted2, letterSpacing: 0.5, marginTop: 8 }}>
+                    今天完成 ({todayOk.length})
+                  </div>
+                  {todayOk.slice(0, 8).map(t => <TaskCard key={t.id} task={t} onClick={() => goTask(t)} compact />)}
+                </>
+              )}
+              {todayFailed.length > 0 && (
+                <>
+                  <div style={{ fontSize: 11, color: T.muted2, letterSpacing: 0.5, marginTop: 8 }}>
+                    没成 ({todayFailed.length})
+                  </div>
+                  {todayFailed.map(t => <TaskCard key={t.id} task={t} onClick={() => goTask(t)} />)}
+                </>
+              )}
+            </div>
+          )}
         </div>
       )}
       <button
@@ -337,10 +435,40 @@ function LiDock({ context }) {
           fontFamily: "inherit", fontSize: 13.5, fontWeight: 500,
         }}
       >
-        <span style={{ width: 26, height: 26, borderRadius: "50%", background: T.brandSoft, color: T.brand, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700 }}>华</span>
+        <span style={{ position: "relative", width: 26, height: 26, borderRadius: "50%", background: T.brandSoft, color: T.brand, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700 }}>
+          华
+          {badgeColor && (
+            <span style={{
+              position: "absolute", top: -4, right: -4,
+              minWidth: 16, height: 16, padding: "0 4px",
+              borderRadius: 100, background: badgeColor, color: "#fff",
+              fontSize: 10, fontWeight: 700,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              border: "2px solid " + T.text,
+              boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
+            }}>{badgeNum}</span>
+          )}
+        </span>
         跟小华说一句
       </button>
     </>
+  );
+}
+
+// D-069: tab 头小组件
+function LiDockTab({ label, active, onClick, accent }) {
+  return (
+    <button onClick={onClick} style={{
+      flex: 1, background: active ? "#fff" : "transparent",
+      border: "none",
+      borderTop: active ? `2px solid ${accent || T.brand}` : "2px solid transparent",
+      color: active ? (accent || T.text) : T.muted,
+      padding: "9px 0", fontSize: 12.5, fontWeight: active ? 600 : 500,
+      cursor: "pointer", fontFamily: "inherit",
+      borderBottom: active ? "1px solid #fff" : "none",
+      marginBottom: -1,
+      transition: "all 0.15s",
+    }}>{label}</button>
   );
 }
 

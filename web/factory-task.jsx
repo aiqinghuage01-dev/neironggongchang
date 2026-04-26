@@ -194,7 +194,33 @@ function LoadingProgress({ task, icon, title, subtitle, onCancel }) {
 }
 
 // ─── FailedRetry 组件 ────────────────────────────────────
+// D-069: error monospace 区块默认折叠 + 友好原因映射
+// 把 ClaudeOpusError / DeepSeekUnavailable / Pydantic 422 等转成大白话, 不露技术细节.
+function _friendlyErrorReason(raw) {
+  const s = String(raw || "");
+  if (!s) return null;
+  // 网络/上游 AI
+  if (/timed?out|timeout|超时|connection|reset|refused|unreachable/i.test(s))
+    return "AI 反应慢, 多半网络或上游卡了一下";
+  if (/502|503|504|gateway|bad gateway/i.test(s))
+    return "AI 上游临时不可用, 一会儿再试就好";
+  if (/429|rate limit|too many|quota/i.test(s))
+    return "请求太密, 稍等片刻再来";
+  if (/401|403|unauthorized|forbidden|api[\s_-]?key|token|invalid.*key/i.test(s))
+    return "AI 账户配置可能不对, 去设置看看";
+  // 内容触发
+  if (/safety|policy|content|harmful|sensitive|content_filter|blocked/i.test(s))
+    return "这一段触发了 AI 的内容规则, 换个角度再说一次试试";
+  // Pydantic 422 (一般是前端入参错, 真正修法不是 retry)
+  if (/422|validation|greater_than|less_than|missing|field required/i.test(s))
+    return "这次的入参不太对, 改一下再试";
+  // 兜底
+  return "通常重试一次就好";
+}
+
 function FailedRetry({ error, onRetry, onEdit, icon, title }) {
+  const [showRaw, setShowRaw] = React.useState(false);
+  const friendly = _friendlyErrorReason(error);
   return (
     <div style={{
       maxWidth: 680, margin: "40px auto", background: "#fff",
@@ -203,20 +229,11 @@ function FailedRetry({ error, onRetry, onEdit, icon, title }) {
     }}>
       <div style={{ fontSize: 32 }}>{icon || "😅"}</div>
       <div style={{ fontSize: 18, fontWeight: 600, marginTop: 10, marginBottom: 4, color: T.red }}>
-        {title || "这次没跑成功"}
+        {title || "这次没跑成"}
       </div>
       <div style={{ color: T.muted, fontSize: 13 }}>
-        大概率是 AI 上游临时不稳定, 通常重试一次就好
+        {friendly || "大概率是临时波动, 通常重试一次就好"}
       </div>
-      {error && (
-        <div style={{
-          background: T.redSoft, color: T.red, padding: "10px 14px",
-          borderRadius: 8, fontSize: 12.5, margin: "16px 0", textAlign: "left",
-          fontFamily: "ui-monospace, monospace", wordBreak: "break-all",
-        }}>
-          {error}
-        </div>
-      )}
       <div style={{ display: "flex", gap: 10, justifyContent: "center", marginTop: 16 }}>
         {onRetry && (
           <button
@@ -242,6 +259,27 @@ function FailedRetry({ error, onRetry, onEdit, icon, title }) {
           </button>
         )}
       </div>
+      {/* D-069: 技术原文默认折叠, 排查时再展开 */}
+      {error && (
+        <div style={{ marginTop: 14, fontSize: 11.5, color: T.muted2 }}>
+          <button
+            onClick={() => setShowRaw(!showRaw)}
+            style={{ background: "transparent", border: "none", color: T.muted2, cursor: "pointer", fontSize: 11.5, padding: 0, fontFamily: "inherit" }}
+          >
+            {showRaw ? "收起技术详情" : "看技术详情"}
+          </button>
+          {showRaw && (
+            <div style={{
+              background: T.bg2, color: T.muted, padding: "8px 12px",
+              borderRadius: 8, fontSize: 11.5, marginTop: 8, textAlign: "left",
+              fontFamily: "ui-monospace, monospace", wordBreak: "break-all",
+              maxHeight: 150, overflow: "auto",
+            }}>
+              {error}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -321,6 +359,45 @@ function taskIcon(kind) {
     if (k.startsWith(ns + ".")) return TASK_KIND_ICONS[k];
   }
   return "⚙️";
+}
+
+// D-069: kind → 中文 label, 任务卡 fallback 用 (避免直接吐 "hotrewrite.write" 这种技术名)
+const TASK_KIND_LABELS = {
+  "compliance.check":     "违规审查",
+  "compliance.write":     "违规审查",
+  "compliance.analyze":   "违规审查",
+  "wechat.write":         "公众号长文",
+  "wechat.cover":         "公众号封面",
+  "wechat.section-image": "公众号配图",
+  "wechat.plan-images":   "公众号配图",
+  "wechat.titles":        "公众号标题",
+  "wechat.outline":       "公众号大纲",
+  "hotrewrite.write":     "热点改写",
+  "hotrewrite.analyze":   "热点改写",
+  "voicerewrite.write":   "录音改写",
+  "voicerewrite.analyze": "录音改写",
+  "baokuan.rewrite":      "爆款改写",
+  "baokuan.analyze":      "爆款改写",
+  "touliu.generate":      "投流文案",
+  "planner.write":        "内容策划",
+  "planner.analyze":      "内容策划",
+  "moments.derive":       "朋友圈",
+  "topics.generate":      "选题生成",
+  "rewrite":              "口播改写",
+  "dhv5.render":          "视频渲染",
+  "image.generate":       "出图",
+};
+function taskFriendlyName(task) {
+  if (!task) return "任务";
+  if (task.label) return task.label;
+  const kind = task.kind || "";
+  if (TASK_KIND_LABELS[kind]) return TASK_KIND_LABELS[kind];
+  // fallback: ns 匹配
+  const ns = kind.split(".")[0];
+  for (const k of Object.keys(TASK_KIND_LABELS)) {
+    if (k.startsWith(ns + ".")) return TASK_KIND_LABELS[k];
+  }
+  return "任务";
 }
 
 // D-068: 任务"卡死"判定 — 跑过预估 2x 或缺预估时跑超 5 min
@@ -458,8 +535,8 @@ function TaskBar({ onNav }) {
               <div style={{
                 color: T.muted2, fontSize: 13, textAlign: "center", padding: "60px 0",
               }}>
-                今天还没跑过任务<br />
-                <span style={{ fontSize: 12 }}>去生产部任意 skill 开个活吧</span>
+                今天还没干过活<br />
+                <span style={{ fontSize: 12 }}>去生产部找个工具开始干吧</span>
               </div>
             )}
           </div>
@@ -502,10 +579,10 @@ function TaskCard({ task, onClick, compact, onCancel }) {
         <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>
           <span style={{ fontSize: 15 }}>{taskIcon(task.kind)}</span>
           <span style={{ flex: 1, color: stale ? "#B55B00" : (failed ? T.red : T.text), fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {task.label || task.kind}
+            {taskFriendlyName(task)}
           </span>
           <span style={{ color: stale ? "#B55B00" : T.muted2, fontSize: 11, fontWeight: stale ? 600 : 400 }}>
-            {ok ? "✓ " : ""}{cancelled ? "⊘ " : ""}{stale ? "⚠ 卡了 " : ""}{elapsedDisplay}
+            {ok ? "✓ " : ""}{cancelled ? "⊘ " : ""}{stale ? "⚠ 等了 " : ""}{elapsedDisplay}
           </span>
         </div>
         {running && pct !== null && (
@@ -516,19 +593,19 @@ function TaskCard({ task, onClick, compact, onCancel }) {
         {running && task.progress_text && (
           <div style={{ fontSize: 11.5, color: stale ? "#B55B00" : T.muted, marginTop: 6 }}>
             {task.progress_text}
-            {stale && task.estimated_seconds ? ` · 预估 ${fmtSec(task.estimated_seconds)}, 实际超 ${Math.round(((task.elapsed_sec||0) / task.estimated_seconds) * 10) / 10}x` : ""}
+            {stale && task.estimated_seconds ? ` · 比预想久 ${Math.round(((task.elapsed_sec||0) / task.estimated_seconds) * 10) / 10} 倍` : ""}
           </div>
         )}
         {failed && task.error && (
-          <div style={{ fontSize: 11.5, color: T.red, marginTop: 6, lineHeight: 1.5, fontFamily: "ui-monospace, monospace" }}>
-            {task.error.length > 100 ? task.error.slice(0, 100) + "..." : task.error}
+          <div style={{ fontSize: 11.5, color: T.red, marginTop: 6, lineHeight: 1.5 }}>
+            {_friendlyErrorReason(task.error) || (task.error.length > 80 ? task.error.slice(0, 80) + "..." : task.error)}
           </div>
         )}
       </div>
       {running && onCancel && (
         <div style={{ marginTop: 8, display: "flex", justifyContent: "flex-end", gap: 6 }}>
           <button
-            onClick={(e) => { e.stopPropagation(); if (window.confirm(stale ? "确定杀掉这个卡死的任务?" : "确定取消这个任务?")) onCancel(task.id); }}
+            onClick={(e) => { e.stopPropagation(); if (window.confirm(stale ? "这个等太久了, 停掉重来?" : "确定停掉这个任务?")) onCancel(task.id); }}
             style={{
               background: stale ? "#E07A1A" : "transparent",
               color: stale ? "#fff" : T.muted2,
@@ -537,8 +614,8 @@ function TaskCard({ task, onClick, compact, onCancel }) {
               fontSize: 11, fontWeight: stale ? 600 : 500,
               cursor: "pointer", fontFamily: "inherit",
             }}
-            title={stale ? "杀掉卡死的任务" : "取消任务"}
-          >{stale ? "杀掉" : "取消"}</button>
+            title={stale ? "停掉这个等太久的" : "停掉这个任务"}
+          >{stale ? "停掉" : "取消"}</button>
         </div>
       )}
     </div>

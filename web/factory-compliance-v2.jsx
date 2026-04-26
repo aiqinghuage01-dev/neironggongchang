@@ -174,7 +174,7 @@ function CStepResult({ result, onPrev, onReset }) {
             {hasAny ? `🛡️ 审查完成 · 发现 ${stats.total || 0} 处违规` : "✅ 审查完成 · 无违规"}
           </div>
           <div style={{ fontSize: 12, color: T.muted }}>
-            扫描范围: {result.scan_scope || "通用审查"} · {result.tokens?.total || "?"} tokens
+            扫描范围: {result.scan_scope || "通用审查"}
           </div>
         </div>
         <div style={{ display: "flex", gap: 6 }}>

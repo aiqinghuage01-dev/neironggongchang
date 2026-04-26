@@ -220,34 +220,38 @@ function AiUsageCard({ usage }) {
       boxShadow: "0 1px 2px rgba(0,0,0,0.03)",
       display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap",
     }}>
+      {/* D-069: 首页 AI 消耗看板去技术词. tokens → "字" (1 token≈0.7 字), engine 名 → 友好昵称 */}
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
         <span style={{ fontSize: 16 }}>📊</span>
         <div>
-          <div style={{ fontSize: 11.5, color: T.muted2, fontWeight: 600, letterSpacing: "0.08em" }}>今日 AI 消耗</div>
+          <div style={{ fontSize: 11.5, color: T.muted2, fontWeight: 600, letterSpacing: "0.08em" }}>今天用了多少 AI</div>
           <div style={{ fontSize: 15, fontWeight: 600, color: T.text }}>
-            {o.calls} 次 · {(o.total_tokens / 1000).toFixed(1)}K tokens
+            {o.calls} 次 · 约 {Math.round((o.total_tokens || 0) * 0.7 / 1000)}K 字
           </div>
         </div>
       </div>
       <div style={{ width: 1, height: 32, background: T.borderSoft }} />
       <div>
-        <div style={{ fontSize: 11.5, color: T.muted2, fontWeight: 600, letterSpacing: "0.08em" }}>估算成本</div>
+        <div style={{ fontSize: 11.5, color: T.muted2, fontWeight: 600, letterSpacing: "0.08em" }}>今天花了</div>
         <div style={{ fontSize: 15, fontWeight: 600, color: o.cost_cny >= 5 ? T.amber : T.text, fontFamily: "SF Mono, monospace" }}>
-          ¥{o.cost_cny.toFixed(2)} <span style={{ fontSize: 11, color: T.muted2, fontWeight: 400 }}>(${o.cost_usd.toFixed(3)})</span>
+          ¥{o.cost_cny.toFixed(2)}
         </div>
       </div>
       <div style={{ flex: 1 }} />
       <div style={{ display: "flex", gap: 10 }}>
-        {engines.map(e => (
-          <div key={e.engine} style={{
-            padding: "4px 10px", borderRadius: 100, fontSize: 11,
-            background: e.engine === "opus" ? T.amberSoft : T.brandSoft,
-            color: e.engine === "opus" ? T.amber : T.brand,
-            fontWeight: 600, fontFamily: "SF Mono, monospace",
-          }}>
-            {e.engine} {e.calls} 次 · {(e.total_tokens/1000).toFixed(1)}K · ¥{e.cost_cny.toFixed(2)}
-          </div>
-        ))}
+        {engines.map(e => {
+          const nick = e.engine === "opus" ? "深度 AI" : (e.engine === "deepseek" ? "快速 AI" : e.engine);
+          return (
+            <div key={e.engine} style={{
+              padding: "4px 10px", borderRadius: 100, fontSize: 11,
+              background: e.engine === "opus" ? T.amberSoft : T.brandSoft,
+              color: e.engine === "opus" ? T.amber : T.brand,
+              fontWeight: 600,
+            }}>
+              {nick} {e.calls} 次 · ¥{e.cost_cny.toFixed(2)}
+            </div>
+          );
+        })}
       </div>
       {o.fails > 0 && (
         <div style={{ fontSize: 11, color: T.red, background: T.redSoft, padding: "3px 8px", borderRadius: 100 }}>

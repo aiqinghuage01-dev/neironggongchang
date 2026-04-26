@@ -90,8 +90,8 @@ function PageSettings({ onNav }) {
               <span>{aiHealth?.ok ? "✓" : "✕"}</span>
               <span style={{ flex: 1 }}>
                 {!aiHealth ? "检测中..." :
-                 aiHealth.ok ? `已连通 · ${aiHealth.engine} · ${aiHealth.model || ""} · 回了一句"${aiHealth.reply}"` :
-                 `连不通: ${aiHealth.error?.slice(0, 100) || "(未知)"}`}
+                 aiHealth.ok ? `AI 通讯正常 · 试探回了一句"${aiHealth.reply}"` :
+                 `AI 暂时连不上, 一会儿再试`}
               </span>
               <Btn size="sm" onClick={reping}>↻ 重探</Btn>
             </div>
@@ -105,13 +105,7 @@ function PageSettings({ onNav }) {
             ]} />
           </SettingsSection>
 
-          {/* 调试可见性 */}
-          <SettingsSection icon="🔧" title="开发调试" desc="默认全部隐藏, 需要看后台动作时打开">
-            <ChoiceRow label="顶栏 API 调用条" current={s.show_api_status_light ? "show" : "hide"} onChange={v => saveOne("show_api_status_light", v === "show")} options={[
-              { v: "hide", label: "🙈 隐藏", hint: "默认 · 工厂感更纯净" },
-              { v: "show", label: "👀 显示", hint: "顶栏右上显示 GET /api/... · 30ms, 看每次 API 真实延迟" },
-            ]} />
-          </SettingsSection>
+          {/* D-069: "开发调试" section 删除. 顶栏 API 调用条已硬关, 只 localStorage.show_api_status=1 才开 (录视频不会误显) */}
 
           {/* 小华偏好 */}
           <SettingsSection icon="🤖" title="小华偏好" desc="调小华的性格、主动性、默认风格">

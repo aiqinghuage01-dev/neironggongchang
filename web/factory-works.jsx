@@ -288,7 +288,7 @@ function renderCard(w, onPick) {
           <span style={{ padding: "3px 10px", borderRadius: 100, background: T.amberSoft, color: T.amber, fontSize: 11.5, fontWeight: 500 }}>
             {sourceLabel(w.source_skill)}
           </span>
-          {w.tokens_used > 0 && <span style={{ fontSize: 11, color: T.muted2 }}>{w.tokens_used} token</span>}
+          {/* D-069: 删 token 露出 */}
           <div style={{ flex: 1 }} />
           <span style={{ fontSize: 11, color: T.muted2 }}>{formatTime(w.created_at)}</span>
         </div>
@@ -625,12 +625,7 @@ function TextInfoPanel({ work, onDel }) {
         </span>
         <span style={{ fontSize: 11.5, color: T.muted2 }}>·</span>
         <span style={{ fontSize: 11.5, color: T.muted2 }}>{(work.final_text || "").length} 字</span>
-        {work.tokens_used > 0 && (
-          <>
-            <span style={{ fontSize: 11.5, color: T.muted2 }}>·</span>
-            <span style={{ fontSize: 11.5, color: T.muted2 }}>{work.tokens_used} token</span>
-          </>
-        )}
+        {/* D-069: 删 token 露出 */}
       </div>
       {work.title && (
         <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 12, lineHeight: 1.4 }}>{work.title}</div>

@@ -18,33 +18,68 @@ async function _trace(method, path, fn) {
     throw e;
   }
 }
+
+// D-069: 把后端错误转大白话, 不直接吐 Pydantic JSON / HTTP code
+async function _handleErrorResponse(r) {
+  let body;
+  try { body = await r.json(); }
+  catch (_) { try { body = await r.text(); } catch (_) { body = ""; } }
+  // 422 Pydantic 校验错 — 详细字段映射
+  if (r.status === 422 && body && body.detail) {
+    const arr = Array.isArray(body.detail) ? body.detail : [body.detail];
+    const msgs = arr.map((d) => {
+      if (!d || typeof d !== "object") return String(d);
+      const field = (d.loc && d.loc.slice(-1)[0]) || "字段";
+      const ctx = d.ctx || {};
+      if (d.type === "greater_than_equal") return `${field} 至少 ${ctx.ge}`;
+      if (d.type === "less_than_equal")    return `${field} 最多 ${ctx.le}`;
+      if (d.type === "greater_than")       return `${field} 要大于 ${ctx.gt}`;
+      if (d.type === "less_than")          return `${field} 要小于 ${ctx.lt}`;
+      if (d.type === "missing")            return `${field} 没填`;
+      if (d.type === "string_too_short")   return `${field} 太短(至少 ${ctx.min_length} 字)`;
+      if (d.type === "string_too_long")    return `${field} 太长(最多 ${ctx.max_length} 字)`;
+      if (d.type === "value_error")        return d.msg || `${field} 不太对`;
+      return d.msg ? d.msg : "格式不对";
+    });
+    return new Error("这次入参不太对: " + msgs.join("; "));
+  }
+  // 5xx 上游波动
+  if (r.status >= 500) {
+    return new Error("AI 上游临时不可用, 一会儿再试");
+  }
+  // 其他 4xx — 取 detail/message, 不露 stack
+  const detail = (body && (body.detail || body.error || body.message)) || (typeof body === "string" ? body : "");
+  const short = String(detail).slice(0, 180) || `请求失败 (${r.status})`;
+  return new Error(short);
+}
+
 const api = {
   base: API_BASE,
   get(path) {
     return _trace("GET", path, async () => {
       const r = await fetch(`${API_BASE}${path}`);
-      if (!r.ok) throw new Error(`${path} HTTP ${r.status}: ${await r.text()}`);
+      if (!r.ok) throw await _handleErrorResponse(r);
       return r.json();
     });
   },
   post(path, body) {
     return _trace("POST", path, async () => {
       const r = await fetch(`${API_BASE}${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
-      if (!r.ok) throw new Error(`${path} HTTP ${r.status}: ${await r.text()}`);
+      if (!r.ok) throw await _handleErrorResponse(r);
       return r.json();
     });
   },
   patch(path, body) {
     return _trace("PATCH", path, async () => {
       const r = await fetch(`${API_BASE}${path}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
-      if (!r.ok) throw new Error(`${path} HTTP ${r.status}: ${await r.text()}`);
+      if (!r.ok) throw await _handleErrorResponse(r);
       return r.json();
     });
   },
   del(path) {
     return _trace("DELETE", path, async () => {
       const r = await fetch(`${API_BASE}${path}`, { method: "DELETE" });
-      if (!r.ok) throw new Error(`${path} HTTP ${r.status}`);
+      if (!r.ok) throw await _handleErrorResponse(r);
       return r.json();
     });
   },
@@ -53,7 +88,7 @@ const api = {
       const fd = new FormData();
       fd.append(fieldName, file);
       const r = await fetch(`${API_BASE}${path}`, { method: "POST", body: fd });
-      if (!r.ok) throw new Error(`${path} HTTP ${r.status}`);
+      if (!r.ok) throw await _handleErrorResponse(r);
       return r.json();
     });
   },
@@ -63,28 +98,21 @@ const api = {
   },
 };
 
-// 最近一次 API 调用的小灯(放顶栏右上).
-// 默认隐藏 (外测反馈技术词偏多), settings 里能开 "show_api_status_light".
-// 也可 localStorage 直接设 show_api_status=1 (调试快捷开关).
+// 最近一次 API 调用的小灯 (放顶栏右上).
+// D-069: 硬关. 录视频露馅, 只允许 localStorage.show_api_status=1 开 (调试用).
+// 移除从 settings 读取的路径, 防止误勾.
 function ApiStatusLight() {
   const [last, setLast] = React.useState(window.__apiLast);
-  const [show, setShow] = React.useState(() => {
-    try {
-      const ls = localStorage.getItem("show_api_status");
-      if (ls === "1" || ls === "true") return true;
-      if (ls === "0" || ls === "false") return false;
-    } catch (_) {}
-    return null; // null = 还没读到 settings
-  });
+  const show = (() => {
+    try { return localStorage.getItem("show_api_status") === "1"; }
+    catch (_) { return false; }
+  })();
   React.useEffect(() => {
-    if (show !== null) return; // 已有 ls 覆盖, 不读 settings
-    api.get("/api/settings").then(s => setShow(!!s?.show_api_status_light)).catch(() => setShow(false));
-  }, [show]);
-  React.useEffect(() => {
+    if (!show) return;
     const h = (e) => setLast(e.detail);
     window.addEventListener("api-call", h);
     return () => window.removeEventListener("api-call", h);
-  }, []);
+  }, [show]);
 
   if (!show) return null;  // 默认关 → 不渲染
 
