@@ -1,0 +1,383 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>D-037 异步任务化 · mockup</title>
+<style>
+  :root{
+    --brand:#10b981; --brand-soft:#d1fae5; --brand-deep:#047857;
+    --text:#0f172a; --muted:#64748b; --muted2:#94a3b8;
+    --bg:#f6f7fa; --border:#e2e8f0; --border-soft:#eef2f6;
+    --red:#dc2626; --red-soft:#fee2e2;
+    --amber:#d97706; --amber-soft:#fef3c7;
+    --blue:#2563eb; --blue-soft:#dbeafe;
+  }
+  *{box-sizing:border-box} body{margin:0; font: 14px/1.6 -apple-system, "PingFang SC", sans-serif; background:var(--bg); color:var(--text)}
+  h1,h2,h3{margin:0}
+  .wrap{max-width:1100px; margin:30px auto; padding:0 20px}
+  .h1{font-size:22px; font-weight:700; margin-bottom:6px}
+  .subtitle{color:var(--muted); font-size:13px; margin-bottom:30px}
+  .scene{background:#fff; border:1px solid var(--border); border-radius:14px; margin-bottom:24px; overflow:hidden}
+  .scene-head{padding:14px 18px; border-bottom:1px solid var(--border-soft); background:#fafbfc; display:flex; align-items:center; gap:10px}
+  .scene-head .num{background:var(--brand); color:#fff; width:24px; height:24px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; font-size:12px; font-weight:700}
+  .scene-head .title{font-weight:600; font-size:15px}
+  .scene-head .why{color:var(--muted); font-size:12.5px; margin-left:auto}
+  .scene-body{padding:0; background:#fff}
+
+  /* 模拟工厂界面 */
+  .app{display:flex; min-height:480px; background:var(--bg)}
+  .sidebar{width:64px; background:#fff; border-right:1px solid var(--border-soft); padding:14px 0; display:flex; flex-direction:column; align-items:center; gap:6px}
+  .sidebar .icon{width:40px; height:40px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:18px; cursor:pointer}
+  .sidebar .icon.active{background:var(--brand-soft)}
+  .sidebar .icon:hover{background:#f1f5f9}
+  .main{flex:1; display:flex; flex-direction:column; overflow:hidden}
+  .topbar{height:48px; background:#fff; border-bottom:1px solid var(--border-soft); display:flex; align-items:center; padding:0 16px; gap:12px}
+  .topbar .crumb{font-size:13px; color:var(--muted)}
+  .topbar .grow{flex:1}
+  .content{flex:1; padding:24px; overflow:auto}
+
+  /* StepHeader */
+  .stepHead{display:flex; align-items:center; gap:14px; margin-bottom:24px; padding-bottom:14px; border-bottom:1px solid var(--border-soft)}
+  .stepHead .icon{width:36px; height:36px; border-radius:10px; background:var(--brand-soft); display:flex; align-items:center; justify-content:center; font-size:18px}
+  .stepHead .name{font-size:16px; font-weight:600}
+  .stepHead .badge{background:#f1f5f9; color:var(--muted); font-size:11.5px; padding:3px 8px; border-radius:6px}
+  .stepHead .dots{display:flex; gap:6px; margin-left:auto}
+  .stepHead .dots .dot{display:flex; align-items:center; gap:6px; font-size:12px; color:var(--muted)}
+  .stepHead .dots .dot.cur{color:var(--brand-deep); font-weight:600}
+  .stepHead .dots .dot .n{width:18px; height:18px; border-radius:50%; background:#e2e8f0; color:var(--muted); display:inline-flex; align-items:center; justify-content:center; font-size:11px}
+  .stepHead .dots .dot.cur .n{background:var(--brand); color:#fff}
+
+  /* TaskBar (顶栏 chip + 抽屉) */
+  .taskbar-chip{
+    background:var(--brand-soft); color:var(--brand-deep); border-radius:8px;
+    padding:6px 12px; font-size:12.5px; font-weight:600; cursor:pointer;
+    display:flex; align-items:center; gap:8px; border:1px solid #a7f3d0;
+  }
+  .taskbar-chip:hover{background:#bbf7d0}
+  .taskbar-chip .pulse{width:8px; height:8px; background:var(--brand); border-radius:50%; animation:pulse 1.5s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+  .taskbar-chip.idle{background:#f1f5f9; color:var(--muted); border-color:var(--border)}
+  .taskbar-chip.idle .pulse{background:var(--muted2); animation:none}
+
+  .drawer{width:380px; background:#fff; border-left:1px solid var(--border); position:absolute; right:0; top:0; bottom:0; padding:18px; box-shadow:-4px 0 20px rgba(0,0,0,.06); display:flex; flex-direction:column; gap:14px}
+  .drawer h3{font-size:15px; font-weight:600; padding-bottom:10px; border-bottom:1px solid var(--border-soft)}
+  .drawer .group-label{font-size:12px; color:var(--muted2); letter-spacing:.5px; margin-top:6px}
+  .task-card{background:#fafbfc; border:1px solid var(--border-soft); border-radius:10px; padding:12px; cursor:pointer}
+  .task-card:hover{background:#f1f5f9}
+  .task-card .head{display:flex; align-items:center; gap:8px; font-size:13px; font-weight:500}
+  .task-card .head .icon{font-size:15px}
+  .task-card .head .label{flex:1}
+  .task-card .head .time{color:var(--muted); font-size:11px}
+  .task-card .progressBar{margin-top:8px; height:4px; background:#e2e8f0; border-radius:2px; overflow:hidden}
+  .task-card .progressBar .fill{height:100%; background:var(--brand); border-radius:2px; transition: width .5s}
+  .task-card .progressText{font-size:11.5px; color:var(--muted); margin-top:6px}
+  .task-card.failed{background:var(--red-soft)}
+  .task-card.failed .head .label{color:var(--red)}
+  .task-card.ok{opacity:.65}
+
+  /* LoadingProgress (page 主区) */
+  .loading{background:#fff; border:1.5px solid var(--brand); border-radius:16px; padding:24px; max-width:680px; margin:0 auto; text-align:center; box-shadow:0 0 0 5px var(--brand-soft)}
+  .loading .icon{font-size:32px}
+  .loading h3{font-size:18px; font-weight:600; margin:10px 0 4px}
+  .loading .sub{color:var(--muted); font-size:13px; margin-bottom:18px}
+  .loading .bar{height:6px; background:#e2e8f0; border-radius:3px; overflow:hidden; margin:14px 0}
+  .loading .bar .fill{height:100%; background:linear-gradient(90deg, var(--brand) 0%, #34d399 100%); border-radius:3px; animation: progress 90s linear forwards}
+  @keyframes progress{0%{width:0%}100%{width:95%}}
+  .loading .stats{display:flex; justify-content:space-around; padding:10px 0; font-size:12.5px; color:var(--muted); border-top:1px dashed var(--border-soft)}
+  .loading .stats .num{font-size:18px; font-weight:600; color:var(--brand-deep); display:block}
+  .loading .progressText{margin-top:14px; padding:10px 14px; background:var(--brand-soft); border-radius:8px; font-size:12.5px; color:var(--brand-deep)}
+  .loading .hint{margin-top:14px; font-size:12px; color:var(--muted); display:flex; align-items:center; justify-content:center; gap:6px}
+  .loading .cancelBtn{background:#fff; border:1px solid var(--border); color:var(--muted); border-radius:8px; padding:6px 14px; font-size:12.5px; cursor:pointer; margin-top:14px}
+  .loading .cancelBtn:hover{border-color:var(--red); color:var(--red)}
+
+  /* FailedRetry */
+  .failed-card{background:#fff; border:1.5px solid var(--red); border-radius:16px; padding:24px; max-width:680px; margin:0 auto; text-align:center; box-shadow:0 0 0 5px var(--red-soft)}
+  .failed-card .icon{font-size:32px}
+  .failed-card h3{font-size:18px; font-weight:600; margin:10px 0 4px; color:var(--red)}
+  .failed-card .err{background:var(--red-soft); color:var(--red); padding:10px 14px; border-radius:8px; font-size:12.5px; margin:14px 0; text-align:left; font-family: ui-monospace, monospace}
+  .failed-card .actions{display:flex; gap:10px; justify-content:center}
+  .failed-card .btnRetry{background:var(--brand); color:#fff; border:none; border-radius:10px; padding:9px 22px; font-size:14px; font-weight:500; cursor:pointer}
+  .failed-card .btnRetry:hover{background:var(--brand-deep)}
+  .failed-card .btnEdit{background:#fff; border:1px solid var(--border); color:var(--text); border-radius:10px; padding:9px 22px; font-size:14px; cursor:pointer}
+
+  /* SuccessResult */
+  .ok-card{background:#fff; border:1px solid var(--border); border-radius:14px; padding:20px; max-width:680px; margin:0 auto}
+  .ok-card .head{display:flex; align-items:center; gap:10px; margin-bottom:14px; padding-bottom:12px; border-bottom:1px solid var(--border-soft)}
+  .ok-card .head .badge{background:var(--brand-soft); color:var(--brand-deep); font-size:11.5px; padding:3px 8px; border-radius:6px; font-weight:600}
+  .ok-card .head .title{font-size:15px; font-weight:600}
+  .ok-card .head .meta{margin-left:auto; color:var(--muted); font-size:12px}
+  .ok-card pre{background:#f8fafc; padding:12px; border-radius:8px; font-size:12.5px; color:var(--text); overflow:auto; max-height:200px; margin:0}
+
+  /* 文字注释 */
+  .anno{background:#fffbeb; border-left:3px solid var(--amber); padding:10px 14px; margin:12px 0; font-size:12.5px; color:var(--amber); border-radius:0 6px 6px 0; font-family: ui-monospace, monospace}
+
+  /* 互动按钮控制 demo */
+  .demo-ctrl{position:sticky; top:0; background:rgba(255,255,255,.95); backdrop-filter:blur(8px); padding:12px 18px; border-bottom:1px solid var(--border); z-index:10; display:flex; align-items:center; gap:10px; flex-wrap:wrap}
+  .demo-ctrl button{background:#fff; border:1px solid var(--border); padding:6px 12px; border-radius:8px; font-size:12.5px; cursor:pointer}
+  .demo-ctrl button.active{background:var(--brand); color:#fff; border-color:var(--brand)}
+  .demo-ctrl .label{font-size:12px; color:var(--muted); margin-right:auto}
+
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1 class="h1">D-037 异步任务化 · 体验 mockup</h1>
+  <div class="subtitle">把"违规审查 Failed to fetch"那种 90 秒裸 fetch 改成: 立即返 task_id + 前端轮询 + 切走再回来不丢. 下面 5 个场景模拟用户真实操作.</div>
+
+  <!-- 场景 1: 长任务 LoadingProgress -->
+  <div class="scene">
+    <div class="scene-head"><span class="num">1</span><span class="title">长任务进行中 · LoadingProgress</span><span class="why">替代当前的 "Failed to fetch" / 转圈</span></div>
+    <div class="scene-body">
+      <div class="app">
+        <div class="sidebar">
+          <div class="icon">🏠</div>
+          <div class="icon">🎬</div>
+          <div class="icon">💰</div>
+          <div class="icon">📄</div>
+          <div class="icon">🔥</div>
+          <div class="icon active">🛡️</div>
+          <div class="icon">📥</div>
+        </div>
+        <div class="main">
+          <div class="topbar">
+            <span class="crumb">生产部 / 违规审查</span>
+            <span class="grow"></span>
+            <div class="taskbar-chip"><span class="pulse"></span>1 个进行中</div>
+          </div>
+          <div class="content">
+            <div class="stepHead">
+              <div class="icon">🛡️</div>
+              <div class="name">违规审查 · 2 步</div>
+              <div class="badge">用技能: 违禁违规审查-学员版</div>
+              <div class="dots">
+                <div class="dot"><span class="n">1</span>输入文案</div>
+                <div class="dot cur"><span class="n">2</span>报告 + 2 版改写</div>
+              </div>
+            </div>
+
+            <div class="loading">
+              <div class="icon">🛡️</div>
+              <h3>小华正在审查违规...</h3>
+              <div class="sub">大健康行业 · 2078 字 · 通用 + 敏感词库双层扫</div>
+              <div class="bar"><div class="fill"></div></div>
+              <div class="stats">
+                <div><span class="num">42 秒</span>已等</div>
+                <div><span class="num">~ 90 秒</span>预计</div>
+                <div><span class="num">47%</span>进度</div>
+              </div>
+              <div class="progressText">📋 扫通用违禁词中... (8 类: 极限词 / 虚假宣传 / 引诱消费 / ...)</div>
+              <div class="hint">💡 你可以切走干别的, 任务在后台跑, 切回来还能看到</div>
+              <button class="cancelBtn">取消任务</button>
+            </div>
+
+            <div class="anno">说明: 进度条按预计时间走 (90s 满), 不是真进度. 真进度文案在下方 progressText, 后端 update_progress 推. 用户切走后台 chrome 节流 fetch, 但因为我们 200ms 就拿到了 task_id, 后续 3s 一次的轻量轮询不会被节流断.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 场景 2: TaskBar 抽屉 -->
+  <div class="scene">
+    <div class="scene-head"><span class="num">2</span><span class="title">顶栏 TaskBar 抽屉</span><span class="why">任意页都看得到所有进行中 + 今日完成 + 失败</span></div>
+    <div class="scene-body">
+      <div class="app" style="position:relative">
+        <div class="sidebar">
+          <div class="icon active">🏠</div>
+          <div class="icon">🎬</div>
+          <div class="icon">💰</div>
+          <div class="icon">📄</div>
+          <div class="icon">🔥</div>
+          <div class="icon">🛡️</div>
+          <div class="icon">📥</div>
+        </div>
+        <div class="main">
+          <div class="topbar">
+            <span class="crumb">总部 / 今日产出</span>
+            <span class="grow"></span>
+            <div class="taskbar-chip"><span class="pulse"></span>2 个进行中 · 5 完成</div>
+          </div>
+          <div class="content" style="background:#fafbfc">
+            <div style="color:var(--muted); font-size:13px; padding:40px 0; text-align:center">(总部页内容...)</div>
+          </div>
+        </div>
+        <div class="drawer">
+          <h3>🌟 我的任务</h3>
+
+          <div class="group-label">进行中 (2)</div>
+          <div class="task-card">
+            <div class="head">
+              <span class="icon">🛡️</span>
+              <span class="label">违规审查 · 大健康 · 2078字</span>
+              <span class="time">1m 12s</span>
+            </div>
+            <div class="progressBar"><div class="fill" style="width:60%"></div></div>
+            <div class="progressText">扫敏感行业词中 · 大健康/医疗</div>
+          </div>
+          <div class="task-card">
+            <div class="head">
+              <span class="icon">💰</span>
+              <span class="label">投流文案 · 10 条</span>
+              <span class="time">28s</span>
+            </div>
+            <div class="progressBar"><div class="fill" style="width:18%"></div></div>
+            <div class="progressText">分配结构: 痛/对/步/话/创...</div>
+          </div>
+
+          <div class="group-label">今日完成 (5)</div>
+          <div class="task-card ok">
+            <div class="head"><span class="icon">📄</span><span class="label">公众号长文 · 新手开店第一周</span><span class="time">2m 前</span></div>
+          </div>
+          <div class="task-card ok">
+            <div class="head"><span class="icon">🔥</span><span class="label">热点改写 · 张雪峰开播</span><span class="time">15m 前</span></div>
+          </div>
+          <div class="task-card ok">
+            <div class="head"><span class="icon">📄</span><span class="label">公众号封面 4 选 1</span><span class="time">18m 前</span></div>
+          </div>
+          <div class="task-card ok">
+            <div class="head"><span class="icon">💥</span><span class="label">爆款改写 · 4 版</span><span class="time">31m 前</span></div>
+          </div>
+
+          <div class="group-label">失败 (1)</div>
+          <div class="task-card failed">
+            <div class="head"><span class="icon">📄</span><span class="label">公众号段间图 · 第 2 张</span><span class="time">8m 前</span></div>
+            <div class="progressText">apimart 504 · <a style="color:var(--brand-deep); cursor:pointer">再试一次</a></div>
+          </div>
+        </div>
+      </div>
+      <div style="padding:14px 18px"><div class="anno">说明: 抽屉常驻数据从 GET /api/tasks?limit=20 拿. 进行中任务 3 秒轮询, 完成的不轮. 点任意一条 → 跳到对应 page (page_id 字段). 任务超过 7 天后端自动 cleanup_old.</div></div>
+    </div>
+  </div>
+
+  <!-- 场景 3: 失败 + 重试 -->
+  <div class="scene">
+    <div class="scene-head"><span class="num">3</span><span class="title">任务失败 + 一键重试</span><span class="why">替代当前红条 "Failed to fetch" 不知所云</span></div>
+    <div class="scene-body">
+      <div class="app">
+        <div class="sidebar">
+          <div class="icon">🏠</div>
+          <div class="icon">🎬</div>
+          <div class="icon">💰</div>
+          <div class="icon">📄</div>
+          <div class="icon">🔥</div>
+          <div class="icon active">🛡️</div>
+          <div class="icon">📥</div>
+        </div>
+        <div class="main">
+          <div class="topbar"><span class="crumb">生产部 / 违规审查</span><span class="grow"></span><div class="taskbar-chip idle"><span class="pulse"></span>没有进行中</div></div>
+          <div class="content">
+            <div class="failed-card">
+              <div class="icon">😅</div>
+              <h3>这次没跑成功</h3>
+              <div style="color:var(--muted); font-size:13px">大概率是 AI 上游临时不稳定, 通常重试一次就好</div>
+              <div class="err">DeepSeekUnavailable: 上游 502 Bad Gateway · 已重试 1 次</div>
+              <div class="actions">
+                <button class="btnRetry">🔄 再试一次</button>
+                <button class="btnEdit">📝 改一下文案再试</button>
+              </div>
+            </div>
+            <div style="text-align:center; margin-top:20px; color:var(--muted); font-size:12px">⚙️ 你的 2078 字文案没丢, 点 "改一下文案再试" 可以编辑</div>
+
+            <div class="anno">说明: 友好错误文案后端 finish_task(error=...) 时给, 前端显示. 草稿在 wfState 里 (D-016 已有), 重试不掉. 不再出现 "Failed to fetch" 这种浏览器原生错.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 场景 4: 切走再回来 -->
+  <div class="scene">
+    <div class="scene-head"><span class="num">4</span><span class="title">切走再回来 · 任务恢复</span><span class="why">长任务最大杀手锏: 关浏览器都不丢</span></div>
+    <div class="scene-body">
+      <div class="app">
+        <div class="sidebar">
+          <div class="icon">🏠</div>
+          <div class="icon">🎬</div>
+          <div class="icon">💰</div>
+          <div class="icon">📄</div>
+          <div class="icon">🔥</div>
+          <div class="icon active">🛡️</div>
+          <div class="icon">📥</div>
+        </div>
+        <div class="main">
+          <div class="topbar">
+            <span class="crumb">生产部 / 违规审查</span><span class="grow"></span>
+            <div class="taskbar-chip"><span class="pulse"></span>1 个进行中</div>
+          </div>
+          <div class="content">
+            <div style="background:var(--blue-soft); border:1px solid #93c5fd; border-radius:10px; padding:12px 16px; max-width:680px; margin:0 auto 18px; font-size:13px; color:var(--blue); display:flex; align-items:center; gap:10px">
+              <span style="font-size:18px">↩️</span>
+              <span>欢迎回来. 上次提交的"违规审查 · 2078 字"还在跑 (已 1m 32s), 进度条接着走.</span>
+            </div>
+
+            <div class="loading">
+              <div class="icon">🛡️</div>
+              <h3>小华正在审查违规...</h3>
+              <div class="sub">大健康行业 · 2078 字</div>
+              <div class="bar"><div class="fill" style="animation:none; width:88%"></div></div>
+              <div class="stats">
+                <div><span class="num">1m 32s</span>已等</div>
+                <div><span class="num">~ 1m 30s</span>预计</div>
+                <div><span class="num">88%</span>进度</div>
+              </div>
+              <div class="progressText">✏️ 写营销版 (保留紧迫感 + 社交证言)...</div>
+            </div>
+
+            <div class="anno">说明: localStorage 存 task_id (compliance:taskId 这种 key). 关闭浏览器 → 再打开 → useTaskPoller 看到 localStorage 还有 task_id → 立即拉 GET /api/tasks/{id} → 看到 status=running → 接着轮询 → 拿到 result.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 场景 5: 任务完成 -->
+  <div class="scene">
+    <div class="scene-head"><span class="num">5</span><span class="title">任务完成 · 报告渲染</span><span class="why">体验和现在差不多, 但是不会再炸</span></div>
+    <div class="scene-body">
+      <div class="app">
+        <div class="sidebar">
+          <div class="icon">🏠</div>
+          <div class="icon">🎬</div>
+          <div class="icon">💰</div>
+          <div class="icon">📄</div>
+          <div class="icon">🔥</div>
+          <div class="icon active">🛡️</div>
+          <div class="icon">📥</div>
+        </div>
+        <div class="main">
+          <div class="topbar"><span class="crumb">生产部 / 违规审查</span><span class="grow"></span><div class="taskbar-chip idle"><span class="pulse"></span>没有进行中 · 6 完成</div></div>
+          <div class="content">
+            <div class="ok-card">
+              <div class="head">
+                <span class="badge">⚠️ 9 处违规</span>
+                <span class="title">原文几乎每个短句都踩线 · 必封级别</span>
+                <span class="meta">耗时 1m 38s · DeepSeek</span>
+              </div>
+              <div style="font-size:13px; color:var(--muted); padding:6px 0 12px">高危 6 · 中危 2 · 低危 1</div>
+              <pre>📝 保守版 (97 分)  关注我, 了解一款日常体重管理方案, 温和辅助身材...
+📝 营销版 (87 分)  私信我, 了解这款口碑很好的轻体好物, 身边好多朋友用了...</pre>
+            </div>
+
+            <div class="anno">说明: status=ok 后停止轮询, render result 按之前 CStepResult 那套 UI 走. localStorage 的 compliance:taskId 清掉. tasks 表保留这条 ok 记录 7 天, 顶栏 "今日完成" chip 能看到.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 决策点 -->
+  <div class="scene">
+    <div class="scene-head"><span class="num">?</span><span class="title">需要清华哥点头的几件事</span><span class="why">点头后开干</span></div>
+    <div style="padding:18px 24px; line-height:2">
+      <div>1. <b>顶栏 TaskBar</b> 要做吗? (推荐做, 场景 2/4 才成立) — <span style="color:var(--muted)">不做就不知道任务存在, 切到别的页就看不到</span></div>
+      <div>2. <b>取消按钮</b> D-037b 一并做? (推荐) — <span style="color:var(--muted)">已经 is_cancelled 支持, 多 1 行 UI</span></div>
+      <div>3. <b>进度条用预计时间假动画</b> 还是 <b>真进度百分比</b>? (推荐预计时间) — <span style="color:var(--muted)">真进度要在 worker 里多 update_progress, 复杂. 预计时间假动画 + 真进度文案文字, 体感够用</span></div>
+      <div>4. <b>预计时间字段 estimated_seconds</b> 加到 tasks 表? (推荐加) — <span style="color:var(--muted)">不加就硬编码到前端, 改起来烦</span></div>
+      <div>5. <b>改造范围</b>: 上面 SPEC.md §5.2 列了 13 个 endpoint, 短的 3 个 (titles/outline/rewrite-section) 不改保持同步, 你认可? — <span style="color:var(--muted)">认可就按 §7 实际推荐顺序开干</span></div>
+      <div>6. <b>第一波先动哪个</b>? (推荐 compliance/check) — <span style="color:var(--muted)">已经是你今天发现的痛点, 改完直接验证范式</span></div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

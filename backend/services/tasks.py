@@ -46,6 +46,8 @@ CREATE TABLE IF NOT EXISTS tasks (
     result TEXT,
     error TEXT,
     progress_text TEXT,
+    progress_pct INTEGER,
+    estimated_seconds INTEGER,
     started_ts INTEGER NOT NULL,
     finished_ts INTEGER,
     updated_ts INTEGER NOT NULL
@@ -54,6 +56,12 @@ CREATE INDEX IF NOT EXISTS idx_tasks_status_updated ON tasks(status, updated_ts 
 CREATE INDEX IF NOT EXISTS idx_tasks_kind ON tasks(kind);
 CREATE INDEX IF NOT EXISTS idx_tasks_ns ON tasks(ns);
 """
+
+# D-037b1: 老库 ALTER TABLE 加 progress_pct / estimated_seconds. 幂等, 已有列跳过.
+_MIGRATIONS = [
+    ("progress_pct", "INTEGER"),
+    ("estimated_seconds", "INTEGER"),
+]
 
 _schema_init = threading.Lock()
 _schema_done = False
@@ -70,6 +78,10 @@ def _ensure_schema():
             return
         with closing(sqlite3.connect(DB_PATH)) as con:
             con.executescript(SCHEMA)
+            existing = {r[1] for r in con.execute("PRAGMA table_info(tasks)").fetchall()}
+            for col, typ in _MIGRATIONS:
+                if col not in existing:
+                    con.execute(f"ALTER TABLE tasks ADD COLUMN {col} {typ}")
             con.commit()
         _schema_done = True
 
@@ -113,8 +125,12 @@ def create_task(
     step: str | None = None,
     payload: Any = None,
     status: str = "running",
+    estimated_seconds: int | None = None,
 ) -> str:
-    """创建一条任务, 返回 task_id。默认 status=running (让调用方在创建线程前就进入运行态)。"""
+    """创建一条任务, 返回 task_id。默认 status=running (让调用方在创建线程前就进入运行态)。
+
+    estimated_seconds: D-037b1 加, 前端顶栏 TaskBar 显示预计耗时, 不参与百分比计算 (清华哥拍板要真进度).
+    """
     if status not in VALID_STATUS:
         raise ValueError(f"invalid status: {status}")
     _ensure_schema()
@@ -122,27 +138,42 @@ def create_task(
     now = int(time.time())
     with closing(sqlite3.connect(DB_PATH)) as con:
         con.execute(
-            "INSERT INTO tasks (id, kind, label, status, ns, page_id, step, payload, started_ts, updated_ts) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?)",
+            "INSERT INTO tasks (id, kind, label, status, ns, page_id, step, payload, "
+            "estimated_seconds, started_ts, updated_ts) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
             (
                 tid, kind[:64], (label or "")[:200], status,
                 (ns or "")[:32] or None, (page_id or "")[:32] or None, (step or "")[:32] or None,
-                _dumps(payload), now, now,
+                _dumps(payload),
+                int(estimated_seconds) if estimated_seconds else None,
+                now, now,
             ),
         )
         con.commit()
     return tid
 
 
-def update_progress(task_id: str, progress_text: str) -> None:
-    """更新阶段文案(前端轮询看到实时进度)。"""
+def update_progress(task_id: str, progress_text: str, *, pct: int | None = None) -> None:
+    """更新阶段文案(前端轮询看到实时进度)。
+
+    pct: D-037b1 加. 0-100 的真实百分比, 由 worker 在每个里程碑后推. 不传则只更新 text.
+    """
     _ensure_schema()
     now = int(time.time())
+    if pct is not None:
+        pct = max(0, min(100, int(pct)))
     with closing(sqlite3.connect(DB_PATH)) as con:
-        con.execute(
-            "UPDATE tasks SET progress_text=?, updated_ts=? WHERE id=? AND status='running'",
-            ((progress_text or "")[:200], now, task_id),
-        )
+        if pct is None:
+            con.execute(
+                "UPDATE tasks SET progress_text=?, updated_ts=? WHERE id=? AND status='running'",
+                ((progress_text or "")[:200], now, task_id),
+            )
+        else:
+            con.execute(
+                "UPDATE tasks SET progress_text=?, progress_pct=?, updated_ts=? "
+                "WHERE id=? AND status='running'",
+                ((progress_text or "")[:200], pct, now, task_id),
+            )
         con.commit()
 
 

@@ -194,3 +194,49 @@ def test_cleanup_old(tmp_db):
     remain = t.list_tasks()
     kinds = {x["kind"] for x in remain}
     assert kinds == {"fresh", "running_one"}
+
+
+# ─── D-037b1 新字段: progress_pct + estimated_seconds ───
+
+def test_create_task_with_estimated_seconds(tmp_db):
+    from backend.services import tasks as t
+    tid = t.create_task("compliance.check", estimated_seconds=90)
+    rec = t.get_task(tid)
+    assert rec["estimated_seconds"] == 90
+
+
+def test_create_task_estimated_seconds_default_null(tmp_db):
+    from backend.services import tasks as t
+    tid = t.create_task("kind_no_est")
+    rec = t.get_task(tid)
+    assert rec["estimated_seconds"] is None
+
+
+def test_update_progress_with_pct(tmp_db):
+    from backend.services import tasks as t
+    tid = t.create_task("compliance.check")
+    t.update_progress(tid, "扫违规中", pct=30)
+    rec = t.get_task(tid)
+    assert rec["progress_text"] == "扫违规中"
+    assert rec["progress_pct"] == 30
+
+
+def test_update_progress_pct_clamps(tmp_db):
+    """pct 越界 (负数 / >100) 钳到 0-100。"""
+    from backend.services import tasks as t
+    tid = t.create_task("k")
+    t.update_progress(tid, "p", pct=-5)
+    assert t.get_task(tid)["progress_pct"] == 0
+    t.update_progress(tid, "p", pct=120)
+    assert t.get_task(tid)["progress_pct"] == 100
+
+
+def test_update_progress_without_pct_keeps_old(tmp_db):
+    """update_progress 不传 pct 不动已有 progress_pct (避免覆盖成 None)。"""
+    from backend.services import tasks as t
+    tid = t.create_task("k")
+    t.update_progress(tid, "step1", pct=40)
+    t.update_progress(tid, "step2")  # 不传 pct
+    rec = t.get_task(tid)
+    assert rec["progress_text"] == "step2"
+    assert rec["progress_pct"] == 40  # 旧值保留
