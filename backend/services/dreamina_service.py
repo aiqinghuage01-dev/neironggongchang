@@ -390,7 +390,26 @@ def submit_and_wait(
 
 
 def query_result(submit_id: str, download: bool = True) -> dict[str, Any]:
-    """查任务结果。download=True 则下载到 DREAMINA_DOWNLOAD_DIR。"""
+    """查任务结果。download=True 则下载到 DREAMINA_DOWNLOAD_DIR。
+
+    D-082e: DREAMINA_MOCK=1 时跳过真 CLI, 立即返 done + 一个项目里现成 mp4 当假产物.
+    仅供开发测试加速 (playwright 跑流程不烧 credits 不等排队). **绝不当验收依据**.
+    """
+    if os.environ.get("DREAMINA_MOCK") == "1":
+        # 找一个现有 mp4 当假产物 (用 e76aca91 抢救来的 4s 视频)
+        mock_dir = DREAMINA_DOWNLOAD_DIR
+        mock_files = sorted([p for p in mock_dir.glob("*.mp4")], key=lambda x: -x.stat().st_size)
+        mp4 = str(mock_files[0]) if mock_files else ""
+        return {
+            "ok": True,
+            "result": {
+                "gen_status": "done",
+                "submit_id": submit_id,
+                "_mock": True,
+            },
+            "downloaded": [mp4] if mp4 and download else [],
+            "raw": "[MOCK] 跳过真 CLI",
+        }
     args = ["query_result", "--submit_id", submit_id]
     if download:
         args += ["--download_dir", str(DREAMINA_DOWNLOAD_DIR)]

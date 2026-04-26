@@ -37,5 +37,28 @@ probe "moments.derive n=3"      "/api/moments/derive"      '{"topic":"实体老�
 probe "topics.generate n=5"     "/api/topics/generate"     '{"seed":"老板用 AI 自动化","n":5,"deep":false}'
 probe "image.generate n=1"      "/api/image/generate"      '{"prompt":"一只橘猫坐在阳台","n":1,"size":"1:1"}'
 
+# D-078c smoke (远程任务 watcher 相关 endpoint)
+probe_get() {
+  local label="$1" path="$2"
+  local code=$(curl -s -o /tmp/_p.body -w "%{http_code}" "$API$path" -m 10)
+  local body_preview=$(head -c 150 /tmp/_p.body)
+  if [[ "$code" == "200" ]]; then
+    echo "✓ [$code] $label"; PASS=$((PASS+1))
+  else
+    echo "❌ [$code] $label  body: $body_preview"; FAIL=$((FAIL+1))
+  fi
+}
+probe_get "remote-jobs.stats"   "/api/remote-jobs/stats"
+
+# dreamina recover (fake submit_id → endpoint 不 crash 即 OK; 真 recover 见 by-task)
+recover_code=$(curl -s -o /tmp/_p.body -w "%{http_code}" -X POST "$API/api/dreamina/recover/fake_smoke_sid" -m 30)
+if [[ "$recover_code" == "200" ]]; then
+  echo "✓ [$recover_code] dreamina.recover (fake sid → endpoint 在)"
+  PASS=$((PASS+1))
+else
+  echo "❌ [$recover_code] dreamina.recover  body: $(head -c 150 /tmp/_p.body)"
+  FAIL=$((FAIL+1))
+fi
+
 echo "=== TOTAL: ${PASS} pass · ${FAIL} fail ==="
 exit $FAIL
