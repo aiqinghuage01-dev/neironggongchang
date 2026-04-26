@@ -58,9 +58,13 @@ CREATE INDEX IF NOT EXISTS idx_tasks_ns ON tasks(ns);
 """
 
 # D-037b1: 老库 ALTER TABLE 加 progress_pct / estimated_seconds. 幂等, 已有列跳过.
+# T9: retry_count 列, LLM with_retry 触发时 +1 (跟 in-process stats 双写, DB 持久化更稳).
+# T13: user_id 列, 默认 'qinghua', 给 poju.ai 多用户铺垫. 业务逻辑暂不读 (单用户假设).
 _MIGRATIONS = [
     ("progress_pct", "INTEGER"),
     ("estimated_seconds", "INTEGER"),
+    ("retry_count", "INTEGER"),
+    ("user_id", "TEXT"),
 ]
 
 _schema_init = threading.Lock()
@@ -139,13 +143,15 @@ def create_task(
     with closing(sqlite3.connect(DB_PATH)) as con:
         con.execute(
             "INSERT INTO tasks (id, kind, label, status, ns, page_id, step, payload, "
-            "estimated_seconds, started_ts, updated_ts) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            "estimated_seconds, retry_count, user_id, started_ts, updated_ts) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 tid, kind[:64], (label or "")[:200], status,
                 (ns or "")[:32] or None, (page_id or "")[:32] or None, (step or "")[:32] or None,
                 _dumps(payload),
                 int(estimated_seconds) if estimated_seconds else None,
+                0,  # T9 retry_count 初始 0
+                "qinghua",  # T13 user_id 默认 qinghua (单用户假设, 多用户化前不变)
                 now, now,
             ),
         )
@@ -207,7 +213,9 @@ def finish_task(
     error: str | None = None,
     status: str | None = None,
 ) -> None:
-    """标记任务结束。status 不传则按 error 是否为 None 自动定: ok / failed。"""
+    """标记任务结束。status 不传则按 error 是否为 None 自动定: ok / failed。
+    T7: failed 时, 产物类 task (dreamina/image/dhv5/shiliu/wechat-cover) 写一条 work
+    (status=failed, source=task) 让作品库能展示老板"那条没出来的视频" 可重查."""
     if status is None:
         status = "failed" if error else "ok"
     if status not in VALID_STATUS:
@@ -220,6 +228,51 @@ def finish_task(
             (status, _dumps(result), (error or "")[:500] if error else None, now, now, task_id),
         )
         con.commit()
+    # T7: 失败 placeholder 入作品库
+    if status == "failed":
+        try:
+            _autoinsert_failed_placeholder(task_id, error or "")
+        except Exception:
+            pass
+
+
+def _autoinsert_failed_placeholder(task_id: str, err: str) -> None:
+    """T7: 把失败的产物类 task 写成 work (status=failed) 让作品库能找到 + 重查.
+    避免重复 — 同 task_id 已写过就跳."""
+    t = get_task(task_id)
+    if not t:
+        return
+    PRODUCT_KINDS = ("dreamina.", "image.", "dhv5.", "shiliu.", "wechat.cover")
+    if not any(t["kind"].startswith(k) for k in PRODUCT_KINDS):
+        return
+    payload = t.get("payload") or {}
+    title = (t.get("label") or t["kind"])[:60] + " (失败)"
+    try:
+        from shortvideo.works import insert_work, list_works
+        # 重复检测: 看 metadata.task_id 已存在
+        for w in list_works(limit=50):
+            md = getattr(w, "metadata", "") or ""
+            if task_id in md:
+                return
+        wtype = "video" if any(t["kind"].startswith(k) for k in ("dreamina.", "dhv5.", "shiliu.")) else "image"
+        insert_work(
+            type=wtype, source_skill="failed-task",
+            title=title,
+            local_path=None, thumb_path=None, status="failed",
+            metadata=json.dumps({
+                "task_id": task_id,
+                "kind": t["kind"],
+                "submit_id": payload.get("submit_id"),
+                "prompt_preview": (payload.get("prompt_preview") or payload.get("hotspot_preview") or "")[:200],
+                "error": err[:300],
+                "page_id": t.get("page_id"),
+            }, ensure_ascii=False),
+        )
+    except Exception:
+        pass
+
+
+# 加 json import 顶部需要 — 已有 import json L25 OK
 
 
 def cancel_task(task_id: str) -> bool:
@@ -325,6 +378,72 @@ def start_watchdog() -> bool:
             return False
         _watchdog_started = True
     t = threading.Timer(_WATCHDOG_INTERVAL_SEC, _watchdog_tick)
+    t.daemon = True
+    t.start()
+    return True
+
+
+# T10: task 自动 cleanup — 防 DB 无限膨胀
+_CLEANUP_INTERVAL_SEC = 24 * 3600  # 一天一次
+_CLEANUP_OK_TTL_SEC = 7 * 24 * 3600       # ok task 7 天后删
+_CLEANUP_FAILED_TTL_SEC = 30 * 24 * 3600  # failed/cancelled task 30 天后删
+_cleanup_started = False
+_cleanup_lock = threading.Lock()
+
+
+def cleanup_old() -> dict[str, int]:
+    """删除老 task. ok/cancelled > 7d 删, failed > 30d 删. running/pending 不动.
+    返回 {ok_deleted, failed_deleted}."""
+    _ensure_schema()
+    now = int(time.time())
+    ok_cutoff = now - _CLEANUP_OK_TTL_SEC
+    failed_cutoff = now - _CLEANUP_FAILED_TTL_SEC
+    with closing(sqlite3.connect(DB_PATH)) as con:
+        c1 = con.execute(
+            "DELETE FROM tasks WHERE status IN ('ok','cancelled') AND COALESCE(finished_ts, updated_ts) < ?",
+            (ok_cutoff,),
+        )
+        ok_n = c1.rowcount
+        c2 = con.execute(
+            "DELETE FROM tasks WHERE status='failed' AND COALESCE(finished_ts, updated_ts) < ?",
+            (failed_cutoff,),
+        )
+        failed_n = c2.rowcount
+        con.commit()
+    return {"ok_deleted": ok_n, "failed_deleted": failed_n}
+
+
+def _cleanup_tick():
+    """T10 daemon: 24h 扫一次."""
+    try:
+        r = cleanup_old()
+        if r["ok_deleted"] or r["failed_deleted"]:
+            import logging
+            logging.getLogger("tasks.cleanup").info(
+                f"cleanup deleted: ok={r['ok_deleted']} failed={r['failed_deleted']}"
+            )
+    except Exception as e:
+        import logging
+        logging.getLogger("tasks.cleanup").error(f"cleanup failed: {e}")
+    finally:
+        t = threading.Timer(_CLEANUP_INTERVAL_SEC, _cleanup_tick)
+        t.daemon = True
+        t.start()
+
+
+def start_cleanup() -> bool:
+    """启动 cleanup daemon (idempotent). 启动时也会立刻跑一次清理."""
+    global _cleanup_started
+    with _cleanup_lock:
+        if _cleanup_started:
+            return False
+        _cleanup_started = True
+    # 启动时立刻跑一次, 不等 24h
+    try:
+        cleanup_old()
+    except Exception:
+        pass
+    t = threading.Timer(_CLEANUP_INTERVAL_SEC, _cleanup_tick)
     t.daemon = True
     t.start()
     return True

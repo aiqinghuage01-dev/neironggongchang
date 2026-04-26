@@ -25,7 +25,22 @@ def _poll_for_watcher(submit_id: str) -> dict[str, Any]:
     """remote_jobs watcher poll_fn.
 
     submit_id = str(video_id) (柿榴 video_id 是 int, 我们字符串化).
+    T12: SHILIU_MOCK=1 时跳过真柿榴 API, 立即返 done + 现成 mp4 当假产物.
     """
+    import os
+    if os.environ.get("SHILIU_MOCK") == "1":
+        from shortvideo.config import VIDEO_DIR
+        # 找现有 shiliu_*.mp4 当假产物
+        mocks = sorted(VIDEO_DIR.glob("shiliu_*.mp4"), key=lambda x: -x.stat().st_size)
+        path = str(mocks[0]) if mocks else ""
+        return {"status": "done", "result": {
+            "video_id": int(submit_id) if submit_id.isdigit() else 0,
+            "video_url": "[MOCK]",
+            "local_path": path,
+            "title": "MOCK shiliu",
+            "progress": 100,
+            "_mock": True,
+        }}
     try:
         from shortvideo.shiliu import ShiliuClient
         with ShiliuClient() as c:

@@ -26,6 +26,24 @@ function PageTouliu({ onNav }) {
   const [skillInfo, setSkillInfo] = React.useState(null);
   React.useEffect(() => { api.get("/api/touliu/skill-info").then(setSkillInfo).catch(() => {}); }, []);
 
+  // D-082b 完整版: 跳页 retry 自动预填 (page id 是 ad)
+  React.useEffect(() => {
+    try {
+      const retry = sessionStorage.getItem("retry_payload_ad") || sessionStorage.getItem("retry_payload_touliu");
+      if (retry) {
+        const p = JSON.parse(retry);
+        const recovered = p.pitch_preview || p.pitch || p.prompt_preview || p.text;
+        if (recovered && !pitch) { setPitch(recovered); }
+        if (p.industry && p.industry !== "通用老板") { setIndustry(p.industry); }
+        if (p.target_action) { setTargetAction(p.target_action); }
+        if (p.channel) { setChannel(p.channel); }
+        sessionStorage.removeItem("retry_payload_ad");
+        sessionStorage.removeItem("retry_payload_touliu");
+      }
+    } catch (_) {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // D-037b6: 轮询 generate 任务
   const poller = useTaskPoller(taskId, {
     onComplete: (r) => { setResult(r); setTaskId(null); },

@@ -33,6 +33,21 @@ function PageBaokuan({ onNav }) {
   const [skillInfo, setSkillInfo] = React.useState(null);
   React.useEffect(() => { api.get("/api/baokuan/skill-info").then(setSkillInfo).catch(() => {}); }, []);
 
+  // D-082b 完整版: 跳页 retry 自动预填
+  React.useEffect(() => {
+    try {
+      const retry = sessionStorage.getItem("retry_payload_baokuan");
+      if (retry) {
+        const p = JSON.parse(retry);
+        const recovered = p.text_preview || p.text || p.prompt_preview;
+        if (recovered && !text) { setText(recovered); }
+        if (p.industry && !industry) { setIndustry(p.industry); }
+        sessionStorage.removeItem("retry_payload_baokuan");
+      }
+    } catch (_) {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // D-037b5: 轮询 rewrite 任务状态
   const poller = useTaskPoller(taskId, {
     onComplete: (r) => {

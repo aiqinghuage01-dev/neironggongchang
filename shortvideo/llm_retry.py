@@ -29,6 +29,33 @@ def is_transient_error(e: BaseException) -> bool:
     return any(kw in msg for kw in TRANSIENT_KEYWORDS)
 
 
+# T9: retry 命中率统计 (in-process, 不持久化, 进程重启清零)
+# 老板首页 dashboard "今天 LLM 重试 N 次救活 M 次" 用.
+import threading as _th_t9
+_T9_LOCK = _th_t9.Lock()
+_T9_STATS = {"retried": 0, "saved_after_retry": 0, "failed_after_retry": 0, "since_ts": 0}
+
+
+def _t9_init():
+    if _T9_STATS["since_ts"] == 0:
+        import time as _tm
+        _T9_STATS["since_ts"] = int(_tm.time())
+
+
+def _t9_bump(key: str):
+    with _T9_LOCK:
+        _t9_init()
+        _T9_STATS[key] = _T9_STATS.get(key, 0) + 1
+
+
+def get_retry_stats() -> dict:
+    """T9: dashboard 拉数. 返回 retried (触发次数), saved_after_retry (重试成功救活),
+    failed_after_retry (重试也失败), since_ts (开始计数 unix 时间)."""
+    with _T9_LOCK:
+        _t9_init()
+        return dict(_T9_STATS)
+
+
 def with_retry(
     fn: Callable[[], T],
     *,
@@ -42,12 +69,19 @@ def with_retry(
     backoff: attempt × 1.5^attempt 指数退避. attempt=0 → 1.5s, attempt=1 → 2.25s
     """
     last_err: BaseException | None = None
+    triggered = False  # T9: 是否真触发了至少一次重试
     for attempt in range(max_retries + 1):
         try:
-            return fn()
+            r = fn()
+            if triggered:
+                _t9_bump("saved_after_retry")
+            return r
         except BaseException as e:
             last_err = e
             if attempt < max_retries and is_transient_error(e):
+                if not triggered:
+                    _t9_bump("retried")
+                    triggered = True
                 if on_retry:
                     try:
                         on_retry(attempt + 1, e)
@@ -55,6 +89,8 @@ def with_retry(
                         pass
                 time.sleep(backoff_sec * (1.5 ** attempt))
                 continue
+            if triggered:
+                _t9_bump("failed_after_retry")
             raise
     # 永远到不了: 上面要么 return 要么 raise
     raise last_err  # type: ignore[misc]

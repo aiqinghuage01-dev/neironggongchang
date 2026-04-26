@@ -286,6 +286,9 @@ def _recover_orphan_tasks():
             log.warning(f"recovered {n_runs} orphan night runs")
         if tasks_service.start_watchdog():
             log.info("watchdog started (60s sweep stuck running)")
+        # T10: 老 task 自动 cleanup (24h 一次)
+        if tasks_service.start_cleanup():
+            log.info("task cleanup started (24h tick, ok>7d / failed>30d)")
     except Exception as e:
         log.error(f"orphan/watchdog setup failed: {e}")
 
@@ -1056,6 +1059,63 @@ def remote_jobs_stats():
         "providers": remote_jobs.list_providers(),
         "watcher_running": remote_jobs.watcher_running(),
     }
+
+
+@app.get("/api/dreamina/queue-status", tags=["即梦 AIGC"], summary="(T8) 即梦排队拥堵预判")
+def dreamina_queue_status():
+    """看用户当前在即梦端排队中的任务数 + 历史平均出结果时间.
+    给前端 dreamina 页提交前 banner 用.
+    返回 {querying_count, recent_avg_minutes, last_done_at_min_ago}.
+    """
+    from backend.services import remote_jobs
+    import sqlite3 as _sq
+    from contextlib import closing as _cl
+    from shortvideo.config import DB_PATH as _DB
+    now = int(time.time())
+    with _cl(_sq.connect(_DB)) as con:
+        # 当前 querying / pending 数
+        querying = con.execute(
+            "SELECT COUNT(*) FROM remote_jobs WHERE provider='dreamina' "
+            "AND (last_status IS NULL OR last_status NOT IN ('done','failed','timeout','cancelled'))"
+        ).fetchone()[0]
+        # 最近 10 个 done 任务的平均出结果时间 (submitted → finished_at)
+        rows = con.execute(
+            "SELECT submitted_at, finished_at FROM remote_jobs "
+            "WHERE provider='dreamina' AND last_status='done' AND finished_at IS NOT NULL "
+            "ORDER BY submitted_at DESC LIMIT 10"
+        ).fetchall()
+        durations = [(f - s) for s, f in rows if s and f]
+        avg_sec = (sum(durations) / len(durations)) if durations else 0
+        # 最近一次 done 距今多久
+        last_done_at = max([f for _, f in rows], default=0)
+        last_done_min = (now - last_done_at) // 60 if last_done_at else None
+    avg_min = round(avg_sec / 60, 1)
+    # 拥堵程度判断
+    if querying == 0:
+        level = "idle"; hint = "目前队列空, 提交后基本立刻开始"
+    elif querying < 3:
+        level = "light"; hint = f"你有 {querying} 个任务排队, 一般 {avg_min}min 出结果" if avg_min else f"你有 {querying} 个任务排队"
+    elif querying < 8:
+        level = "moderate"; hint = f"⚠ 有 {querying} 个任务排队中, 新提交可能要等 {avg_min*2:.0f}min+"
+    else:
+        level = "heavy"; hint = f"🔴 队列已挤 ({querying} 个), 建议晚一点提交或耐心等"
+    return {
+        "querying_count": querying,
+        "recent_avg_minutes": avg_min,
+        "last_done_at_min_ago": last_done_min,
+        "congestion_level": level,
+        "hint": hint,
+    }
+
+
+@app.get("/api/llm-retry/stats", tags=["总部"], summary="(T9) LLM 自动重试命中率")
+def llm_retry_stats():
+    """D-082c retry 命中率: retried 触发次数, saved 重试成功救活, failed 重试也挂.
+    in-process 计数, 进程重启清零. 首页"今天 LLM 重试 N 次救活 M 次" 用."""
+    from shortvideo.llm_retry import get_retry_stats
+    s = get_retry_stats()
+    save_rate = round(s["saved_after_retry"] / max(1, s["retried"]) * 100, 1) if s["retried"] else 0
+    return {**s, "save_rate_pct": save_rate}
 
 
 # 即梦 CLI 要本地路径不要 data URL, 不能复用 D-073 的 /api/image/upload-ref (那个返 base64).
@@ -2900,6 +2960,9 @@ def image_generate(req: ImageGenReq):
     完成后 task.result = {images: [{url, local_path, media_url}, ...], engine, n, size, elapsed_sec}.
     apimart 30-60s/张, dreamina 60-120s/张.
     D-073: refs (参考图 data URL list) 仅 apimart 引擎接, dreamina 忽略.
+
+    D-080: apimart 单图 (n=1) 改走 remote_jobs watcher — 即便 apimart 偶尔卡 >150s 也不假 fail.
+    n>1 / dreamina 仍走老 image_engine.generate (sync 同步等), watchdog 600s 兜底.
     """
     from shortvideo import image_engine
     from backend.services import tasks as tasks_service
@@ -2907,6 +2970,63 @@ def image_generate(req: ImageGenReq):
     est_sec = (30 if actual_engine == "apimart" else 90) * req.n
     refs = req.refs or None
 
+    # D-080: apimart 单图走 watcher 路径
+    if actual_engine == "apimart" and req.n == 1:
+        from backend.services import apimart_service, remote_jobs
+        from shortvideo.config import DATA_DIR
+        out_dir = DATA_DIR / "image-gen"
+        out_dir.mkdir(parents=True, exist_ok=True)
+
+        task_id = tasks_service.create_task(
+            kind="image.generate",
+            label=f"直接生图 · {req.prompt[:30]}" + (f" · {len(refs)} 张参考图" if refs else ""),
+            ns="image", page_id="imagegen", step="generate",
+            payload={
+                "prompt_preview": req.prompt[:200], "size": req.size, "n": 1,
+                "engine": "apimart", "refs_count": len(refs) if refs else 0,
+                "remote_managed": True,  # watchdog 跳过, watcher 接管
+            },
+            estimated_seconds=est_sec,
+        )
+        tasks_service.update_progress(task_id, f"apimart 提交中 ({req.size})...", pct=5)
+
+        from backend.services import guest_mode as _gm
+        captured = _gm.capture()
+
+        def _submit_worker(p=req.prompt, tid=task_id, cap=captured):
+            tok = _gm.set_guest(cap)
+            try:
+                import uuid as _uu
+                fname = f"{req.label or 'img'}_{int(time.time())}_{_uu.uuid4().hex[:6]}.png"
+                dest = out_dir / fname
+                ar = apimart_service.submit_and_register(
+                    prompt=p, size=req.size, refs=refs,
+                    task_id=tid,
+                    dest_path=str(dest),
+                    kind="image",
+                    title=p[:48],
+                    source_skill="image-gen",
+                    max_wait_sec=1200,
+                )
+                tasks_service.update_payload(tid, {
+                    "apimart_task_id": ar["apimart_task_id"],
+                    "submit_id": ar["apimart_task_id"],  # UI "🔍 重查" 一致用 submit_id
+                    "dest_path": str(dest),
+                })
+                tasks_service.update_progress(
+                    tid,
+                    f"已提交 apimart (apimart_task_id={ar['apimart_task_id'][:10]}...), 等真出图",
+                    pct=20,
+                )
+            except Exception as e:
+                tasks_service.finish_task(tid, error=f"apimart 提交失败: {e}", status="failed")
+            finally:
+                _gm.reset(tok)
+
+        threading.Thread(target=_submit_worker, daemon=True).start()
+        return {"task_id": task_id, "status": "running", "estimated_seconds": est_sec, "page_id": "imagegen", "engine": "apimart", "remote_managed": True}
+
+    # 老路径 (n>1 / dreamina): 同步 generate (image_engine.generate 内含下载 + 入作品库)
     task_id = tasks_service.run_async(
         kind="image.generate",
         label=f"直接生图 · {req.prompt[:30]} · {req.n} 张" + (f" · {len(refs)} 张参考图" if refs else ""),

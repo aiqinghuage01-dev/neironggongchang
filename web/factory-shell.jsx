@@ -277,6 +277,29 @@ function LiDock({ context }) {
     setMessages([{ role: "assistant", text: `老板在看「${ctxKey}」,需要帮忙吗?` }]);
   }, [ctxKey]);
 
+  // T6: 失败任务主动通知 — 失败数比上次进 LiDock 时多, 自动 push 一条小华消息
+  const lastSeenFailedRef = React.useRef(null);
+  React.useEffect(() => {
+    if (lastSeenFailedRef.current === null) {
+      lastSeenFailedRef.current = Number(sessionStorage.getItem("lidock_last_seen_failed") || "0");
+    }
+    const current = todayFailed.length;
+    const seen = lastSeenFailedRef.current;
+    if (current > seen) {
+      const newOnes = todayFailed.slice(0, current - seen);
+      const friendly = newOnes.map(t => taskFriendlyName(t)).slice(0, 3).join(", ");
+      const more = newOnes.length > 3 ? ` 等 ${newOnes.length} 个` : "";
+      const msg = `⚠ 刚才${friendly}${more}失败了。失败的卡片上有 "🔄 重新生成" 按钮可以一键重做, 或者跟我说 "帮我重做最后一个".`;
+      setMessages(prev => {
+        // 防重 — 同样消息已存在不再加
+        if (prev.some(m => m.text === msg)) return prev;
+        return [...prev, { role: "assistant", text: msg }];
+      });
+      lastSeenFailedRef.current = current;
+      sessionStorage.setItem("lidock_last_seen_failed", String(current));
+    }
+  }, [todayFailed.length]);
+
   // 自动滚到底
   React.useEffect(() => {
     if (scrollRef.current) {

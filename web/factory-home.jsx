@@ -258,6 +258,24 @@ function AiUsageCard({ usage }) {
           ⚠️ {o.fails} 次失败
         </div>
       )}
+      <RetryStatChip />
+    </div>
+  );
+}
+
+// T9 D-082c retry 命中率小卡片 — 老板看 AI 抽风兜底有没在 work
+function RetryStatChip() {
+  const [s, setS] = React.useState(null);
+  React.useEffect(() => {
+    api.get("/api/llm-retry/stats").then(setS).catch(() => {});
+    const t = setInterval(() => api.get("/api/llm-retry/stats").then(setS).catch(() => {}), 60000);
+    return () => clearInterval(t);
+  }, []);
+  if (!s || !s.retried) return null;  // 没触发就不显
+  return (
+    <div title={`AI 调用偶发抽风时自动重试 1 次. 救活率: ${s.save_rate_pct}%`}
+      style={{ fontSize: 11, color: T.brand, background: T.brandSoft, padding: "3px 8px", borderRadius: 100, fontWeight: 600 }}>
+      🔁 AI 抽风重试 {s.retried} 次 · 救活 {s.saved_after_retry}
     </div>
   );
 }

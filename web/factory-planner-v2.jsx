@@ -20,6 +20,20 @@ function PagePlanner({ onNav }) {
   const [skillInfo, setSkillInfo] = React.useState(null);
   React.useEffect(() => { api.get("/api/planner/skill-info").then(setSkillInfo).catch(() => {}); }, []);
 
+  // D-082b 完整版: 跳页 retry 自动预填
+  React.useEffect(() => {
+    try {
+      const retry = sessionStorage.getItem("retry_payload_planner");
+      if (retry) {
+        const p = JSON.parse(retry);
+        const recovered = p.brief_preview || p.brief || p.prompt_preview || p.text;
+        if (recovered && !brief) { setBrief(recovered); }
+        sessionStorage.removeItem("retry_payload_planner");
+      }
+    } catch (_) {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // D-037b5 轮询 write_plan 任务
   const poller = useTaskPoller(taskId, {
     onComplete: (r) => { setPlanResult(r); setTaskId(null); },

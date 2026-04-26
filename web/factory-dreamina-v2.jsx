@@ -261,6 +261,8 @@ function DStepInput({
         </div>
       </div>
 
+      <DreaminaQueueBanner />
+
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
         {DM_MODES.map(m => (
           <div key={m.id} onClick={() => setMode(m.id)} style={{
@@ -653,6 +655,31 @@ function DTaskCard({ taskId, prompt, idx }) {
         </div>
       )}
     </div>
+  );
+}
+
+// T8 即梦排队拥堵预判 banner
+function DreaminaQueueBanner() {
+  const [q, setQ] = React.useState(null);
+  React.useEffect(() => {
+    const load = () => api.get("/api/dreamina/queue-status").then(setQ).catch(() => {});
+    load();
+    const t = setInterval(load, 30000);
+    return () => clearInterval(t);
+  }, []);
+  if (!q || q.congestion_level === "idle") return null;
+  const colors = {
+    light: { bg: T.brandSoft, fg: T.brand, br: T.brand },
+    moderate: { bg: T.amberSoft, fg: T.amber, br: T.amber },
+    heavy: { bg: T.redSoft, fg: T.red, br: T.red },
+  }[q.congestion_level] || { bg: T.bg2, fg: T.muted, br: T.border };
+  return (
+    <div style={{
+      background: colors.bg, color: colors.fg,
+      border: `1px solid ${colors.br}33`,
+      borderRadius: 10, padding: "10px 16px",
+      fontSize: 12.5, marginBottom: 14, fontWeight: 500, textAlign: "center",
+    }}>{q.hint}</div>
   );
 }
 

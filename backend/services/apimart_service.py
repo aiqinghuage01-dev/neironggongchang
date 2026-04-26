@@ -25,7 +25,24 @@ log = logging.getLogger("apimart_service")
 
 
 def _poll_for_watcher(submit_id: str) -> dict[str, Any]:
-    """submit_id = apimart task_id."""
+    """submit_id = apimart task_id.
+    T12: APIMART_MOCK=1 跳过真 API 立即返 done + 现成 png 假产物.
+    """
+    import os
+    if os.environ.get("APIMART_MOCK") == "1":
+        from shortvideo.config import DATA_DIR
+        # 找现有 png 当假产物
+        candidates = []
+        for sub in ["image-gen", "wechat-images", "apimart"]:
+            d = DATA_DIR / sub
+            if d.exists():
+                candidates.extend(d.glob("*.png"))
+                candidates.extend(d.glob("*.jpg"))
+        path = str(sorted(candidates, key=lambda x: -x.stat().st_size)[0]) if candidates else ""
+        return {"status": "done", "result": {
+            "task_id": submit_id, "url": f"file://{path}" if path else "[MOCK]",
+            "local_path": path, "_mock": True,
+        }}
     try:
         from shortvideo.apimart import ApimartClient
         with ApimartClient() as c:
@@ -33,17 +50,30 @@ def _poll_for_watcher(submit_id: str) -> dict[str, Any]:
     except Exception as e:
         return {"status": "poll_error", "error": str(e)[:200]}
 
-    sl = (data.get("status") or "").lower()
+    # apimart 实际返回结构: {code, data: {status, result: {images: [{url: [...]}]}, error?}}
+    body = data.get("data") if isinstance(data, dict) else {}
+    body = body if isinstance(body, dict) else {}
+    sl = (body.get("status") or data.get("status") or "").lower()
     DONE_SET = {"completed", "succeed", "success", "done", "ready", "finished"}
     FAIL_SET = {"failed", "error", "cancelled"}
 
     if sl in DONE_SET:
-        # 拿 url
-        items = data.get("data") or [{}]
-        url = items[0].get("url") if items else ""
+        # 拿 url — apimart: data.result.images[0].url 可能是 list 或 string
+        url = ""
+        result = body.get("result") or {}
+        if isinstance(result, dict):
+            imgs = result.get("images") or []
+            if imgs and isinstance(imgs, list):
+                u = imgs[0].get("url") if isinstance(imgs[0], dict) else None
+                if isinstance(u, list) and u:
+                    url = u[0]
+                elif isinstance(u, str):
+                    url = u
         if not url:
-            # 有些响应 url 在 image_urls
-            url = (data.get("image_urls") or [""])[0]
+            # 兜底其他可能位置
+            items = data.get("data")
+            if isinstance(items, list) and items:
+                url = items[0].get("url", "") if isinstance(items[0], dict) else ""
         return {
             "status": "done",
             "result": {
@@ -54,7 +84,7 @@ def _poll_for_watcher(submit_id: str) -> dict[str, Any]:
         }
 
     if sl in FAIL_SET:
-        err = data.get("error") or data.get("error_message") or sl
+        err = body.get("error") or body.get("error_message") or data.get("error") or sl
         return {"status": "failed", "error": str(err)[:200]}
 
     return {"status": sl or "processing"}

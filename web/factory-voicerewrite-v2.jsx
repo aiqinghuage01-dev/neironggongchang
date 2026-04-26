@@ -59,6 +59,20 @@ function PageVoicerewrite({ onNav }) {
   const [skillInfo, setSkillInfo] = React.useState(null);
   React.useEffect(() => { api.get("/api/voicerewrite/skill-info").then(setSkillInfo).catch(() => {}); }, []);
 
+  // D-082b 完整版: failed task "🔄 重新生成" 跳页 sessionStorage 预填
+  React.useEffect(() => {
+    try {
+      const retry = sessionStorage.getItem("retry_payload_voicerewrite");
+      if (retry) {
+        const p = JSON.parse(retry);
+        const recovered = p.transcript_preview || p.transcript || p.prompt_preview || p.text;
+        if (recovered && !transcript) { setTranscript(recovered); }
+        sessionStorage.removeItem("retry_payload_voicerewrite");
+      }
+    } catch (_) {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // D-037b5: write 异步任务. ref 存当前 task 的 angle/modeLabel 给 onComplete 用.
   const [taskId, setTaskId] = useTaskPersist("voicerewrite");
   const taskMetaRef = React.useRef({ angle: null, modeLabel: "" });

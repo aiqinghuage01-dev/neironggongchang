@@ -87,6 +87,19 @@ function PageHotrewrite({ onNav }) {
   React.useEffect(() => {
     if (seedConsumedRef.current) return;
     try {
+      // D-082b 完整版: failed task "🔄 重新生成" 跳页时 sessionStorage 写入 hotspot_preview
+      const retry = sessionStorage.getItem("retry_payload_hotrewrite");
+      if (retry) {
+        const p = JSON.parse(retry);
+        const recoveredHotspot = p.hotspot_preview || p.prompt_preview || p.text;
+        if (recoveredHotspot && !hotspot) {
+          seedConsumedRef.current = true;
+          setHotspot(recoveredHotspot);
+          sessionStorage.removeItem("retry_payload_hotrewrite");
+          localStorage.removeItem("wf:hotrewrite");
+          // 不自动跑 — 只填回, 让用户改一下再提交
+        }
+      }
       const seed = localStorage.getItem("hotrewrite_seed_hotspot");
       if (seed && !hotspot) {
         seedConsumedRef.current = true;
