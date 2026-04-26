@@ -2240,6 +2240,49 @@ def dhv5_render(req: Dhv5RenderReq):
     return {"task_id": task_id, "template_id": req.template_id}
 
 
+# ═══════════════════════════════════════════════════════════════════
+# D-064b · 直接生图独立入口 (sidebar "🖼️ 直接出图")
+# 不绑定业务流程, prompt + size + n + engine → 出 N 张候选
+# 走 image_engine.generate, 异步任务. 跟即梦 standalone 入口对称.
+# ═══════════════════════════════════════════════════════════════════
+
+class ImageGenReq(BaseModel):
+    prompt: str = Field(..., description="生图 prompt")
+    size: str = Field("16:9", description="比例 16:9 / 9:16 / 1:1 / 3:4 / 4:3")
+    n: int = Field(2, ge=1, le=8, description="出几张候选 (默认 2)")
+    engine: str | None = Field(None, description="apimart | dreamina · None 用 settings 默认")
+    label: str = Field("gen", description="文件名前缀 (落 data/image-gen/)")
+
+
+@app.post("/api/image/generate", tags=["生图"], summary="直接生图 (D-064b 独立工具, 异步)")
+def image_generate(req: ImageGenReq):
+    """异步触发图引擎生图. 立即返 task_id, daemon thread 跑.
+
+    完成后 task.result = {images: [{url, local_path, media_url}, ...], engine, n, size, elapsed_sec}.
+    apimart 30-60s/张, dreamina 60-120s/张.
+    """
+    from shortvideo import image_engine
+    from backend.services import tasks as tasks_service
+    actual_engine = (req.engine or image_engine.get_default_engine()).lower()
+    est_sec = (30 if actual_engine == "apimart" else 90) * req.n
+
+    task_id = tasks_service.run_async(
+        kind="image.generate",
+        label=f"直接生图 · {req.prompt[:30]} · {req.n} 张",
+        ns="image",
+        page_id="imagegen",
+        step="generate",
+        payload={"prompt_preview": req.prompt[:200], "size": req.size, "n": req.n, "engine": actual_engine},
+        estimated_seconds=est_sec,
+        progress_text=f"{actual_engine} 生 {req.n} 张图 ({req.size})...",
+        sync_fn=lambda: image_engine.generate(
+            prompt=req.prompt, size=req.size, n=req.n,
+            engine=req.engine, label=req.label,
+        ),
+    )
+    return {"task_id": task_id, "status": "running", "estimated_seconds": est_sec, "page_id": "imagegen", "engine": actual_engine}
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="127.0.0.1", port=8000, log_level="info")

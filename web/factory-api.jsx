@@ -63,14 +63,31 @@ const api = {
   },
 };
 
-// 最近一次 API 调用的小灯(放顶栏右上)
+// 最近一次 API 调用的小灯(放顶栏右上).
+// 默认隐藏 (外测反馈技术词偏多), settings 里能开 "show_api_status_light".
+// 也可 localStorage 直接设 show_api_status=1 (调试快捷开关).
 function ApiStatusLight() {
   const [last, setLast] = React.useState(window.__apiLast);
+  const [show, setShow] = React.useState(() => {
+    try {
+      const ls = localStorage.getItem("show_api_status");
+      if (ls === "1" || ls === "true") return true;
+      if (ls === "0" || ls === "false") return false;
+    } catch (_) {}
+    return null; // null = 还没读到 settings
+  });
+  React.useEffect(() => {
+    if (show !== null) return; // 已有 ls 覆盖, 不读 settings
+    api.get("/api/settings").then(s => setShow(!!s?.show_api_status_light)).catch(() => setShow(false));
+  }, [show]);
   React.useEffect(() => {
     const h = (e) => setLast(e.detail);
     window.addEventListener("api-call", h);
     return () => window.removeEventListener("api-call", h);
   }, []);
+
+  if (!show) return null;  // 默认关 → 不渲染
+
   if (!last) {
     return (
       <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 10.5, color: T.muted2 }} title="还没有 API 调用">

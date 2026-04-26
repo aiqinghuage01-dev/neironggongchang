@@ -417,6 +417,12 @@ function NightJobCard({ job, runs, onToggle, onRun, onEdit, onDelete }) {
 // ─── D-058: 删除确认非阻塞模态 ─────────────────────────────
 // 取代浏览器原生 confirm() · iOS 风视觉对齐 NightJobEditor
 function NightDeleteConfirm({ job, onCancel, onConfirm, deleting }) {
+  // Esc 关闭 (P3)
+  React.useEffect(() => {
+    function onKey(e) { if (e.key === "Escape" && !deleting) onCancel(); }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onCancel, deleting]);
   return (
     <div onClick={onCancel} style={{
       position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 200,
@@ -493,6 +499,13 @@ function NightJobEditor({ job, onClose, onSaved }) {
 
   const [saving, setSaving] = React.useState(false);
   const [err, setErr] = React.useState("");
+
+  // Esc 关闭弹窗 (P3)
+  React.useEffect(() => {
+    function onKey(e) { if (e.key === "Escape") onClose(); }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
 
   // 实时预览
   const previewCron = mode === "daily"

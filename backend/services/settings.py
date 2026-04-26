@@ -45,6 +45,8 @@ DEFAULTS: dict[str, Any] = {
     # 图引擎 (D-064 · 2026-04-26)
     "image_engine": "apimart",    # apimart (GPT-Image-2, 默认) | dreamina (即梦)
     "image_n_default": 2,          # 一次出几张候选 (cover / 朋友圈 / 段间图都用)
+    # 调试可见性 (外测反馈, 默认隐藏)
+    "show_api_status_light": False,  # 顶栏 GET /api/... · 30ms 调试条
 }
 
 

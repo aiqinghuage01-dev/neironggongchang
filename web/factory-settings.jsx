@@ -105,6 +105,14 @@ function PageSettings({ onNav }) {
             ]} />
           </SettingsSection>
 
+          {/* 调试可见性 */}
+          <SettingsSection icon="🔧" title="开发调试" desc="默认全部隐藏, 需要看后台动作时打开">
+            <ChoiceRow label="顶栏 API 调用条" current={s.show_api_status_light ? "show" : "hide"} onChange={v => saveOne("show_api_status_light", v === "show")} options={[
+              { v: "hide", label: "🙈 隐藏", hint: "默认 · 工厂感更纯净" },
+              { v: "show", label: "👀 显示", hint: "顶栏右上显示 GET /api/... · 30ms, 看每次 API 真实延迟" },
+            ]} />
+          </SettingsSection>
+
           {/* 小华偏好 */}
           <SettingsSection icon="🤖" title="小华偏好" desc="调小华的性格、主动性、默认风格">
             <ChoiceRow label="语气" current={s.li_tone} onChange={v => saveOne("li_tone", v)} options={[

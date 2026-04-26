@@ -15,6 +15,7 @@ const NAV_MAIN = [
   { id: "baokuan", icon: "✍️", label: "爆款改写" },
   { id: "planner", icon: "🗓️", label: "内容策划" },
   { id: "compliance", icon: "🛡️", label: "违规审查" },
+  { id: "imagegen", icon: "🖼️", label: "直接出图" },
   { id: "dreamina", icon: "🎨", label: "即梦 AIGC" },
 ];
 const NAV_ASSETS = [
