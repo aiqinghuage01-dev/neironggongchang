@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import asyncio
 import re
+import threading
 import time
 import json
 import uuid
@@ -309,6 +310,20 @@ def _start_remote_jobs_watcher():
                 _ds.register_with_watcher()
         except Exception as e:
             log.warning(f"dreamina register_with_watcher skipped: {e}")
+        # D-079 shiliu (数字人) provider
+        try:
+            from backend.services import shiliu_service as _ss
+            if hasattr(_ss, "register_with_watcher"):
+                _ss.register_with_watcher()
+        except Exception as e:
+            log.warning(f"shiliu register_with_watcher skipped: {e}")
+        # D-080/081 apimart (出图/封面) provider
+        try:
+            from backend.services import apimart_service as _as
+            if hasattr(_as, "register_with_watcher"):
+                _as.register_with_watcher()
+        except Exception as e:
+            log.warning(f"apimart register_with_watcher skipped: {e}")
         if remote_jobs.start_watcher():
             log.info(f"remote_jobs watcher started (60s tick), providers={remote_jobs.list_providers()}")
     except Exception as e:
@@ -438,6 +453,8 @@ def templates():
 # ---- P6: 石榴视频 ----
 @app.post("/api/video/submit", tags=["短视频"], summary="数字人视频合成提交 (柿榴 异步)")
 def video_submit(req: VideoSubmitReq):
+    """D-079: 提交后建 task + register remote_job, watcher 接管轮询.
+    旧字段 video_id / work_id 保留兼容前端 setInterval polling (双兜底)."""
     try:
         with ShiliuClient() as c:
             vid, length_ms = c.create_video_by_text(
@@ -455,7 +472,46 @@ def video_submit(req: VideoSubmitReq):
         status="generating",
     )
     update_work(wid, shiliu_video_id=vid)
-    return {"video_id": vid, "work_id": wid, "estimated_length_ms": length_ms}
+
+    # D-079: 接 remote_jobs watcher
+    try:
+        from backend.services import tasks as tasks_service
+        from backend.services import remote_jobs
+        task_id = tasks_service.create_task(
+            kind="shiliu.video",
+            label=f"数字人视频 · {(req.title or req.text[:20])[:24]}",
+            ns="shiliu",
+            page_id="make",
+            step="video",
+            payload={
+                "shiliu_video_id": vid,
+                "work_id": wid,
+                "title": req.title or req.text[:20],
+                "text_preview": req.text[:200],
+                "remote_managed": True,  # D-078 watchdog 跳过
+                "submit_id": str(vid),
+            },
+            estimated_seconds=180,
+        )
+        tasks_service.update_progress(task_id, f"已提交柿榴 (video_id={vid}), 等远程出结果...", pct=20)
+        remote_jobs.register(
+            provider="shiliu",
+            submit_id=str(vid),
+            task_id=task_id,
+            submit_payload={
+                "work_id": wid,
+                "title": req.title or req.text[:20],
+                "text_preview": req.text[:200],
+            },
+            max_wait_sec=3600,  # 数字人一般 3-10min, 1h 兜底
+        )
+    except Exception as e:
+        # 不破坏旧路径 — task/remote_jobs 失败不影响 video_id 返回
+        import logging
+        logging.getLogger("shiliu").warning(f"D-079 task/remote_jobs register skipped: {e}")
+        task_id = None
+
+    return {"video_id": vid, "work_id": wid, "estimated_length_ms": length_ms, "task_id": task_id}
 
 
 @app.get("/api/video/query/{video_id}", tags=["短视频"], summary="查视频合成结果")
@@ -895,6 +951,113 @@ def dreamina_list_tasks():
     return dreamina_service.list_tasks()
 
 
+@app.post("/api/dreamina/recover/{submit_id}", tags=["即梦 AIGC"], summary="(D-078c) 失败/超时手动重查")
+def dreamina_recover(submit_id: str):
+    """对一个 submit_id 重查即梦 CLI 拿真终态.
+
+    场景:
+    - watcher timeout 标 task=failed 但即梦其实出来了 → 用户点"🔍 重查"补救
+    - 用户从 list_tasks 历史里捞一个 submit_id 重新触发入库
+
+    流程:
+    1. 调 dreamina_service._poll_for_watcher(submit_id) 拿真终态
+    2. done → 入作品库 + 找到关联的 remote_job 标 done + finish 关联 task
+    3. failed → 标 failed
+    4. 仍 querying → 重置 remote_job 为 pending, watcher 接管 (如果有 remote_job 行)
+    """
+    from backend.services import remote_jobs
+    poll = dreamina_service._poll_for_watcher(submit_id)
+    status = poll.get("status", "")
+    result = poll.get("result")
+    err = poll.get("error", "")
+
+    rj = remote_jobs.get_by_submit_id(submit_id)
+
+    out = {"submit_id": submit_id, "status": status, "error": err}
+
+    if status == "done":
+        # 入作品库
+        if rj:
+            try:
+                dreamina_service._on_done_for_watcher(rj, result)
+            except Exception as e:
+                out["autoinsert_error"] = str(e)
+            remote_jobs.mark_done(rj["id"], result=result)
+            # finish 关联 task
+            tid = rj.get("task_id")
+            if tid:
+                try:
+                    from backend.services import tasks as tasks_service
+                    t = tasks_service.get_task(tid)
+                    if t and t["status"] in ("running", "failed"):
+                        tasks_service.finish_task(tid, result=result, status="ok")
+                except Exception:
+                    pass
+        else:
+            # 没 remote_job 行 (老历史 task) → 直接入作品库
+            try:
+                from shortvideo.works import insert_work
+                downloaded = (result or {}).get("downloaded") or []
+                for p in downloaded:
+                    pp = Path(p)
+                    if pp.exists():
+                        insert_work(
+                            type="video" if pp.suffix.lower() in (".mp4",".mov",".webm") else "image",
+                            source_skill="dreamina",
+                            title=f"即梦 recover · {pp.stem[:24]}",
+                            local_path=str(pp), thumb_path=None, status="ready",
+                            metadata=json.dumps({"submit_id": submit_id, "route": "recover"}, ensure_ascii=False),
+                        )
+            except Exception as e:
+                out["insert_error"] = str(e)
+        out["result"] = result
+        out["recovered"] = True
+
+    elif status in ("failed", "fail", "error", "cancelled"):
+        if rj:
+            remote_jobs.mark_failed(rj["id"], error=err or status)
+        out["recovered"] = False
+
+    else:
+        # 还在 querying / 未知 — 重置 watcher 接管
+        if rj:
+            remote_jobs.reset_for_recover(rj["id"])
+            out["watcher_will_retry"] = True
+        out["recovered"] = False
+
+    return out
+
+
+@app.get("/api/remote-jobs/by-task/{task_id}", tags=["即梦 AIGC"], summary="(D-078c) 由 task_id 查 remote_job")
+def remote_jobs_by_task(task_id: str):
+    """前端 TaskCard 失败态时用. 拿到 submit_id + last_status, 给 '🔍 重查' 按钮用."""
+    from backend.services import remote_jobs
+    _ensure_schema_ok = remote_jobs._ensure_schema()
+    import sqlite3 as _sq
+    from contextlib import closing as _cl
+    from shortvideo.config import DB_PATH as _DB
+    with _cl(_sq.connect(_DB)) as con:
+        con.row_factory = _sq.Row
+        r = con.execute(
+            "SELECT * FROM remote_jobs WHERE task_id=? ORDER BY submitted_at DESC LIMIT 1",
+            (task_id,),
+        ).fetchone()
+    if not r:
+        return {"ok": False, "error": "no remote_job for this task"}
+    row = remote_jobs._row_to_dict(r)
+    return {"ok": True, "remote_job": row}
+
+
+@app.get("/api/remote-jobs/stats", tags=["即梦 AIGC"], summary="(D-078) remote_jobs watcher 统计")
+def remote_jobs_stats():
+    from backend.services import remote_jobs
+    return {
+        "stats": remote_jobs.stats(),
+        "providers": remote_jobs.list_providers(),
+        "watcher_running": remote_jobs.watcher_running(),
+    }
+
+
 # 即梦 CLI 要本地路径不要 data URL, 不能复用 D-073 的 /api/image/upload-ref (那个返 base64).
 # 落盘到 data/dreamina/refs/ , 用完不删 (CLI submit 后还会再读一次, 不能临时清).
 DREAMINA_REFS_DIR = Path("data/dreamina/refs")
@@ -940,15 +1103,20 @@ class DreaminaBatchVideoReq(BaseModel):
 
 @app.post("/api/dreamina/batch-video", tags=["即梦 AIGC"], summary="批量生视频 (统一入口, 单/批都走)")
 def dreamina_batch_video(req: DreaminaBatchVideoReq):
-    """每条 prompt 独立起一个 daemon task, 立即返回 N 个 task_id.
-    按 ref_paths 数量自动分流:
+    """D-078b: 每条 prompt 独立起一个 task. 按 ref_paths 数量自动分流:
       - 0 张 → text2video (纯文字)
       - 1 张 → image2video (首帧动)
       - ≥2 张 → multimodal2video (全参考)
-    sync_fn 内部 submit + 轮询 + 下载, 完成后写入作品库.
-    单跑 (N=1) 也走这条统一路径, UI 只需要 task 卡片视图。
+
+    新流程 (相比 D-075 旧的 daemon 内 while 死等):
+      1. daemon thread 调 submit_only 拿 submit_id 立即返回 (~3-5s 不阻塞)
+      2. register_remote_job 持久化 → watcher 60s 接管轮询
+      3. task.payload.remote_managed=true → watchdog 不假杀
+      4. 远程真终态 watcher 写 task + 入作品库
+      5. 即梦排队 30min+ / 进程重启 都不丢
     """
     from backend.services import tasks as tasks_service
+    from backend.services import remote_jobs
 
     prompts = [p.strip() for p in req.prompts if p and p.strip()]
     if not prompts:
@@ -968,19 +1136,8 @@ def dreamina_batch_video(req: DreaminaBatchVideoReq):
     est_per = 180 if req.model_version == "seedance2.0fast" else 240
     out_tasks = []
     for prompt in prompts:
-        def _make_sync(p=prompt):
-            def _sync():
-                return dreamina_service.submit_and_wait(
-                    prompt=p, refs=refs,
-                    duration=req.duration,
-                    ratio=req.ratio,
-                    video_resolution=req.video_resolution,
-                    model_version=req.model_version,
-                    timeout_sec=900,
-                )
-            return _sync
-
-        task_id = tasks_service.run_async(
+        # 创建 placeholder task — 立即返 task_id 给前端, daemon thread 后台 submit
+        task_id = tasks_service.create_task(
             kind=f"dreamina.{route}",
             label=f"即梦 {route} · {prompt[:24]}" + (f" · {len(refs)} 张参考图" if refs else ""),
             ns="dreamina",
@@ -992,11 +1149,52 @@ def dreamina_batch_video(req: DreaminaBatchVideoReq):
                 "refs_count": len(refs),
                 "model_version": req.model_version,
                 "duration": req.duration,
+                "remote_managed": True,  # D-078: watchdog 跳过, 由 watcher 接管
             },
             estimated_seconds=est_per,
-            progress_text=f"即梦 {route} 跑中 ({req.model_version}, {req.duration or 5}s)...",
-            sync_fn=_make_sync(),
         )
+        tasks_service.update_progress(task_id, "提交即梦 CLI 中...", pct=5)
+
+        # daemon thread 跑 submit_only — 拿 submit_id 后 register, watcher 接管
+        from backend.services import guest_mode as _gm
+        captured = _gm.capture()
+
+        def _submit_worker(p=prompt, tid=task_id, cap=captured):
+            tok = _gm.set_guest(cap)
+            try:
+                sub = dreamina_service.submit_only(
+                    prompt=p, refs=refs,
+                    duration=req.duration, ratio=req.ratio,
+                    video_resolution=req.video_resolution,
+                    model_version=req.model_version,
+                )
+                submit_id = sub["submit_id"]
+                # D-078c: 把 submit_id 写到 task.payload 让 UI / recover 拿到
+                tasks_service.update_payload(tid, {"submit_id": submit_id})
+                tasks_service.update_progress(
+                    tid,
+                    f"已提交即梦 ({route}, {req.model_version}, {req.duration or 5}s) · submit_id={submit_id[:8]}... · 等远程出结果",
+                    pct=20,
+                )
+                remote_jobs.register(
+                    provider="dreamina",
+                    submit_id=submit_id,
+                    task_id=tid,
+                    submit_payload={
+                        "prompt": p, "route": route,
+                        "refs": refs, "duration": req.duration,
+                        "model_version": req.model_version,
+                    },
+                    max_wait_sec=7200,
+                )
+            except dreamina_service.DreaminaError as e:
+                tasks_service.finish_task(tid, error=f"即梦提交失败: {e}", status="failed")
+            except Exception as e:
+                tasks_service.finish_task(tid, error=f"{type(e).__name__}: {e}", status="failed")
+            finally:
+                _gm.reset(tok)
+
+        threading.Thread(target=_submit_worker, daemon=True).start()
         out_tasks.append({"task_id": task_id, "prompt": prompt})
 
     return {

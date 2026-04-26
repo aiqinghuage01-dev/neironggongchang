@@ -602,6 +602,66 @@ function TaskCard({ task, onClick, compact, onCancel }) {
           </div>
         )}
       </div>
+      {failed && !((task.kind || "").startsWith("dreamina.") && task.payload?.submit_id) && task.page_id && (
+        <div style={{ marginTop: 8, display: "flex", justifyContent: "flex-end" }}>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              try { sessionStorage.setItem("retry_payload_" + task.page_id, JSON.stringify(task.payload || {})); } catch {}
+              window.location.search = `?page=${encodeURIComponent(task.page_id)}`;
+            }}
+            style={{
+              background: "transparent", color: T.brand,
+              border: `1px solid ${T.brand}`,
+              borderRadius: 6, padding: "3px 10px",
+              fontSize: 11, fontWeight: 500,
+              cursor: "pointer", fontFamily: "inherit",
+            }}
+            title="跳到对应页面重做这个任务 (D-082b)"
+          >🔄 重新生成</button>
+        </div>
+      )}
+      {failed && (task.kind || "").startsWith("dreamina.") && task.payload?.submit_id && (
+        <div style={{ marginTop: 8, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6 }}>
+          <span style={{ fontSize: 10.5, color: T.muted2, fontFamily: "monospace" }}>
+            id: {String(task.payload.submit_id).slice(0, 12)}…
+          </span>
+          <button
+            onClick={async (e) => {
+              e.stopPropagation();
+              const sid = task.payload.submit_id;
+              const btn = e.currentTarget;
+              btn.disabled = true;
+              btn.textContent = "查询中...";
+              try {
+                const r = await fetch(`/api/dreamina/recover/${sid}`, { method: "POST" });
+                const j = await r.json();
+                if (j.recovered) {
+                  alert(`✅ 即梦端真出来了, 已入作品库 (status=${j.status})`);
+                } else if (j.watcher_will_retry) {
+                  alert(`🔄 即梦还在跑 (status=${j.status}), 后台 watcher 已重新接管, 稍后再看`);
+                } else {
+                  alert(`❌ 远程返回 ${j.status}: ${j.error || ''}`);
+                }
+                if (onClick) onClick();  // 刷新
+              } catch (err) {
+                alert(`查询失败: ${err.message}`);
+              } finally {
+                btn.disabled = false;
+                btn.textContent = "🔍 重查即梦";
+              }
+            }}
+            style={{
+              background: "transparent", color: T.brand,
+              border: `1px solid ${T.brand}`,
+              borderRadius: 6, padding: "3px 10px",
+              fontSize: 11, fontWeight: 500,
+              cursor: "pointer", fontFamily: "inherit",
+            }}
+            title="即梦端可能已经跑出来了, 重查一下入作品库"
+          >🔍 重查即梦</button>
+        </div>
+      )}
       {running && onCancel && (
         <div style={{ marginTop: 8, display: "flex", justifyContent: "flex-end", gap: 6 }}>
           <button

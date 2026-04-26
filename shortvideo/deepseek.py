@@ -4,11 +4,13 @@
 """
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 
 from openai import OpenAI
 
 from .config import settings
+from .llm_retry import with_retry
 
 
 @dataclass
@@ -46,11 +48,18 @@ class DeepSeekClient:
         if system:
             messages.append({"role": "system", "content": system})
         messages.append({"role": "user", "content": prompt})
-        resp = self._client.chat.completions.create(
-            model=self.model,
-            messages=messages,
-            temperature=temperature,
-            max_tokens=max_tokens,
+        # D-082c: transient (5xx / timeout / rate limit / network) 自动重试 1 次
+        resp = with_retry(
+            lambda: self._client.chat.completions.create(
+                model=self.model,
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+            ),
+            max_retries=1,
+            on_retry=lambda n, e: logging.getLogger("deepseek").warning(
+                f"transient err, retrying #{n}: {str(e)[:150]}"
+            ),
         )
         usage = resp.usage
         return LLMResult(

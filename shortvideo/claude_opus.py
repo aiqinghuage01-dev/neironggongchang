@@ -10,10 +10,13 @@ OpenClaw proxy 提供 OpenAI 兼容接口:
 """
 from __future__ import annotations
 
+import logging
+
 import httpx
 from openai import OpenAI
 
 from .deepseek import LLMResult
+from .llm_retry import with_retry
 
 # 默认配置(设置页可覆盖)
 DEFAULT_BASE_URL = "http://localhost:3456/v1"
@@ -53,12 +56,19 @@ class ClaudeOpusClient:
         if system:
             messages.append({"role": "system", "content": system})
         messages.append({"role": "user", "content": prompt})
+        # D-082c: transient 错误 (5xx / timeout / connection / rate limit) 自动重试 1 次
         try:
-            resp = self._client.chat.completions.create(
-                model=self.model,
-                messages=messages,
-                temperature=temperature,
-                max_tokens=max_tokens,
+            resp = with_retry(
+                lambda: self._client.chat.completions.create(
+                    model=self.model,
+                    messages=messages,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                ),
+                max_retries=1,
+                on_retry=lambda n, e: logging.getLogger("claude_opus").warning(
+                    f"transient err, retrying #{n}: {str(e)[:150]}"
+                ),
             )
         except Exception as e:
             raise ClaudeOpusError(f"Claude Opus 调用失败({self.base_url} · {self.model}): {e}") from e

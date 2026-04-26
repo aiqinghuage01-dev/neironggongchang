@@ -153,6 +153,29 @@ def create_task(
     return tid
 
 
+def update_payload(task_id: str, patch: dict[str, Any]) -> None:
+    """D-078: 合并 patch 到 task.payload (JSON merge). 用于 worker 拿到 submit_id 后写回.
+    patch 为空 / payload 已含相同 key 都 OK (覆盖). 任务已结束也允许写 (debug 用)."""
+    if not patch:
+        return
+    _ensure_schema()
+    now = int(time.time())
+    with closing(sqlite3.connect(DB_PATH)) as con:
+        cur = con.execute("SELECT payload FROM tasks WHERE id=?", (task_id,))
+        r = cur.fetchone()
+        if not r:
+            return
+        current = _loads(r[0]) or {}
+        if not isinstance(current, dict):
+            current = {"_legacy_payload": current}
+        current.update(patch)
+        con.execute(
+            "UPDATE tasks SET payload=?, updated_ts=? WHERE id=?",
+            (_dumps(current), now, task_id),
+        )
+        con.commit()
+
+
 def update_progress(task_id: str, progress_text: str, *, pct: int | None = None) -> None:
     """更新阶段文案(前端轮询看到实时进度)。
 
@@ -224,13 +247,19 @@ def is_cancelled(task_id: str) -> bool:
 def recover_orphans() -> int:
     """启动时调一次: 上次进程死掉(uvicorn --reload / 崩溃 / 手动 kill)的孤儿任务全标 failed.
     daemon 工作线程随进程退出, DB 行没人收尾会永远卡 running, 前端轮询无解.
+
+    D-078: 跳过 payload.remote_managed=true 的 task — 它们由 remote_jobs watcher 接管,
+    submit_id 持久化在 remote_jobs 表, 重启后 watcher 自然继续轮询. 假杀这些会让用户
+    看到"假失败"但即梦/数字人/出图其实还在跑.
+
     返回回收数量."""
     _ensure_schema()
     now = int(time.time())
     with closing(sqlite3.connect(DB_PATH)) as con:
         cur = con.execute(
             "UPDATE tasks SET status='failed', error=?, finished_ts=?, updated_ts=? "
-            "WHERE status IN ('pending','running')",
+            "WHERE status IN ('pending','running') "
+            "AND (payload IS NULL OR payload NOT LIKE '%\"remote_managed\": true%')",
             ("服务重启,任务中断,请重新触发", now, now),
         )
         con.commit()

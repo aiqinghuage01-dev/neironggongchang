@@ -266,6 +266,44 @@ def _autoinsert_works(downloaded: list[str], submit_id: str, route: str, prompt:
             pass
 
 
+def submit_only(
+    *,
+    prompt: str,
+    refs: list[str] | None = None,
+    duration: int | None = None,
+    ratio: str | None = None,
+    video_resolution: str | None = None,
+    model_version: str | None = None,
+) -> dict[str, Any]:
+    """D-078b: 只提交, 拿到 submit_id 立即返回, 让 remote_jobs watcher 接管轮询.
+
+    返回 {submit_id, route, raw}. 失败 raise DreaminaError.
+    """
+    refs = [r for r in (refs or []) if r]
+    if len(refs) == 0:
+        sub = text2video(
+            prompt, duration=duration, ratio=ratio,
+            video_resolution=video_resolution, model_version=model_version,
+        )
+        route = "text2video"
+    elif len(refs) == 1:
+        sub = image2video(
+            refs[0], prompt, duration=duration,
+            video_resolution=video_resolution, model_version=model_version,
+        )
+        route = "image2video"
+    else:
+        sub = multimodal2video(
+            prompt, refs, duration=duration, ratio=ratio,
+            video_resolution=video_resolution, model_version=model_version,
+        )
+        route = "multimodal2video"
+    submit_id = _extract_submit_id(sub)
+    if not submit_id:
+        raise DreaminaError(f"未拿到 submit_id, raw={sub.get('raw', '')[:200]}")
+    return {"submit_id": submit_id, "route": route, "raw": (sub.get("raw") or "")[:300]}
+
+
 def submit_and_wait(
     *,
     prompt: str,
@@ -369,6 +407,69 @@ def query_result(submit_id: str, download: bool = True) -> dict[str, Any]:
         "ok": True, "result": obj, "downloaded": downloaded,
         "raw": r["stdout"][-500:],
     }
+
+
+# ─── D-078b watcher provider 接入 ─────────────────────────
+
+def _poll_for_watcher(submit_id: str) -> dict[str, Any]:
+    """remote_jobs watcher 调的 poll_fn.
+
+    返回值:
+      {"status": "done", "result": {...}}    — done + 已下载到本地
+      {"status": "failed", "error": "..."}    — 远程返回失败
+      {"status": "querying"|"submitted"|...}  — 中间态, 继续等
+    """
+    try:
+        q = query_result(submit_id, download=True)
+    except Exception as e:
+        return {"status": "poll_error", "error": str(e)[:200]}
+    if not q.get("ok"):
+        # CLI 调用层错误 — 暂归中间态, 下轮再试
+        return {"status": "poll_error", "error": (q.get("error") or "")[:200]}
+    result = q.get("result") or {}
+    last_status = (
+        result.get("gen_status")
+        or result.get("status")
+        or result.get("Status")
+        or ""
+    ).lower()
+    downloaded = q.get("downloaded") or []
+    if downloaded:
+        return {
+            "status": "done",
+            "result": {
+                "submit_id": submit_id,
+                "downloaded": downloaded,
+                "media_urls": [_to_media_url(p) for p in downloaded],
+                "raw_result": result,
+                "gen_status": last_status or "done",
+            },
+        }
+    if last_status in ("failed", "fail", "error", "cancelled"):
+        return {"status": "failed", "error": f"即梦端返回 {last_status}"}
+    return {"status": last_status or "querying"}
+
+
+def _on_done_for_watcher(rj: dict[str, Any], result: Any) -> None:
+    """done 时入作品库 (跟原 _autoinsert_works 同逻辑)."""
+    submit_payload = rj.get("submit_payload") or {}
+    prompt = submit_payload.get("prompt", "")
+    route = submit_payload.get("route", "")
+    submit_id = rj.get("submit_id", "")
+    downloaded = (result or {}).get("downloaded") or []
+    if downloaded:
+        _autoinsert_works(downloaded, submit_id, route, prompt)
+
+
+def register_with_watcher() -> None:
+    """启动时调一次 — 把 dreamina 注册到 remote_jobs watcher.
+    api.py startup hook 调."""
+    from backend.services import remote_jobs
+    remote_jobs.register_provider(
+        "dreamina",
+        _poll_for_watcher,
+        on_done=_on_done_for_watcher,
+    )
 
 
 # ─── 元数据 (CLI version) ────────────────────────────────
