@@ -2429,6 +2429,9 @@ class ImageGenReq(BaseModel):
     n: int = Field(2, ge=1, le=8, description="出几张候选 (默认 2)")
     engine: str | None = Field(None, description="apimart | dreamina · None 用 settings 默认")
     label: str = Field("gen", description="文件名前缀 (落 data/image-gen/)")
+    # D-073: 参考图 (apimart 引擎才支持, dreamina 暂忽略). 传 data URL (base64) 或公网 URL.
+    refs: list[str] = Field(default_factory=list, max_length=4,
+        description="参考图列表, 最多 4 张. 传了 AI 会基于图来改. apimart 引擎才支持.")
 
 
 @app.post("/api/image/generate", tags=["生图"], summary="直接生图 (D-064b 独立工具, 异步)")
@@ -2437,27 +2440,55 @@ def image_generate(req: ImageGenReq):
 
     完成后 task.result = {images: [{url, local_path, media_url}, ...], engine, n, size, elapsed_sec}.
     apimart 30-60s/张, dreamina 60-120s/张.
+    D-073: refs (参考图 data URL list) 仅 apimart 引擎接, dreamina 忽略.
     """
     from shortvideo import image_engine
     from backend.services import tasks as tasks_service
     actual_engine = (req.engine or image_engine.get_default_engine()).lower()
     est_sec = (30 if actual_engine == "apimart" else 90) * req.n
+    refs = req.refs or None
 
     task_id = tasks_service.run_async(
         kind="image.generate",
-        label=f"直接生图 · {req.prompt[:30]} · {req.n} 张",
+        label=f"直接生图 · {req.prompt[:30]} · {req.n} 张" + (f" · {len(refs)} 张参考图" if refs else ""),
         ns="image",
         page_id="imagegen",
         step="generate",
-        payload={"prompt_preview": req.prompt[:200], "size": req.size, "n": req.n, "engine": actual_engine},
+        payload={
+            "prompt_preview": req.prompt[:200], "size": req.size, "n": req.n,
+            "engine": actual_engine, "refs_count": len(refs) if refs else 0,
+        },
         estimated_seconds=est_sec,
-        progress_text=f"{actual_engine} 生 {req.n} 张图 ({req.size})...",
+        progress_text=f"{actual_engine} 生 {req.n} 张图 ({req.size})..." + (" · 基于参考图" if refs else ""),
         sync_fn=lambda: image_engine.generate(
             prompt=req.prompt, size=req.size, n=req.n,
-            engine=req.engine, label=req.label,
+            engine=req.engine, label=req.label, refs=refs,
         ),
     )
     return {"task_id": task_id, "status": "running", "estimated_seconds": est_sec, "page_id": "imagegen", "engine": actual_engine}
+
+
+# D-073: 参考图上传 — 接本地文件, 转 base64 data URL 返回给前端,
+# 前端再把 data URL 加到 /api/image/generate 的 refs 字段里 (apimart 接 data URL).
+# 不存盘 (临时素材, 用完即弃, 避免污染作品库).
+@app.post("/api/image/upload-ref", tags=["生图"], summary="上传参考图 → base64 data URL (D-073)")
+async def image_upload_ref(file: UploadFile = File(...)):
+    """单张图 → 转 base64 data URL. apimart 接 data URL, 不需要本地落盘.
+    单张 ≤4MB (apimart 大概率接收, 大了会拒). jpg/png/webp.
+    """
+    data = await file.read()
+    if not data:
+        raise HTTPException(400, "空文件")
+    if len(data) > 4 * 1024 * 1024:
+        raise HTTPException(400, f"图太大 {len(data)//1024} KB · 上限 4096 KB")
+    ext = (Path(file.filename or "ref.jpg").suffix or ".jpg").lower()
+    mime_map = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp"}
+    if ext not in mime_map:
+        raise HTTPException(400, f"只支持 jpg/png/webp · 收到 {ext}")
+    import base64 as _b64
+    b64 = _b64.b64encode(data).decode("ascii")
+    data_url = f"data:{mime_map[ext]};base64,{b64}"
+    return {"ok": True, "data_url": data_url, "size_bytes": len(data), "mime": mime_map[ext]}
 
 
 if __name__ == "__main__":

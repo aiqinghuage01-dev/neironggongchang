@@ -19,6 +19,40 @@ function PageImageGen({ onNav }) {
   const [result, setResult] = React.useState(null);
   const [err, setErr] = React.useState("");
 
+  // D-073: 参考图 — 最多 4 张, 上传后转 base64 data URL 跟生图请求一起传
+  // 每条结构: { id, data_url, name, size_bytes, uploading?, error? }
+  const [refs, setRefs] = React.useState([]);
+  const fileInputRef = React.useRef(null);
+
+  async function uploadRefs(files) {
+    const remaining = 4 - refs.length;
+    if (remaining <= 0) return;
+    const list = Array.from(files).slice(0, remaining);
+    // 先插占位 (uploading 状态)
+    const placeholders = list.map((f, i) => ({
+      id: `tmp-${Date.now()}-${i}`, name: f.name, size_bytes: f.size, uploading: true,
+    }));
+    setRefs(prev => [...prev, ...placeholders]);
+
+    for (let i = 0; i < list.length; i++) {
+      const f = list[i];
+      const ph = placeholders[i];
+      try {
+        const r = await api.upload("/api/image/upload-ref", f);
+        setRefs(prev => prev.map(x => x.id === ph.id ? {
+          ...x, uploading: false, data_url: r.data_url, mime: r.mime,
+        } : x));
+      } catch (e) {
+        setRefs(prev => prev.map(x => x.id === ph.id ? {
+          ...x, uploading: false, error: e.message || "上传失败",
+        } : x));
+      }
+    }
+  }
+  function removeRef(id) {
+    setRefs(prev => prev.filter(x => x.id !== id));
+  }
+
   const poller = useTaskPoller(taskId, {
     onComplete: (r) => { setResult(r); setTaskId(null); },
     onError: (e) => { setErr(e || "生图失败"); },
@@ -28,8 +62,16 @@ function PageImageGen({ onNav }) {
     if (!prompt.trim()) return;
     setErr(""); setResult(null); setTaskId(null);
     try {
+      // D-073: refs 只取上传成功的 (filter out uploading + error)
+      const ready = refs.filter(r => r.data_url && !r.error).map(r => r.data_url);
+      // dreamina 暂不支持参考图, 老板传了图但选了即梦 → 提示
+      if (ready.length > 0 && imgEngine === "dreamina") {
+        setErr("即梦引擎暂不支持参考图, 切回 apimart 试试");
+        return;
+      }
       const r = await api.post("/api/image/generate", {
         prompt: prompt.trim(), size, n, engine: imgEngine, label: "gen",
+        refs: ready,
       });
       setTaskId(r.task_id);
     } catch (e) { setErr(e.message); }
@@ -38,7 +80,7 @@ function PageImageGen({ onNav }) {
   function retry() { setErr(""); setResult(null); setTaskId(null); generate(); }
   function reset() { setResult(null); setTaskId(null); setErr(""); }
 
-  // wfState
+  // wfState (refs 不持久化 — 临时素材, 切页就该丢)
   const wfState = { prompt, size, n, result, taskId };
   const wfRestore = (s) => {
     if (s.prompt != null) setPrompt(s.prompt);
@@ -138,6 +180,69 @@ function PageImageGen({ onNav }) {
                   💡 {imgEngine === "dreamina" ? "即梦 60-120s/张" : "apimart 30-60s/张"}, 张数越多越慢
                 </div>
               </div>
+            </div>
+
+            {/* D-073: 📷 参考图 (可选, 最多 4 张, 仅 apimart) */}
+            <div style={{ marginTop: 14, padding: 14, background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 10 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+                <div style={{ fontSize: 11.5, color: T.muted2, fontWeight: 600, letterSpacing: "0.08em" }}>📷 参考图</div>
+                <span style={{ fontSize: 11, color: T.muted2 }}>
+                  可选 · 最多 4 张 · 传了 AI 会基于图来改
+                  {imgEngine === "dreamina" && (
+                    <span style={{ color: T.amber, marginLeft: 6 }}>⚠ 即梦暂不支持, 切 apimart</span>
+                  )}
+                </span>
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                {refs.map(r => (
+                  <div key={r.id} style={{
+                    position: "relative", width: 72, height: 72, borderRadius: 8,
+                    background: r.data_url ? `url(${r.data_url}) center/cover` : T.bg2,
+                    border: `1px solid ${r.error ? T.red : T.borderSoft}`,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                  }} title={r.name}>
+                    {r.uploading && (
+                      <span style={{ fontSize: 18 }}>⏳</span>
+                    )}
+                    {r.error && (
+                      <span style={{ fontSize: 10, color: T.red, padding: 4, textAlign: "center" }}>{r.error.slice(0, 20)}</span>
+                    )}
+                    <button onClick={() => removeRef(r.id)} title="删除" style={{
+                      position: "absolute", top: -6, right: -6,
+                      width: 20, height: 20, borderRadius: "50%",
+                      background: "#fff", border: `1px solid ${T.border}`,
+                      color: T.muted, fontSize: 11, cursor: "pointer",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      padding: 0, fontFamily: "inherit",
+                      boxShadow: "0 1px 2px rgba(0,0,0,0.1)",
+                    }}>✕</button>
+                  </div>
+                ))}
+                {refs.length < 4 && (
+                  <button
+                    onClick={() => fileInputRef.current && fileInputRef.current.click()}
+                    style={{
+                      width: 72, height: 72, borderRadius: 8,
+                      border: `1.5px dashed ${T.border}`, background: T.bg2,
+                      cursor: "pointer", color: T.muted, fontSize: 12,
+                      display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+                      gap: 2, fontFamily: "inherit",
+                    }}>
+                    <span style={{ fontSize: 18 }}>+</span>
+                    <span style={{ fontSize: 10 }}>添加</span>
+                  </button>
+                )}
+              </div>
+              <input
+                ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp"
+                multiple style={{ display: "none" }}
+                onChange={(e) => {
+                  if (e.target.files && e.target.files.length > 0) {
+                    uploadRefs(e.target.files);
+                    e.target.value = "";  // 允许重新上传同一文件
+                  }
+                }}
+              />
             </div>
 
             {result && (
