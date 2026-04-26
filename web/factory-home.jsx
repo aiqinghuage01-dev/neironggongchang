@@ -30,26 +30,37 @@ function PageHome({ onNav }) {
             </div>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 36 }}>
+          {/* D-066: 6 个一级入口对齐侧栏 */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14, marginBottom: 36 }}>
             <BigAction
-              icon="🎬" title="做条短视频" subtitle="链接 → 文案 → 声音 → 数字人 → 剪辑 → 发布"
+              icon="🎬" title="做视频" subtitle="链接 → 文案 → 声音 → 数字人 → 剪辑"
               stat={make.hint || "最高频动作"} hot
               onClick={() => onNav("make")}
             />
             <BigAction
-              icon="💰" title="写投流文案" subtitle="一个卖点 · 批量出 N 版 · 自动跑 lint 质检"
-              stat={stats?.ad?.hint || "今日还没出过投流"}
-              onClick={() => onNav("ad")}
-            />
-            <BigAction
-              icon="📄" title="写公众号" subtitle="方法论长文 · 2000+ 字 · 段间配图 + 自动排版"
+              icon="📄" title="公众号" subtitle="方法论长文 · 2000+ 字 · 自动排版"
               stat={stats?.wechat?.hint || "本周还没写过公众号"}
               onClick={() => onNav("wechat")}
             />
             <BigAction
-              icon="📱" title="发朋友圈" subtitle="一个话题 → 衍生 5 条 + 自动配图 + 一键复制"
+              icon="📱" title="朋友圈" subtitle="一个话题 → 5 条 + 配图 + 一键复制"
               stat={stats?.moments?.hint || "今日还没发朋友圈"}
               onClick={() => onNav("moments")}
+            />
+            <BigAction
+              icon="✏️" title="写文案" subtitle="投流 / 改写 / 策划 / 审查 6 个 AI 工具"
+              stat="6 个工具按场景分"
+              onClick={() => onNav("write")}
+            />
+            <BigAction
+              icon="🎨" title="出图片" subtitle="直接出图 / 即梦 AIGC · 一句 prompt 出图"
+              stat="2 个引擎按场景选"
+              onClick={() => onNav("image")}
+            />
+            <BigAction
+              icon="🧪" title="黑科技" subtitle="实验性功能 · 给未来好玩的留位置"
+              stat="暂时空着"
+              onClick={() => onNav("beta")}
             />
           </div>
 
@@ -116,10 +127,13 @@ function SkillCenter({ catalog, onNav }) {
 
   return (
     <div style={{ marginTop: 28 }}>
-      <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 14 }}>
-        <div style={{ fontSize: 18, fontWeight: 700, color: T.text }}>🛠️ 我的技能</div>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 14, flexWrap: "wrap" }}>
+        <div style={{ fontSize: 18, fontWeight: 700, color: T.text }}>🛠️ 子工具速选</div>
         <div style={{ fontSize: 12, color: T.muted }}>
           已接入 {installed.length} 个{unregistered.length > 0 ? ` · 还有 ${unregistered.length} 个可接入` : ""}
+        </div>
+        <div style={{ fontSize: 11.5, color: T.muted2, marginLeft: "auto" }}>
+          · 也可以从生产部「✏️ 写文案 / 🎨 出图片」进入
         </div>
       </div>
 
