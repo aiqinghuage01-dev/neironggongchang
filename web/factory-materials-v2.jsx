@@ -82,7 +82,7 @@ function _hashStr(s) {
 }
 
 
-function MV2L1Home({ stats, folders, loading, err, onPickFolder, onScan, scanning }) {
+function MV2L1Home({ stats, folders, loading, err, onPickFolder, onScan, scanning, onBatchTag, batchTagging }) {
   if (loading) return <div style={{ padding: 60, textAlign: "center", color: T.muted }}>加载中...</div>;
   return (
     <div>
@@ -135,9 +135,21 @@ function MV2L1Home({ stats, folders, loading, err, onPickFolder, onScan, scannin
         <div style={{ fontSize: 13, color: T.muted, fontWeight: 500 }}>
           主分区 · {folders.length} 个 · <span style={{ color: T.muted2 }}>点击进入</span>
         </div>
-        <Btn variant="outline" size="sm" onClick={onScan} disabled={scanning}>
-          {scanning ? "扫描中..." : "🔄 重新扫描"}
-        </Btn>
+        <div style={{ display: "flex", gap: 6 }}>
+          {stats && (stats.total - stats.ai_tagged) > 0 && (
+            <Btn
+              variant="outline" size="sm"
+              data-testid="mv2-l1-batch-tag-btn"
+              onClick={onBatchTag} disabled={batchTagging}
+              style={{ borderColor: T_GREEN, color: T_GREEN }}
+            >
+              {batchTagging ? "AI 打标中..." : `✨ AI 打 10 条待标 (剩 ${stats.total - stats.ai_tagged})`}
+            </Btn>
+          )}
+          <Btn variant="outline" size="sm" onClick={onScan} disabled={scanning}>
+            {scanning ? "扫描中..." : "🔄 重新扫描"}
+          </Btn>
+        </div>
       </div>
 
       {/* 8 文件夹大卡片 (2 列 4 行) */}
@@ -402,6 +414,8 @@ function MV2L4Preview({ asset: assetMini, onClose, onNav }) {
   const [asset, setAsset] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
   const [err, setErr] = React.useState("");
+  const [tagging, setTagging] = React.useState(false);
+  const [tagResult, setTagResult] = React.useState(null);
 
   async function load() {
     setLoading(true); setErr("");
@@ -414,6 +428,18 @@ function MV2L4Preview({ asset: assetMini, onClose, onNav }) {
     setLoading(false);
   }
   React.useEffect(() => { load(); }, [assetMini.id]);
+
+  async function handleTag(force) {
+    setTagging(true); setErr(""); setTagResult(null);
+    try {
+      const r = await api.post(`/api/material-lib/tag/${asset.id}${force ? "?force=true" : ""}`);
+      setTagResult(r);
+      await load();  // 刷新 asset.tags
+    } catch (e) {
+      setErr(e.message);
+    }
+    setTagging(false);
+  }
 
   function handleEsc(e) {
     if (e.key === "Escape") onClose();
@@ -484,9 +510,26 @@ function MV2L4Preview({ asset: assetMini, onClose, onNav }) {
             </div>
 
             <div>
-              <div style={{ fontSize: 11, color: T.muted, marginBottom: 4 }}>🏷 标签</div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                <div style={{ fontSize: 11, color: T.muted }}>🏷 标签</div>
+                {(asset.tags.length === 0 || asset.tags.length > 0) && (
+                  <button
+                    onClick={() => handleTag(asset.tags.length > 0)}
+                    disabled={tagging}
+                    data-testid="mv2-l4-tag-btn"
+                    style={{
+                      fontSize: 11, padding: "2px 8px", borderRadius: 4,
+                      background: tagging ? T.bg2 : "transparent",
+                      border: `1px solid ${T_GREEN}`, color: T_GREEN,
+                      cursor: tagging ? "wait" : "pointer", fontFamily: "inherit",
+                    }}
+                  >
+                    {tagging ? "AI 打标中..." : asset.tags.length > 0 ? "✨ 重新打标" : "✨ AI 打标"}
+                  </button>
+                )}
+              </div>
               {asset.tags.length === 0 ? (
-                <div style={{ fontSize: 11.5, color: T_AMBER }}>⚠ 还没打标 (AI 打标功能等老板回来开)</div>
+                <div style={{ fontSize: 11.5, color: T_AMBER }}>⚠ 还没打标 · 点上面"✨ AI 打标"</div>
               ) : (
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
                   {asset.tags.map(t => (
@@ -497,6 +540,14 @@ function MV2L4Preview({ asset: assetMini, onClose, onNav }) {
                       border: t.source === "ai" ? "1px dashed #81c784" : "none",
                     }}>{t.source === "ai" ? "✨" : ""}{t.name}</span>
                   ))}
+                </div>
+              )}
+              {tagResult && tagResult.reason && (
+                <div style={{ fontSize: 10.5, color: T.muted2, marginTop: 6, padding: "6px 8px", background: "#f0f7f0", borderRadius: 4, border: `1px solid ${T_GREEN}33` }}>
+                  💡 {tagResult.reason}
+                  {tagResult.folder && tagResult.folder !== asset.rel_folder && (
+                    <div style={{ marginTop: 3, color: T_AMBER }}>📂 建议归到: {tagResult.folder}</div>
+                  )}
                 </div>
               )}
             </div>
@@ -543,6 +594,7 @@ function PageMaterialsV2({ onNav }) {
   const [loading, setLoading] = React.useState(true);
   const [err, setErr] = React.useState("");
   const [scanning, setScanning] = React.useState(false);
+  const [batchTagging, setBatchTagging] = React.useState(false);
 
   async function loadHome() {
     setLoading(true); setErr("");
@@ -588,6 +640,34 @@ function PageMaterialsV2({ onNav }) {
     setScanning(false);
   }
 
+  async function handleBatchTag() {
+    setBatchTagging(true); setErr("");
+    try {
+      const r = await api.post("/api/material-lib/tag-batch?limit=10");
+      const taskId = r.task_id;
+      // 轮询 (最多 3 分钟)
+      let waited = 0;
+      while (waited < 180000) {
+        await new Promise(res => setTimeout(res, 3000));
+        waited += 3000;
+        try {
+          const t = await api.get(`/api/tasks/${taskId}`);
+          if (t.status === "ok") {
+            await loadHome();
+            break;
+          }
+          if (t.status === "failed") {
+            setErr(t.error || "批量打标失败");
+            break;
+          }
+        } catch {}
+      }
+    } catch (e) {
+      setErr(e.message);
+    }
+    setBatchTagging(false);
+  }
+
   function handlePickFolder(folder) {
     setTopFolder(folder);
     setMode("grouped");
@@ -618,6 +698,7 @@ function PageMaterialsV2({ onNav }) {
           stats={stats} folders={folders} loading={loading} err={err}
           onPickFolder={handlePickFolder}
           onScan={handleScan} scanning={scanning}
+          onBatchTag={handleBatchTag} batchTagging={batchTagging}
         />
       )}
       {view === "folder" && (
