@@ -350,7 +350,8 @@ function StepTranscribing({ url, batchId, onSuccess, onFallbackPaste }) {
         <>
           <div style={{ width: 72, height: 72, borderRadius: "50%", background: T.redSoft, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28, color: T.red }}>✕</div>
           <div style={{ fontSize: 18, fontWeight: 700 }}>没扒到</div>
-          <div style={{ fontSize: 13, color: T.muted, maxWidth: 440, textAlign: "center" }}>{err}</div>
+          {/* D-086: 走全站 normalizeErrorMessage 转友好文案 */}
+          <div style={{ fontSize: 13, color: T.muted, maxWidth: 440, textAlign: "center" }}>{normalizeErrorMessage(err)}</div>
           <div style={{ display: "flex", gap: 10 }}>
             <Btn variant="primary" onClick={onFallbackPaste}>直接粘文案 →</Btn>
           </div>
@@ -823,7 +824,8 @@ function StepWaiting({ workId, videoId, onDone, onError }) {
         <>
           <div style={{ fontSize: 40 }}>❌</div>
           <div style={{ fontSize: 18, fontWeight: 700 }}>生成失败</div>
-          <div style={{ color: T.muted, fontSize: 13, textAlign: "center", maxWidth: 440 }}>{err}</div>
+          {/* D-086: 走全站 normalizeErrorMessage 转友好文案 */}
+          <div style={{ color: T.muted, fontSize: 13, textAlign: "center", maxWidth: 440 }}>{normalizeErrorMessage(err)}</div>
         </>
       )}
     </div>

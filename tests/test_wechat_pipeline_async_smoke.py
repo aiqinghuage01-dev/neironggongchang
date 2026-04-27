@@ -34,10 +34,17 @@ def tmp_db(monkeypatch):
 
 @pytest.fixture
 def mock_write_article(monkeypatch):
-    """mock wechat_pipeline.write_article: daemon worker 通过 lambda 闭包调它,
-    monkeypatch module-level name 能拦住.
+    """**双重 mock** (D-086 follow-up GPT P1):
+    1. mock wechat_pipeline.write_article → stub (防偷烧 LLM)
+    2. **mock tasks.run_async → 同步执行 sync_fn (不起 daemon)**
 
-    防偷烧 credits: 真 write_article 调 Opus 长文 ~30s + DeepSeek 自检 ~2s.
+    Why 双重: 单 mock write_article 不够, daemon thread 跨测试存活, 在前测试结束
+    后才被调到, 此时 monkeypatch 已 revert → 真 write_article 被调 → 偷烧 + 串扰.
+    具体串扰: 前测试 daemon 在后测试 fixture 期间触发, push 进**当前 fixture 的
+    calls 列表**, 让 calls[0]['topic'] 不是当前测试的 topic, 断言挂.
+
+    修法: patch tasks.run_async 成同步路径 (创建 task + 同步跑 sync_fn + 收尾),
+    完全不起 daemon, 跨测试干净.
     """
     calls = []
 
@@ -53,6 +60,25 @@ def mock_write_article(monkeypatch):
         "backend.services.wechat_pipeline.write_article",
         fake_write,
     )
+
+    # 同步版 run_async: 创建 task + 立即跑 sync_fn + 收尾, 不起 daemon thread
+    from backend.services import tasks as tasks_service
+
+    def fake_run_async(*, kind, label=None, ns=None, page_id=None, step=None,
+                       payload=None, estimated_seconds=None,
+                       progress_text=None, sync_fn):
+        task_id = tasks_service.create_task(
+            kind=kind, label=label, ns=ns, page_id=page_id, step=step,
+            payload=payload, estimated_seconds=estimated_seconds,
+        )
+        try:
+            result = sync_fn()
+            tasks_service.finish_task(task_id, result=result, status="ok")
+        except Exception as e:
+            tasks_service.finish_task(task_id, error=str(e), status="failed")
+        return task_id
+
+    monkeypatch.setattr("backend.services.tasks.run_async", fake_run_async)
     return calls
 
 
@@ -87,24 +113,19 @@ def test_write_article_async_creates_task_in_db(tmp_db, mock_write_article):
     assert t["page_id"] == "wechat"
 
 
-def test_write_article_async_daemon_calls_stub_not_real_llm(tmp_db, mock_write_article):
-    """daemon 真跑到 sync_fn → 调 stub (不烧 credits). 等一小段让 daemon 完成."""
+def test_write_article_async_calls_stub_and_finishes_ok(tmp_db, mock_write_article):
+    """sync_fn 真被调到 stub (不烧 LLM) + task 终态 = ok.
+
+    mock_write_article 双重 mock 后, run_async 是同步路径, 测试结束 task 已 ok.
+    """
     from backend.services import wechat_pipeline
     from backend.services import tasks as tasks_service
 
     task_id = wechat_pipeline.write_article_async(
         topic="topic-1", title="title-1", outline={"hook": "h"},
     )
-    # 等 daemon thread 跑完 sync_fn (stub 立即返, ~50ms 应足够)
-    deadline = time.time() + 3.0
-    while time.time() < deadline:
-        t = tasks_service.get_task(task_id)
-        if t and t["status"] in ("ok", "failed"):
-            break
-        time.sleep(0.05)
-    # 验证 stub 真被调 (而不是真 LLM)
-    assert len(mock_write_article) >= 1, "daemon 没调到 stub (worker 没跑或 mock 没拦)"
+    # 同步路径: return 时 stub 已被调, task 已 ok
+    assert len(mock_write_article) == 1, f"stub 应被调 1 次, 实际 {len(mock_write_article)}"
     assert mock_write_article[0]["topic"] == "topic-1"
-    # 验证 task 终态 = ok (走完整路径)
     t = tasks_service.get_task(task_id)
     assert t["status"] == "ok", f"task 没正常完成: status={t['status']}, error={t.get('error')}"

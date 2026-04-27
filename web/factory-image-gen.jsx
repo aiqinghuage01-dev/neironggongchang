@@ -319,8 +319,11 @@ function PageImageGen({ onNav }) {
                     {r.uploading && (
                       <span style={{ fontSize: 18 }}>⏳</span>
                     )}
+                    {/* D-086: 走 ErrorText 转友好 + 折行截断 */}
                     {r.error && (
-                      <span style={{ fontSize: 10, color: T.red, padding: 4, textAlign: "center" }}>{r.error.slice(0, 20)}</span>
+                      <span style={{ fontSize: 10, padding: 4, textAlign: "center" }}>
+                        <ErrorText err={r.error} maxLen={20} />
+                      </span>
                     )}
                     <button onClick={() => removeRef(r.id)} title="删除" style={{
                       position: "absolute", top: -6, right: -6,

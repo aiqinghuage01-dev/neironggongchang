@@ -705,7 +705,8 @@ function NightJobEditor({ job, onClose, onSaved }) {
           </label>
         </Field>
 
-        {err && <div style={{ padding: 10, background: T.redSoft, color: T.red, borderRadius: 8, fontSize: 12, marginBottom: 10 }}>{err}</div>}
+        {/* D-086: 走全站 InlineError */}
+        {err && <InlineError err={err} />}
 
         <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 8 }}>
           <button onClick={onClose}

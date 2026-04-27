@@ -293,7 +293,8 @@ function DStepInput({
                   display: "flex", alignItems: "center", justifyContent: "center",
                 }} title={r.name}>
                   {r.uploading && <span style={{ fontSize: 16 }}>⏳</span>}
-                  {r.error && <span style={{ fontSize: 9, color: T.red, padding: 3, textAlign: "center" }}>{r.error.slice(0, 16)}</span>}
+                  {/* D-086: 走 ErrorText 转友好 */}
+                  {r.error && <span style={{ fontSize: 9, padding: 3, textAlign: "center" }}><ErrorText err={r.error} maxLen={16} /></span>}
                   <button onClick={() => removeRef(r.id)} title="删除" style={{
                     position: "absolute", top: -6, right: -6,
                     width: 18, height: 18, borderRadius: "50%",

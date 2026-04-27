@@ -589,7 +589,8 @@ function TaskCard({ task, onClick, compact, onCancel }) {
         )}
         {failed && task.error && (
           <div style={{ fontSize: 11.5, color: T.red, marginTop: 6, lineHeight: 1.5 }}>
-            {_friendlyErrorReason(task.error) || (task.error.length > 80 ? task.error.slice(0, 80) + "..." : task.error)}
+            {/* D-086: _friendlyErrorReason 已改调 humanizeError, 永远非空, 删掉 slice 兜底 (防原始错误漏出) */}
+            {_friendlyErrorReason(task.error)}
           </div>
         )}
       </div>
