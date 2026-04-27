@@ -115,7 +115,8 @@ remote_jobs.register_provider("dreamina", poll_fn, on_done=cb)
 ```python
 from shortvideo.ai import get_ai_client
 client = get_ai_client(route_key="hotrewrite.write")
-client.chat(messages=...)
+result = client.chat("你的提示词", system="可选的任务级 system", deep=True)
+# 真实签名: chat(prompt: str, *, system=None, deep=True, temperature=0.7, max_tokens=2048)
 ```
 **反例 (禁止)**:
 - 直接 `from shortvideo.claude_opus import ClaudeOpusClient; ClaudeOpusClient().chat(...)`
@@ -130,8 +131,8 @@ client.chat(messages=...)
 绕过 = 丢 4 项, 任意一项都是债.
 
 ### 2.2 deep 参数语义
-- `deep=True` 全量人设 ~7500 token (业务画像 + 写作风格 + 协作偏好等)
-- `deep=False` 精简 ~300 token (默认)
+- `deep=True` 全量人设 ~7500 token (业务画像 + 写作风格 + 协作偏好等) — **默认值**
+- `deep=False` 精简 ~300 token
 - 6 个核心模型加 `deep` 参数 (D-008), 新加 endpoint 注意保持
 
 ---

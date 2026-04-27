@@ -33,7 +33,7 @@
 - ✅ D-068/D-069/D-070/D-078 四条硬约束都能在新文档一眼找到 (各自独立小节)
 - ✅ PROGRESS + CHANGELOG 同步记录 D-083
 
-**下一步**: 隐患 3 — SQLite migrations 集中化 (5 张表分散在各 service 的 CREATE TABLE IF NOT EXISTS 统一进 `data/migrations.py`).
+**下一步**: 隐患 3 — SQLite migrations 集中化 (10 张表分散在 5 个 service 的 CREATE TABLE IF NOT EXISTS 统一进 `backend/services/migrations.py`).
 
 ---
 
