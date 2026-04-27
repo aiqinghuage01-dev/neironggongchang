@@ -18,6 +18,17 @@ function _emitApi(info) {
   window.__apiLast = info;
   try { window.dispatchEvent(new CustomEvent("api-call", { detail: info })); } catch(e){}
 }
+// D-069 follow-up: fetch 网络层错误 (TypeError "Failed to fetch") 检测.
+// 触发场景: backend 没起 / 重启窗口 / 网络中断 / CORS preflight 失败.
+// 这类错误**不会进 _handleErrorResponse** (没收到响应), 必须在外层 catch 转译,
+// 否则用户看到 "Failed to fetch" / "Load failed" 等纯英文技术词 (D-069 没覆盖到的边界).
+function _isNetworkError(e) {
+  if (!e) return false;
+  if (e instanceof TypeError) return true;  // fetch 失败标准抛 TypeError
+  const msg = String(e.message || e || "").toLowerCase();
+  return /failed to fetch|load failed|network|networkerror|err_connection/i.test(msg);
+}
+
 async function _trace(method, path, fn) {
   const t0 = Date.now();
   try {
@@ -25,6 +36,19 @@ async function _trace(method, path, fn) {
     _emitApi({ method, path, ms: Date.now() - t0, ok: true, at: Date.now() });
     return data;
   } catch (e) {
+    // 网络层错误: 自动 retry 1 次 (500ms 延迟), 兜住 backend --reload / 短暂重启窗口
+    if (_isNetworkError(e)) {
+      try {
+        await new Promise(res => setTimeout(res, 500));
+        const data = await fn();
+        _emitApi({ method, path, ms: Date.now() - t0, ok: true, at: Date.now(), retried: true });
+        return data;
+      } catch (e2) {
+        _emitApi({ method, path, ms: Date.now() - t0, ok: false, error: String(e2.message || e2), at: Date.now(), retried: true });
+        // 转友好 Error, 避免用户看到 "Failed to fetch" 纯英文技术词
+        throw new Error("后端连接失败 (服务可能正在重启), 稍等几秒再点一次");
+      }
+    }
     _emitApi({ method, path, ms: Date.now() - t0, ok: false, error: String(e.message || e), at: Date.now() });
     throw e;
   }

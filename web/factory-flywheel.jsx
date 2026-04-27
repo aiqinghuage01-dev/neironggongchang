@@ -161,6 +161,10 @@ function FromMakeBanner({ fromMake, dismiss, label }) {
 //      <ErrorBanner err={rawMsg} actions={[{ label: "重试", onClick }]} />
 
 const ERROR_PATTERNS = [
+  // ─── D-069 follow-up: 网络层 / 后端连接失败 (高频, 放最前) ─
+  { match: /后端连接失败|failed to fetch|load failed|networkerror|err_connection/i,
+    icon: "🔌", title: "后端连接失败 (服务可能正在重启)",
+    suggestion: "稍等几秒再点一次 · 一直不通就去终端跑 bash scripts/start_api.sh 看 backend 状态" },
   // ─── D-062ii 柿榴常见错误 (清华哥反馈触发) ───────────────
   { match: /算力不足|余额不足|请充值|insufficient.*balance/i,
     icon: "💰", title: "柿榴算力不足 (要充值)",

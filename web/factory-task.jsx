@@ -199,6 +199,9 @@ function LoadingProgress({ task, icon, title, subtitle, onCancel }) {
 function _friendlyErrorReason(raw) {
   const s = String(raw || "");
   if (!s) return null;
+  // D-069 follow-up: 后端连接失败 (_trace 转译过的中文 message)
+  if (/后端连接失败|failed to fetch|load failed|networkerror/i.test(s))
+    return "后端服务可能正在重启, 稍等几秒再点一次就好";
   // 网络/上游 AI
   if (/timed?out|timeout|超时|connection|reset|refused|unreachable/i.test(s))
     return "AI 反应慢, 多半网络或上游卡了一下";
