@@ -4,7 +4,52 @@
 
 ---
 
-## 当前状态(2026-04-27 晚 · D-083 系统硬约束集中化)
+## 当前状态(2026-04-27 深夜 · D-084 DB 入口集中化 + schema migrations)
+
+**版本**: v0.5.2 — 全库 DB 直连 (48 处) 收敛到单一连接抽象点 + schema 集中迁移.
+路线 B 切 Postgres 第一步真"改一处"成立 (除 SQL dialect).
+
+**触发**: D-083 落地后接着做隐患 3. GPT 五审 (v1→v5) 共抓 1 P1 + 多 P2:
+- v1: 漏 legacy fixups (老库 IF NOT EXISTS 跳过表但缺列)
+- v2: "切 Postgres 一处" 表述误导 + 测试隔离不够
+- v3: works.py row_factory 不能丢 (P1 致命) + get_connection 不该放 migrations.py + 路径不规范化
+- v4: works 顶层跨包矛盾 + 漏 insights.py + api.py + path 没用 resolve
+- v5: 通过, 实施
+
+**改造统计 (1 commit)**:
+- 新建 2 文件: `shortvideo/db.py` (40 行) + `backend/services/migrations.py` (~330 行)
+- 改 7 文件: 5 个 service (sed) + api.py (手改 3 端点) + works.py (手改保 row_factory + lazy import)
+- 加 2 测试文件: test_migrations.py (10 测试) + test_works_crud_integration.py (2 测试 P1 验收)
+- 改 3 文档: SYSTEM-CONSTRAINTS §9 + CHANGELOG v0.5.2 + PROGRESS (本节)
+
+**实施时再次抓 bug** (GPT v3-v5 都没发现):
+- V1_BASELINE 一次 executescript 跑 CREATE TABLE + CREATE INDEX, 老库已有表跳过但 INDEX 撞缺列
+- 修法: `_split_v1_baseline()` 拆开, 应用顺序: TABLE → legacy_fixups 补列 → INDEX
+- 测试 `test_legacy_fixup_works_old_db_missing_4_columns` 直接抓出来
+
+**16 条验收全过** (commit 前自检):
+- ✅ shortvideo/db.py + migrations.py 存在 + 函数可调用
+- ✅ get_connection 用 current_db_path() 规范化路径
+- ✅ schema_version 表 1 行 baseline
+- ✅ 10 张表 + 索引全建
+- ✅ 5 个 service `_ensure_schema()` 调 apply_migrations + SCHEMA / `_MIGRATIONS` / `_migrate_works()` 已删
+- ✅ rg 验零: 5 个 service 不再 `from shortvideo.config import DB_PATH` (含 alias 模式)
+- ✅ rg 验零: 48 处 DB 直连全部走 get_connection
+- ✅ shortvideo/works.py 的 `_conn()` 包装保留 row_factory + works CRUD 回归测试通过
+- ✅ pytest 321 → 333 通过 (+12 测试)
+- ✅ api.py startup hook `_apply_db_migrations` 在 `_recover_orphan_tasks` 之前
+- ✅ current_db_path() 处理 ~/相对路径/symlink (单测覆盖)
+- ✅ _legacy_fixups 补 8 列 + 2 索引
+- ✅ 路线 B 文档表述精确 (db.py docstring 列 dialect 7 项)
+- ✅ SYSTEM-CONSTRAINTS §9 + CHANGELOG v0.5.2 + PROGRESS 同步 D-084
+- ✅ V1_BASELINE INDEX 顺序坑修复 (`_split_v1_baseline`)
+- ✅ 测试 fixture 老表场景双覆盖 (works + tasks)
+
+**下一步**: vibecoding 评审 3 隐患全部清完. 回到产品功能层 — 候选: 装战略规划技能 / LiDock 真 tool calling / 偏好抽取增强 / 周报长摘要.
+
+---
+
+## 上一里程碑(2026-04-27 晚 · D-083 系统硬约束集中化)
 
 **版本**: v0.5.1 — 文档级整顿. 把分散的硬约束集中成独立文档, 锁定路线 B 路径策略.
 

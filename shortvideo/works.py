@@ -8,91 +8,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from .config import DB_PATH
-
-SCHEMA = """
-CREATE TABLE IF NOT EXISTS works (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    created_at INTEGER NOT NULL,
-    title TEXT,
-    source_url TEXT,
-    original_text TEXT,
-    final_text TEXT NOT NULL,
-    avatar_id INTEGER,
-    speaker_id INTEGER,
-    shiliu_video_id INTEGER,
-    local_path TEXT,
-    duration_sec REAL,
-    status TEXT NOT NULL,
-    error TEXT,
-    tokens_used INTEGER DEFAULT 0,
-    type TEXT NOT NULL DEFAULT 'video',
-    source_skill TEXT,
-    thumb_path TEXT,
-    metadata TEXT
-);
-CREATE INDEX IF NOT EXISTS idx_works_created_at ON works(created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_works_status ON works(status);
--- D-065 索引(idx_works_type, idx_works_source_skill) 在 _migrate_works() 中创建,
--- 因为老库 ALTER 加列必须发生在创建对应索引之前.
-
-CREATE TABLE IF NOT EXISTS materials (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    created_at INTEGER NOT NULL,
-    url TEXT,
-    title TEXT,
-    author TEXT,
-    duration_sec REAL,
-    original_text TEXT NOT NULL,
-    source TEXT
-);
-CREATE INDEX IF NOT EXISTS idx_materials_created_at ON materials(created_at DESC);
-
-CREATE TABLE IF NOT EXISTS hot_topics (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    created_at INTEGER NOT NULL,
-    platform TEXT,
-    title TEXT NOT NULL,
-    heat_score INTEGER DEFAULT 0,
-    match_persona INTEGER DEFAULT 0,
-    match_reason TEXT,
-    source_url TEXT,
-    fetched_from TEXT DEFAULT 'manual',
-    status TEXT DEFAULT 'unused'
-);
-CREATE INDEX IF NOT EXISTS idx_hot_topics_created ON hot_topics(created_at DESC);
-
-CREATE TABLE IF NOT EXISTS topics (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    created_at INTEGER NOT NULL,
-    title TEXT NOT NULL,
-    description TEXT,
-    tags TEXT,
-    heat_score INTEGER DEFAULT 0,
-    source TEXT DEFAULT 'manual',
-    status TEXT DEFAULT 'unused'
-);
-CREATE INDEX IF NOT EXISTS idx_topics_created ON topics(created_at DESC);
-
-CREATE TABLE IF NOT EXISTS metrics (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    work_id INTEGER NOT NULL,
-    platform TEXT NOT NULL,
-    views INTEGER DEFAULT 0,
-    likes INTEGER DEFAULT 0,
-    comments INTEGER DEFAULT 0,
-    shares INTEGER DEFAULT 0,
-    saves INTEGER DEFAULT 0,
-    followers_gained INTEGER DEFAULT 0,
-    conversions INTEGER DEFAULT 0,
-    completion_rate REAL,
-    notes TEXT,
-    recorded_at INTEGER NOT NULL,
-    source TEXT DEFAULT 'manual',
-    UNIQUE(work_id, platform)
-);
-CREATE INDEX IF NOT EXISTS idx_metrics_work ON metrics(work_id);
-"""
+from shortvideo.db import get_connection
+# D-084: SCHEMA / _migrate_works 已迁出到 backend/services/migrations.py.
+# 不在顶层 import backend (shortvideo 包内代码顶层不跨包到 backend, 见 SYSTEM-CONSTRAINTS).
+# init_db() 函数内 lazy import apply_migrations.
 
 
 @dataclass
@@ -182,31 +101,17 @@ class Work:
 
 
 def _conn() -> sqlite3.Connection:
-    conn = sqlite3.connect(DB_PATH)
+    """works CRUD 专用. **必须 row_factory=Row** — _row_to_work 用 row["id"] 字典访问.
+    D-084: 内部走 shortvideo.db.get_connection (单一连接抽象点)."""
+    conn = get_connection()
     conn.row_factory = sqlite3.Row
     return conn
 
 
-def _migrate_works(c: sqlite3.Connection) -> None:
-    """D-065: 给老库 works 表加 type / source_skill / thumb_path / metadata 4 列(幂等)."""
-    cols = {row["name"] for row in c.execute("PRAGMA table_info(works)").fetchall()}
-    if "type" not in cols:
-        c.execute("ALTER TABLE works ADD COLUMN type TEXT NOT NULL DEFAULT 'video'")
-    if "source_skill" not in cols:
-        c.execute("ALTER TABLE works ADD COLUMN source_skill TEXT")
-    if "thumb_path" not in cols:
-        c.execute("ALTER TABLE works ADD COLUMN thumb_path TEXT")
-    if "metadata" not in cols:
-        c.execute("ALTER TABLE works ADD COLUMN metadata TEXT")
-    c.execute("CREATE INDEX IF NOT EXISTS idx_works_type ON works(type)")
-    c.execute("CREATE INDEX IF NOT EXISTS idx_works_source_skill ON works(source_skill)")
-
-
 def init_db() -> None:
-    with closing(_conn()) as c:
-        c.executescript(SCHEMA)
-        _migrate_works(c)
-        c.commit()
+    """D-084: schema 集中化. **lazy import** 避免 shortvideo 包顶层依赖 backend."""
+    from backend.services.migrations import apply_migrations
+    apply_migrations()
 
 
 def _row_to_work(row: sqlite3.Row) -> Work:

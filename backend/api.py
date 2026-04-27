@@ -241,6 +241,25 @@ def _run_cover_task(task_id: str, prompt: str, size: str, engine: str | None = N
         COVER_TASKS[task_id].update(status="failed", error=f"{type(e).__name__}: {e}")
 
 
+# --------- 启动钩子: SQLite schema migrations (D-084, 必须最先) ----------
+@app.on_event("startup")
+def _apply_db_migrations():
+    """uvicorn boot 时一次性建好/补齐所有表 schema. 必须在 recover_orphans/watcher 之前.
+
+    pytest 不触发 startup event, 测试 fixture 自己调 migrations.apply_migrations().
+    挂了直接 raise: schema 不可用时后续 startup hook 必撞错, 早死早超生.
+    """
+    import logging
+    log = logging.getLogger("migrations")
+    try:
+        from backend.services import migrations
+        version = migrations.apply_migrations()
+        log.info(f"db schema applied, version={version}")
+    except Exception as e:
+        log.error(f"migrations failed: {e}")
+        raise
+
+
 # --------- 启动钩子: 小华夜班调度器 (D-040c) ----------
 @app.on_event("startup")
 def _start_night_scheduler():
@@ -1035,12 +1054,12 @@ def dreamina_recover(submit_id: str):
 def remote_jobs_by_task(task_id: str):
     """前端 TaskCard 失败态时用. 拿到 submit_id + last_status, 给 '🔍 重查' 按钮用."""
     from backend.services import remote_jobs
-    _ensure_schema_ok = remote_jobs._ensure_schema()
-    import sqlite3 as _sq
-    from contextlib import closing as _cl
-    from shortvideo.config import DB_PATH as _DB
-    with _cl(_sq.connect(_DB)) as con:
-        con.row_factory = _sq.Row
+    from shortvideo.db import get_connection
+    import sqlite3
+    from contextlib import closing
+    remote_jobs._ensure_schema()
+    with closing(get_connection()) as con:
+        con.row_factory = sqlite3.Row
         r = con.execute(
             "SELECT * FROM remote_jobs WHERE task_id=? ORDER BY submitted_at DESC LIMIT 1",
             (task_id,),
@@ -1068,11 +1087,10 @@ def dreamina_queue_status():
     返回 {querying_count, recent_avg_minutes, last_done_at_min_ago}.
     """
     from backend.services import remote_jobs
-    import sqlite3 as _sq
-    from contextlib import closing as _cl
-    from shortvideo.config import DB_PATH as _DB
+    from shortvideo.db import get_connection
+    from contextlib import closing
     now = int(time.time())
-    with _cl(_sq.connect(_DB)) as con:
+    with closing(get_connection()) as con:
         # 当前 querying / pending 数
         querying = con.execute(
             "SELECT COUNT(*) FROM remote_jobs WHERE provider='dreamina' "
@@ -1436,9 +1454,8 @@ def settings_reset_ep():
 def stats_home():
     """4 方块 + 1 热点条的统计数据 (D-024 接入 ai_calls 真实数据)。"""
     import time as _t
-    import sqlite3
     from contextlib import closing
-    from shortvideo.config import DB_PATH
+    from shortvideo.db import get_connection
     from backend.services import ai_usage
 
     now = int(_t.time())
@@ -1466,7 +1483,7 @@ def stats_home():
     ai_usage._ensure_schema()
     counts: dict[str, dict[str, int]] = {"today": {}, "yesterday": {}, "week": {}}
     try:
-        with closing(sqlite3.connect(DB_PATH)) as con:
+        with closing(get_connection()) as con:
             for label, since, until in [
                 ("today",     today_start,  now),
                 ("yesterday", yday_start,   today_start),

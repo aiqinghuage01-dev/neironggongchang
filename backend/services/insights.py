@@ -19,7 +19,8 @@ import time
 from contextlib import closing
 from typing import Any
 
-from shortvideo.config import DB_PATH
+from backend.services.migrations import apply_migrations
+from shortvideo.db import get_connection
 
 _CACHE_TTL = 3600  # 1 小时缓存,避免每次 topics_generate 都重调 AI
 _lock = threading.Lock()
@@ -27,20 +28,14 @@ _cache: dict[str, Any] = {"ts": 0.0, "patterns": "", "top": []}
 
 
 def _ensure_metrics_schema():
-    """works/metrics 表已经在 shortvideo/works.py::init_db() 创建,这里只确认存在。"""
-    try:
-        with closing(sqlite3.connect(DB_PATH)) as con:
-            con.execute("SELECT 1 FROM metrics LIMIT 1")
-    except sqlite3.OperationalError:
-        # 表还没建过,触发一次
-        from shortvideo.works import init_db
-        init_db()
+    """D-084: schema 集中化, 走 migrations.apply_migrations (幂等)."""
+    apply_migrations()
 
 
 def top_performers(limit: int = 10) -> list[dict[str, Any]]:
     """按 views 聚合 top N works(跨平台合并)。"""
     _ensure_metrics_schema()
-    with closing(sqlite3.connect(DB_PATH)) as con:
+    with closing(get_connection()) as con:
         con.row_factory = sqlite3.Row
         rows = con.execute(
             """SELECT m.work_id,

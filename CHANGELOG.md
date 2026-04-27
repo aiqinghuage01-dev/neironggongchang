@@ -6,6 +6,60 @@
 
 ---
 
+## [v0.5.2] — 2026-04-27 (DB 入口集中化 + schema migrations)
+
+D-083 之后, 隐患 3 落地. 把分散在 5 个 service 的 mini-migrations 收敛 +
+全库 48 处 DB 直连统一走单一连接抽象点. 路线 B 切 Postgres 第一步真"改一处".
+
+GPT 五审 (v1→v2→v3→v4→v5) 共抓 1 P1 + 多个 P2, 全部修复后实施.
+
+### Added
+- **[D-084]** `shortvideo/db.py` — DB 连接抽象层 (3 个公开函数)
+  - `current_db_path() -> Path` 单一规范化点 (expanduser + resolve, 处理 `~`/相对路径/symlink)
+  - `get_connection()` 动态读 DB_PATH, 用规范化路径连接 (兼容 pytest monkeypatch)
+  - `current_db_key() -> str` 规范化字符串 key, 用于 migrations 跟踪 + 测试 fixture 比较
+- **[D-084]** `backend/services/migrations.py` — 集中 schema 迁移 (~330 行)
+  - `V1_BASELINE` 10 张表 baseline (含 D-065 / T9 / T13 历史 ALTER 进来的列直接进 v1)
+  - `_legacy_fixups()` 显式 PRAGMA + ALTER 补 8 个历史列 (works 4 + tasks 4) + 2 个索引
+  - `_split_v1_baseline()` 拆 CREATE TABLE / CREATE INDEX, 解决"老表 CREATE INDEX 撞缺列"陷阱
+  - `apply_migrations()` 启动钩子 + `_applied_db_key` 跟踪 (DB 路径变自动重跑)
+  - `_MIGRATIONS` append-only 列表 (v2+ 加列加表都走这)
+  - `reset_for_test()` escape hatch
+- **[D-084]** `backend/api.py` startup hook 加 `_apply_db_migrations()`, 必须最先 (recover/watcher 之前). schema 挂掉直接 raise, 早死早超生
+- **[D-084]** `tests/test_migrations.py` (10 测试) — schema_version=1 / 10 张表全建 / works 索引 / **legacy fixups works 老表** / **legacy fixups tasks 老表** / DB_PATH 切换重跑 / 路径规范化 / 幂等
+- **[D-084]** `tests/test_works_crud_integration.py` (2 测试, P1 验收) — 创/读/查 5 条 works 记录 + 直接验 _conn 返回 sqlite3.Row + 字典访问 row["id"] 不撞 IndexError
+- **[D-084]** SYSTEM-CONSTRAINTS.md §9 (5 节硬约束 + 1 节实施陷阱)
+
+### Changed (7 文件 48 处 DB 直连改造)
+- `backend/services/tasks.py`: 删 SCHEMA + `_MIGRATIONS` + 锁逻辑 (~50 行); sed 替换 14 处 `sqlite3.connect(DB_PATH)` → `get_connection()`
+- `backend/services/night_shift.py`: 删 SCHEMA + 锁逻辑; sed 替换 12 处
+- `backend/services/remote_jobs.py`: 删 SCHEMA + 锁逻辑; sed 替换 12 处
+- `backend/services/ai_usage.py`: 删 SCHEMA + 锁逻辑; sed 替换 4 处
+- `backend/services/insights.py`: 改 `_ensure_metrics_schema` 走 apply_migrations; sed 替换 2 处
+- `backend/api.py`: **手改** 3 个端点 (line 1054 / 1083 / 1453), 含 `_sq/_cl/_DB` alias 不一致, 不能 sed
+- `shortvideo/works.py`: **手改** (P1 致命点) — `_conn()` 包装保留 `conn.row_factory = sqlite3.Row`; `init_db()` 函数内 lazy import apply_migrations (shortvideo 包内代码顶层不跨包到 backend); 删 SCHEMA + `_migrate_works()`
+
+### 实施踩坑 + 修复
+- **V1_BASELINE 老库 INDEX 撞缺列**: GPT v3-v5 文档没发现, 跑 `test_legacy_fixup_works_old_db_missing_4_columns` 时撞 `no such column: type`. 修法: 拆 V1_TABLES + V1_INDEXES, 应用顺序 TABLE → fixups → INDEX
+- **测试老表 fixture 简化过头**: 初版 tasks 老表 fixture 只写 5 列, 撞 `no such column: ns`. 修法: fixture 建 D-037a 时代完整 13 列, 只缺 4 个 ALTER 列
+
+### Tested
+- pytest 321 → **333 passed** (+12: 10 migrations + 2 works CRUD), 1 skipped 不变
+- rg 双路验零通过:
+  - DB 直连模式 (含 alias): `sqlite3\.connect\((DB_PATH|_DB)\)|_sq\.connect\((DB_PATH|_DB)\)|from (shortvideo\.config|\.config) import DB_PATH|DB_PATH as _DB|sqlite3 as _sq` → 0 行 (除 shortvideo/db.py)
+  - schema 残留: `CREATE TABLE IF NOT EXISTS|ALTER TABLE|^SCHEMA = |^_MIGRATIONS = ` → 0 行 (除 migrations.py)
+
+### Files Changed
+- 新建: `shortvideo/db.py` · `backend/services/migrations.py` · `tests/test_migrations.py` · `tests/test_works_crud_integration.py`
+- 改: `backend/api.py` · `backend/services/{tasks,night_shift,remote_jobs,ai_usage,insights}.py` · `shortvideo/works.py` · `docs/SYSTEM-CONSTRAINTS.md` · `docs/PROGRESS.md`
+- 净减 233 行业务代码 (删重复 SCHEMA + 锁), 加 ~600 行 (migrations + 测试 + db.py)
+
+### 一句话总结
+GPT 五审打磨, 但实施时还抓出 v3-v5 没发现的 INDEX 顺序 bug — 测试驱动救场.
+**单一连接抽象点 + schema 集中迁移**, 路线 B 切 Postgres 第一步真"改一处" (除 SQL dialect 适配).
+
+---
+
 ## [v0.5.1] — 2026-04-27 (系统硬约束集中化)
 
 vibecoding 方法论评审后, 把分散在 D-068/D-069/D-070/D-078 的硬约束集中成独立文档,

@@ -279,6 +279,70 @@ python3 scripts/add_skill.py --slug "X" --key Y --icon Z --label W
 
 ---
 
+## 9. 数据库 schema + connection 硬约束 (D-084)
+
+### 9.1 schema 改动必须走 migrations.py
+
+**正例**:
+- 加列: append `(version, note, sql)` 到 `backend/services/migrations.py` 的 `_MIGRATIONS` 列表
+- 加表: 同上, 用 v2/v3 版本号
+- 改类型: 不允许 (SQLite ALTER 限制 + 路线 B 切 Postgres 风险)
+
+**反例 (禁止)**:
+- 直接改 `V1_BASELINE` 常量 (v1 已 frozen)
+- 在 service 文件里写 `SCHEMA = "..."` / `_ensure_schema` 自建表
+- 业务代码里 `con.execute("ALTER TABLE ...")`
+
+**Why**: 5 个 service 各自建表 → 改 schema 要 grep 5 处 + 没法一眼看全 + 没版本追踪. 集中后改一处.
+
+### 9.2 connection 必须走 shortvideo.db.get_connection()
+
+**正例**:
+```python
+from shortvideo.db import get_connection
+from contextlib import closing
+with closing(get_connection()) as con:
+    ...
+# 字典式 row 访问 (works._conn 这种):
+conn = get_connection()
+conn.row_factory = sqlite3.Row
+return conn
+```
+
+**反例 (禁止)**:
+- `from shortvideo.config import DB_PATH; sqlite3.connect(DB_PATH)` (顶层拷死路径, 测试 monkeypatch 失效)
+- `from shortvideo.config import DB_PATH as _DB; sqlite3.connect(_DB)` (alias 也不行)
+- 任何业务代码顶部 `from shortvideo.config import DB_PATH`
+
+**Why**: D-084 改造前 7 文件 48 处 CRUD 用拷死的 DB_PATH, 测试 monkeypatch 后建表到新库读写到旧库. 走 get_connection 动态读, 路径变了 migrations 自动重跑.
+
+### 9.3 schema_version 表是事实源
+
+- 当前版本: `SELECT MAX(version) FROM schema_version`
+- 启动时 `apply_migrations()` 自动追到最新
+- pytest fixture 切 DB_PATH → migrations 检测 `_applied_db_key` 变化自动重跑
+
+### 9.4 路线 B 切 Postgres 不是"改一处"
+
+- **第一步钩子**: 改 `shortvideo/db.py:get_connection()` 返回 psycopg2/asyncpg
+- **第二步**: 逐表逐查替换 SQL 方言 7 项 (主键/时间/冲突/PRAGMA/row factory/占位符/lastrowid)
+- 预估工作量: 1-2 天 (不含 ORM)
+
+### 9.5 V1_BASELINE 应用顺序的隐藏陷阱 (D-084 实施时踩出)
+
+**坑**: V1_BASELINE 把 CREATE TABLE + CREATE INDEX 一起 executescript, 老库 CREATE TABLE 跳过但 CREATE INDEX 执行 → 撞 `no such column` (e.g. idx_works_type 依赖 D-065 ALTER 才有的 type 列).
+
+**修法**: `_split_v1_baseline()` 拆开, 应用顺序:
+1. CREATE TABLE (老表跳过)
+2. `_legacy_fixups()` 补缺列
+3. CREATE INDEX (此时所有列都齐)
+4. 标 schema_version=1
+5. 应用 v2+ migrations
+
+新加 V1 baseline 表/索引时记住此顺序; 别在 V1_BASELINE 里写依赖"未来 ALTER 列"的索引.
+
+---
+
 ## 索引: 约束 → D 编号 → 文件
 
 | 约束 | D 编号 | 关键文件 |
@@ -291,3 +355,5 @@ python3 scripts/add_skill.py --slug "X" --key Y --icon Z --label W
 | 文案脱敏 (TASK_KIND_LABELS) | D-069 | `web/factory-task.jsx` |
 | 接入新 skill 范式 | D-010 | `scripts/add_skill.py`, `docs/NEW-SKILL-PLAYBOOK.md` |
 | 路径抽象层 (待建) | D-083 | `backend/services/paths.py` (本文骨架) |
+| **DB schema 集中迁移** | **D-084** | `backend/services/migrations.py` |
+| **DB 连接抽象层** | **D-084** | `shortvideo/db.py` (`get_connection` + `current_db_key`) |

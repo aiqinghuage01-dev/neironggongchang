@@ -22,42 +22,9 @@ import time
 from contextlib import closing
 from typing import Any
 
-from shortvideo.config import DB_PATH
+from backend.services.migrations import apply_migrations
+from shortvideo.db import get_connection
 
-
-SCHEMA = """
-CREATE TABLE IF NOT EXISTS night_jobs (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,
-    icon TEXT,
-    skill_slug TEXT,
-    trigger_type TEXT NOT NULL,        -- cron | file_watch | manual
-    trigger_config TEXT,               -- JSON: {cron: "...", path: "...", ...}
-    output_target TEXT,                -- materials | works | knowledge | home
-    ai_route TEXT,                     -- 可选: 覆盖默认引擎路由 ("opus" / "deepseek")
-    enabled INTEGER NOT NULL DEFAULT 1,
-    created_at INTEGER NOT NULL,
-    updated_at INTEGER NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_night_jobs_enabled ON night_jobs(enabled);
-
-CREATE TABLE IF NOT EXISTS night_job_runs (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    job_id INTEGER NOT NULL,
-    started_at INTEGER NOT NULL,
-    ended_at INTEGER,
-    status TEXT NOT NULL,              -- running | success | failed
-    output_summary TEXT,               -- "5 条选题" / "整理 12 条新笔记"
-    output_refs TEXT,                  -- JSON: [{kind:"work", id:42}, ...]
-    log TEXT,
-    FOREIGN KEY(job_id) REFERENCES night_jobs(id) ON DELETE CASCADE
-);
-CREATE INDEX IF NOT EXISTS idx_night_runs_job_started ON night_job_runs(job_id, started_at DESC);
-CREATE INDEX IF NOT EXISTS idx_night_runs_status ON night_job_runs(status);
-"""
-
-_schema_init = threading.Lock()
-_schema_done = False
 
 VALID_TRIGGER_TYPES = {"cron", "file_watch", "manual"}
 VALID_OUTPUT_TARGETS = {"materials", "works", "knowledge", "home"}
@@ -65,16 +32,8 @@ VALID_RUN_STATUS = {"running", "success", "failed"}
 
 
 def _ensure_schema():
-    global _schema_done
-    if _schema_done:
-        return
-    with _schema_init:
-        if _schema_done:
-            return
-        with closing(sqlite3.connect(DB_PATH)) as con:
-            con.executescript(SCHEMA)
-            con.commit()
-        _schema_done = True
+    """D-084: schema 集中化, 走 migrations.apply_migrations (幂等)."""
+    apply_migrations()
 
 
 def _dumps(v: Any) -> str | None:
@@ -132,7 +91,7 @@ def create_job(
         raise ValueError(f"invalid output_target: {output_target}")
     _ensure_schema()
     now = int(time.time())
-    with closing(sqlite3.connect(DB_PATH)) as con:
+    with closing(get_connection()) as con:
         cur = con.execute(
             "INSERT INTO night_jobs (name, icon, skill_slug, trigger_type, trigger_config, "
             "output_target, ai_route, enabled, created_at, updated_at) "
@@ -155,7 +114,7 @@ def create_job(
 
 def get_job(job_id: int) -> dict[str, Any] | None:
     _ensure_schema()
-    with closing(sqlite3.connect(DB_PATH)) as con:
+    with closing(get_connection()) as con:
         con.row_factory = sqlite3.Row
         r = con.execute("SELECT * FROM night_jobs WHERE id=?", (job_id,)).fetchone()
     return _job_row(r) if r else None
@@ -168,7 +127,7 @@ def list_jobs(*, enabled_only: bool = False) -> list[dict[str, Any]]:
     if enabled_only:
         sql += " WHERE enabled=1"
     sql += " ORDER BY id ASC"
-    with closing(sqlite3.connect(DB_PATH)) as con:
+    with closing(get_connection()) as con:
         con.row_factory = sqlite3.Row
         rows = con.execute(sql, args).fetchall()
     return [_job_row(r) for r in rows]
@@ -200,7 +159,7 @@ def update_job(job_id: int, **fields: Any) -> bool:
     cols.append("updated_at=?")
     args.append(int(time.time()))
     args.append(job_id)
-    with closing(sqlite3.connect(DB_PATH)) as con:
+    with closing(get_connection()) as con:
         cur = con.execute(f"UPDATE night_jobs SET {', '.join(cols)} WHERE id=?", tuple(args))
         con.commit()
     return cur.rowcount > 0
@@ -208,7 +167,7 @@ def update_job(job_id: int, **fields: Any) -> bool:
 
 def delete_job(job_id: int) -> bool:
     _ensure_schema()
-    with closing(sqlite3.connect(DB_PATH)) as con:
+    with closing(get_connection()) as con:
         # runs 通过 ON DELETE CASCADE 自动清, 但 sqlite 默认外键不开, 显式删
         con.execute("DELETE FROM night_job_runs WHERE job_id=?", (job_id,))
         cur = con.execute("DELETE FROM night_jobs WHERE id=?", (job_id,))
@@ -226,7 +185,7 @@ def start_run(job_id: int) -> int:
     """开一条 running 运行, 返回 run_id. 任务执行器调用."""
     _ensure_schema()
     now = int(time.time())
-    with closing(sqlite3.connect(DB_PATH)) as con:
+    with closing(get_connection()) as con:
         cur = con.execute(
             "INSERT INTO night_job_runs (job_id, started_at, status) VALUES (?,?,?)",
             (job_id, now, "running"),
@@ -247,7 +206,7 @@ def finish_run(
         raise ValueError(f"invalid status: {status}")
     _ensure_schema()
     now = int(time.time())
-    with closing(sqlite3.connect(DB_PATH)) as con:
+    with closing(get_connection()) as con:
         con.execute(
             "UPDATE night_job_runs SET ended_at=?, status=?, output_summary=?, output_refs=?, log=? WHERE id=?",
             (
@@ -267,7 +226,7 @@ def recover_orphan_runs() -> int:
     返回回收的 run 数."""
     _ensure_schema()
     now = int(time.time())
-    with closing(sqlite3.connect(DB_PATH)) as con:
+    with closing(get_connection()) as con:
         cur = con.execute(
             "UPDATE night_job_runs SET ended_at=?, status='failed', "
             "log='[recover] 服务重启, 夜班 run 中断' WHERE status='running'",
@@ -279,7 +238,7 @@ def recover_orphan_runs() -> int:
 
 def get_run(run_id: int) -> dict[str, Any] | None:
     _ensure_schema()
-    with closing(sqlite3.connect(DB_PATH)) as con:
+    with closing(get_connection()) as con:
         con.row_factory = sqlite3.Row
         r = con.execute("SELECT * FROM night_job_runs WHERE id=?", (run_id,)).fetchone()
     return _run_row(r) if r else None
@@ -307,7 +266,7 @@ def list_runs(
     where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
     sql = f"SELECT * FROM night_job_runs {where} ORDER BY started_at DESC LIMIT ?"
     args.append(max(1, min(int(limit or 50), 500)))
-    with closing(sqlite3.connect(DB_PATH)) as con:
+    with closing(get_connection()) as con:
         con.row_factory = sqlite3.Row
         rows = con.execute(sql, tuple(args)).fetchall()
     return [_run_row(r) for r in rows]
@@ -337,7 +296,7 @@ def get_digest(*, since_hours: int = 24) -> dict[str, Any]:
     """
     _ensure_schema()
     since_ts = int(time.time()) - since_hours * 3600
-    with closing(sqlite3.connect(DB_PATH)) as con:
+    with closing(get_connection()) as con:
         con.row_factory = sqlite3.Row
         rows = con.execute(
             "SELECT r.id AS run_id, r.job_id, r.started_at, r.ended_at, r.status, "

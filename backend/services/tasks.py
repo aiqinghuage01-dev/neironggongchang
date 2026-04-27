@@ -30,64 +30,16 @@ import uuid
 from contextlib import closing
 from typing import Any
 
-from shortvideo.config import DB_PATH
+from backend.services.migrations import apply_migrations
+from shortvideo.db import get_connection
 
-
-SCHEMA = """
-CREATE TABLE IF NOT EXISTS tasks (
-    id TEXT PRIMARY KEY,
-    kind TEXT NOT NULL,
-    label TEXT,
-    status TEXT NOT NULL,
-    ns TEXT,
-    page_id TEXT,
-    step TEXT,
-    payload TEXT,
-    result TEXT,
-    error TEXT,
-    progress_text TEXT,
-    progress_pct INTEGER,
-    estimated_seconds INTEGER,
-    started_ts INTEGER NOT NULL,
-    finished_ts INTEGER,
-    updated_ts INTEGER NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_tasks_status_updated ON tasks(status, updated_ts DESC);
-CREATE INDEX IF NOT EXISTS idx_tasks_kind ON tasks(kind);
-CREATE INDEX IF NOT EXISTS idx_tasks_ns ON tasks(ns);
-"""
-
-# D-037b1: 老库 ALTER TABLE 加 progress_pct / estimated_seconds. 幂等, 已有列跳过.
-# T9: retry_count 列, LLM with_retry 触发时 +1 (跟 in-process stats 双写, DB 持久化更稳).
-# T13: user_id 列, 默认 'qinghua', 给 poju.ai 多用户铺垫. 业务逻辑暂不读 (单用户假设).
-_MIGRATIONS = [
-    ("progress_pct", "INTEGER"),
-    ("estimated_seconds", "INTEGER"),
-    ("retry_count", "INTEGER"),
-    ("user_id", "TEXT"),
-]
-
-_schema_init = threading.Lock()
-_schema_done = False
 
 VALID_STATUS = {"pending", "running", "ok", "failed", "cancelled"}
 
 
 def _ensure_schema():
-    global _schema_done
-    if _schema_done:
-        return
-    with _schema_init:
-        if _schema_done:
-            return
-        with closing(sqlite3.connect(DB_PATH)) as con:
-            con.executescript(SCHEMA)
-            existing = {r[1] for r in con.execute("PRAGMA table_info(tasks)").fetchall()}
-            for col, typ in _MIGRATIONS:
-                if col not in existing:
-                    con.execute(f"ALTER TABLE tasks ADD COLUMN {col} {typ}")
-            con.commit()
-        _schema_done = True
+    """D-084: schema 集中化, 走 migrations.apply_migrations (幂等)."""
+    apply_migrations()
 
 
 def _dumps(v: Any) -> str | None:
@@ -140,7 +92,7 @@ def create_task(
     _ensure_schema()
     tid = uuid.uuid4().hex
     now = int(time.time())
-    with closing(sqlite3.connect(DB_PATH)) as con:
+    with closing(get_connection()) as con:
         con.execute(
             "INSERT INTO tasks (id, kind, label, status, ns, page_id, step, payload, "
             "estimated_seconds, retry_count, user_id, started_ts, updated_ts) "
@@ -166,7 +118,7 @@ def update_payload(task_id: str, patch: dict[str, Any]) -> None:
         return
     _ensure_schema()
     now = int(time.time())
-    with closing(sqlite3.connect(DB_PATH)) as con:
+    with closing(get_connection()) as con:
         cur = con.execute("SELECT payload FROM tasks WHERE id=?", (task_id,))
         r = cur.fetchone()
         if not r:
@@ -191,7 +143,7 @@ def update_progress(task_id: str, progress_text: str, *, pct: int | None = None)
     now = int(time.time())
     if pct is not None:
         pct = max(0, min(100, int(pct)))
-    with closing(sqlite3.connect(DB_PATH)) as con:
+    with closing(get_connection()) as con:
         if pct is None:
             con.execute(
                 "UPDATE tasks SET progress_text=?, updated_ts=? WHERE id=? AND status='running'",
@@ -222,7 +174,7 @@ def finish_task(
         raise ValueError(f"invalid status: {status}")
     _ensure_schema()
     now = int(time.time())
-    with closing(sqlite3.connect(DB_PATH)) as con:
+    with closing(get_connection()) as con:
         con.execute(
             "UPDATE tasks SET status=?, result=?, error=?, finished_ts=?, updated_ts=? WHERE id=?",
             (status, _dumps(result), (error or "")[:500] if error else None, now, now, task_id),
@@ -279,7 +231,7 @@ def cancel_task(task_id: str) -> bool:
     """软取消: 标记 cancelled。真正的中断靠任务循环自己检查 is_cancelled。"""
     _ensure_schema()
     now = int(time.time())
-    with closing(sqlite3.connect(DB_PATH)) as con:
+    with closing(get_connection()) as con:
         cur = con.execute(
             "UPDATE tasks SET status='cancelled', finished_ts=?, updated_ts=? "
             "WHERE id=? AND status IN ('pending','running')",
@@ -292,7 +244,7 @@ def cancel_task(task_id: str) -> bool:
 def is_cancelled(task_id: str) -> bool:
     """任务线程定期调, 发现被取消就早退。"""
     _ensure_schema()
-    with closing(sqlite3.connect(DB_PATH)) as con:
+    with closing(get_connection()) as con:
         r = con.execute("SELECT status FROM tasks WHERE id=?", (task_id,)).fetchone()
     return bool(r and r[0] == "cancelled")
 
@@ -308,7 +260,7 @@ def recover_orphans() -> int:
     返回回收数量."""
     _ensure_schema()
     now = int(time.time())
-    with closing(sqlite3.connect(DB_PATH)) as con:
+    with closing(get_connection()) as con:
         cur = con.execute(
             "UPDATE tasks SET status='failed', error=?, finished_ts=?, updated_ts=? "
             "WHERE status IN ('pending','running') "
@@ -340,7 +292,7 @@ def sweep_stuck() -> int:
     _ensure_schema()
     now = int(time.time())
     threshold_expr = f"MAX(COALESCE(estimated_seconds,0)*{_WATCHDOG_MULTIPLIER}, {_WATCHDOG_MIN_TIMEOUT_SEC})"
-    with closing(sqlite3.connect(DB_PATH)) as con:
+    with closing(get_connection()) as con:
         cur = con.execute(
             f"UPDATE tasks SET status='failed', error=?, finished_ts=?, updated_ts=? "
             f"WHERE status='running' AND ? - COALESCE(started_ts, updated_ts) > {threshold_expr} "
@@ -398,7 +350,7 @@ def cleanup_old() -> dict[str, int]:
     now = int(time.time())
     ok_cutoff = now - _CLEANUP_OK_TTL_SEC
     failed_cutoff = now - _CLEANUP_FAILED_TTL_SEC
-    with closing(sqlite3.connect(DB_PATH)) as con:
+    with closing(get_connection()) as con:
         c1 = con.execute(
             "DELETE FROM tasks WHERE status IN ('ok','cancelled') AND COALESCE(finished_ts, updated_ts) < ?",
             (ok_cutoff,),
@@ -451,7 +403,7 @@ def start_cleanup() -> bool:
 
 def get_task(task_id: str) -> dict[str, Any] | None:
     _ensure_schema()
-    with closing(sqlite3.connect(DB_PATH)) as con:
+    with closing(get_connection()) as con:
         con.row_factory = sqlite3.Row
         r = con.execute("SELECT * FROM tasks WHERE id=?", (task_id,)).fetchone()
     return _row_to_dict(r) if r else None
@@ -485,7 +437,7 @@ def list_tasks(
     where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
     sql = f"SELECT * FROM tasks {where} ORDER BY updated_ts DESC LIMIT ?"
     args.append(max(1, min(int(limit or 50), 200)))
-    with closing(sqlite3.connect(DB_PATH)) as con:
+    with closing(get_connection()) as con:
         con.row_factory = sqlite3.Row
         rows = con.execute(sql, tuple(args)).fetchall()
     return [_row_to_dict(r) for r in rows]
@@ -494,7 +446,7 @@ def list_tasks(
 def counts() -> dict[str, int]:
     """各状态数量, 前端顶栏红点用。"""
     _ensure_schema()
-    with closing(sqlite3.connect(DB_PATH)) as con:
+    with closing(get_connection()) as con:
         rows = con.execute(
             "SELECT status, COUNT(*) AS c FROM tasks GROUP BY status"
         ).fetchall()
@@ -654,7 +606,7 @@ def cleanup_old(days: int = 7) -> int:
     """清掉 N 天前已结束的任务, 返回删除行数。建议在 cron 或启动时调。"""
     _ensure_schema()
     cutoff = int(time.time()) - days * 86400
-    with closing(sqlite3.connect(DB_PATH)) as con:
+    with closing(get_connection()) as con:
         cur = con.execute(
             "DELETE FROM tasks WHERE status IN ('ok','failed','cancelled') AND finished_ts<?",
             (cutoff,),

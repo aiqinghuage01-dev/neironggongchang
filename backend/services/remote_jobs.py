@@ -28,41 +28,17 @@ from contextlib import closing
 from dataclasses import dataclass
 from typing import Any, Callable
 
-from shortvideo.config import DB_PATH
+from backend.services.migrations import apply_migrations
+from shortvideo.db import get_connection
 
 log = logging.getLogger("remote_jobs")
 
-
-SCHEMA = """
-CREATE TABLE IF NOT EXISTS remote_jobs (
-    id TEXT PRIMARY KEY,
-    task_id TEXT,
-    provider TEXT NOT NULL,
-    submit_id TEXT NOT NULL,
-    submit_payload TEXT,
-    last_status TEXT,
-    last_poll_at INTEGER,
-    poll_count INTEGER NOT NULL DEFAULT 0,
-    submitted_at INTEGER NOT NULL,
-    finished_at INTEGER,
-    result TEXT,
-    error TEXT,
-    max_wait_sec INTEGER NOT NULL DEFAULT 7200
-);
-CREATE INDEX IF NOT EXISTS idx_rj_status ON remote_jobs(last_status, submitted_at);
-CREATE INDEX IF NOT EXISTS idx_rj_provider ON remote_jobs(provider);
-CREATE INDEX IF NOT EXISTS idx_rj_task ON remote_jobs(task_id);
-CREATE INDEX IF NOT EXISTS idx_rj_submit ON remote_jobs(submit_id);
-"""
 
 TERMINAL_STATUS = {"done", "failed", "timeout", "cancelled"}
 
 # provider 注册表: name → handler
 _PROVIDERS: dict[str, "ProviderHandler"] = {}
 _providers_lock = threading.Lock()
-
-_schema_lock = threading.Lock()
-_schema_done = False
 
 _watcher_started = False
 _watcher_lock = threading.Lock()
@@ -90,16 +66,8 @@ class ProviderHandler:
 
 
 def _ensure_schema():
-    global _schema_done
-    if _schema_done:
-        return
-    with _schema_lock:
-        if _schema_done:
-            return
-        with closing(sqlite3.connect(DB_PATH)) as con:
-            con.executescript(SCHEMA)
-            con.commit()
-        _schema_done = True
+    """D-084: schema 集中化, 走 migrations.apply_migrations (幂等)."""
+    apply_migrations()
 
 
 def _dumps(v: Any) -> str | None:
@@ -169,7 +137,7 @@ def register(
     _ensure_schema()
     rj_id = uuid.uuid4().hex
     now = int(time.time())
-    with closing(sqlite3.connect(DB_PATH)) as con:
+    with closing(get_connection()) as con:
         con.execute(
             "INSERT INTO remote_jobs "
             "(id, task_id, provider, submit_id, submit_payload, last_status, "
@@ -187,7 +155,7 @@ def register(
 
 def get(rj_id: str) -> dict[str, Any] | None:
     _ensure_schema()
-    with closing(sqlite3.connect(DB_PATH)) as con:
+    with closing(get_connection()) as con:
         con.row_factory = sqlite3.Row
         r = con.execute("SELECT * FROM remote_jobs WHERE id=?", (rj_id,)).fetchone()
     return _row_to_dict(r)
@@ -195,7 +163,7 @@ def get(rj_id: str) -> dict[str, Any] | None:
 
 def get_by_submit_id(submit_id: str) -> dict[str, Any] | None:
     _ensure_schema()
-    with closing(sqlite3.connect(DB_PATH)) as con:
+    with closing(get_connection()) as con:
         con.row_factory = sqlite3.Row
         r = con.execute(
             "SELECT * FROM remote_jobs WHERE submit_id=? ORDER BY submitted_at DESC LIMIT 1",
@@ -213,7 +181,7 @@ def list_pending(provider: str | None = None, limit: int = 200) -> list[dict[str
         where += " AND provider=?"
         args.append(provider)
     args.append(limit)
-    with closing(sqlite3.connect(DB_PATH)) as con:
+    with closing(get_connection()) as con:
         con.row_factory = sqlite3.Row
         rows = con.execute(
             f"SELECT * FROM remote_jobs {where} ORDER BY submitted_at ASC LIMIT ?",
@@ -230,7 +198,7 @@ def list_recent(*, provider: str | None = None, limit: int = 50) -> list[dict[st
         where = "WHERE provider=?"
         args.append(provider)
     args.append(limit)
-    with closing(sqlite3.connect(DB_PATH)) as con:
+    with closing(get_connection()) as con:
         con.row_factory = sqlite3.Row
         rows = con.execute(
             f"SELECT * FROM remote_jobs {where} ORDER BY submitted_at DESC LIMIT ?",
@@ -243,7 +211,7 @@ def update_status(rj_id: str, last_status: str) -> None:
     """中间态更新 (querying / processing 等) — 不算终态."""
     _ensure_schema()
     now = int(time.time())
-    with closing(sqlite3.connect(DB_PATH)) as con:
+    with closing(get_connection()) as con:
         con.execute(
             "UPDATE remote_jobs SET last_status=?, last_poll_at=?, poll_count=poll_count+1 WHERE id=?",
             (last_status[:32], now, rj_id),
@@ -254,7 +222,7 @@ def update_status(rj_id: str, last_status: str) -> None:
 def mark_done(rj_id: str, *, result: Any = None) -> None:
     _ensure_schema()
     now = int(time.time())
-    with closing(sqlite3.connect(DB_PATH)) as con:
+    with closing(get_connection()) as con:
         con.execute(
             "UPDATE remote_jobs SET last_status='done', last_poll_at=?, finished_at=?, "
             "poll_count=poll_count+1, result=? WHERE id=?",
@@ -266,7 +234,7 @@ def mark_done(rj_id: str, *, result: Any = None) -> None:
 def mark_failed(rj_id: str, *, error: str) -> None:
     _ensure_schema()
     now = int(time.time())
-    with closing(sqlite3.connect(DB_PATH)) as con:
+    with closing(get_connection()) as con:
         con.execute(
             "UPDATE remote_jobs SET last_status='failed', last_poll_at=?, finished_at=?, "
             "poll_count=poll_count+1, error=? WHERE id=?",
@@ -278,7 +246,7 @@ def mark_failed(rj_id: str, *, error: str) -> None:
 def mark_timeout(rj_id: str, *, error: str = "等远程结果超时, 可手动重查") -> None:
     _ensure_schema()
     now = int(time.time())
-    with closing(sqlite3.connect(DB_PATH)) as con:
+    with closing(get_connection()) as con:
         con.execute(
             "UPDATE remote_jobs SET last_status='timeout', last_poll_at=?, finished_at=?, "
             "poll_count=poll_count+1, error=? WHERE id=?",
@@ -290,7 +258,7 @@ def mark_timeout(rj_id: str, *, error: str = "等远程结果超时, 可手动�
 def reset_for_recover(rj_id: str) -> None:
     """手动重查 (D-078c) 或 worker 恢复时把 timeout/failed 重置为 pending, watcher 重新接管."""
     _ensure_schema()
-    with closing(sqlite3.connect(DB_PATH)) as con:
+    with closing(get_connection()) as con:
         con.execute(
             "UPDATE remote_jobs SET last_status='pending', finished_at=NULL, error=NULL "
             "WHERE id=?",
@@ -450,7 +418,7 @@ def stats() -> dict[str, int]:
     """各状态统计, /api/health 或 dashboard 展示."""
     _ensure_schema()
     out = {"pending": 0, "querying": 0, "done": 0, "failed": 0, "timeout": 0, "cancelled": 0, "total": 0}
-    with closing(sqlite3.connect(DB_PATH)) as con:
+    with closing(get_connection()) as con:
         rows = con.execute(
             "SELECT COALESCE(last_status,'pending') AS s, COUNT(*) AS c FROM remote_jobs GROUP BY s"
         ).fetchall()

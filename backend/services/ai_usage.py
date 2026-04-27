@@ -22,7 +22,8 @@ from contextlib import closing
 from dataclasses import dataclass
 from typing import Any
 
-from shortvideo.config import DB_PATH
+from backend.services.migrations import apply_migrations
+from shortvideo.db import get_connection
 
 
 # 价格 (USD per 1M tokens) — 可通过 settings.engine_pricing 覆盖
@@ -35,39 +36,9 @@ DEFAULT_PRICING = {
 DEFAULT_USD_TO_CNY = 7.2
 
 
-SCHEMA = """
-CREATE TABLE IF NOT EXISTS ai_calls (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    ts INTEGER NOT NULL,
-    engine TEXT NOT NULL,
-    route_key TEXT,
-    prompt_tokens INTEGER DEFAULT 0,
-    completion_tokens INTEGER DEFAULT 0,
-    total_tokens INTEGER DEFAULT 0,
-    duration_ms INTEGER DEFAULT 0,
-    ok INTEGER DEFAULT 1,
-    error TEXT
-);
-CREATE INDEX IF NOT EXISTS idx_ai_calls_ts ON ai_calls(ts DESC);
-CREATE INDEX IF NOT EXISTS idx_ai_calls_engine ON ai_calls(engine);
-CREATE INDEX IF NOT EXISTS idx_ai_calls_route ON ai_calls(route_key);
-"""
-
-_schema_init = threading.Lock()
-_schema_done = False
-
-
 def _ensure_schema():
-    global _schema_done
-    if _schema_done:
-        return
-    with _schema_init:
-        if _schema_done:
-            return
-        with closing(sqlite3.connect(DB_PATH)) as con:
-            con.executescript(SCHEMA)
-            con.commit()
-        _schema_done = True
+    """D-084: schema 集中化, 走 migrations.apply_migrations (幂等)."""
+    apply_migrations()
 
 
 def record_call(
@@ -87,7 +58,7 @@ def record_call(
         return
     try:
         _ensure_schema()
-        with closing(sqlite3.connect(DB_PATH)) as con:
+        with closing(get_connection()) as con:
             con.execute(
                 "INSERT INTO ai_calls (ts, engine, route_key, prompt_tokens, completion_tokens, total_tokens, duration_ms, ok, error) "
                 "VALUES (?,?,?,?,?,?,?,?,?)",
@@ -143,7 +114,7 @@ def get_usage(range_: str = "today") -> dict[str, Any]:
     pricing, fx = _load_pricing_and_fx()
     since = _range_to_since(range_)
 
-    with closing(sqlite3.connect(DB_PATH)) as con:
+    with closing(get_connection()) as con:
         con.row_factory = sqlite3.Row
         overall = con.execute(
             "SELECT COUNT(*) AS calls, "
@@ -230,7 +201,7 @@ def get_usage(range_: str = "today") -> dict[str, Any]:
 def recent_calls(limit: int = 50) -> list[dict[str, Any]]:
     """最近 N 次调用明细(供调试页)。"""
     _ensure_schema()
-    with closing(sqlite3.connect(DB_PATH)) as con:
+    with closing(get_connection()) as con:
         con.row_factory = sqlite3.Row
         rows = con.execute(
             "SELECT id, ts, engine, route_key, prompt_tokens, completion_tokens, total_tokens, duration_ms, ok, error "
