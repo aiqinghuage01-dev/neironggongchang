@@ -276,9 +276,74 @@ def _legacy_fixups(con: sqlite3.Connection) -> None:
 # - 不改老条目, 只 append
 # - 列表顺序即应用顺序
 
+# ─── v2 (D-087): 素材库 5 张表 ────────────────────────────
+# 用 material_* 前缀避免跟老 V1 的 materials 表 (爆款参考业务) 冲突.
+# 5 表: material_assets / material_tags / material_asset_tags / material_usage_log / material_pending_moves
+
+_V2_MATERIALS_LIB = """
+CREATE TABLE IF NOT EXISTS material_assets (
+    id TEXT PRIMARY KEY,
+    abs_path TEXT NOT NULL UNIQUE,
+    filename TEXT NOT NULL,
+    ext TEXT NOT NULL,
+    rel_folder TEXT,
+    size_bytes INTEGER,
+    width INTEGER,
+    height INTEGER,
+    duration_sec REAL,
+    file_ctime INTEGER,
+    imported_at INTEGER NOT NULL,
+    thumb_path TEXT,
+    ocr_text TEXT,
+    status TEXT NOT NULL DEFAULT 'sorted',
+    is_pending_review INTEGER NOT NULL DEFAULT 0,
+    user_id TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_material_assets_folder ON material_assets(rel_folder);
+CREATE INDEX IF NOT EXISTS idx_material_assets_status ON material_assets(status);
+CREATE INDEX IF NOT EXISTS idx_material_assets_imported ON material_assets(imported_at DESC);
+CREATE INDEX IF NOT EXISTS idx_material_assets_pending ON material_assets(is_pending_review);
+
+CREATE TABLE IF NOT EXISTS material_tags (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT UNIQUE NOT NULL,
+    source TEXT NOT NULL,
+    color TEXT,
+    created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_material_tags_source ON material_tags(source);
+
+CREATE TABLE IF NOT EXISTS material_asset_tags (
+    asset_id TEXT NOT NULL,
+    tag_id INTEGER NOT NULL,
+    confidence REAL DEFAULT 1.0,
+    PRIMARY KEY (asset_id, tag_id)
+);
+CREATE INDEX IF NOT EXISTS idx_material_asset_tags_tag ON material_asset_tags(tag_id);
+
+CREATE TABLE IF NOT EXISTS material_usage_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    asset_id TEXT NOT NULL,
+    used_in TEXT,
+    used_at INTEGER NOT NULL,
+    position_sec REAL
+);
+CREATE INDEX IF NOT EXISTS idx_material_usage_asset ON material_usage_log(asset_id);
+CREATE INDEX IF NOT EXISTS idx_material_usage_at ON material_usage_log(used_at DESC);
+
+CREATE TABLE IF NOT EXISTS material_pending_moves (
+    asset_id TEXT PRIMARY KEY,
+    suggested_folder TEXT,
+    is_new_folder INTEGER NOT NULL DEFAULT 0,
+    reason TEXT,
+    status TEXT NOT NULL DEFAULT 'pending',
+    created_at INTEGER NOT NULL
+);
+"""
+
+
 _MIGRATIONS: list[tuple[int, str, str]] = [
-    # 当前没有 v2+. 占位:
-    # (2, "ai_calls 加 user_id 列", "ALTER TABLE ai_calls ADD COLUMN user_id TEXT;"),
+    (2, "D-087 素材库 5 表 (material_assets/tags/asset_tags/usage_log/pending_moves)", _V2_MATERIALS_LIB),
 ]
 
 

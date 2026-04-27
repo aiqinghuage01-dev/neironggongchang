@@ -1900,6 +1900,119 @@ def materials_add(req: MaterialReq):
     return {"id": mid, "ok": True}
 
 
+# ─── D-087 素材库 (本地素材文件管理) ────────────────────────
+# 与老 /api/materials (爆款参考业务) 数据/语义独立, 走 material_assets/material_tags 等 5 张表.
+# 路径前缀 /api/material-lib/ 避免冲突.
+
+from fastapi.responses import FileResponse  # noqa: E402
+
+
+@app.get("/api/material-lib/stats", tags=["档案部"], summary="(D-087) 素材库总览 KPI")
+def material_lib_stats():
+    from backend.services import materials_service as ms
+    return ms.get_stats()
+
+
+@app.get("/api/material-lib/folders", tags=["档案部"], summary="(D-087) 一级文件夹列表 (L1 大屏 8 张大卡片)")
+def material_lib_folders(limit: int = 12):
+    from backend.services import materials_service as ms
+    return {"folders": ms.list_top_folders(limit=limit)}
+
+
+@app.get("/api/material-lib/subfolders", tags=["档案部"], summary="(D-087) 二级子文件夹 (L2)")
+def material_lib_subfolders(top: str, limit: int = 32):
+    from backend.services import materials_service as ms
+    return {"folder": top, "subfolders": ms.list_subfolders(top, limit=limit)}
+
+
+@app.get("/api/material-lib/list", tags=["档案部"], summary="(D-087) 素材列表 (L3 网格)")
+def material_lib_list(
+    folder: str | None = None,
+    limit: int = 100,
+    offset: int = 0,
+    sort: str = "imported",
+    tag_ids: str | None = None,  # 逗号分隔
+):
+    from backend.services import materials_service as ms
+    tids = None
+    if tag_ids:
+        try:
+            tids = [int(x) for x in tag_ids.split(",") if x.strip()]
+        except ValueError:
+            tids = None
+    items = ms.list_assets(folder=folder, limit=limit, offset=offset, tag_ids=tids, sort=sort)
+    return {"items": items, "count": len(items), "folder": folder}
+
+
+@app.get("/api/material-lib/asset/{asset_id}", tags=["档案部"], summary="(D-087) 单条素材详情 (L4 大预览)")
+def material_lib_asset(asset_id: str):
+    from backend.services import materials_service as ms
+    a = ms.get_asset(asset_id)
+    if not a:
+        raise HTTPException(status_code=404, detail="素材不存在")
+    return a
+
+
+@app.get("/api/material-lib/thumb/{asset_id}", tags=["档案部"], summary="(D-087) 缩略图 (静态 jpg)")
+def material_lib_thumb(asset_id: str):
+    from backend.services import materials_service as ms
+    p = ms.thumb_abs_path(asset_id)
+    if not p:
+        raise HTTPException(status_code=404, detail="缩略图不存在")
+    return FileResponse(str(p), media_type="image/jpeg")
+
+
+@app.get("/api/material-lib/file/{asset_id}", tags=["档案部"], summary="(D-087) 素材原文件 (L4 video src)")
+def material_lib_file(asset_id: str):
+    from backend.services import materials_service as ms
+    a = ms.get_asset(asset_id)
+    if not a:
+        raise HTTPException(status_code=404, detail="素材不存在")
+    p = Path(a["abs_path"])
+    if not p.exists():
+        raise HTTPException(status_code=404, detail="原文件不存在 (可能已删/移走)")
+    media = "video/mp4" if a["ext"] in (".mp4", ".mov", ".m4v") else "image/jpeg"
+    return FileResponse(str(p), media_type=media)
+
+
+@app.post("/api/material-lib/scan", tags=["档案部"], summary="(D-087) 触发扫描素材根目录 (异步, 返 task_id)")
+def material_lib_scan(max_files: int | None = None):
+    """异步扫描. 走 D-068 tasks.run_async daemon thread + 防卡死.
+    前端轮询 GET /api/tasks/{task_id} 看进度.
+    """
+    from backend.services import materials_service as ms
+    from backend.services import tasks as tasks_service
+
+    def _do():
+        return ms.scan_root(max_files=max_files)
+
+    task_id = tasks_service.run_async(
+        kind="materials.scan",
+        label=f"扫描素材库{'(限 ' + str(max_files) + ')' if max_files else ''}",
+        ns="materials",
+        page_id="materials",
+        step="scan",
+        payload={"max_files": max_files, "root": str(ms.get_materials_root())},
+        estimated_seconds=300,
+        progress_text="扫描素材文件 + 生成缩略图...",
+        sync_fn=_do,
+    )
+    return {"task_id": task_id, "status": "running"}
+
+
+class MaterialUsageReq(BaseModel):
+    asset_id: str
+    used_in: str | None = None
+    position_sec: float | None = None
+
+
+@app.post("/api/material-lib/usage", tags=["档案部"], summary="(D-087) 记录素材被用 (PRD §3.5 做视频对接)")
+def material_lib_usage(req: MaterialUsageReq):
+    from backend.services import materials_service as ms
+    ms.log_usage(req.asset_id, req.used_in or "", req.position_sec)
+    return {"ok": True}
+
+
 @app.delete("/api/materials/{material_id}", tags=["档案部"], summary="删素材")
 def materials_delete(material_id: int):
     delete_material(material_id)

@@ -25,7 +25,14 @@ EXPECTED_TABLES = {
     "ai_calls",
     "night_jobs", "night_job_runs",
     "remote_jobs",
+    # D-087 v2: 素材库 5 表
+    "material_assets", "material_tags", "material_asset_tags",
+    "material_usage_log", "material_pending_moves",
 }
+
+# 跟 backend.services.migrations._MIGRATIONS 同步:
+# v1 = D-084 baseline, v2 = D-087 素材库 5 表
+EXPECTED_VERSION = 2
 
 
 @pytest.fixture
@@ -46,16 +53,18 @@ def tmp_db(monkeypatch):
 
 
 def test_apply_migrations_creates_schema_version_v1(tmp_db):
-    """新 DB 应用一次 → schema_version=1, 一行 'baseline'."""
+    """新 DB 应用一次 → schema_version 含 v1 baseline + 所有 v2+ migrations."""
     from backend.services import migrations
     version = migrations.apply_migrations()
-    assert version == 1
+    assert version == EXPECTED_VERSION
 
     with sqlite3.connect(str(tmp_db)) as con:
-        rows = con.execute("SELECT version, note FROM schema_version").fetchall()
-    assert len(rows) == 1
-    assert rows[0][0] == 1
-    assert rows[0][1] == "baseline"
+        rows = con.execute("SELECT version, note FROM schema_version ORDER BY version").fetchall()
+    versions = {r[0] for r in rows}
+    assert versions == set(range(1, EXPECTED_VERSION + 1)), f"应有 v1..v{EXPECTED_VERSION}, 实际 {versions}"
+    # v1 是 baseline
+    v1_row = next(r for r in rows if r[0] == 1)
+    assert v1_row[1] == "baseline"
 
 
 def test_apply_migrations_creates_all_10_tables(tmp_db):
@@ -163,14 +172,14 @@ def test_apply_migrations_reruns_on_db_path_change(monkeypatch, tmp_path):
     db1 = tmp_path / "db1.db"
     monkeypatch.setattr("shortvideo.config.DB_PATH", db1)
     v1 = migrations.apply_migrations()
-    assert v1 == 1
+    assert v1 == EXPECTED_VERSION
     assert db1.exists()
 
     # DB2: apply (新路径)
     db2 = tmp_path / "db2.db"
     monkeypatch.setattr("shortvideo.config.DB_PATH", db2)
     v2 = migrations.apply_migrations()
-    assert v2 == 1
+    assert v2 == EXPECTED_VERSION
     assert db2.exists(), "DB_PATH 切换后 migrations 应该在新路径建表"
 
 
@@ -212,7 +221,7 @@ def test_current_db_key_uses_resolve(monkeypatch, tmp_path):
 
 
 def test_apply_migrations_idempotent(tmp_db):
-    """连续 2 次 apply: schema_version 仍只有 1 行."""
+    """连续 2 次 apply: 每个 version 仍只有 1 行 (不重复 INSERT)."""
     from backend.services import migrations
     migrations.apply_migrations()
     migrations.reset_for_test()  # 强制重跑同一 DB
@@ -222,9 +231,10 @@ def test_apply_migrations_idempotent(tmp_db):
         rows = con.execute(
             "SELECT version, COUNT(*) FROM schema_version GROUP BY version"
         ).fetchall()
-    assert len(rows) == 1
-    assert rows[0][0] == 1
-    assert rows[0][1] == 1, "schema_version v=1 不应重复 INSERT"
+    # v1..vN 各应只有 1 行
+    assert len(rows) == EXPECTED_VERSION
+    assert all(r[1] == 1 for r in rows), f"每个 version 应只 INSERT 一次, 实际 {rows}"
+    assert {r[0] for r in rows} == set(range(1, EXPECTED_VERSION + 1))
 
 
 def test_apply_migrations_safe_when_called_multiple_times_same_db(tmp_db):
@@ -233,7 +243,7 @@ def test_apply_migrations_safe_when_called_multiple_times_same_db(tmp_db):
     v1 = migrations.apply_migrations()
     v2 = migrations.apply_migrations()  # cache hit, 不重跑
     v3 = migrations.apply_migrations()
-    assert v1 == v2 == v3 == 1
+    assert v1 == v2 == v3 == EXPECTED_VERSION
 
 
 # ─── P3 边界 (D-084 follow-up): DB 文件被删 cache 应失效 ──────
@@ -259,7 +269,7 @@ def test_apply_migrations_recovers_from_db_file_deletion(tmp_db):
 
     # 再次 apply: cache 应失效, 重新建库
     v = migrations.apply_migrations()
-    assert v == 1
+    assert v == EXPECTED_VERSION
     assert db_path.exists(), "DB 文件应被重新创建"
 
     # schema 完整性: 10 张表应该全在
@@ -287,8 +297,9 @@ def test_apply_migrations_recovers_from_schema_version_drop(tmp_db):
 
     # 再 apply: 应该重建 schema_version
     v = migrations.apply_migrations()
-    assert v == 1
+    assert v == EXPECTED_VERSION
 
     with sqlite3.connect(str(current_db_path())) as con:
-        rows = con.execute("SELECT version FROM schema_version").fetchall()
-    assert rows == [(1,)], f"schema_version 应被重建为 v=1, 实际 {rows}"
+        rows = con.execute("SELECT version FROM schema_version ORDER BY version").fetchall()
+    expected_rows = [(i,) for i in range(1, EXPECTED_VERSION + 1)]
+    assert rows == expected_rows, f"schema_version 应被重建为 v1..v{EXPECTED_VERSION}, 实际 {rows}"
