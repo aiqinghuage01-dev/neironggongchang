@@ -1284,48 +1284,90 @@ def dreamina_batch_video(req: DreaminaBatchVideoReq):
     }
 
 
-@app.post("/api/chat", tags=["总部"], summary="小华自由对话 dock 多轮 (D-027)")
+@app.post("/api/chat", tags=["总部"], summary="小华自由对话 dock 多轮 (D-027 / D-085 tool calling)")
 def chat_dock(req: ChatDockReq, background_tasks: "BackgroundTasks" = None):
     """小华浮动 dock 自由对话(多轮)。messages 是完整对话历史,context 是当前页。
-    返回后台异步触发偏好学习(D-030),失败吃掉不影响主响应。"""
-    # 把多轮历史拼成单 user prompt(PersonaInjectedAI 只接受单 prompt + system)
+
+    D-085: 走 ReAct 工具协议. AI 输出 <<USE_TOOL>>{json}<<END>>, 后端解析:
+      - single (nav): 透传 actions 给前端 (前端 dispatch ql-nav)
+      - read+followup (kb_search/tasks_summary): 后端执行 + round2 LLM 总结
+
+    返回 {reply, actions, tokens, rounds}.
+    后台异步触发偏好学习(D-030), 失败吃掉.
+    """
+    from backend.services import lidock_tools
+
+    # 把多轮历史拼成单 user prompt
     history_lines = []
     for m in req.messages[-12:]:  # 最近 12 轮,避免太长
         prefix = "老板" if m.role == "user" else "小华"
         history_lines.append(f"{prefix}: {m.text.strip()}")
     history = "\n".join(history_lines)
 
-    system = (
+    # base system: 人设 + D-085 tool registry + D-067 守则 + 真实页面结构
+    base_system = (
         "你是小华,清华哥的内容生产副驾。当前老板在看「" + (req.context or "首页") + "」页面。\n\n"
-        "## 严格守则(D-067):\n"
-        "1. **不能撒谎说自己有能力**:你不能直接打开/查询/操作任何文件、文件夹、页面、知识库.\n"
-        "   你只是聊天的, 没有工具调用能力.\n"
-        "2. **不能编造不存在的功能或路径**:比如别说'我帮你打开 XX 文件夹', 别编'XX 追踪'这种实际没有的目录.\n"
-        "3. **老板问'我的 X 在哪'**: 直接告诉他从哪个真实页面进入, 不要假装你能帮他打开.\n\n"
-        "## 工厂的真实结构(只有这些是真的):\n"
-        "- **总部**(home): 老板的工作台首页\n"
-        "- **生产部**(6 个一级入口):\n"
-        "  · 做视频(make): 链接→文案→数字人→剪辑→发布\n"
-        "  · 公众号(wechat): 8 步出公众号长文\n"
-        "  · 朋友圈(moments): 一个话题→衍生 N 条\n"
-        "  · 写文案(write): 投流/热点改写/录音改写/爆款改写/内容策划/违规审查 6 个工具\n"
-        "  · 出图片(image): 直接出图 / 即梦 AIGC 2 个引擎\n"
-        "  · 黑科技(beta): 实验性功能(目前空)\n"
-        "- **档案部**(3 个): 素材库 / 作品库 / 知识库\n"
-        "- **值班室**: 小华值班 (夜里抓热点 + 总结产出)\n\n"
+        + lidock_tools.build_tool_system_block()
+        + "\n\n## 工厂真实页面 id (nav.args.page 用, 实证来自 web/factory-app.jsx):\n"
+        "一级: home / strategy / make / wechat / moments / write / image / beta / "
+        "materials / works / knowledge / nightshift / settings\n"
+        "二级 skill 页: ad / hotrewrite / voicerewrite / baokuan / "
+        "planner / compliance / imagegen / dreamina / dhv5\n\n"
+        "## D-067 守则 (没工具能解决的不要瞎编):\n"
+        "1. 不能撒谎说自己能直接打开/查询本地文件、文件夹.\n"
+        "2. 工具只有上面列的 3 个, 别编不存在的能力.\n"
+        "3. 跳页只能用 nav (page id 必须真实), 不要说'我帮你打开 XX 文件夹'之类.\n\n"
         "## 对话规则:\n"
         "- 简短,口语,像跟兄弟聊天\n"
-        "- 一次回复不超过 80 字\n"
-        "- 直接回答,不要前言\n"
-        "- 老板提工作问题(写文案/改写/查违规),告诉他去「写文案」二级页选对应工具\n"
-        "- 老板问知识库/作品库的某个东西在哪,告诉他从「档案部」对应入口手动找,不要假装你能直接打开"
+        "- 回复正文不超过 80 字 (USE_TOOL 块不算)\n"
+        "- 直接回答,不要前言"
     )
-    prompt = (
-        f"对话历史:\n{history}\n\n小华(回这条,用大白话,不超过 80 字):"
-    )
+    prompt = f"对话历史:\n{history}\n\n小华:"
 
     ai = get_ai_client(route_key="chat.dock")
-    r = ai.chat(prompt, system=system, deep=False, temperature=0.85, max_tokens=400)
+
+    # ─── Round 1 ──────────────────────────────────────────
+    r1 = ai.chat(prompt, system=base_system, deep=False, temperature=0.85, max_tokens=600)
+    reply, calls = lidock_tools.parse_tool_calls(r1.text)
+
+    actions: list[dict] = []
+    rounds = 1
+    total_tokens = r1.total_tokens
+
+    if calls:
+        call = calls[0]
+        invalid = lidock_tools.validate_call(call)
+        if invalid is None:
+            tool = lidock_tools.REGISTRY[call["name"]]
+            if tool.mode == "single":
+                # nav 等: 透传给前端 (前端 dispatch ql-nav)
+                actions.append({"type": call["name"], **call["args"]})
+            elif tool.mode == "read+followup":
+                # kb_search / tasks_summary: 后端执行 + round2 LLM
+                tool_result = lidock_tools.execute_read_tool(call)
+                followup_system = lidock_tools.build_followup_system(
+                    base_system, call["name"], tool_result
+                )
+                followup_prompt = f"对话历史:\n{history}\n\n小华 (基于上面工具结果回答):"
+                r2 = ai.chat(
+                    followup_prompt,
+                    system=followup_system,
+                    deep=False,
+                    temperature=0.7,
+                    max_tokens=400,
+                )
+                reply2, _calls2 = lidock_tools.parse_tool_calls(r2.text)  # round2 再有 USE_TOOL 也 strip
+                if reply2:
+                    reply = reply2
+                rounds = 2
+                total_tokens += r2.total_tokens
+        else:
+            # invalid / unknown / 白名单外 tool: **不静默, 覆盖 reply 明确告知**
+            # (防 AI 调了不存在的 tool 后用户看到 "我帮你跑了 XX" 之类假承诺)
+            reply = (
+                f"我没有这个工具能力 ({invalid.get('error', '未知错误')}). "
+                f"我能做的只有 3 件事: 跳页 (nav) / 搜知识库 (kb_search) / 查任务概况 (tasks_summary)."
+            )
 
     # D-030: 异步学偏好(失败吃掉)
     if background_tasks is not None:
@@ -1337,8 +1379,10 @@ def chat_dock(req: ChatDockReq, background_tasks: "BackgroundTasks" = None):
             pass
 
     return {
-        "reply": (r.text or "").strip(),
-        "tokens": r.total_tokens,
+        "reply": reply,
+        "actions": actions,
+        "tokens": total_tokens,
+        "rounds": rounds,
     }
 
 

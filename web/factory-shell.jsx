@@ -321,6 +321,14 @@ function LiDock({ context }) {
         context: ctxKey,
       });
       setMessages(prev => [...prev, { role: "assistant", text: r.reply || "(空回复)" }]);
+      // D-085: 执行 tool actions (single 模式 tool 后端透传给前端)
+      for (const act of (r.actions || [])) {
+        if (act && act.type === "nav" && act.page) {
+          window.dispatchEvent(new CustomEvent("ql-nav", { detail: { page: act.page } }));
+          setOpen(false);  // 跳页后收起 dock
+        }
+        // 后续可扩展更多 action 类型 (e.g. open_dialog / scroll_to_section)
+      }
     } catch (e) {
       setMessages(prev => [...prev, { role: "assistant", text: "❌ " + (e.message || "调用失败") }]);
     } finally {
