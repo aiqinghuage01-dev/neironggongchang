@@ -303,6 +303,9 @@ def rewrite_section(full_article: str, selected: str, instruction: str = "") -> 
 
 def write_article_async(topic: str, title: str, outline: dict) -> str:
     """异步触发 write_article, 立即返 task_id. 真跑 30-60s (Opus 长文 + DeepSeek 自检)."""
+    # lazy import: 本文件原本漏顶部 import tasks_service, 触发 NameError 500.
+    # 用函数内 lazy 跟 shortvideo/ai.py 跨包模式一致, 不引入新顶层依赖.
+    from backend.services import tasks as tasks_service
     return tasks_service.run_async(
         kind="wechat.write",
         label=f"公众号长文 · {(title or topic)[:40]}",
