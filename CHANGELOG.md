@@ -6,6 +6,103 @@
 
 ---
 
+## [v0.5.1] — 2026-04-27 (系统硬约束集中化)
+
+vibecoding 方法论评审后, 把分散在 D-068/D-069/D-070/D-078 的硬约束集中成独立文档,
+解决"约束散落, 新 AI 接手只能踩二茬坑"的问题. 同时锁定路线 B (千人内学员版) 路径策略.
+
+### Added
+- **[D-083]** `docs/SYSTEM-CONSTRAINTS.md` — 系统硬约束集中文档
+  - §0 路径策略: 路线 B 锁定 (千人内, 不上 k8s/微服务, 但多用户前必须换 Postgres + 队列 + 对象存储, SQLite 仅低并发过渡)
+  - §1 异步任务: daemon 必须挂 tasks 框架 + 远程任务必须走 remote_jobs watcher
+  - §2 AI 调用: 必须走 `shortvideo.ai.get_ai_client()` 关卡层 (绕过 = 丢人设/路由/retry/usage 4 项)
+  - §3 访客模式: `guest_mode.is_guest()` + 跨 daemon contextvar capture/set
+  - §4-§7 知识库只读 / 错误友好化 / 接入 skill 范式 / playwright 测试闭环
+  - 含 `paths.py` 最小骨架样例 (~30 行, 第一个真要新增 user 路径的 commit 同步建)
+- **[D-083]** 路径硬编码策略锁定: 已有不重构 + 新代码走 paths.py + 摸到老硬编码顺手替换
+
+### Changed
+- `CLAUDE.md`: 237 行 → < 200 行, 第一屏加 SYSTEM-CONSTRAINTS 指针, 分散的 D 编号引用统一指过去
+- `AGENTS.md`: 220 行 → < 200 行, 同步瘦身, **修历史漂移**:
+  - 版本号 v0.3.0 → v0.5.1
+  - "Codex Opus" 笔误 → "Claude Opus"
+  - 已接入 skill 列表 4 → 8 个 (补 planner/compliance/dreamina/dhv5)
+- 两份入口的 "Session 开始 2 步" → "3 步" (加读 SYSTEM-CONSTRAINTS)
+- 两份入口的文档事实源表加一行 SYSTEM-CONSTRAINTS
+
+### 一句话总结
+GPT 审查 Claude 评审方案抓出 5 点漏洞 (AGENTS 没同步 / paths.py 引用幽灵接口 / 千人 SQLite 表述太粗 / 缺验收 / CHANGELOG 断层), 全收, 重做.
+
+---
+
+## [v0.5.0] — 2026-04-27 (远程任务 watcher + LLM 重试 + 真烧 credits e2e)
+
+D-071 → D-082 一周连环改造, 远程长任务永不假失败 + LLM 抽风自动重试 + 失败可重做.
+覆盖即梦/数字人/出图三类远端长任务. pytest 288 → 321.
+
+### Added
+- **[D-071]** 访客模式从侧栏挪进设置页 (D-070 后续, 入口降权)
+- **[D-072]** 设置页加密码门 (`qinghua116`) — 防误触敏感开关
+- **[D-073]** 出图加参考图 — 上传 → base64 data URL → apimart, 多图融合
+- **[D-074]** 通用 `ImageWithLightbox` 组件 + 5 处接入 (作品库/出图/公众号/即梦/数字人)
+- **[D-075]** 即梦批量视频 + 9 张参考图 — text2video / image2video / multimodal2video 自动分流
+- **[D-076]** 出图批量 + 公众号封面批量 (复用 D-075 卡片堆叠)
+- **[D-077]** 数字人 v5 批量渲染 — ≤8 文案 → 共享 dh + 共享模板 → N 个视频
+- **[D-078a]** 远程长任务 `remote_jobs` DB + watcher 框架 (新基础设施)
+  - 持久化 submit_id + last_status + poll_count, 60s tick 调 provider poll_fn
+  - task.payload.remote_managed=true → recover_orphans / sweep_stuck 跳过
+  - max_wait_sec 默认 2h 兜底, 进程重启 DB 接管不丢
+  - provider 注册框架: `register_provider("dreamina", poll_fn, on_done=cb)`
+  - 19 单测全过 (含进程重启接管)
+- **[D-078b]** 即梦改走 watcher
+  - `dreamina_service.submit_only / _poll_for_watcher / _on_done_for_watcher / register_with_watcher`
+  - `/api/dreamina/batch-video` daemon thread 立即 submit + register, response 8s (旧 30s+)
+  - 真测 4s 视频, 8min 即梦端真在 querying, watcher poll_count=10 工作正常, task 没被假杀
+- **[D-078c]** recover endpoint + UI 重查按钮
+  - `POST /api/dreamina/recover/{submit_id}` 真测重置 watcher 接管
+  - `GET /api/remote-jobs/by-task/{task_id}` UI 拿 submit_id
+  - `GET /api/remote-jobs/stats` watcher_running + 3 providers
+  - TaskCard "🔍 重查即梦" (failed dreamina + payload.submit_id 时显示)
+- **[D-079]** 数字人 (柿榴) 接 watcher (additive)
+  - `backend/services/shiliu_service.py` poll/on_done/register
+  - `/api/video/submit` 创建 task + register remote_job
+- **[D-080/D-081]** apimart 基础设施
+  - `backend/services/apimart_service.py` poll/on_done/submit_and_register helper
+  - endpoint 切换暂搁置 (大改造, 等真出问题再切, 见 KNOWN_ISSUES.md)
+- **[D-082b]** "🔄 重新生成" 按钮 (简化版) — failed 非 dreamina task 跳 page_id, 完整版 sessionStorage 预填留 known issue
+- **[D-082c]** LLM 自动重试 1 次 (transient 错误兜底)
+  - `shortvideo/llm_retry.py with_retry` helper
+  - 关键字判定 5xx / timeout / rate-limit / connection
+  - claude_opus / deepseek `chat()` 都接, 13 单测全过
+  - 文案功能"偶尔抽风又失败"消失
+- **[D-082d]** 文案 12 真测 (核心)
+  - rewrite/transcribe 跳过 (老 endpoint 已废 / 需真 url 间接覆盖)
+  - 真烧 credits 走 batch.py + smoke 11/11 PASS
+  - hotrewrite 浏览器闭环验 analyze 通
+- **[D-082e]** `DREAMINA_MOCK=1` 桩模式 — query_result 立即返 done + 现成 mp4, 仅供开发自测加速
+- **[T1-T13]** 13 项全闭环真烧 credits 完整验收 + 5 项新功能
+- **`scripts/run_e2e_full.sh`** 一键全量
+  - Phase 1: backend smoke 11 endpoint
+  - Phase 2: 文案 LLM 真烧 credits batch (D-082d 8 个)
+  - Phase 3: 16 关键 page 浏览器截图巡检
+  - Phase 4: pytest 完整套件
+
+### Tested
+- pytest 288 → **321 passed** (+33), 1 skipped 跟之前一致
+- Playwright 真烧 4s 视频, watcher 全程跟踪正常
+- 抢救老 task 7aef6b97/4290bbcc/e76aca91 → 救回 2 个入作品库 (work_id=215, 216)
+
+### Known Issues (留作下一轮)
+- 即梦超长排队 >2h (case 7aef6b97 仍 12h+ querying)
+- apimart endpoint 没切 watcher 路径
+- 文案 retry 不预填 sessionStorage
+- 录音转文字没直接真测
+
+### 一句话总结
+远程长任务永不假失败 + LLM 抽风自动 retry, 老板再也不会"提交即梦后看到失败但平台扣 credits".
+
+---
+
 ## [v0.4.0] — 2026-04-26 (任务防御 + 去技术化 + 访客模式)
 
 一天连环修 + 加固 + 去技术化, 5 个 D 编号, 6 个 commit:

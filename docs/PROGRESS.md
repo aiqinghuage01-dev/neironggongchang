@@ -4,7 +4,40 @@
 
 ---
 
-## 当前状态(2026-04-27 · D-078/D-082 远程任务 watcher + LLM 重试 + 真烧 credits e2e)
+## 当前状态(2026-04-27 晚 · D-083 系统硬约束集中化)
+
+**版本**: v0.5.1 — 文档级整顿. 把分散的硬约束集中成独立文档, 锁定路线 B 路径策略.
+
+**触发**: 用 vibecoding 方法论 (21 天挑战 Day 005) 评审项目, 发现:
+- "骨架定得 90 分"但**非功能需求散落** (D-068/D-078/D-082c 都是踩坑后补)
+- "现在不部署"vs"未来 poju.ai" 是矛盾信号, 未声明路径策略
+- CLAUDE.md 237 行 / AGENTS.md 220 行都已超 200 行红线
+- AGENTS.md 还停在 v0.3.0, "Codex Opus" 笔误, skill 列表只 4 个
+
+**改动** (1 commit, 5 文件, 0 业务代码):
+1. 新建 `docs/SYSTEM-CONSTRAINTS.md` (含 paths.py 最小骨架样例)
+2. CLAUDE.md / AGENTS.md 双瘦身回 < 200 行 + 第一屏加 SYSTEM-CONSTRAINTS 指针
+3. AGENTS.md 修历史漂移: v0.3.0 → v0.5.1 / "Codex Opus" → "Claude Opus" / skill 4 → 8
+4. CHANGELOG 补 v0.5.0 段 (D-071 → D-082) + 加 v0.5.1 (D-083)
+5. PROGRESS 加本节
+
+**路线 B 锁定** (清华哥 2026-04-27 拍板):
+- 千人内规模, 不上 k8s/微服务
+- 但真实多用户前必须换: Postgres + 持久任务队列 + 对象存储 + user_id 行级隔离
+- SQLite 仅限低并发过渡 (个人版 / Mac Mini / 内测)
+- 已有硬编码不重构, 新代码走 paths.py 抽象层 (待第一个真要新增 user 路径的 commit 同步建)
+
+**验收标准达成** (4/4):
+- ✅ CLAUDE.md + AGENTS.md 都 < 200 行 + 第一屏指向 SYSTEM-CONSTRAINTS
+- ✅ SYSTEM-CONSTRAINTS.md 不引用任何不存在的代码接口 (paths.py 用"样例"标注)
+- ✅ D-068/D-069/D-070/D-078 四条硬约束都能在新文档一眼找到 (各自独立小节)
+- ✅ PROGRESS + CHANGELOG 同步记录 D-083
+
+**下一步**: 隐患 3 — SQLite migrations 集中化 (5 张表分散在各 service 的 CREATE TABLE IF NOT EXISTS 统一进 `data/migrations.py`).
+
+---
+
+## 上一里程碑(2026-04-27 早 · D-078/D-082 远程任务 watcher + LLM 重试 + 真烧 credits e2e)
 
 **版本**: v0.5.0 — 远程任务永不假失败 (即梦/数字人/出图 watcher) + LLM 抽风自动重试 + 失败可重做.
 
