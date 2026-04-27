@@ -369,8 +369,8 @@ function PageWechat({ onNav }) {
           onClear={() => { reset(); wf.dismissSnapshot(); }}
           label="公众号工作流" />
         {err && (
-          <div style={{ maxWidth: 820, margin: "16px auto 0", padding: 12, background: T.redSoft, color: T.red, borderRadius: 10, fontSize: 13 }}>
-            ⚠️ {err}
+          <div style={{ maxWidth: 820, margin: "16px auto 0" }}>
+            <ErrorBanner err={err} />
           </div>
         )}
         {step === "auto"    && <WxAutoProgress steps={autoSteps} title={pickedTitle} err={err} onAbort={abortAuto} skipImages={skipImages} />}
@@ -1224,8 +1224,8 @@ function WxAutoProgress({ steps, title, err, onAbort, skipImages }) {
       </div>
 
       {err && (
-        <div style={{ padding: 12, background: T.redSoft, color: T.red, borderRadius: 10, fontSize: 13, marginBottom: 14 }}>
-          ⚠️ {err}
+        <div style={{ marginBottom: 14 }}>
+          <ErrorBanner err={err} />
         </div>
       )}
 
