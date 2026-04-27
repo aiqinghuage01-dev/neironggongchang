@@ -107,17 +107,27 @@ def test_chat_nav_invalid_page_overrides_reply(client, monkeypatch):
     assert data["rounds"] == 1
 
 
-def test_chat_unknown_tool_silently_filtered(client, monkeypatch):
-    """未注册 tool (parse 阶段就过滤) → reply 是 round1 strip 后, 不进 invalid 分支."""
+def test_chat_unknown_tool_overrides_reply_no_fake_promise(client, monkeypatch):
+    """**D-067 不撒谎守则核心边界**: AI 调未注册 tool 时, reply 必须被覆盖,
+    不能让用户看到 round1 的隐含承诺.
+
+    场景: AI 输出 '收到。<<USE_TOOL>>{"name":"trigger_skill",...}<<END>>'
+    - 旧实现: parse 阶段静默过滤 → calls=[] → reply='收到。' → 用户以为 AI 帮做了
+    - 新实现: parse 不过滤 → validate_call 拦下 → chat_dock 走 invalid 分支覆盖 reply
+    """
     _mock_ai(monkeypatch, '收到。\n<<USE_TOOL>>{"name":"trigger_skill","args":{"skill":"x"}}<<END>>')
     r = client.post("/api/chat", json={
-        "messages": [{"role": "user", "text": "随便"}],
+        "messages": [{"role": "user", "text": "帮我跑 trigger_skill"}],
         "context": "首页",
     })
     data = r.json()
-    # parse_tool_calls 已 ignore 未注册 tool, 不会触发 validate_call invalid 分支
-    # reply 是 strip 后的纯文本
-    assert data["reply"] == "收到。"
+    # 必须不能是 "收到。" 假承诺
+    assert data["reply"] != "收到。"
+    # 必须明确告知能力上限
+    assert "没有这个" in data["reply"]
+    # 提到能做的 3 件事之一
+    assert any(t in data["reply"] for t in ["nav", "kb_search", "tasks_summary"])
+    # 没透传 unknown action
     assert data["actions"] == []
 
 
@@ -215,3 +225,104 @@ def test_chat_rejects_historically_wrong_page_ids(client, monkeypatch, bad_page)
     data = r.json()
     assert data["actions"] == []  # 没透传
     assert "没有这个" in data["reply"]
+
+
+# ─── round2 健壮性 (D-085 follow-up) ─────────────────────
+
+
+def test_chat_round2_llm_failure_does_not_500(client, monkeypatch):
+    """round2 LLM 抛异常 (e.g. OpenClaw 503) → /api/chat 不抛 500, 返 friendly reply."""
+    import backend.services.kb as kb_module
+    monkeypatch.setattr(kb_module, "match", lambda query, k=5: [{"path": "x.md", "preview": "data"}])
+
+    from shortvideo.deepseek import LLMResult
+
+    call_idx = [0]
+
+    def flaky_chat(prompt, *, system=None, **kw):
+        idx = call_idx[0]
+        call_idx[0] += 1
+        if idx == 0:
+            return LLMResult(
+                text='查一下。<<USE_TOOL>>{"name":"kb_search","args":{"query":"x"}}<<END>>',
+                prompt_tokens=10, completion_tokens=20, total_tokens=30,
+            )
+        # round2: 模拟 OpenClaw 503
+        raise RuntimeError("OpenClaw 503: backend overloaded")
+
+    fake_client = MagicMock()
+    fake_client.chat = flaky_chat
+    import backend.api as api_mod
+    monkeypatch.setattr(api_mod, "get_ai_client", lambda **kw: fake_client)
+
+    r = client.post("/api/chat", json={
+        "messages": [{"role": "user", "text": "查 x"}],
+        "context": "首页",
+    })
+    # 关键: 不能 500
+    assert r.status_code == 200
+    data = r.json()
+    # 不能让用户看到 round1 的"查一下" 误导 (round2 没成功 = 没真查到)
+    assert data["reply"] != "查一下。"
+    # 必须给 friendly fallback
+    assert "抽风" in data["reply"] or "稍后" in data["reply"] or "没成功" in data["reply"]
+    assert data["rounds"] == 2  # 确实进了 round2 (虽然失败)
+
+
+def test_chat_round2_empty_reply_fallback(client, monkeypatch):
+    """round2 LLM 返回纯 USE_TOOL 块 (reply2='') → 不留 round1 误导, fallback 友好提示."""
+    import backend.services.kb as kb_module
+    monkeypatch.setattr(kb_module, "match", lambda query, k=5: [])
+
+    _mock_ai(
+        monkeypatch,
+        '老板稍等, 我查一下。<<USE_TOOL>>{"name":"kb_search","args":{"query":"x"}}<<END>>',
+        # round2: 输出纯 USE_TOOL 块 (reply2 strip 后是空)
+        '<<USE_TOOL>>{"name":"nav","args":{"page":"home"}}<<END>>',
+    )
+    r = client.post("/api/chat", json={
+        "messages": [{"role": "user", "text": "查 x"}],
+        "context": "首页",
+    })
+    data = r.json()
+    # round1 的"老板稍等, 我查一下"不能留下来误导用户
+    assert data["reply"] != "老板稍等, 我查一下。"
+    # 必须给 fallback 提示
+    assert "查到" in data["reply"] or "稍后" in data["reply"]
+
+
+def test_chat_round2_handler_error_surfaced(client, monkeypatch):
+    """tool handler 异常 + round2 LLM 也失败 → 把 handler error 透给用户, 不编造数据."""
+    import backend.services.kb as kb_module
+
+    def boom(*a, **kw):
+        raise RuntimeError("KB index broken")
+
+    monkeypatch.setattr(kb_module, "match", boom)
+
+    from shortvideo.deepseek import LLMResult
+    call_idx = [0]
+
+    def flaky_chat(prompt, *, system=None, **kw):
+        idx = call_idx[0]
+        call_idx[0] += 1
+        if idx == 0:
+            return LLMResult(
+                text='查一下。<<USE_TOOL>>{"name":"kb_search","args":{"query":"x"}}<<END>>',
+                prompt_tokens=10, completion_tokens=20, total_tokens=30,
+            )
+        raise RuntimeError("OpenClaw 503")
+
+    fake_client = MagicMock()
+    fake_client.chat = flaky_chat
+    import backend.api as api_mod
+    monkeypatch.setattr(api_mod, "get_ai_client", lambda **kw: fake_client)
+
+    r = client.post("/api/chat", json={
+        "messages": [{"role": "user", "text": "查 x"}],
+        "context": "首页",
+    })
+    assert r.status_code == 200
+    data = r.json()
+    # 必须告知失败原因 (不能假装查到了)
+    assert "没成功" in data["reply"] or "失败" in data["reply"] or "broken" in data["reply"].lower()

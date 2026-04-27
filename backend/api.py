@@ -1349,18 +1349,34 @@ def chat_dock(req: ChatDockReq, background_tasks: "BackgroundTasks" = None):
                     base_system, call["name"], tool_result
                 )
                 followup_prompt = f"对话历史:\n{history}\n\n小华 (基于上面工具结果回答):"
-                r2 = ai.chat(
-                    followup_prompt,
-                    system=followup_system,
-                    deep=False,
-                    temperature=0.7,
-                    max_tokens=400,
-                )
-                reply2, _calls2 = lidock_tools.parse_tool_calls(r2.text)  # round2 再有 USE_TOOL 也 strip
-                if reply2:
-                    reply = reply2
+                # round2 LLM 失败兜底: OpenClaw 503 / timeout / rate-limit 时
+                # 不让整个 /api/chat 抛 500, 也不让用户看到 round1 的 "老板稍等" 误导文字.
                 rounds = 2
-                total_tokens += r2.total_tokens
+                try:
+                    r2 = ai.chat(
+                        followup_prompt,
+                        system=followup_system,
+                        deep=False,
+                        temperature=0.7,
+                        max_tokens=400,
+                    )
+                    reply2, _calls2 = lidock_tools.parse_tool_calls(r2.text)  # round2 再有 USE_TOOL 也 strip
+                    total_tokens += r2.total_tokens
+                    if reply2:
+                        reply = reply2
+                    else:
+                        # round2 输出空 (e.g. AI 只输出 USE_TOOL 块没正文): 不留 round1 误导
+                        reply = "我查到了但表达不出来, 你可以稍后再问一次."
+                except Exception as e:
+                    import logging
+                    logging.getLogger("chat_dock").warning(
+                        f"round2 LLM failed (tool={call['name']}): {e}"
+                    )
+                    # tool_result 有 error 时优先告知失败原因, 否则给 friendly fallback
+                    if isinstance(tool_result, dict) and tool_result.get("error"):
+                        reply = f"工具调用没成功: {str(tool_result['error'])[:120]}. 你可以再问我一次或者去对应页面手动看."
+                    else:
+                        reply = "刚才查到数据了但 AI 回答抽风了, 稍后再问一次试试."
         else:
             # invalid / unknown / 白名单外 tool: **不静默, 覆盖 reply 明确告知**
             # (防 AI 调了不存在的 tool 后用户看到 "我帮你跑了 XX" 之类假承诺)

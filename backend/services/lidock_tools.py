@@ -184,11 +184,16 @@ def parse_tool_calls(ai_text: str) -> tuple[str, list[dict]]:
     - clean_reply: 去掉 USE_TOOL 块后的纯文本回复
     - calls: MVP 一次最多取第 1 个 (后续 ignore)
 
-    容错:
-    - JSON 损坏 → 跳过该 block, 继续解析后续
-    - 未注册 tool 名 → ignore (白名单兜底)
-    - args 不是 dict → ignore
-    - 整段无 USE_TOOL → 返回 ([], 原文 strip)
+    **设计决策 (D-067 不撒谎守则)**:
+    - 未注册 tool 名 **不在 parse 阶段过滤**, 必须返回让 validate_call 报错 →
+      chat_dock 走 invalid 分支覆盖 reply 明确告知用户. 静默 ignore = 假承诺.
+
+    容错 (parse 阶段才能容错的, 跳过该块):
+    - JSON 损坏 → 跳过 (无法构造 call dict)
+    - 整体不是 dict / name 缺失 / args 不是 dict → 跳过 (结构错)
+    - 整段无 USE_TOOL → 返回 (原文 strip, [])
+
+    白名单检查交给 validate_call (统一报错路径).
     """
     if not ai_text:
         return "", []
@@ -204,8 +209,7 @@ def parse_tool_calls(ai_text: str) -> tuple[str, list[dict]]:
         args = obj.get("args") or {}
         if not name or not isinstance(args, dict):
             continue
-        if name not in REGISTRY:
-            continue  # 白名单外 ignore
+        # 不在这里过滤白名单. validate_call 会拦, chat_dock 走 invalid 分支覆盖 reply.
         calls.append({"name": name, "args": args})
     clean_reply = _TOOL_BLOCK_RE.sub("", ai_text).strip()
     return clean_reply, calls[:1]  # MVP: 一次最多 1 个

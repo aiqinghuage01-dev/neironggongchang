@@ -67,13 +67,20 @@ def test_parse_tool_calls_broken_json_skips():
     assert calls[0]["name"] == "nav"
 
 
-def test_parse_tool_calls_unregistered_tool_ignored():
-    """未注册 tool 名 → 白名单兜底 ignore."""
-    from backend.services.lidock_tools import parse_tool_calls
+def test_parse_tool_calls_unregistered_tool_passed_through_to_validate():
+    """**D-067 不撒谎守则**: parse 阶段**不**过滤白名单, 让 validate_call 报错走 invalid 分支
+    覆盖 reply. 静默 ignore = AI round1 "我帮你跑了 XX" + 后端啥都没做 = 假承诺."""
+    from backend.services.lidock_tools import parse_tool_calls, validate_call
 
-    text = '<<USE_TOOL>>{"name":"trigger_skill","args":{"skill":"wechat"}}<<END>>'
+    text = '收到。<<USE_TOOL>>{"name":"trigger_skill","args":{"skill":"wechat"}}<<END>>'
     reply, calls = parse_tool_calls(text)
-    assert calls == []  # 不在 REGISTRY
+    # parse 把未注册 tool 也传出来 (USE_TOOL 块仍 strip)
+    assert reply == "收到。"
+    assert len(calls) == 1
+    assert calls[0]["name"] == "trigger_skill"
+    # validate_call 拦下来 → chat_dock 走 invalid 分支
+    err = validate_call(calls[0])
+    assert err is not None and "trigger_skill" in err["error"]
 
 
 def test_parse_tool_calls_args_not_dict_ignored():
