@@ -2013,6 +2013,42 @@ def material_lib_usage(req: MaterialUsageReq):
     return {"ok": True}
 
 
+# ─── D-087 Day 2: AI 打标 ───────────────────────────────
+
+
+@app.post("/api/material-lib/tag/{asset_id}", tags=["档案部"], summary="(D-087) 单条素材 AI 打标 (LLM + 启发式 fallback)")
+def material_lib_tag(asset_id: str, force: bool = False):
+    """同步打一条. 走文本 LLM (注入清华哥人设) + 启发式兜底."""
+    from backend.services import materials_pipeline as mp
+    try:
+        return mp.tag_asset(asset_id, force=force)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@app.post("/api/material-lib/tag-batch", tags=["档案部"], summary="(D-087) 批量打标 (异步, 走 tasks.run_async)")
+def material_lib_tag_batch(limit: int = 10, force: bool = False):
+    """异步批量打 N 条 (默认 10). 大批量请分多次调用. 真烧 credits 谨慎."""
+    from backend.services import materials_pipeline as mp
+    from backend.services import tasks as tasks_service
+
+    def _do():
+        return mp.tag_batch(limit=limit, force=force)
+
+    task_id = tasks_service.run_async(
+        kind="materials.tag_batch",
+        label=f"AI 打标{'(强制重打 ' + str(limit) + ')' if force else f'(限 {limit})'}",
+        ns="materials",
+        page_id="materials",
+        step="tag_batch",
+        payload={"limit": limit, "force": force},
+        estimated_seconds=max(60, limit * 4),
+        progress_text="AI 给素材打标中...",
+        sync_fn=_do,
+    )
+    return {"task_id": task_id, "status": "running"}
+
+
 @app.delete("/api/materials/{material_id}", tags=["档案部"], summary="删素材")
 def materials_delete(material_id: int):
     delete_material(material_id)
