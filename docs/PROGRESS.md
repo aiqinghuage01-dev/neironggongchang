@@ -4,7 +4,56 @@
 
 ---
 
-## 当前状态(2026-04-27 深夜 · D-086 全站错误出口统一)
+## 当前状态(2026-04-28 · D-087 素材库重建 · Day 1+UI)
+
+**版本**: v0.5.5 — 素材库板块 web 路线全栈 (后端 + 4 层 UI + e2e).
+
+**清华哥 PRD + 4 张交互稿** → 重建素材库. 关键决策"打开一个网站就实现所有功能"=
+不做 Electron, 嵌入 web 工厂. 设计稿左侧侧栏就是工厂标准侧栏验证了这条.
+
+**Day 1 (commit ffe5b7a) 后端基础**:
+- migration v2 加 5 表 (material_assets/tags/asset_tags/usage_log/pending_moves)
+- materials_service.py: scan + 缩略图 (ffmpeg + Pillow) + 查询 (~310 行)
+- 8 API endpoint (/api/material-lib/*)
+- 65 单测 + 集成测试全过
+
+**Day 1.5 (commit 即将) 4 层 UI**:
+- factory-materials-v2.jsx: L1 数据大屏 + L2 C/A 模式 + L3 子分类网格 + L4 黑底大预览
+- 路由切换: case "materials" → PageMaterialsV2, 老 page 改名 materials-legacy 兜底
+- 4 层 e2e 闭环全过, 0 console error
+- 真扫 ~/Downloads 30 文件 4 秒入库, 视频缩略图 + 真视频预览 OK
+
+**Day 2 范围 (清华哥追加)**:
+- AI 视觉打标 pipeline (Vision via OpenClaw, 注入清华哥业务上下文)
+- 文件名启发式 fallback (Vision 不通时降级)
+- L3 网格卡片 ✨ AI 标签 chip
+- 真烧 credits 仅探活 (1-2 次), 全量打标等老板回来确认
+
+**关键设计决策**:
+- 表前缀 material_* 避开老 V1 materials (爆款参考业务)
+- 设计稿 A/B/C 三方案选 **C 默认 + A 可切, B 不做** (路径地图融合 = A 模式右栏选中预览替代)
+- 主色深绿 #2a6f4a + 暖橙 #c08a2e (PRD §9 配色严格落实)
+- 文件 ID 用 sha1(path+mtime) 截 16 位
+- 长扫描走 D-068 tasks.run_async daemon + 防卡死
+
+**清华哥要求兑现 (\"细致一点\")**:
+- ✅ pytest 438 (+65 新, 0 回归), 1 skip 不变
+- ✅ test_migrations.py 6 处 assert 同步 (加 EXPECTED_VERSION=2 常量)
+- ✅ 4 层 e2e 闭环, 0 console error / 0 page error
+- ✅ 真烧 (30 文件扫描 + 缩略图 + 视频预览) 跑过
+- ✅ data-testid 给关键卡片防 selector 脆弱
+- ✅ SYSTEM-CONSTRAINTS §12 (7 节硬约束) 落字
+- ✅ CHANGELOG v0.5.5 + PROGRESS 同步
+
+**老板回来要决策**:
+- (a) AI 打标全量跑 (1100+ 真素材, 烧 1-2 美元 credits) 还是按需打
+- (b) 老 PageMaterials 4 tab (热点/选题/爆款参考/空镜录音) 数据要不要挪进新 page 角落
+- (c) image-gen / dreamina "命中关键词先找素材库" 对接 (改两个生产页)
+- (d) ~/Downloads 切到 ~/Desktop/清华哥素材库/ (只需改 settings.materials_root)
+
+---
+
+## 上一里程碑(2026-04-27 深夜 · D-086 全站错误出口统一)
 
 **版本**: v0.5.4 — 把 14 文件 18 处裸 `⚠️ {err}` 替换成 `<InlineError />`,
 `ERROR_PATTERNS / humanizeError` 集中到 `web/factory-errors.jsx` 单一事实源.

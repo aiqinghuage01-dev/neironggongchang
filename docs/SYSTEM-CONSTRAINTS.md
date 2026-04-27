@@ -437,6 +437,42 @@ return conn
 
 ---
 
+## 12. 素材库硬约束 (D-087)
+
+### 12.1 数据隔离: material_* 前缀
+新建表必须 `material_` 前缀避开老 V1 `materials` 表 (爆款参考业务).
+当前 5 表: `material_assets / material_tags / material_asset_tags / material_usage_log / material_pending_moves`.
+
+### 12.2 文件 ID 哈希
+`sha1(abs_path + mtime)` 截 16 位作 asset_id. 文件改了 mtime 自动 → 新 row.
+**不要**用文件名或纯 path 做 ID (重复风险).
+
+### 12.3 扫描入库白名单严格
+`materials_service.ASSET_EXTS` 是单一事实源:
+图片 `.jpg .jpeg .png .gif .webp` + 视频 `.mp4 .mov .m4v .avi .mpg .mpeg`.
+新加格式只在这一处加, **禁止**业务代码里 hard-code 后缀检查.
+PDF/zip/dmg/exe 等非素材**永远**不入库.
+
+### 12.4 长扫描必须走 tasks.run_async
+`POST /api/material-lib/scan` 走 D-068 daemon thread + 防卡死.
+~/Downloads 12000+ 文件全扫 5-15 分钟, daemon 内死等会被 watchdog 误杀.
+进度回调 `on_progress(idx, total, path)` 每 10 文件推一次.
+
+### 12.5 前端走 D-086 错误出口
+所有素材库 page 的错误必须走 `<InlineError />` / `<ErrorText />`.
+不直接 `setErr(e.message)` 后渲染 `⚠️ {err}`.
+
+### 12.6 路径配置: settings.materials_root
+`materials_service.get_materials_root()` 从 `settings.materials_root` 读, 默认 `~/Downloads/`.
+未来切 `~/Desktop/清华哥素材库/` 改 settings 一行, 代码不动.
+**禁止**业务代码里 hard-code 路径.
+
+### 12.7 缩略图缓存独立目录
+`data/material_thumbs/{asset_id}.jpg`, 不进 git, 独立于 `data/works/` 等.
+缩略图丢失 → 下次 `_make_thumb` 重建 (自愈).
+
+---
+
 ## 索引: 约束 → D 编号 → 文件
 
 | 约束 | D 编号 | 关键文件 |
@@ -455,3 +491,5 @@ return conn
 | **LiDock tool 白名单 + 防注入 + 防递归** | **D-085** | `lidock_tools.py:REGISTRY` + `build_followup_system` |
 | **UI 错误出口统一** | **D-086** | `web/factory-errors.jsx` (`ErrorBanner` / `InlineError` / `ErrorText` / `humanizeError` / `normalizeErrorMessage`) |
 | **fetch 自动重试 + 120s timeout** | **D-086** | `web/factory-api.jsx::_trace` + `_fetchWithTimeout` |
+| **素材库 schema + 扫描 + 4 层 UI** | **D-087** | `backend/services/materials_service.py` + `web/factory-materials-v2.jsx` |
+| **素材库表名前缀 material_*** | **D-087** | `migrations.py` v2 baseline |

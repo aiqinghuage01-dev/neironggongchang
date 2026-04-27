@@ -6,6 +6,76 @@
 
 ---
 
+## [v0.5.5] — 2026-04-28 (D-087 素材库重建 · Day 1+UI)
+
+清华哥重建素材库板块. 设计稿 4 张交互稿 + PRD 给定. 路线 B (web 工厂内, 不做 Electron).
+"我打开一个网站, 它就应该能够实现所有的功能" — 清华哥拍板.
+
+### Added
+- **[D-087]** `migrations.py` v2: 5 张 `material_*` 表
+  - assets / tags / asset_tags / usage_log / pending_moves
+  - 用 `material_` 前缀避开老 `materials` 表 (爆款参考业务) 冲突
+  - schema_version 自动从 1 → 2
+- **[D-087]** `backend/services/materials_service.py` (~310 行): 完整 CRUD
+  - scan_root: 白名单过滤 + sha1(path+mtime) ID + 缩略图 + 进度回调
+  - 缩略图: 视频走 ffmpeg 抽 1s 处帧, 图片走 Pillow 320×180
+  - probe: ffprobe 视频元信息, Pillow 图片尺寸
+  - 查询: get_stats / list_top_folders / list_subfolders / list_assets / get_asset
+- **[D-087]** `backend/api.py` 加 8 个 endpoint (`/api/material-lib/*`)
+  - GET stats / folders / subfolders / list / asset / thumb / file
+  - POST scan (异步走 D-068) / usage (PRD §3.5 做视频对接)
+- **[D-087]** `web/factory-materials-v2.jsx` (~430 行) 4 层钻取 UI
+  - L1 数据大屏: 4 KPI 横条 (总素材 / 待整理-暖橙 / AI 打标 / 本月使用) + 文件夹大卡片 (2 列网格)
+  - L2 大分区: 默认 C 模式 (按子分类分组每组 4 张) + 切 A 模式 (全网格)
+  - L3 子分类: 5 列网格 + 排序 (最新/命中/文件名)
+  - L4 黑底大预览: video/img + 右栏信息 + 用它做视频按钮 + Esc 退出
+  - 主色深绿 #2a6f4a + 暖橙 #c08a2e (PRD §9 配色)
+- **[D-087]** `tests/test_materials_service.py` (37 单测) + `tests/test_materials_lib_api.py` (28 集成)
+- **[D-087]** `/tmp/d087_e2e.js` 4 层 playwright 闭环 (L1→L2→L3→L4)
+- **[D-087]** SYSTEM-CONSTRAINTS §12 (7 节素材库硬约束)
+
+### Changed
+- `index.html`: 加载顺序加 factory-materials-v2.jsx
+- `factory-app.jsx`: case "materials" → PageMaterialsV2 (老 page 改名 "materials-legacy" 兜底, 数据流不动)
+- `tests/test_migrations.py`: 加 `EXPECTED_VERSION = 2` 常量, 6 处 `assert version == 1` 同步更新
+
+### Tested
+- pytest 373 → **438 passed** (+65, 0 回归, 1 skip 不变)
+- D-086 e2e 5/5 仍过
+- D-087 4 层 e2e 全过 (L1 KPI 显示 30 ✅ / L2 进入 _根目录 ✅ / 切 A 模式 ✅ / L4 大预览 ✅)
+- 0 console error / 0 page error
+
+### 真烧测试
+- ~/Downloads 30 文件扫描 4 秒入库, DB 30 行 + 缩略图 30 张
+- 真视频缩略图: ffmpeg 抽 1s 处帧 OK
+- 真视频预览: HTML5 `<video>` 自动播放 OK
+- 文件夹大卡片渲染 + 主色 + 暖橙 KPI 视觉确认 (Read 截图)
+
+### 设计 + 实施决策 (清华哥拍板 + 我自主)
+- ❌ 不做 Electron (web 路线, 一个网站实现所有功能)
+- ✅ 默认 C 模式 (浏览全貌) + 切 A 模式 (聚焦子分类), B 路径地图融合不做
+- ✅ 表前缀 `material_*` 避开老 materials 表
+- ✅ 路径走 settings.materials_root (默认 ~/Downloads, 改 settings 一行切目录)
+- ✅ data-testid 给关键卡片防 e2e selector 脆弱
+- ✅ 老 PageMaterials 路由改名 "materials-legacy" 留兜底, 数据流不断
+
+### Day 2 路线 (清华哥追加: AI 打标加进 D-087)
+- AI 视觉打标 pipeline (Vision via OpenClaw, 注入清华哥业务上下文)
+- 文件名启发式 fallback (Vision 不通时降级)
+- POST /api/material-lib/tag/{id} 单条 + tag-batch 异步队列 (限并发 3)
+- L3 网格卡片 ✨ AI 标签 chip 显示
+- 真烧 credits 仅跑 1-2 次最便宜组合验证集成路径, 不全量打标 1100+ 张 (等老板回来确认全量跑)
+
+### Files Changed
+- 新建: backend/services/materials_service.py · web/factory-materials-v2.jsx · tests/test_materials_service.py · tests/test_materials_lib_api.py
+- 改: backend/services/migrations.py · backend/api.py · tests/test_migrations.py · web/index.html · web/factory-app.jsx · docs/SYSTEM-CONSTRAINTS.md
+
+### 一句话总结
+"打开网站就能管理本地素材". 4 层 UI + 8 API + 65 测试 + e2e 闭环, 真扫 30 文件全过.
+等老板回来加 AI 打标 + image-gen 命中关键词先找素材库.
+
+---
+
 ## [v0.5.4] — 2026-04-27 深夜 (D-086 全站错误出口统一)
 
 GPT 抓的: D-069 / D-085 follow-up 走"补 pattern"路线没解决根本 — 全站错误出口
