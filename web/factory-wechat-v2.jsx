@@ -1054,8 +1054,9 @@ function WxStepCover({ cover, title, loading, onPrev, onNext, onRegen, onSelect,
                   downloadName={`wechat-cover-${i+1}.png`}
                   style={{ width: "100%", aspectRatio: "16/9", borderRadius: 6, objectFit: "cover", display: "block" }} />
               ) : (
-                <div style={{ aspectRatio: "16/9", borderRadius: 6, background: T.bg2, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, color: T.red, padding: 12, textAlign: "center" }}>
-                  ⚠️ {(c.error || "失败").slice(0, 60)}
+                <div style={{ aspectRatio: "16/9", borderRadius: 6, background: T.bg2, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, padding: 12, textAlign: "center", gap: 4 }}>
+                  {/* D-086: ErrorText 替代裸 slice (friendly title 而非裸 raw) */}
+                  ⚠️ <ErrorText err={c.error || "失败"} maxLen={60} />
                 </div>
               )}
               <div style={{ fontSize: 11, color: T.muted2, marginTop: 6, padding: "0 4px", display: "flex", alignItems: "center", gap: 6 }}>

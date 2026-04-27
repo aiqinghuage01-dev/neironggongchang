@@ -65,11 +65,8 @@ function PageMakeV2({ onNav }) {
 
       <div style={{ flex: 1, overflow: "auto", padding: "24px 32px 80px" }}>
         <div style={{ maxWidth: 980, margin: "0 auto" }}>
-          {err && (
-            <div style={{ padding: 12, background: T.redSoft, color: T.red, borderRadius: 10, fontSize: 13, marginBottom: 14 }}>
-              ⚠️ {err}
-            </div>
-          )}
+          {/* D-086: 走全站 InlineError, 不再裸渲染 ⚠️ {err} */}
+          {err && <InlineError err={err} />}
 
           {step === "script"   && <MakeV2StepScript script={script} setScript={setScript} onNext={() => gotoStep("voice-dh")} onNav={onNav} seedFrom={seedFrom} onDismissSeed={() => setSeedFrom(null)} />}
           {step === "voice-dh" && <MakeV2StepVoiceDh

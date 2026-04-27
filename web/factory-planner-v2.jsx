@@ -100,11 +100,8 @@ function PagePlanner({ onNav }) {
         <WfRestoreBanner show={wf.hasSnapshot} onDismiss={wf.dismissSnapshot}
           onClear={() => { reset(); wf.dismissSnapshot(); }}
           label="内容策划工作流" />
-        {err && (
-          <div style={{ maxWidth: 820, margin: "16px auto 0", padding: 12, background: T.redSoft, color: T.red, borderRadius: 10, fontSize: 13 }}>
-            ⚠️ {err}
-          </div>
-        )}
+        {/* D-086: 走全站 InlineError */}
+        {err && <InlineError err={err} />}
         {step === "input"  && <PStepInput brief={brief} setBrief={setBrief} onGo={doAnalyze} loading={loading} />}
         {step === "levels" && <PStepLevels analysis={analysis} loading={loading} onPick={pickLevel} onPrev={() => setStep("input")} onRegen={doAnalyze} />}
         {step === "plan"   && (

@@ -289,11 +289,8 @@ function PageDhv5({ onNav }) {
             onPickWork={pickWork}
           />
 
-          {err && (
-            <div style={{ padding: 12, background: T.redSoft, color: T.red, borderRadius: 10, fontSize: 13, marginBottom: 14 }}>
-              ⚠️ {err}
-            </div>
-          )}
+          {/* D-086: 走全站 InlineError */}
+          {err && <InlineError err={err} />}
 
           {/* 主区: 模板挑选 (Step 2) */}
           <div style={{ marginTop: 22, marginBottom: 14, display: "flex", alignItems: "center", gap: 10 }}>
@@ -387,7 +384,7 @@ function PageDhv5({ onNav }) {
         <div style={{ flex: 1, overflow: "auto", padding: "24px 32px 80px" }}>
           <div style={{ maxWidth: 1080, margin: "0 auto" }}>
             {/* 错误提示 */}
-            {err && <div style={{ padding: 12, background: T.redSoft, color: T.red, borderRadius: 10, fontSize: 13, marginBottom: 14 }}>⚠️ {err}</div>}
+            {/* D-086 */}{err && <InlineError err={err} />}
 
             {/* D-077: 单 / 批量 文案 toggle */}
             <div style={{ display: "flex", justifyContent: "center", marginBottom: 14 }}>
@@ -571,7 +568,7 @@ function PageDhv5({ onNav }) {
           onBack={status === "running" ? null : () => setStep("align")} />
         <div style={{ flex: 1, overflow: "auto", padding: "24px 32px 80px" }}>
           <div style={{ maxWidth: 720, margin: "0 auto" }}>
-            {err && <div style={{ padding: 12, background: T.redSoft, color: T.red, borderRadius: 10, fontSize: 13, marginBottom: 14 }}>⚠️ {err}</div>}
+            {/* D-086 */}{err && <InlineError err={err} />}
 
             {/* 状态卡片 */}
             <div style={{ padding: 24, background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 12, marginBottom: 16 }}>

@@ -163,11 +163,8 @@ function PageImageGen({ onNav }) {
           onClear={() => { reset(); setPrompt(""); wf.dismissSnapshot(); }}
           label="直接出图工作流" />
 
-        {err && (
-          <div style={{ maxWidth: 860, margin: "16px auto 0", padding: 12, background: T.redSoft, color: T.red, borderRadius: 10, fontSize: 13 }}>
-            ⚠️ {err}
-          </div>
-        )}
+        {/* D-086: 走全站 InlineError */}
+        {err && <InlineError err={err} maxWidth={860} />}
 
         {/* 输入 + 提交 (单跑 vs 批量 用不同 visibility 条件) */}
         {((!batchMode && !poller.isRunning && !poller.isFailed && !poller.isCancelled) || (batchMode && batchTasks.length === 0)) && (

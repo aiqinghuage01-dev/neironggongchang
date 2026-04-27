@@ -6,6 +6,74 @@
 
 ---
 
+## [v0.5.4] — 2026-04-27 深夜 (D-086 全站错误出口统一)
+
+GPT 抓的: D-069 / D-085 follow-up 走"补 pattern"路线没解决根本 — 全站错误出口
+分裂(每页自己 setErr+渲染), 下个新页又会裸露 "Failed to fetch". 这次收口.
+
+### Added
+- **[D-086]** `web/factory-errors.jsx` (~270 行) — 全站错误出口事实源
+  - `ERROR_PATTERNS`: 24 条覆盖网络层/上游 AI/HTTP/业务/Pydantic 等
+  - `humanizeError(raw)`: → {icon, title, suggestion, raw, matched}
+  - `normalizeErrorMessage(e)`: Error/字符串/null → 用户可见 string
+    - 短中文用户提示 (e.g. "HTML 还没生成") 原样返, 不当"出错"
+    - 技术错误 → humanizeError(.title)
+  - `ErrorBanner({err, actions, compact})`: 大块错误条 (页面顶部, 折叠原始 + 重试按钮)
+  - `InlineError({err, actions, maxWidth})`: 简化内联红条 (替代 ⚠️ {err})
+  - `ErrorText({err, maxLen})`: 卡片内短文本错误 (替代裸 slice)
+- **[D-086]** `web/factory-api.jsx` 改造:
+  - `_isNetworkError` 检测扩展含 AbortError
+  - `_fetchWithTimeout` 加 120s 默认 timeout (防 backend 半活挂浏览器)
+  - retry 失败转 `normalizeErrorMessage(e2)` 走单一事实源
+- **[D-086]** `scripts/e2e_error_boundaries.js` 5 代表页 abort 闭环
+  - wechat / make / imagegen / dreamina / hotrewrite
+  - 验证: UI 文本不含 "Failed to fetch / TypeError / NetworkError / Pydantic / Traceback"
+  - console / pageerror = 0 (Failed to load resource 等 abort 副作用白名单)
+- **[D-086]** SYSTEM-CONSTRAINTS §11 (5 节 UI 错误出口硬约束)
+
+### Changed
+- `web/factory-flywheel.jsx`: **删 114 行** (ERROR_PATTERNS / humanizeError / ErrorBanner 重复定义), 由 factory-errors.jsx 替代
+- `web/factory-task.jsx::_friendlyErrorReason`: 改调 `humanizeError(error).title`, 不再维护第二套 if/elif 规则
+- `web/index.html` 加载顺序: `tokens → errors → api` (api 用 normalizeErrorMessage)
+- **14 文件 18 处 `⚠️ {err}` / `error.slice(60)` / 裸渲染** 全部替换为 InlineError / ErrorText / ErrorBanner
+  - 5 代表页: wechat / make / imagegen / dreamina / hotrewrite
+  - 9 扩展页: voicerewrite / baokuan / touliu / planner / compliance / dhv5 (3 处) / night / settings / flow (3 处)
+
+### 实施踩坑
+- **D-085 follow-up 复盘真根因** (GPT 顺手提的, 落 PROGRESS 别只留聊天):
+  - 清华哥 "Failed to fetch" 截图实际根因不是"backend 重启窗口", 是
+    `wechat_pipeline.write_article_async:306` 漏 import `tasks_service` (NameError → 500 → ASGI 异常断 connection → 浏览器看到 TypeError "Failed to fetch")
+  - commit 3b12a33 已修, dca430c 加 mock 防测试偷烧 credits
+  - 教训: 解释根因前必须 grep log + ps + curl 真测, 不能凭直觉
+
+### Tested
+- pytest 372 → **373 passed** (+0 后端改动, jsx 改不影响 pytest)
+- `scripts/e2e_error_boundaries.js`: 5/5 页通过
+- 烟雾测 factory-errors.jsx 全局函数挂载: humanizeError / normalizeErrorMessage / ErrorBanner / InlineError / ErrorText 全 function ✅
+- rg 双路验零:
+  - `⚠️ {err}` 在 web/*.jsx 残留 = 0 (除 factory-make-v2 的注释)
+  - `Failed to fetch` 只在 factory-api.jsx / factory-errors.jsx (合法白名单)
+
+### 8 条验收 (GPT 给的, commit 前自检)
+- ✅ pytest -q 通过
+- ✅ scripts/e2e_error_boundaries.js 通过
+- ✅ rg "⚠️ \{err\}" web/*.jsx = 0 (除注释)
+- ✅ rg "Failed to fetch" web/*.jsx 只在 factory-errors.jsx / factory-api.jsx
+- ✅ wechat 截图无 Failed to fetch 原文
+- ✅ ErrorBanner / InlineError 仍能展开看原始错误 (details/summary)
+- ✅ PROGRESS + CHANGELOG + SYSTEM-CONSTRAINTS 同步
+- ✅ commit message: [D-086] 全站错误出口统一
+
+### Files Changed
+- 新建: `web/factory-errors.jsx` · `scripts/e2e_error_boundaries.js`
+- 改: `web/factory-api.jsx` · `web/factory-flywheel.jsx` · `web/factory-task.jsx` · `web/index.html` · 14 个 page jsx · `docs/SYSTEM-CONSTRAINTS.md` · `CHANGELOG.md` · `docs/PROGRESS.md`
+
+### 一句话总结
+GPT 一句"以后任何页面再遇到后端重启/断网, 都只能看到友好错误, 不能再裸露英文技术错误"
+就是这次的标准. 不是"再补一个 Failed to fetch pattern", 是"全站错误出口收口".
+
+---
+
 ## [v0.5.3] — 2026-04-27 深夜 (LiDock 真 tool calling)
 
 D-067 "不撒谎守则" 之后的闭环: LiDock 从"陪聊"升级"会做事".

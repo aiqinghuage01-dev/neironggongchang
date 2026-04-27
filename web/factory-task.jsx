@@ -194,30 +194,18 @@ function LoadingProgress({ task, icon, title, subtitle, onCancel }) {
 }
 
 // ─── FailedRetry 组件 ────────────────────────────────────
-// D-069: error monospace 区块默认折叠 + 友好原因映射
-// 把 ClaudeOpusError / DeepSeekUnavailable / Pydantic 422 等转成大白话, 不露技术细节.
+// D-086: _friendlyErrorReason 改调 humanizeError (factory-errors.jsx 是全站事实源),
+//        不再维护本文件第二套 if/elif 规则. 任何错误模式新加只在 factory-errors.jsx 改.
 function _friendlyErrorReason(raw) {
   const s = String(raw || "");
   if (!s) return null;
-  // D-069 follow-up: 后端连接失败 (_trace 转译过的中文 message)
-  if (/后端连接失败|failed to fetch|load failed|networkerror/i.test(s))
-    return "后端服务可能正在重启, 稍等几秒再点一次就好";
-  // 网络/上游 AI
-  if (/timed?out|timeout|超时|connection|reset|refused|unreachable/i.test(s))
-    return "AI 反应慢, 多半网络或上游卡了一下";
-  if (/502|503|504|gateway|bad gateway/i.test(s))
-    return "AI 上游临时不可用, 一会儿再试就好";
-  if (/429|rate limit|too many|quota/i.test(s))
-    return "请求太密, 稍等片刻再来";
-  if (/401|403|unauthorized|forbidden|api[\s_-]?key|token|invalid.*key/i.test(s))
-    return "AI 账户配置可能不对, 去设置看看";
-  // 内容触发
-  if (/safety|policy|content|harmful|sensitive|content_filter|blocked/i.test(s))
-    return "这一段触发了 AI 的内容规则, 换个角度再说一次试试";
-  // Pydantic 422 (一般是前端入参错, 真正修法不是 retry)
-  if (/422|validation|greater_than|less_than|missing|field required/i.test(s))
-    return "这次的入参不太对, 改一下再试";
-  // 兜底
+  // 走全站 humanizeError, 拿 title 作为 friendly 原因展示
+  if (typeof humanizeError === "function") {
+    const h = humanizeError(s);
+    // 没匹配 pattern 时返兜底文案 (不直接用"出错了 (没匹配到已知模式)" 这种露馅 title)
+    return h.matched ? h.title : "通常重试一次就好";
+  }
+  // factory-errors.jsx 没加载时的极端兜底 (理论上不会触发)
   return "通常重试一次就好";
 }
 

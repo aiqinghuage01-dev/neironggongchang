@@ -570,11 +570,8 @@ function WechatDraftSection() {
         </div>
       )}
       <input ref={fileRef} type="file" accept="image/jpeg,image/png" onChange={onFile} style={{ display: "none" }} />
-      {err && (
-        <div style={{ marginTop: 10, padding: "8px 10px", background: T.redSoft, color: T.red, borderRadius: 6, fontSize: 11.5 }}>
-          ⚠️ {err}
-        </div>
-      )}
+      {/* D-086: 走全站 InlineError (settings 是窄版面, maxWidth 给 460) */}
+      {err && <InlineError err={err} maxWidth={460} />}
     </SettingsSection>
   );
 }

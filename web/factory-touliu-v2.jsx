@@ -96,11 +96,8 @@ function PageTouliu({ onNav }) {
         <WfRestoreBanner show={wf.hasSnapshot} onDismiss={wf.dismissSnapshot}
           onClear={() => { reset(); wf.dismissSnapshot(); }}
           label="投流文案工作流" />
-        {err && (
-          <div style={{ maxWidth: 1040, margin: "16px auto 0", padding: 12, background: T.redSoft, color: T.red, borderRadius: 10, fontSize: 13 }}>
-            ⚠️ {err}
-          </div>
-        )}
+        {/* D-086: 走全站 InlineError */}
+        {err && <InlineError err={err} maxWidth={1040} />}
         {step === "input"  && <TLStepInput pitch={pitch} setPitch={setPitch} industry={industry} setIndustry={setIndustry}
           targetAction={targetAction} setTargetAction={setTargetAction} n={n} setN={setN} channel={channel} setChannel={setChannel}
           loading={loading} onGo={generate} skillInfo={skillInfo} />}

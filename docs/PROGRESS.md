@@ -4,7 +4,55 @@
 
 ---
 
-## 当前状态(2026-04-27 深夜 · D-085 LiDock 真 tool calling)
+## 当前状态(2026-04-27 深夜 · D-086 全站错误出口统一)
+
+**版本**: v0.5.4 — 把 14 文件 18 处裸 `⚠️ {err}` 替换成 `<InlineError />`,
+`ERROR_PATTERNS / humanizeError` 集中到 `web/factory-errors.jsx` 单一事实源.
+
+**触发**: 清华哥实测撞 "Failed to fetch" → D-069 follow-up 走"补 pattern"路线没解决根本.
+GPT 抓: 全站错误出口分裂(每页自己 setErr+渲染), 下个新页又会裸露英文. 这次收口.
+
+**改造统计 (1 commit, 4-5h, 两段式实施)**:
+- 新建 `web/factory-errors.jsx` (~270 行 5 个 export + 24 条 ERROR_PATTERNS)
+- 新建 `scripts/e2e_error_boundaries.js` (5 代表页 abort 闭环)
+- 改 4 基础文件: index.html / factory-api.jsx / factory-flywheel.jsx / factory-task.jsx
+- 改 14 page jsx (18 处替换)
+- 删 factory-flywheel.jsx 114 行重复定义
+- 加 SYSTEM-CONSTRAINTS §11 (5 节硬约束)
+
+**实施分两段** (清华哥拍板防一次性 14 页机械替换炸):
+- 段 A: 基础层 (factory-errors.jsx + index 加载 + 3 基础文件接入) → 烟雾测全局函数挂载 ✅
+- 段 B: 5 代表页 (wechat/make/imagegen/dreamina/hotrewrite) → e2e 5/5 通过
+- 段 C: 扩 9 页 + 文档 + commit (本节)
+
+**rg 双路验零**:
+- `⚠️ {err}` 残留 = 0 (除 factory-make-v2.jsx 注释)
+- `Failed to fetch` 只在 factory-errors.jsx (pattern 匹配) + factory-api.jsx (检测) 合法白名单
+
+**8 条验收全过** (GPT 标准):
+pytest 373 ✅ / e2e 5/5 ✅ / rg 验零 ✅ / 截图无 Failed to fetch ✅ /
+ErrorBanner 仍能展开原始 ✅ / 文档同步 ✅ / commit message 对 ✅
+
+---
+
+## D-085 follow-up 真根因复盘 (GPT 顺手提的, 别只留聊天)
+
+清华哥实测 "Failed to fetch" 截图根因 **不是"backend 重启窗口"** (我前面回答错了, 凭直觉没核实).
+
+实际根因: `backend/services/wechat_pipeline.py:306` 漏 import `tasks_service` →
+NameError → /api/wechat/write 500 → starlette ExceptionMiddleware 抛异常时 ASGI
+connection 异常断开 → 浏览器 fetch 看到的是 TypeError "Failed to fetch" (不是 HTTP 500).
+
+证据 (实证打脸): `grep "POST /api/wechat/write" /tmp/d085f_backend.log` 看到 500 + NameError traceback; `ps -p backend PID` backend 起跑 18min 没死; CORS allow_origins=["*"] 早就配了.
+
+修复: `3b12a33 [fix] wechat_pipeline.write_article_async NameError (实际根因)` lazy import + 回归测试; `dca430c [test] mock write_article 防偷烧 credits` 测试卫生补丁.
+
+教训: **解释根因前必须 grep log + ps + curl 真测**, 不能凭"5 秒重启窗口"这种直觉.
+被清华哥一句 "刚刚实际什么问题" 问回真相. 这条进我自己的 SOP.
+
+---
+
+## 上一里程碑(2026-04-27 深夜 · D-085 LiDock 真 tool calling)
 
 **版本**: v0.5.3 — LiDock 从"陪聊"升级"会做事". ReAct 文本协议 + 3 个 MVP tools.
 

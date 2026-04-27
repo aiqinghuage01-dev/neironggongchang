@@ -204,11 +204,8 @@ function PageDreamina({ onNav }) {
         <WfRestoreBanner show={wf.hasSnapshot} onDismiss={wf.dismissSnapshot}
           onClear={() => { reset(); wf.dismissSnapshot(); }}
           label="即梦工作流" />
-        {err && (
-          <div style={{ maxWidth: 820, margin: "16px auto 0", padding: 12, background: T.redSoft, color: T.red, borderRadius: 10, fontSize: 13 }}>
-            ⚠️ {err}
-          </div>
-        )}
+        {/* D-086: 走全站 InlineError */}
+        {err && <InlineError err={err} />}
         {step === "input"  && <DStepInput
           info={info} mode={mode} setMode={setMode} prompt={prompt} setPrompt={setPrompt}
           isVideo={isVideo}

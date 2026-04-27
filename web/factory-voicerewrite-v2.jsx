@@ -198,11 +198,8 @@ function PageVoicerewrite({ onNav }) {
         <WfRestoreBanner show={wf.hasSnapshot} onDismiss={wf.dismissSnapshot}
           onClear={() => { reset(); wf.dismissSnapshot(); }}
           label="录音改写工作流" />
-        {err && (
-          <div style={{ maxWidth: 820, margin: "16px auto 0", padding: 12, background: T.redSoft, color: T.red, borderRadius: 10, fontSize: 13 }}>
-            ⚠️ {err}
-          </div>
-        )}
+        {/* D-086: 走全站 InlineError */}
+        {err && <InlineError err={err} />}
         {step === "input"  && <VStepInput transcript={transcript} setTranscript={setTranscript} onGo={doAnalyze} loading={loading} skillInfo={skillInfo} />}
         {step === "angles" && <VStepAngles analyze={analyze} loading={loading} onPick={pickAngle} onPrev={() => setStep("input")} onRegen={doAnalyze}
           withBiz={withBiz} setWithBiz={setWithBiz} pureRewrite={pureRewrite} setPureRewrite={setPureRewrite} />}

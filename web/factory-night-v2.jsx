@@ -220,11 +220,8 @@ function PageNightShift({ onNav }) {
             <Btn variant="primary" onClick={() => setEditing({})}>+ 加一条任务</Btn>
           </div>
 
-          {err && (
-            <div style={{ padding: 12, background: T.redSoft, color: T.red, borderRadius: 10, fontSize: 13, marginBottom: 14 }}>
-              ⚠️ {err}
-            </div>
-          )}
+          {/* D-086: 走全站 InlineError */}
+          {err && <InlineError err={err} />}
 
           {/* 任务列表 */}
           {loading ? (

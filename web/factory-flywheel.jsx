@@ -155,124 +155,14 @@ function FromMakeBanner({ fromMake, dismiss, label }) {
   );
 }
 
-// ─── D-062cc · 错误信息友好化 ──────────────────────────────────
-// 把 backend 抛出来的英文/技术错误翻译成"为啥 + 怎么办" 给用户看
-// 用法: const { icon, title, suggestion, severity } = humanizeError(rawMsg);
-//      <ErrorBanner err={rawMsg} actions={[{ label: "重试", onClick }]} />
+// ─── D-086: ERROR_PATTERNS / humanizeError / ErrorBanner 已迁出到 factory-errors.jsx
+// 全站事实源在那, 这里不再重复定义. 引用通过 window 全局.
+// 历史: D-062cc 起在本文件定义, D-086 (2026-04-27) 收口到 factory-errors.jsx.
+//
+// 兼容: 老代码若 import humanizeError / ErrorBanner from window, 仍可用.
+//
+// 下面继续是飞轮业务组件 (NightHotFlywheel / FromMakeBanner 等), 不动.
 
-const ERROR_PATTERNS = [
-  // ─── D-069 follow-up: 网络层 / 后端连接失败 (高频, 放最前) ─
-  { match: /后端连接失败|failed to fetch|load failed|networkerror|err_connection/i,
-    icon: "🔌", title: "后端连接失败 (服务可能正在重启)",
-    suggestion: "稍等几秒再点一次 · 一直不通就去终端跑 bash scripts/start_api.sh 看 backend 状态" },
-  // ─── D-062ii 柿榴常见错误 (清华哥反馈触发) ───────────────
-  { match: /算力不足|余额不足|请充值|insufficient.*balance/i,
-    icon: "💰", title: "柿榴算力不足 (要充值)",
-    suggestion: "登录柿榴 Web 后台 → 充值 → 回来重试 · 这是 #1 高频原因" },
-  { match: /createByText.*code=1|video\/createByText/i,
-    icon: "🛠️", title: "柿榴 createByText 失败",
-    suggestion: "看原始错误 msg · 常见: 算力不足 / speaker_id 不存在 / avatar_id 不存在" },
-  { match: /speaker.*not.*found|speaker_id.*invalid|声音.*不存在/i,
-    icon: "🎙️", title: "声音 speaker_id 找不到",
-    suggestion: "去 ⚙️ 设置 看下当前 speaker 列表, 可能柿榴那边删了 · 重选一个声音" },
-  { match: /avatar.*not.*found|avatar_id.*invalid|数字人.*不存在|形象.*不存在/i,
-    icon: "👤", title: "数字人 avatar_id 找不到",
-    suggestion: "去 ⚙️ 设置 看下当前 avatar 列表, 可能柿榴那边删了 · 重选一个数字人" },
-  { match: /sidecar.*未就绪|cosyvoice.*not.*ready|503/i,
-    icon: "🛠️", title: "CosyVoice sidecar 没起",
-    suggestion: "终端跑 bash scripts/start_cosyvoice.sh 启动 sidecar" },
-  // ─── 其他原有 patterns ───────────────────────────────────
-  { match: /模板不存在|模板.*不存在|template.*not.*found/i,
-    icon: "📦", title: "模板不见了",
-    suggestion: "回 Step 3 换一个模板, 或选朴素模式直接出片" },
-  { match: /数字人.*mp4.*不存在|mp4.*不存在|file not found.*mp4/i,
-    icon: "🎬", title: "数字人 mp4 文件丢了",
-    suggestion: "回 Step 2 重新合成数字人 (柿榴文件可能被清理)" },
-  { match: /transcript.*不能为空|文案空了/i,
-    icon: "📝", title: "文案是空的",
-    suggestion: "回 Step 1 写一段口播文案 (≥ 30 字)" },
-  { match: /生图超时|timeout.*120/i,
-    icon: "⏰", title: "B-roll 生图超时 (apimart 120s)",
-    suggestion: "apimart 当前慢, 等 30s 重试 / 或换 prompt 简短点" },
-  { match: /quota|429|rate.?limit/i,
-    icon: "🚧", title: "AI quota 满了",
-    suggestion: "今日 apimart/deepseek 配额用完了, 等明天 / 或去 ⚙️ 设置切别的 key" },
-  { match: /AI.*失败|AI 调用失败|deepseek.*error|apimart.*error/i,
-    icon: "🤖", title: "AI 调用失败",
-    suggestion: "网络抖一下? 等 10s 重试 · 老不好去 ⚙️ 设置看 AI 健康检查" },
-  { match: /AI.*非.*JSON|JSON.*parse|JSON.*解析/i,
-    icon: "🤖", title: "AI 返回了乱七八糟的内容",
-    suggestion: "重试一次 (AI 偶尔抽风) · 多次失败考虑改文案再试" },
-  { match: /scene_idx.*超界|out.?of.?range/i,
-    icon: "🔀", title: "场景索引对不上模板",
-    suggestion: "回 Step 3 重新选模板 → 重新对齐 (alignedScenes 跟新模板对不齐)" },
-  { match: /只.*B.?C.?scene.*broll|only.*B.?C.*broll/i,
-    icon: "🖼️", title: "这个场景不需要配图",
-    suggestion: "A 场 (口播) 没 broll, 只 B/C 场要 · 检查你点的 scene 类型" },
-  { match: /缺.*prompt|没法生图.*prompt/i,
-    icon: "✏️", title: "B-roll prompt 是空的",
-    suggestion: "在场景卡里填一行 prompt (≥ 5 字) 再点生图" },
-  { match: /柿榴|qingdou/i,
-    icon: "🛠️", title: "柿榴异常",
-    suggestion: "看下面原始 message · 如果是网络/超时, 等 10s 重试 · 否则去柿榴 Web 后台看账号状态" },
-  { match: /HTTP 5\d\d|server error|internal/i,
-    icon: "💥", title: "服务器内部错误",
-    suggestion: "后端崩了一下, 等 10s 重试 · 重复出现去看 server log" },
-  { match: /HTTP 4\d\d|bad request|invalid/i,
-    icon: "🚫", title: "请求参数有问题",
-    suggestion: "可能少填东西? 检查上一步是否完整 · 或看 message 后半段细节" },
-];
 
-function humanizeError(rawMsg) {
-  const msg = String(rawMsg || "").trim();
-  if (!msg) return { icon: "⚠️", title: "未知错误", suggestion: "", raw: msg, matched: false };
-  for (const p of ERROR_PATTERNS) {
-    if (p.match.test(msg)) {
-      return { icon: p.icon, title: p.title, suggestion: p.suggestion, raw: msg, matched: true };
-    }
-  }
-  return { icon: "⚠️", title: "出错了 (没匹配到已知模式)", suggestion: "下面是原始 message · 大多重试一次能过", raw: msg, matched: false };
-}
-
-function ErrorBanner({ err, actions }) {
-  if (!err) return null;
-  const h = humanizeError(err);
-  return (
-    <div style={{
-      padding: "12px 16px", background: T.redSoft, border: `1px solid ${T.red}44`,
-      borderRadius: 10, marginBottom: 12,
-    }}>
-      <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
-        <span style={{ fontSize: 20, flexShrink: 0 }}>{h.icon}</span>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: T.red }}>{h.title}</div>
-          {h.suggestion && (
-            <div style={{ fontSize: 12, color: T.red, marginTop: 2, opacity: 0.85 }}>{h.suggestion}</div>
-          )}
-          {/* D-062ii (清华哥反馈): 没匹配 pattern → 原始 msg 默认展开 (用户能直接看到内容);
-                                  匹配了 → 仍折叠 (友好 title 已够用) */}
-          <details style={{ marginTop: 6 }} open={!h.matched}>
-            <summary style={{ fontSize: 10.5, color: T.red, cursor: "pointer", opacity: 0.7 }}>
-              {h.matched ? "看原始错误" : "原始错误 (默认展开):"}
-            </summary>
-            <pre style={{
-              fontSize: 11, fontFamily: "SF Mono, monospace", color: T.red,
-              whiteSpace: "pre-wrap", margin: "4px 0 0", lineHeight: 1.5,
-              opacity: 0.85, padding: "6px 8px", background: "#fff", borderRadius: 4,
-              border: `1px solid ${T.red}22`, maxHeight: 180, overflow: "auto",
-            }}>{h.raw}</pre>
-          </details>
-        </div>
-        {actions && actions.length > 0 && (
-          <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-            {actions.map((a, i) => (
-              <Btn key={i} size="sm" variant={i === 0 ? "primary" : "outline"} onClick={a.onClick}>{a.label}</Btn>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-Object.assign(window, { NightHotFlywheel, setFromMake, clearFromMake, readFromMake, useFromMake, FromMakeBanner, humanizeError, ErrorBanner });
+// D-086: humanizeError / ErrorBanner 已迁到 factory-errors.jsx, 不再从此挂载.
+Object.assign(window, { NightHotFlywheel, setFromMake, clearFromMake, readFromMake, useFromMake, FromMakeBanner });

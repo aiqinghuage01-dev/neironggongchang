@@ -389,6 +389,54 @@ return conn
 
 ---
 
+## 11. UI 错误出口硬约束 (D-086)
+
+### 11.1 任何用户可见错误必须走 factory-errors.jsx 三组件
+
+**正例**:
+```jsx
+// 页面顶部大块错误条
+<ErrorBanner err={err} actions={[{label: "重试", onClick: retry}]} />
+
+// 页面内联红条 (替代裸 ⚠️ {err} 写法)
+<InlineError err={err} maxWidth={820} />
+
+// 小卡片/图片卡内短文本错误
+<ErrorText err={c.error || "失败"} maxLen={60} />
+```
+
+**反例 (禁止)**:
+- `<div>⚠️ {err}</div>` 直接渲染 e.message / err / error
+- `<div>{(err || "失败").slice(0, 60)}</div>` 截断原始错误
+- 任何形式直接吐 traceback / Pydantic JSON / TypeError 给用户
+
+### 11.2 错误事实源在 factory-errors.jsx, 不要分散
+
+- `ERROR_PATTERNS` 列表: 加新错误模式只加这一处
+- `humanizeError(raw)`: 单一入口, 其他文件不要重复定义
+- `normalizeErrorMessage(e)`: Error/字符串/null → 用户可见 string
+- 历史: D-062cc 在 factory-flywheel.jsx 起源, D-086 收口到 factory-errors.jsx
+
+### 11.3 fetch 网络层错误
+
+- `factory-api.jsx::_trace` 检测 TypeError → 自动 retry 1 次 (500ms 延迟)
+- 仍失败 → `normalizeErrorMessage(e2)` 转友好文案
+- 所有 fetch 用 `_fetchWithTimeout` (默认 120s timeout, 防 backend 半活挂浏览器)
+
+### 11.4 setErr(e.message) 不算违规, 但渲染必须走 InlineError
+
+- 数据层 `setErr(e.message)` OK (e.message 已被 _trace 转译过)
+- 渲染层禁止 `<div>⚠️ {err}</div>`, 必须 `<InlineError err={err} />`
+- humanizeError 在渲染时把 message 转友好 title + 折叠原始错误
+
+### 11.5 加新页面/page id
+
+- 替换错误渲染时优先 InlineError (有标准样式 + actions 支持)
+- 卡片内短文本用 ErrorText (避开布局)
+- 大块错误屏 (重试 + 修改) 用 ErrorBanner + FailedRetry (`factory-task.jsx`)
+
+---
+
 ## 索引: 约束 → D 编号 → 文件
 
 | 约束 | D 编号 | 关键文件 |
@@ -405,3 +453,5 @@ return conn
 | DB 连接抽象层 | D-084 | `shortvideo/db.py` (`get_connection` + `current_db_key`) |
 | **LiDock tool calling 协议** | **D-085** | `backend/services/lidock_tools.py` |
 | **LiDock tool 白名单 + 防注入 + 防递归** | **D-085** | `lidock_tools.py:REGISTRY` + `build_followup_system` |
+| **UI 错误出口统一** | **D-086** | `web/factory-errors.jsx` (`ErrorBanner` / `InlineError` / `ErrorText` / `humanizeError` / `normalizeErrorMessage`) |
+| **fetch 自动重试 + 120s timeout** | **D-086** | `web/factory-api.jsx::_trace` + `_fetchWithTimeout` |

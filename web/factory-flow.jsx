@@ -559,7 +559,7 @@ function StepScript({ original, initialFinal, author, sourceUrl, onNext, onPrev 
         </div>
       </div>
 
-      {err && <div style={{ marginTop: 12, padding: 10, background: T.redSoft, color: T.red, borderRadius: 8, fontSize: 12 }}>⚠️ {err}</div>}
+      {/* D-086 */}{err && <InlineError err={err} />}
 
       <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
         {["再随意一点", "加促销钩子", "缩短到 20 秒", "强调免费"].map((t) => (
@@ -631,7 +631,7 @@ function StepVoice({ finalText, onNext, onPrev }) {
         ))}
       </div>
 
-      {err && <div style={{ marginTop: 12, padding: 10, background: T.redSoft, color: T.red, borderRadius: 8, fontSize: 12 }}>⚠️ {err}</div>}
+      {/* D-086 */}{err && <InlineError err={err} />}
 
       <div style={{ display: "flex", marginTop: 20 }}>
         <Btn variant="outline" onClick={onPrev}>← 上一步</Btn>
@@ -699,7 +699,7 @@ function StepAvatar({ onNext, onPrev }) {
         })}
       </div>
 
-      {err && <div style={{ marginTop: 12, padding: 10, background: T.redSoft, color: T.red, borderRadius: 8, fontSize: 12 }}>⚠️ {err}</div>}
+      {/* D-086 */}{err && <InlineError err={err} />}
 
       <div style={{ display: "flex", marginTop: 20 }}>
         <Btn variant="outline" onClick={onPrev}>← 上一步</Btn>

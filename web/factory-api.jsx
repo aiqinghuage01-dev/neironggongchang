@@ -18,15 +18,24 @@ function _emitApi(info) {
   window.__apiLast = info;
   try { window.dispatchEvent(new CustomEvent("api-call", { detail: info })); } catch(e){}
 }
-// D-069 follow-up: fetch 网络层错误 (TypeError "Failed to fetch") 检测.
-// 触发场景: backend 没起 / 重启窗口 / 网络中断 / CORS preflight 失败.
-// 这类错误**不会进 _handleErrorResponse** (没收到响应), 必须在外层 catch 转译,
-// 否则用户看到 "Failed to fetch" / "Load failed" 等纯英文技术词 (D-069 没覆盖到的边界).
+// D-069 follow-up / D-086: fetch 网络层错误检测 + retry + timeout
+// 网络层错误 (TypeError, Failed to fetch, AbortError 等) 不会进 _handleErrorResponse,
+// 必须外层捕获 + 转友好文案 (走 normalizeErrorMessage, 全站事实源在 factory-errors.jsx).
 function _isNetworkError(e) {
   if (!e) return false;
   if (e instanceof TypeError) return true;  // fetch 失败标准抛 TypeError
   const msg = String(e.message || e || "").toLowerCase();
-  return /failed to fetch|load failed|network|networkerror|err_connection/i.test(msg);
+  return /failed to fetch|load failed|network|networkerror|err_connection|aborterror|aborted/i.test(msg);
+}
+
+// D-086: 给 fetch 加 120s 默认 timeout. backend 半活 / 长任务卡死时不能让浏览器
+// 一直挂着. 长任务都已经异步化 (返 task_id), 120s 不会误杀正常请求.
+const FETCH_TIMEOUT_MS = 120000;
+
+function _fetchWithTimeout(url, opts) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS);
+  return fetch(url, { ...opts, signal: ctrl.signal }).finally(() => clearTimeout(timer));
 }
 
 async function _trace(method, path, fn) {
@@ -45,8 +54,11 @@ async function _trace(method, path, fn) {
         return data;
       } catch (e2) {
         _emitApi({ method, path, ms: Date.now() - t0, ok: false, error: String(e2.message || e2), at: Date.now(), retried: true });
-        // 转友好 Error, 避免用户看到 "Failed to fetch" 纯英文技术词
-        throw new Error("后端连接失败 (服务可能正在重启), 稍等几秒再点一次");
+        // D-086: 用全站 normalizeErrorMessage 转译, 不再硬编码文案 (factory-errors.jsx 是单一事实源)
+        const friendly = (typeof normalizeErrorMessage === "function")
+          ? normalizeErrorMessage(e2)
+          : "后端连接失败 (服务可能正在重启), 稍等几秒再点一次";
+        throw new Error(friendly);
       }
     }
     _emitApi({ method, path, ms: Date.now() - t0, ok: false, error: String(e.message || e), at: Date.now() });
@@ -100,28 +112,28 @@ const api = {
   },
   get(path) {
     return _trace("GET", path, async () => {
-      const r = await fetch(`${API_BASE}${path}`, { headers: _baseHeaders() });
+      const r = await _fetchWithTimeout(`${API_BASE}${path}`, { headers: _baseHeaders() });
       if (!r.ok) throw await _handleErrorResponse(r);
       return r.json();
     });
   },
   post(path, body) {
     return _trace("POST", path, async () => {
-      const r = await fetch(`${API_BASE}${path}`, { method: "POST", headers: _baseHeaders({ "Content-Type": "application/json" }), body: JSON.stringify(body || {}) });
+      const r = await _fetchWithTimeout(`${API_BASE}${path}`, { method: "POST", headers: _baseHeaders({ "Content-Type": "application/json" }), body: JSON.stringify(body || {}) });
       if (!r.ok) throw await _handleErrorResponse(r);
       return r.json();
     });
   },
   patch(path, body) {
     return _trace("PATCH", path, async () => {
-      const r = await fetch(`${API_BASE}${path}`, { method: "PATCH", headers: _baseHeaders({ "Content-Type": "application/json" }), body: JSON.stringify(body || {}) });
+      const r = await _fetchWithTimeout(`${API_BASE}${path}`, { method: "PATCH", headers: _baseHeaders({ "Content-Type": "application/json" }), body: JSON.stringify(body || {}) });
       if (!r.ok) throw await _handleErrorResponse(r);
       return r.json();
     });
   },
   del(path) {
     return _trace("DELETE", path, async () => {
-      const r = await fetch(`${API_BASE}${path}`, { method: "DELETE", headers: _baseHeaders() });
+      const r = await _fetchWithTimeout(`${API_BASE}${path}`, { method: "DELETE", headers: _baseHeaders() });
       if (!r.ok) throw await _handleErrorResponse(r);
       return r.json();
     });
@@ -130,7 +142,7 @@ const api = {
     return _trace("UPLOAD", path, async () => {
       const fd = new FormData();
       fd.append(fieldName, file);
-      const r = await fetch(`${API_BASE}${path}`, { method: "POST", headers: _baseHeaders(), body: fd });
+      const r = await _fetchWithTimeout(`${API_BASE}${path}`, { method: "POST", headers: _baseHeaders(), body: fd });
       if (!r.ok) throw await _handleErrorResponse(r);
       return r.json();
     });
