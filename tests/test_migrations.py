@@ -234,3 +234,61 @@ def test_apply_migrations_safe_when_called_multiple_times_same_db(tmp_db):
     v2 = migrations.apply_migrations()  # cache hit, 不重跑
     v3 = migrations.apply_migrations()
     assert v1 == v2 == v3 == 1
+
+
+# ─── P3 边界 (D-084 follow-up): DB 文件被删 cache 应失效 ──────
+
+
+def test_apply_migrations_recovers_from_db_file_deletion(tmp_db):
+    """P3: 同路径 DB 在进程存活期间被删, cache 应失效, apply 重新建表.
+
+    场景: 测试 fixture cleanup / 用户外部删库 / 调试场景.
+    没这个保护: cache 命中 → 跳过 → 业务 CRUD 撞 'no such table'.
+    """
+    from backend.services import migrations
+    from shortvideo.db import current_db_path
+
+    # 第一次 apply, 建库
+    migrations.apply_migrations()
+    db_path = current_db_path()
+    assert db_path.exists()
+
+    # 删 DB 文件 (cache 仍记着上次的 db_key)
+    db_path.unlink()
+    assert not db_path.exists()
+
+    # 再次 apply: cache 应失效, 重新建库
+    v = migrations.apply_migrations()
+    assert v == 1
+    assert db_path.exists(), "DB 文件应被重新创建"
+
+    # schema 完整性: 10 张表应该全在
+    import sqlite3
+    with sqlite3.connect(str(db_path)) as con:
+        rows = con.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+        ).fetchall()
+    actual = {r[0] for r in rows}
+    assert EXPECTED_TABLES <= actual, f"DB 重建后缺表: {EXPECTED_TABLES - actual}"
+
+
+def test_apply_migrations_recovers_from_schema_version_drop(tmp_db):
+    """P3 变种: 同路径 DB 在但 schema_version 表被 DROP → cache 应失效."""
+    import sqlite3
+    from backend.services import migrations
+    from shortvideo.db import current_db_path
+
+    migrations.apply_migrations()
+
+    # 模拟有人手动 DROP schema_version 表 (调试 / 误操作)
+    with sqlite3.connect(str(current_db_path())) as con:
+        con.execute("DROP TABLE schema_version")
+        con.commit()
+
+    # 再 apply: 应该重建 schema_version
+    v = migrations.apply_migrations()
+    assert v == 1
+
+    with sqlite3.connect(str(current_db_path())) as con:
+        rows = con.execute("SELECT version FROM schema_version").fetchall()
+    assert rows == [(1,)], f"schema_version 应被重建为 v=1, 实际 {rows}"

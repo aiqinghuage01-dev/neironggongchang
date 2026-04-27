@@ -334,21 +334,44 @@ def _peek_current_version() -> int:
         return _current_version(con)
 
 
+def _cache_still_valid(db_key: str) -> bool:
+    """P3 (D-084 follow-up): cache hit 时验证 DB 实际状态.
+
+    防 "同路径 DB 进程存活期被删 → _applied_db_key 仍命中 → 跳过重建":
+    - DB 文件不存在 → cache 失效
+    - schema_version 表不存在或没有 v1 行 → cache 失效
+
+    返回 True = cache 可信, 短路返回; False = 需要重跑迁移.
+    """
+    if _applied_db_key != db_key:
+        return False
+    try:
+        if not current_db_path().exists():
+            return False
+        return _peek_current_version() >= 1
+    except Exception:
+        return False
+
+
 def apply_migrations() -> int:
     """启动时调用. 应用所有未应用的 migration. 返回当前版本号.
 
     幂等:
-    - 同一进程内多次调用安全 (_applied_db_key 跟踪)
+    - 同一进程内多次调用安全 (_applied_db_key 跟踪 + DB 文件/schema 实际验证)
     - DB 路径变了自动重跑 (兼容 pytest monkeypatch)
+    - DB 文件被删自动重跑 (P3 边界, D-084 follow-up)
     - SQL 用 IF NOT EXISTS / INSERT OR IGNORE 兜底
     """
     global _applied_db_key
     db_key = current_db_key()
-    if _applied_db_key == db_key:
+    if _cache_still_valid(db_key):
         return _peek_current_version()
     with _apply_lock:
-        if _applied_db_key == db_key:
+        if _cache_still_valid(db_key):
             return _peek_current_version()
+        # cache 失效 (DB 被删 / schema 缺) → 强制重跑前清掉标记
+        if _applied_db_key == db_key:
+            _applied_db_key = None
         with closing(get_connection()) as con:
             table_stmts, index_stmts = _split_v1_baseline()
             # Step 1: CREATE TABLE (老表跳过, 不会撞索引列缺失)
