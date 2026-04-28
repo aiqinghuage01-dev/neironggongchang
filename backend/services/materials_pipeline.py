@@ -259,11 +259,29 @@ def _write_pending_move(
     suggested_folder: str | None,
     reason: str | None,
     is_new: bool = False,
-) -> None:
-    """写归档建议到 material_pending_moves (待审核)."""
+    *,
+    reset_review: bool = False,
+) -> str:
+    """写归档建议到 material_pending_moves (待审核).
+
+    B'-2 (GPT 修订): 已 approved / rejected 默认不覆盖, 历史审核结论保留;
+    显式 reset_review=True 才重置成 pending. 防止 force 重打把老板的审核结果抹掉.
+
+    返回:
+      "written"           — 实写 / 替换 pending
+      "skipped_approved"  — 已通过, 不覆盖
+      "skipped_rejected"  — 已跳过, 不覆盖
+      "noop_no_folder"    — 没建议 folder, 不写
+    """
     if not suggested_folder:
-        return
+        return "noop_no_folder"
     with closing(get_connection()) as con:
+        existing = con.execute(
+            "SELECT status FROM material_pending_moves WHERE asset_id=?",
+            (asset_id,),
+        ).fetchone()
+        if existing and not reset_review and existing[0] in ("approved", "rejected"):
+            return f"skipped_{existing[0]}"
         con.execute(
             "INSERT OR REPLACE INTO material_pending_moves "
             "(asset_id, suggested_folder, is_new_folder, reason, status, created_at) "
@@ -272,6 +290,7 @@ def _write_pending_move(
              (reason or "")[:200], "pending", int(time.time())),
         )
         con.commit()
+        return "written"
 
 
 # ─── 核心: tag_asset 单条 ────────────────────────────────
@@ -312,8 +331,9 @@ def tag_asset(asset_id: str, *, force: bool = False) -> dict[str, Any]:
     if not result or not result.get("tags"):
         result = _filename_heuristic(asset)
         source = "heuristic"
-    # 写 DB
-    n_tags = _write_tags(asset_id, result["tags"], source=source if source == "llm" else "ai",
+    # 写 DB. B'-2 (GPT 修订): source 直传 (llm/heuristic), 不再强转 "ai".
+    # 这样 material_tags.source 能区分纯启发式 vs LLM, 后续筛"低可信 fallback 标签"才准.
+    n_tags = _write_tags(asset_id, result["tags"], source=source,
                          confidence=0.7 if source == "llm" else 0.4)
     if result.get("folder") and result["folder"] != asset.get("rel_folder"):
         _write_pending_move(asset_id, result["folder"], result.get("reason"),

@@ -535,3 +535,139 @@ def test_api_tag_batch_returns_task_id(tmp_db, tmp_thumb_dir, tmp_root, monkeypa
     t = tasks_service.get_task(d["task_id"])
     assert t["status"] == "ok"
     assert t["result"]["scanned"] == 3
+
+
+# ─── B'-2 pending 不覆盖审核 + heuristic source ─────────────
+
+
+def test_pending_move_skips_approved(tmp_db, tmp_thumb_dir, tmp_root):
+    """已 approved 的素材, 再调 _write_pending_move 默认不覆盖, 保留历史结论."""
+    from backend.services.materials_service import (
+        scan_root, list_assets, approve_pending,
+    )
+    from backend.services.materials_pipeline import _write_pending_move
+    from shortvideo.db import get_connection
+    scan_root()
+    aid = list_assets()[0]["id"]
+    _write_pending_move(aid, "01 通过组", "first round", is_new=True)
+    approve_pending(aid)
+    # 第二轮 AI 又建议这条改归档 → 应被守
+    rv = _write_pending_move(aid, "02 不一样", "second round", is_new=True)
+    assert rv == "skipped_approved"
+    with get_connection() as con:
+        row = con.execute(
+            "SELECT suggested_folder, status FROM material_pending_moves WHERE asset_id=?",
+            (aid,),
+        ).fetchone()
+    # 历史结论保留: 还是第一轮的 folder + status=approved
+    assert row[0] == "01 通过组"
+    assert row[1] == "approved"
+
+
+def test_pending_move_skips_rejected(tmp_db, tmp_thumb_dir, tmp_root):
+    """已 rejected 的素材, 再写 pending 默认不覆盖."""
+    from backend.services.materials_service import scan_root, list_assets, reject_pending
+    from backend.services.materials_pipeline import _write_pending_move
+    from shortvideo.db import get_connection
+    scan_root()
+    aid = list_assets()[0]["id"]
+    _write_pending_move(aid, "01 想搬", "first", is_new=True)
+    reject_pending(aid)
+    rv = _write_pending_move(aid, "02 又想搬", "second", is_new=True)
+    assert rv == "skipped_rejected"
+    with get_connection() as con:
+        st = con.execute(
+            "SELECT status FROM material_pending_moves WHERE asset_id=?", (aid,)
+        ).fetchone()[0]
+    assert st == "rejected"
+
+
+def test_pending_move_reset_review_overrides_history(tmp_db, tmp_thumb_dir, tmp_root):
+    """显式 reset_review=True 才能覆盖审核过的结论 (重打/重审用)."""
+    from backend.services.materials_service import scan_root, list_assets, reject_pending
+    from backend.services.materials_pipeline import _write_pending_move
+    from shortvideo.db import get_connection
+    scan_root()
+    aid = list_assets()[0]["id"]
+    _write_pending_move(aid, "01 旧建议", "old", is_new=True)
+    reject_pending(aid)
+    rv = _write_pending_move(aid, "99 新建议", "new", is_new=True, reset_review=True)
+    assert rv == "written"
+    with get_connection() as con:
+        row = con.execute(
+            "SELECT suggested_folder, status FROM material_pending_moves WHERE asset_id=?", (aid,)
+        ).fetchone()
+    assert row[0] == "99 新建议"
+    assert row[1] == "pending"
+
+
+def test_pending_move_overwrites_existing_pending(tmp_db, tmp_thumb_dir, tmp_root):
+    """status='pending' (还没审) 的可以被覆盖, 不需要 reset_review.
+    场景: 改 prompt 重出建议, 老板还没审, 直接换最新."""
+    from backend.services.materials_service import scan_root, list_assets
+    from backend.services.materials_pipeline import _write_pending_move
+    from shortvideo.db import get_connection
+    scan_root()
+    aid = list_assets()[0]["id"]
+    _write_pending_move(aid, "01 第一稿", "v1", is_new=True)
+    rv = _write_pending_move(aid, "02 第二稿", "v2", is_new=True)
+    assert rv == "written"
+    with get_connection() as con:
+        row = con.execute(
+            "SELECT suggested_folder FROM material_pending_moves WHERE asset_id=?", (aid,)
+        ).fetchone()
+    assert row[0] == "02 第二稿"
+
+
+def test_pending_move_no_folder_is_noop(tmp_db, tmp_thumb_dir, tmp_root):
+    from backend.services.materials_service import scan_root, list_assets
+    from backend.services.materials_pipeline import _write_pending_move
+    scan_root()
+    aid = list_assets()[0]["id"]
+    assert _write_pending_move(aid, "", "x", is_new=True) == "noop_no_folder"
+    assert _write_pending_move(aid, None, "x", is_new=True) == "noop_no_folder"
+
+
+def test_tag_asset_falls_back_writes_heuristic_source(tmp_db, tmp_thumb_dir, tmp_root, monkeypatch):
+    """LLM 失败走 heuristic 时, material_tags.source 应是 'heuristic' 不是 'ai'.
+    这样后续筛低可信 fallback 标签才有依据 (GPT P3 修订)."""
+    from backend.services.materials_service import scan_root, list_assets
+    from backend.services.materials_pipeline import tag_asset
+    from shortvideo.db import get_connection
+
+    class _FailAi:
+        def chat(self, *a, **kw):
+            raise RuntimeError("LLM 假装挂")
+    monkeypatch.setattr("shortvideo.ai.get_ai_client", lambda **kw: _FailAi())
+
+    scan_root()
+    aid = next(a["id"] for a in list_assets() if a["filename"] == "raise_hand.jpg")
+    r = tag_asset(aid)
+    assert r["source"] == "heuristic"
+    # tags 里至少 1 个, source='heuristic' 而非 'ai'
+    with get_connection() as con:
+        sources = [s[0] for s in con.execute(
+            "SELECT t.source FROM material_tags t "
+            "JOIN material_asset_tags at ON at.tag_id=t.id "
+            "WHERE at.asset_id=?", (aid,)
+        ).fetchall()]
+    assert len(sources) > 0
+    assert all(s == "heuristic" for s in sources), f"想要全 heuristic, 实拿 {sources}"
+
+
+def test_tag_asset_llm_writes_llm_source(tmp_db, tmp_thumb_dir, tmp_root, monkeypatch, mock_ai):
+    """LLM 成功时, material_tags.source 应是 'llm'."""
+    from backend.services.materials_service import scan_root, list_assets
+    from backend.services.materials_pipeline import tag_asset
+    from shortvideo.db import get_connection
+    scan_root()
+    aid = list_assets()[0]["id"]
+    fake = mock_ai('{"tags": ["独特LLM标签XYZ"], "folder": null, "is_new": false, "reason": "ok"}')
+    monkeypatch.setattr("shortvideo.ai.get_ai_client", lambda **kw: fake)
+    tag_asset(aid)
+    with get_connection() as con:
+        srcs = [s[0] for s in con.execute(
+            "SELECT t.source FROM material_tags t WHERE t.name=?",
+            ("独特LLM标签XYZ",),
+        ).fetchall()]
+    assert "llm" in srcs
