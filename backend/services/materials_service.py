@@ -521,6 +521,84 @@ def list_recent_activity(limit: int = 10) -> list[dict[str, Any]]:
     return events[:limit]
 
 
+def search_assets(query: str, limit: int = 30) -> list[dict[str, Any]]:
+    """全库搜索: 模糊匹配 filename / rel_folder / tag name (D-087 整改 follow-up).
+
+    返回与 list_assets 相同结构 (含 tags + hits).
+    query 空 / 全空白 → 返 [].
+    LIKE 用 %query% 双侧通配, 大小写不敏感 (SQLite COLLATE NOCASE).
+
+    匹配优先级 (SQL ORDER):
+    1. filename 命中 (高分)
+    2. tag name 命中 (中分, 不重复)
+    3. rel_folder 命中 (低分)
+    """
+    _ensure_schema()
+    q = (query or "").strip()
+    if not q:
+        return []
+    pat = f"%{q}%"
+    seen: set[str] = set()
+    out: list[dict[str, Any]] = []
+    with closing(get_connection()) as con:
+        con.row_factory = sqlite3.Row
+        # filename 命中 (优先)
+        rows = con.execute(
+            "SELECT * FROM material_assets WHERE filename LIKE ? COLLATE NOCASE "
+            "ORDER BY imported_at DESC LIMIT ?",
+            (pat, limit),
+        ).fetchall()
+        for r in rows:
+            d = dict(r)
+            seen.add(d["id"])
+            out.append(d)
+        # tag name 命中 (补)
+        if len(out) < limit:
+            tag_rows = con.execute(
+                """SELECT a.* FROM material_assets a
+                   JOIN material_asset_tags at ON at.asset_id = a.id
+                   JOIN material_tags t ON t.id = at.tag_id
+                   WHERE t.name LIKE ? COLLATE NOCASE
+                   ORDER BY a.imported_at DESC LIMIT ?""",
+                (pat, limit),
+            ).fetchall()
+            for r in tag_rows:
+                if r["id"] in seen:
+                    continue
+                seen.add(r["id"])
+                out.append(dict(r))
+                if len(out) >= limit:
+                    break
+        # rel_folder 命中 (兜底)
+        if len(out) < limit:
+            folder_rows = con.execute(
+                "SELECT * FROM material_assets WHERE rel_folder LIKE ? COLLATE NOCASE "
+                "ORDER BY imported_at DESC LIMIT ?",
+                (pat, limit),
+            ).fetchall()
+            for r in folder_rows:
+                if r["id"] in seen:
+                    continue
+                seen.add(r["id"])
+                out.append(dict(r))
+                if len(out) >= limit:
+                    break
+        # 给每条加 tags + hits
+        for d in out[:limit]:
+            tag_rows = con.execute(
+                """SELECT t.id, t.name, t.source FROM material_tags t
+                   JOIN material_asset_tags at ON at.tag_id = t.id
+                   WHERE at.asset_id = ?""",
+                (d["id"],),
+            ).fetchall()
+            d["tags"] = [{"id": t[0], "name": t[1], "source": t[2]} for t in tag_rows]
+            d["hits"] = con.execute(
+                "SELECT COUNT(*) FROM material_usage_log WHERE asset_id = ?",
+                (d["id"],),
+            ).fetchone()[0]
+    return out[:limit]
+
+
 def list_top_used(limit: int = 5) -> list[dict[str, Any]]:
     """L1 右栏 🏆 最常用 Top 5. SQL JOIN hits DESC."""
     _ensure_schema()

@@ -2025,6 +2025,13 @@ def material_lib_top_used(limit: int = 5):
     return {"items": ms.list_top_used(limit=limit)}
 
 
+@app.get("/api/material-lib/search", tags=["档案部"], summary="(D-087) 全库搜索 (filename/tag/folder 模糊匹配)")
+def material_lib_search(q: str = "", limit: int = 30):
+    from backend.services import materials_service as ms
+    items = ms.search_assets(q, limit=limit)
+    return {"q": q, "count": len(items), "items": items}
+
+
 # ─── D-087 Day 2: AI 打标 ───────────────────────────────
 
 

@@ -539,3 +539,103 @@ def test_top_used_sorted_by_hits(tmp_db, tmp_thumb_dir, tmp_root):
     assert top[0]["id"] == items[0]["id"]
     assert top[0]["hits"] == 2
     assert top[1]["hits"] == 1
+
+
+# ─── search_assets 全库搜索 (D-087 整改 follow-up) ────────
+
+
+def test_search_empty_query_returns_empty(tmp_db, tmp_thumb_dir, tmp_root):
+    from backend.services.materials_service import search_assets, scan_root
+    scan_root()
+    assert search_assets("") == []
+    assert search_assets("   ") == []
+    assert search_assets(None) == []
+
+
+def test_search_matches_filename(tmp_db, tmp_thumb_dir, tmp_root):
+    from backend.services.materials_service import scan_root, search_assets
+    scan_root()
+    # tmp_root 含 raise_hand.jpg / podium.jpg / outside.jpg
+    r = search_assets("raise")
+    assert len(r) == 1
+    assert r[0]["filename"] == "raise_hand.jpg"
+
+
+def test_search_case_insensitive(tmp_db, tmp_thumb_dir, tmp_root):
+    from backend.services.materials_service import scan_root, search_assets
+    scan_root()
+    a = search_assets("RAISE")
+    b = search_assets("raise")
+    c = search_assets("Raise")
+    assert len(a) == len(b) == len(c) == 1
+
+
+def test_search_matches_folder(tmp_db, tmp_thumb_dir, tmp_root):
+    from backend.services.materials_service import scan_root, search_assets
+    scan_root()
+    r = search_assets("讲台")  # rel_folder = "00 讲台高光" or "00 讲台高光/提问"
+    names = {a["filename"] for a in r}
+    # 至少应该匹配讲台文件夹下的 raise_hand 和 podium
+    assert "raise_hand.jpg" in names
+    assert "podium.jpg" in names
+    # outside.jpg 在根目录, 不应匹配 "讲台"
+    assert "outside.jpg" not in names
+
+
+def test_search_matches_tag_name(tmp_db, tmp_thumb_dir, tmp_root):
+    """打了标签的素材, 搜标签名能找到."""
+    from backend.services.materials_service import scan_root, list_assets
+    from backend.services.materials_pipeline import _write_tags
+    from backend.services.materials_service import search_assets
+    scan_root()
+    items = list_assets()
+    aid = items[0]["id"]
+    _write_tags(aid, ["独特标签XY"])
+    r = search_assets("独特标签XY")
+    assert len(r) == 1
+    assert r[0]["id"] == aid
+
+
+def test_search_includes_tags_and_hits_in_result(tmp_db, tmp_thumb_dir, tmp_root):
+    """结果含 tags 列表 + hits 数 (跟 list_assets 同 schema)."""
+    from backend.services.materials_service import scan_root, list_assets, log_usage, search_assets
+    scan_root()
+    aid = list_assets()[0]["id"]
+    log_usage(aid, "x")
+    log_usage(aid, "y")
+    items = list_assets()
+    target = next(a for a in items if a["id"] == aid)
+    r = search_assets(target["filename"][:5])
+    assert len(r) >= 1
+    matched = next(a for a in r if a["id"] == aid)
+    assert "tags" in matched
+    assert isinstance(matched["tags"], list)
+    assert matched["hits"] == 2
+
+
+def test_search_limit(tmp_db, tmp_thumb_dir, tmp_root):
+    from backend.services.materials_service import scan_root, search_assets
+    scan_root()
+    # 搜 jpg 应该匹配多张, limit=2 截断
+    r = search_assets("jpg", limit=2)
+    assert len(r) == 2
+
+
+def test_search_no_match_returns_empty(tmp_db, tmp_thumb_dir, tmp_root):
+    from backend.services.materials_service import scan_root, search_assets
+    scan_root()
+    assert search_assets("xyzabcnotexist123") == []
+
+
+def test_search_dedupes_when_filename_and_tag_both_match(tmp_db, tmp_thumb_dir, tmp_root):
+    """同一素材既被 filename 匹配又被 tag 匹配, 只返回一次 (seen 去重)."""
+    from backend.services.materials_service import scan_root, list_assets, search_assets
+    from backend.services.materials_pipeline import _write_tags
+    scan_root()
+    items = list_assets()
+    target = next(a for a in items if a["filename"] == "raise_hand.jpg")
+    _write_tags(target["id"], ["raise"])  # 标签也叫 raise (跟 filename 部分匹配)
+    r = search_assets("raise")
+    # 不应该出现两次
+    ids = [a["id"] for a in r]
+    assert ids.count(target["id"]) == 1

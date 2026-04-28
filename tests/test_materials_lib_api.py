@@ -355,3 +355,50 @@ def test_usage_minimal_payload(populated_client):
     aid = items[0]["id"]
     r = populated_client.post("/api/material-lib/usage", json={"asset_id": aid})
     assert r.status_code == 200
+
+
+# ─── 全库搜索 (D-087 整改 follow-up) ────────────────────
+
+
+def test_search_empty_query_returns_empty(populated_client):
+    r = populated_client.get("/api/material-lib/search?q=")
+    assert r.status_code == 200
+    d = r.json()
+    assert d["count"] == 0
+    assert d["items"] == []
+
+
+def test_search_by_filename(populated_client):
+    r = populated_client.get("/api/material-lib/search?q=raise")
+    d = r.json()
+    assert d["count"] == 1
+    assert d["items"][0]["filename"] == "raise_hand.jpg"
+
+
+def test_search_by_folder_name(populated_client):
+    """搜 '讲台' 应该匹配 rel_folder 含讲台的素材."""
+    r = populated_client.get("/api/material-lib/search?q=讲台")
+    d = r.json()
+    names = {a["filename"] for a in d["items"]}
+    assert "raise_hand.jpg" in names
+    assert "podium.jpg" in names
+
+
+def test_search_no_match(populated_client):
+    r = populated_client.get("/api/material-lib/search?q=xyznoexist123")
+    d = r.json()
+    assert d["count"] == 0
+    assert d["items"] == []
+
+
+def test_search_with_limit(populated_client):
+    r = populated_client.get("/api/material-lib/search?q=jpg&limit=2")
+    d = r.json()
+    assert d["count"] == 2
+    assert len(d["items"]) == 2
+
+
+def test_search_returns_q_in_response(populated_client):
+    """响应应该 echo 原 query (前端展示用)."""
+    r = populated_client.get("/api/material-lib/search?q=raise")
+    assert r.json()["q"] == "raise"

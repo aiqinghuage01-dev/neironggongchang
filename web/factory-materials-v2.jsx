@@ -151,7 +151,7 @@ function MV2TopUsed({ items, loading, onPickAsset }) {
 
 
 function MV2L1Home({ stats, folders, loading, err, onPickFolder, onScan, scanning, onBatchTag, batchTagging,
-                    activity, topUsed, sideLoading, search, onSearch, onPickAsset }) {
+                    activity, topUsed, sideLoading, search, onSearch, searchResults, searching, onPickAsset }) {
   if (loading) return <div style={{ padding: 60, textAlign: "center", color: T.muted }}>加载中...</div>;
   const remainTag = stats ? Math.max(0, stats.total - stats.ai_tagged) : 0;
   return (
@@ -217,52 +217,84 @@ function MV2L1Home({ stats, folders, loading, err, onPickFolder, onScan, scannin
         />
       </div>
 
-      {/* 主分区操作条 */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-        <div style={{ fontSize: 13, color: T.muted, fontWeight: 500 }}>
-          主分区 · {folders.length} 个 · <span style={{ color: T.muted2 }}>点击进入</span>
-        </div>
-        <div style={{ display: "flex", gap: 6 }}>
-          {remainTag > 0 && (
-            <Btn
-              variant="outline" size="sm"
-              data-testid="mv2-l1-batch-tag-btn"
-              onClick={onBatchTag} disabled={batchTagging}
-              style={{ borderColor: T_GREEN, color: T_GREEN }}
-            >
-              {batchTagging ? "AI 打标中..." : `✨ AI 打 10 条 (剩 ${remainTag})`}
-            </Btn>
-          )}
-          <Btn variant="outline" size="sm" onClick={onScan} disabled={scanning}>
-            {scanning ? "扫描中..." : "🔄 重新扫描"}
-          </Btn>
-        </div>
-      </div>
-
-      {/* 主区 (左 文件夹大卡片 70%) + 右栏 (最近活动 + Top 5, 30%) */}
-      <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 280px", gap: 16 }}>
-        {/* 左: 8 文件夹大卡片 (2 列) */}
-        <div>
-          {folders.length === 0 ? (
-            <div style={{ padding: 60, background: "#fff", borderRadius: 10, border: `1px solid ${T.border}`, textAlign: "center", color: T.muted }}>
-              <div style={{ fontSize: 28, marginBottom: 8 }}>📂</div>
-              <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>素材库还是空的</div>
-              <div style={{ fontSize: 12, color: T.muted2, marginBottom: 14 }}>
-                把素材放到 {stats?.root || "~/Downloads/"}, 然后点 "🔄 重新扫描" 入库
-              </div>
-              <Btn variant="primary" size="md" onClick={onScan} disabled={scanning}>
-                {scanning ? "扫描中..." : "▶ 立即扫描"}
+      {/* 主分区操作条 (搜索时隐藏) */}
+      {!(search && search.trim()) && (
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+          <div style={{ fontSize: 13, color: T.muted, fontWeight: 500 }}>
+            主分区 · {folders.length} 个 · <span style={{ color: T.muted2 }}>点击进入</span>
+          </div>
+          <div style={{ display: "flex", gap: 6 }}>
+            {remainTag > 0 && (
+              <Btn
+                variant="outline" size="sm"
+                data-testid="mv2-l1-batch-tag-btn"
+                onClick={onBatchTag} disabled={batchTagging}
+                style={{ borderColor: T_GREEN, color: T_GREEN }}
+              >
+                {batchTagging ? "AI 打标中..." : `✨ AI 打 10 条 (剩 ${remainTag})`}
               </Btn>
+            )}
+            <Btn variant="outline" size="sm" onClick={onScan} disabled={scanning}>
+              {scanning ? "扫描中..." : "🔄 重新扫描"}
+            </Btn>
+          </div>
+        </div>
+      )}
+
+      {/* 主区 (左) + 右栏 (右栏一直可见) */}
+      <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 280px", gap: 16 }}>
+        <div>
+          {/* 搜索状态: 主区显示搜索结果. 否则: 文件夹大卡片 */}
+          {search && search.trim() ? (
+            <div data-testid="mv2-l1-search-results">
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                <div style={{ fontSize: 13, fontWeight: 500 }}>
+                  🔍 搜"<span style={{ color: T_GREEN }}>{search.trim()}</span>"
+                  <span style={{ color: T.muted2, fontWeight: 400, marginLeft: 6 }}>
+                    {searching ? "搜索中..." : `${searchResults.length} 条`}
+                  </span>
+                </div>
+                <span
+                  onClick={() => onSearch("")}
+                  style={{ fontSize: 11.5, color: T.muted2, cursor: "pointer" }}
+                >✕ 清空</span>
+              </div>
+              {searching ? (
+                <div style={{ padding: 40, textAlign: "center", color: T.muted }}>搜索中...</div>
+              ) : searchResults.length === 0 ? (
+                <div style={{ padding: 40, textAlign: "center", color: T.muted, background: "#fff", borderRadius: 10 }}>
+                  没匹配到. 试试别的关键词 (能搜文件名 / 标签 / 文件夹路径)
+                </div>
+              ) : (
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
+                  {searchResults.map(a => (
+                    <MV2AssetCard key={a.id} asset={a} onClick={() => onPickAsset(a)} />
+                  ))}
+                </div>
+              )}
             </div>
           ) : (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 10 }}>
-              {folders.slice(0, 8).map(f => (
-                <MV2FolderCard key={f.folder} folder={f} onClick={() => onPickFolder(f.folder)} />
-              ))}
-            </div>
+            folders.length === 0 ? (
+              <div style={{ padding: 60, background: "#fff", borderRadius: 10, border: `1px solid ${T.border}`, textAlign: "center", color: T.muted }}>
+                <div style={{ fontSize: 28, marginBottom: 8 }}>📂</div>
+                <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>素材库还是空的</div>
+                <div style={{ fontSize: 12, color: T.muted2, marginBottom: 14 }}>
+                  把素材放到 {stats?.root || "~/Downloads/"}, 然后点 "🔄 重新扫描" 入库
+                </div>
+                <Btn variant="primary" size="md" onClick={onScan} disabled={scanning}>
+                  {scanning ? "扫描中..." : "▶ 立即扫描"}
+                </Btn>
+              </div>
+            ) : (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 10 }}>
+                {folders.slice(0, 8).map(f => (
+                  <MV2FolderCard key={f.folder} folder={f} onClick={() => onPickFolder(f.folder)} />
+                ))}
+              </div>
+            )
           )}
         </div>
-        {/* 右栏 */}
+        {/* 右栏 (一直可见) */}
         <div>
           <MV2RecentActivity events={activity || []} loading={sideLoading} />
           <MV2TopUsed items={topUsed || []} loading={sideLoading} onPickAsset={onPickAsset} />
@@ -867,7 +899,28 @@ function PageMaterialsV2({ onNav }) {
   const [err, setErr] = React.useState("");
   const [scanning, setScanning] = React.useState(false);
   const [batchTagging, setBatchTagging] = React.useState(false);
+  // 全库搜索 (D-087 整改 follow-up)
   const [search, setSearch] = React.useState("");
+  const [searchResults, setSearchResults] = React.useState([]);
+  const [searching, setSearching] = React.useState(false);
+
+  // debounce 300ms 触发搜索 (search 状态变后)
+  React.useEffect(() => {
+    const q = (search || "").trim();
+    if (!q) { setSearchResults([]); setSearching(false); return; }
+    setSearching(true);
+    const t = setTimeout(async () => {
+      try {
+        const r = await api.get(`/api/material-lib/search?q=${encodeURIComponent(q)}&limit=30`);
+        setSearchResults(r.items || []);
+      } catch (e) {
+        setErr(e.message);
+        setSearchResults([]);
+      }
+      setSearching(false);
+    }, 300);
+    return () => clearTimeout(t);
+  }, [search]);
 
   async function loadHome() {
     setLoading(true); setSideLoading(true); setErr("");
@@ -978,6 +1031,7 @@ function PageMaterialsV2({ onNav }) {
           onBatchTag={handleBatchTag} batchTagging={batchTagging}
           activity={activity} topUsed={topUsed} sideLoading={sideLoading}
           search={search} onSearch={setSearch}
+          searchResults={searchResults} searching={searching}
           onPickAsset={(a) => setPreviewAsset(a)}
         />
       )}
