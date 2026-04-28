@@ -361,7 +361,8 @@ def tag_batch(
         except Exception as e:
             log.warning(f"tag_batch 单条失败 {aid}: {e}")
             failed += 1
-        if on_progress and i % 2 == 0:
+        # 每条都推 (防 D-068 watchdog 误杀长任务 + 让前端进度条流畅)
+        if on_progress:
             try:
                 on_progress(i + 1, total, aid)
             except Exception:

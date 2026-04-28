@@ -2047,25 +2047,58 @@ def material_lib_tag(asset_id: str, force: bool = False):
 
 @app.post("/api/material-lib/tag-batch", tags=["档案部"], summary="(D-087) 批量打标 (异步, 走 tasks.run_async)")
 def material_lib_tag_batch(limit: int = 10, force: bool = False):
-    """异步批量打 N 条 (默认 10). 大批量请分多次调用. 真烧 credits 谨慎."""
+    """异步批量打 N 条 (默认 10, 全量打标传大 limit 如 5000).
+
+    全量打标 (~1600 条) 需要 ~1 小时 + ~$2-3 credits. 真烧前确认.
+    daemon 内每条 update_progress 推送防 D-068 watchdog 误杀 (estimated * 5 不够时被假杀).
+    """
     from backend.services import materials_pipeline as mp
     from backend.services import tasks as tasks_service
+    from shortvideo.db import get_connection
+    from contextlib import closing
+
+    # estimated 按 5s/条算 (LLM 平均响应 ~3s + DB 写入 buffer)
+    est = max(60, limit * 5)
 
     def _do():
-        return mp.tag_batch(limit=limit, force=force)
+        # 反查自己的 task_id (kind='materials.tag_batch' 最近 running)
+        my_tid = None
+        try:
+            with closing(get_connection()) as con:
+                r = con.execute(
+                    "SELECT id FROM tasks WHERE kind='materials.tag_batch' "
+                    "AND status='running' ORDER BY started_ts DESC LIMIT 1"
+                ).fetchone()
+                if r:
+                    my_tid = r[0]
+        except Exception:
+            pass
+
+        def progress_cb(i, total, aid):
+            # 每条都 update_progress (防 watchdog + 让前端看到实时进度)
+            if my_tid and total > 0:
+                try:
+                    pct = int(i * 100 / total)
+                    tasks_service.update_progress(
+                        my_tid, f"打标中 {i}/{total}", pct=pct,
+                    )
+                except Exception:
+                    pass
+
+        return mp.tag_batch(limit=limit, force=force, on_progress=progress_cb)
 
     task_id = tasks_service.run_async(
         kind="materials.tag_batch",
-        label=f"AI 打标{'(强制重打 ' + str(limit) + ')' if force else f'(限 {limit})'}",
+        label=f"AI 打标 ({'强制重打 ' + str(limit) if force else f'限 {limit}'})",
         ns="materials",
         page_id="materials",
         step="tag_batch",
         payload={"limit": limit, "force": force},
-        estimated_seconds=max(60, limit * 4),
-        progress_text="AI 给素材打标中...",
+        estimated_seconds=est,
+        progress_text=f"AI 给 {limit} 条素材打标中...",
         sync_fn=_do,
     )
-    return {"task_id": task_id, "status": "running"}
+    return {"task_id": task_id, "status": "running", "estimated_seconds": est}
 
 
 @app.delete("/api/materials/{material_id}", tags=["档案部"], summary="删素材")

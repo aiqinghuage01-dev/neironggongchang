@@ -225,14 +225,24 @@ function MV2L1Home({ stats, folders, loading, err, onPickFolder, onScan, scannin
           </div>
           <div style={{ display: "flex", gap: 6 }}>
             {remainTag > 0 && (
-              <Btn
-                variant="outline" size="sm"
-                data-testid="mv2-l1-batch-tag-btn"
-                onClick={onBatchTag} disabled={batchTagging}
-                style={{ borderColor: T_GREEN, color: T_GREEN }}
-              >
-                {batchTagging ? "AI 打标中..." : `✨ AI 打 10 条 (剩 ${remainTag})`}
-              </Btn>
+              <>
+                <Btn
+                  variant="outline" size="sm"
+                  data-testid="mv2-l1-batch-tag-btn"
+                  onClick={() => onBatchTag(false)} disabled={batchTagging}
+                  style={{ borderColor: T_GREEN, color: T_GREEN }}
+                >
+                  {batchTagging ? "AI 打标中..." : `✨ AI 打 10 条 (剩 ${remainTag})`}
+                </Btn>
+                <Btn
+                  variant="primary" size="sm"
+                  data-testid="mv2-l1-batch-tag-full-btn"
+                  onClick={() => onBatchTag(true)} disabled={batchTagging}
+                  style={{ background: T_GREEN, borderColor: T_GREEN }}
+                >
+                  {batchTagging ? "..." : `✨ 全量 (${remainTag})`}
+                </Btn>
+              </>
             )}
             <Btn variant="outline" size="sm" onClick={onScan} disabled={scanning}>
               {scanning ? "扫描中..." : "🔄 重新扫描"}
@@ -970,16 +980,32 @@ function PageMaterialsV2({ onNav }) {
     setScanning(false);
   }
 
-  async function handleBatchTag() {
+  async function handleBatchTag(full) {
+    // full=true 全量打 (剩余所有未打标的) · full=false 打 10 条
+    const remain = stats ? Math.max(0, stats.total - stats.ai_tagged) : 0;
+    const limit = full ? Math.max(10, remain + 5) : 10;
+    if (full) {
+      const ok = window.confirm(
+        `即将给 ${remain} 条未打标素材全量 AI 打标. \n` +
+        `\n` +
+        `· 预计耗时 ~${Math.max(1, Math.round(remain * 3 / 60))} 分钟\n` +
+        `· 烧 credits ~$${(remain * 0.0015).toFixed(2)}\n` +
+        `\n` +
+        `任务后台跑, 跑完自动刷新. 确定吗?`
+      );
+      if (!ok) return;
+    }
     setBatchTagging(true); setErr("");
     try {
-      const r = await api.post("/api/material-lib/tag-batch?limit=10");
+      const r = await api.post(`/api/material-lib/tag-batch?limit=${limit}`);
       const taskId = r.task_id;
-      // 轮询 (最多 3 分钟)
+      const estSec = r.estimated_seconds || 60;
+      // 轮询: 全量给 ~2 倍预估时间, 小批 3 分钟
+      const maxWait = full ? estSec * 2 * 1000 : 180000;
       let waited = 0;
-      while (waited < 180000) {
-        await new Promise(res => setTimeout(res, 3000));
-        waited += 3000;
+      while (waited < maxWait) {
+        await new Promise(res => setTimeout(res, full ? 5000 : 3000));
+        waited += full ? 5000 : 3000;
         try {
           const t = await api.get(`/api/tasks/${taskId}`);
           if (t.status === "ok") {
@@ -989,6 +1015,10 @@ function PageMaterialsV2({ onNav }) {
           if (t.status === "failed") {
             setErr(t.error || "批量打标失败");
             break;
+          }
+          // 全量时, 中途 reload stats 让 KPI 看到进度
+          if (full && waited % 30000 === 0) {
+            try { await loadHome(); } catch {}
           }
         } catch {}
       }
