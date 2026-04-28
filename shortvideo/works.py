@@ -153,11 +153,15 @@ def insert_work(
     metadata: str | None = None,
     local_path: str | None = None,
     created_at: int | None = None,
+    tokens_used: int = 0,
 ) -> int:
     """插入一条产物记录.
 
     D-065: 支持三类(text/image/video). 默认 type='video' 保持旧行为.
     final_text 默认空串(图/视频可不传, schema NOT NULL 兜底).
+    D-093: tokens_used 参数加了 — schema 一直有这列 + dataclass 也读这列, 但函数签名漏
+    暴露, 调用方传 tokens_used=N 会抛 TypeError 被上游 except 静默吞 → 13 条文字 task
+    完成 0 条入库. 现在合法.
     """
     init_db()
     with closing(_conn()) as c:
@@ -165,13 +169,13 @@ def insert_work(
             """INSERT INTO works
                (created_at, title, source_url, original_text, final_text,
                 avatar_id, speaker_id, status, type, source_skill,
-                thumb_path, metadata, local_path)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                thumb_path, metadata, local_path, tokens_used)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
                 created_at if created_at is not None else int(time.time()),
                 title, source_url, original_text, final_text,
                 avatar_id, speaker_id, status, type, source_skill,
-                thumb_path, metadata, local_path,
+                thumb_path, metadata, local_path, tokens_used,
             ),
         )
         c.commit()

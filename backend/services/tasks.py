@@ -577,6 +577,7 @@ def run_async(
 
 
 # D-065: 文字 skill 自动入作品库 helper (kind 前缀映射 source_skill)
+# D-093: 加 compliance — 漏了 8 条 compliance.check ok 任务全没入库
 _KIND_TO_SKILL = (
     ("baokuan.", "baokuan"),
     ("hotrewrite.", "hotrewrite"),
@@ -585,6 +586,7 @@ _KIND_TO_SKILL = (
     ("wechat.write", "wechat"),
     ("planner.", "planner"),
     ("moments.", "moments"),
+    ("compliance.", "compliance"),
 )
 
 
@@ -614,6 +616,19 @@ def _extract_text_from_result(r):
                             break
                 if parts:
                     return "\n\n---\n\n".join(parts)
+    # D-093: compliance.check 的双版本结构 {version_a:{content}, version_b:{content}}
+    # (不在 versions list 里, 字段名固定 a/b). 也可扩展到其他 multi-version skill.
+    parts = []
+    for k in ("version_a", "version_b"):
+        v = r.get(k)
+        if isinstance(v, dict):
+            for k2 in ("content", "text", "final_text", "script"):
+                if isinstance(v.get(k2), str) and v[k2].strip():
+                    label = "【A 版 · 干净版】" if k == "version_a" else "【B 版 · 保留卖点】"
+                    parts.append(f"{label}\n{v[k2].strip()}")
+                    break
+    if parts:
+        return "\n\n---\n\n".join(parts)
     return ""
 
 
@@ -655,8 +670,14 @@ def _autoinsert_text_work(*, kind: str, label: str | None, task_id: str, result:
             status="ready",
             metadata=json.dumps({"task_id": task_id, "kind": kind}, ensure_ascii=False),
         )
-    except Exception:
-        pass  # 回写失败不阻塞主流程
+    except Exception as e:
+        # D-093: 不再静默吞错. 之前 except: pass 把 insert_work 的 TypeError
+        # (tokens_used 参数 schema 错) 吃光, 13 条文字 task 完成 0 条入库, 老板用了几个月
+        # 都没人知道. 至少 log warning 让以后能在日志里抓到.
+        import logging
+        logging.getLogger("tasks._autoinsert_text_work").warning(
+            f"autoinsert text work failed for task={task_id} kind={kind} skill={skill}: {type(e).__name__}: {e}"
+        )
 
 
 def cleanup_old(days: int = 7) -> int:

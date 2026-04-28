@@ -4,7 +4,63 @@
 
 ---
 
-## 当前状态 (2026-04-28 · D-092 举一反三 — 同 session 3 次踩"看似工作其实没工作"的反思)
+## 当前状态 (2026-04-28 · D-093 F1 作品库全面排查 — 文字 skill 入库链路修)
+
+**版本**: v0.6.7 — 老板报告"作品库很多内容没展示出来", D-092 列了全项目排查清单 13 条,
+F1 作品库是 P0. 修完 12 条历史文字产出找回 + 链路恢复.
+
+### 触发 case + 真根因
+- 老板说"很多内容没展示出来" — 验证假设: DB 272 条 / API 也返 272 / **by_type 只有
+  image+video, text=0**. 所有文字 skill (公众号长文 / 热点改写 / 录音改写 / 投流 /
+  策划 / 审查 / 朋友圈 / 爆款) 产出都没入作品库.
+- 真根因 (复现 TypeError 100% 确认):
+  `tasks.py:_autoinsert_text_work` 调 `insert_work(tokens_used=...)` 但
+  `shortvideo/works.py:insert_work` 函数签名漏 tokens_used 参数 → 抛 TypeError →
+  被 `except Exception: pass` 静默吞光 → 13 条文字 ok task 完成 0 条入库. 老板用
+  了几个月没人发现.
+
+### D-093 修复 (4 处)
+1. `shortvideo/works.py:insert_work` 加 tokens_used 参数 (schema/dataclass 有这列,
+   函数签名漏). 写入 SQL VALUES.
+2. `backend/services/tasks.py:_KIND_TO_SKILL` 补 compliance — 历史 8 条 compliance.check
+   ok 即使修了 1 也不入库.
+3. `backend/services/tasks.py:_extract_text_from_result` 加 version_a/b 双版本结构识别
+   (compliance result 是 `{version_a:{content},version_b:{content}}` 嵌套, 不在
+   versions list 里).
+4. `backend/services/tasks.py:_autoinsert_text_work except` 改 log warning, **不再
+   静默吞** — 历史 bug 就是 except: pass 把 TypeError 吃光老板发现不了.
+
+### Backfill 老板历史产出
+- `scripts/backfill_text_works_d093.py` 把 13 条 ok 文字 task 重建成 works text 记录.
+  幂等 (用 metadata.task_id 唯一标识). 1 条文本过短跳过, 12 条真入: 8 compliance +
+  3 wechat 长文 + 1 baokuan 改写.
+
+### 测试
+- `tests/test_autoinsert_text_work.py` 7 case: insert_work tokens_used 参数 / KIND 含
+  compliance / 双版本识别 / 双版本缺 content 返空 / 普通路径不变 / except 改 log
+  warning / 端到端 mock 入库. fixture 自动清理 test-d093 残留不污染老板真 DB.
+- 541 通过 / 17 skip.
+
+### 闭环验证
+- DB 验: text works 12 条 (8 compliance + 3 wechat + 1 baokuan), backfill 幂等.
+- API 验: `/api/works/sources` by_type 含 `text:12`.
+- playwright :8001 真前端: 作品库顶栏 "📝 文字 12" tab 可见, 切到文字 + 全部时间, 12
+  张文字卡片真渲染, 公众号长文 / 违规审查 / 爆款改写来源 chip 正常分类. 截图
+  `/tmp/_ui_shots/d093_03_text_tab_full.png` 视觉确认 (老板今天的 wechat.write
+  也实时入了, 证明新代码生效).
+
+### 反思 (D-092 5 条规则的应用)
+- **规则 1 (验证假设)**: 写一行 `insert_work(tokens_used=999)` 真复现 TypeError, 不
+  靠"代码看着对".
+- **规则 2 (禁编造)**: 没编模型行为, 直接 grep + 数 DB.
+- **规则 3 (扫同类)**: 顺手补了 compliance + version_a/b 嵌套识别 + except 改 log,
+  不只修出错那一行.
+- **规则 4 (禁用语)**: 每次说结果都附数据 (12 条 / 7 case / 541 通过).
+- **规则 5 (做不到就明说)**: 没踩.
+
+---
+
+## 上一里程碑 (2026-04-28 · D-092 举一反三 — 同 session 3 次踩"看似工作其实没工作"的反思)
 
 **版本**: v0.6.6 — 老板批评"做事毛躁举一反三". 主动扫 D-088/D-091 v1 同类风险,
 3 项一项一项处理: 验证 → 决策 → 修.

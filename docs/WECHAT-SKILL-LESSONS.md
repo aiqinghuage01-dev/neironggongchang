@@ -225,7 +225,50 @@ D-091b 同款改** — 把 work 的东西改坏比改好风险大.
 
 ---
 
-## 10. 改完必跑的闭环 (CLAUDE.md 完工铁律)
+## 10. 静默 except 是 bug 温床 (D-093 教训)
+
+历史 case (老板用了几个月没人发现): `tasks._autoinsert_text_work` 调
+`insert_work(tokens_used=...)` 抛 TypeError → 外层 `except Exception: pass` 吞掉 →
+13 条文字 task 完成 0 条入作品库 → 老板看作品库以为"功能没做", 其实是 bug.
+
+**静默 except 的危害**:
+- 掩盖真 bug, 让"看似工作其实没工作"持续存在
+- D-088/D-091 v1/D-093 都是同型 — 表层 happy path 跑通, 底下 silent fail
+- 没监控、没告警、没 log → 没人会发现
+
+**铁律**: `except Exception: pass` 在生产代码里禁止. 至少:
+```python
+except Exception as e:
+    logging.getLogger(__name__).warning(f"... failed: {type(e).__name__}: {e}")
+```
+能在 stderr / 日志里看到错误就行, 不强求向上 raise (有时候是合理 best-effort), 但
+**至少留个证据**.
+
+**反例 (历史踩过)**:
+```python
+# tasks.py:_autoinsert_text_work (D-093 前)
+try:
+    insert_work(...)
+except Exception:
+    pass  # 回写失败不阻塞主流程  ← 看着体贴, 实际把 TypeError 藏 6 个月
+```
+
+**正例 (D-093 修后)**:
+```python
+except Exception as e:
+    logging.getLogger("tasks._autoinsert_text_work").warning(
+        f"autoinsert text work failed for task={task_id} kind={kind}: {type(e).__name__}: {e}"
+    )
+```
+
+**审查清单**: 改任何 `except: ...` / `except Exception:` 时问自己:
+- [ ] 我是不是在掩盖一个真 bug? (不知道答案就 log warning, 别 pass)
+- [ ] 失败时上层调用方能感知吗? (感知不到的话 log 是底线)
+- [ ] 测试是不是覆盖了 except 路径? (一般没有, 因为 except 默默走过去)
+
+---
+
+## 11. 改完必跑的闭环 (CLAUDE.md 完工铁律)
 
 公众号 skill 任何后端改动后:
 
