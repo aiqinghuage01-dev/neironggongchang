@@ -198,6 +198,8 @@ DEFAULT_ENGINE_ROUTES = {
     "insights.winning":      "deepseek",   # 抽 top works 共性,1 小时一次,DS 够
     "compliance.analyze":    "deepseek",  # 兼容 add_skill 骨架路径
     "compliance.write":      "opus",      # 同上
+    # 素材库 AI 打标 (D-087 B): 短 JSON, 1618 条全量, 速度优先 (DS 3s/条 vs Opus 100s+/条)
+    "materials.tag":         "deepseek",
 }
 
 
