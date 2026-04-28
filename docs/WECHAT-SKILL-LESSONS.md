@@ -322,7 +322,51 @@ if not key_field:  # 或更细的有效性判断
 
 ---
 
-## 12. 改完必跑的闭环 (CLAUDE.md 完工铁律)
+## 12. "做成视频" 链路按 seed 来源分流 (D-095)
+
+**老板原话**: "做成视频这块, 它应该是直接做成数字人视频. 点完之后就进入到数字人的
+流程, 声音克隆和数字人的流程, 现在是点完之后又回到主页了, 这个流程是不通的".
+
+**实际不是回主页**, 是 PageMakeV2 默认 step="script" 渲染 4-tab 起点选择 (📹 别人
+的视频 / 🎙️ 我自己录的 / 🔥 今天的热点 / ✏️ 已写好的文案), **视觉上像主页**.
+seed 设进 script state 但 activeTab 默认 "videoLink", 所以 textarea 在 tab 4 看不见.
+老板感觉"啥都没发生", 误以为回主页.
+
+**11 个 source skill** 都用同一个 seed 模式 `localStorage.setItem("make_v2_seed_script", text) + onNav("make")`,
+但 seedFrom.skill 字段两类语义:
+- **文案就绪** (baokuan/hotrewrite/voicerewrite/moments/planner/touliu/wechat/rework):
+  完整文案, 用户已选好, 直接进数字人合成
+- **草稿模板** (hot-topic/topic/viral): seed 是 `# 热点 ... 口播正文:\n` 占位, 用户
+  还得自己写正文, 留 script step 让 textarea 显示
+
+**修法** (`web/factory-make-v2.jsx` PageMakeV2):
+```js
+const READY_SKILLS = new Set([
+  "baokuan", "hotrewrite", "voicerewrite", "moments",
+  "planner", "touliu", "wechat", "rework",
+]);
+useEffect(() => {
+  if (seed && !script) {
+    setScript(seed);
+    setSeedFrom(from);
+    if (READY_SKILLS.has(from?.skill)) {
+      setStep("voice-dh");  // 直跳数字人合成
+    }
+    // 否则留 script step, 但 MakeV2StepScript 默认 plainText tab 让 textarea 显示
+  }
+}, []);
+```
+
+**MakeV2StepScript 改 activeTab 默认逻辑**: 不能用 useState 初值 (PageMakeV2 useEffect
+异步设入 seedFrom 跟不上), 用 useEffect 监听 seedFrom 变化时切到 plainText tab.
+
+**测试入口**: `/tmp/_baokuan_video_link.js` (文案就绪类直跳 voice-dh) +
+`/tmp/_hot_topic_link.js` (草稿类留 script + plainText tab) + `/tmp/_d095_all_sources.js`
+(spot check baokuan/hotrewrite/voicerewrite 真链路).
+
+---
+
+## 13. 改完必跑的闭环 (CLAUDE.md 完工铁律)
 
 公众号 skill 任何后端改动后:
 

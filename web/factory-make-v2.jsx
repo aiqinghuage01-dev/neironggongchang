@@ -34,6 +34,16 @@ function PageMakeV2({ onNav }) {
   const [renderTaskId, setRenderTaskId] = React.useState(null);   // Step 5 trigger
 
   // D-062c: 检测从其它 skill 跳来的 seed (localStorage make_v2_seed_script)
+  // D-095: seed 进来时根据来源类型分流:
+  //   - 文案就绪 skill (baokuan/hotrewrite/voicerewrite/moments/planner/touliu/wechat/rework):
+  //     直接跳 voice-dh, 进数字人合成. 老板要求"做成视频" 进数字人流程, 不停在起点 4 选 1.
+  //   - 模板/草稿 skill (hot-topic/topic/viral): seed 是 "口播正文:\n" 占位模板, 用户还得
+  //     自己写正文, 留在 script step 默认 plainText tab 让 textarea 显示出来.
+  //   想改文案点 voice-dh step 的"← 改文案" 仍可返 script step.
+  const READY_SKILLS = new Set([
+    "baokuan", "hotrewrite", "voicerewrite", "moments",
+    "planner", "touliu", "wechat", "rework",
+  ]);
   const [seedFrom, setSeedFrom] = React.useState(null);
   React.useEffect(() => {
     try {
@@ -41,8 +51,13 @@ function PageMakeV2({ onNav }) {
       const fromRaw = localStorage.getItem("make_v2_seed_from");
       if (seed && !script) {
         setScript(seed);
+        let from = null;
         if (fromRaw) {
-          try { setSeedFrom(JSON.parse(fromRaw)); } catch (_) {}
+          try { from = JSON.parse(fromRaw); setSeedFrom(from); } catch (_) {}
+        }
+        // D-095: 文案就绪类 skill 直跳 voice-dh; 否则留 script 让用户写正文
+        if (from && READY_SKILLS.has(from.skill)) {
+          setStep("voice-dh");
         }
         // 用完清掉 (避免下次还自动填)
         localStorage.removeItem("make_v2_seed_script");
@@ -217,7 +232,16 @@ function MakeV2StepScript({ script, setScript, onNext, onNav, seedFrom, onDismis
   // tab 2 我自己录的 → 跳录音改写
   // tab 3 今天的热点 → 拍这条 / 自粘热点 → 跳热点改写
   // tab 4 已写好的文案 → 做数字人 / 次"爆款改写洗一下"
+  // D-095: 模板/草稿 skill 带 seed 进来时 (hot-topic/topic/viral), 默认 plainText tab
+  // 让 textarea 直接显示, 否则用户进 videoLink tab 看到的是粘链接框, script seed 看不见.
+  // 用 useEffect 而非 useState 初值: PageMakeV2 useEffect 异步设入 seedFrom/script,
+  // useState 初值取的是 mount 时刻的空值, 跟不上.
   const [activeTab, setActiveTab] = React.useState("videoLink");
+  React.useEffect(() => {
+    if (seedFrom || (script && script.trim())) {
+      setActiveTab("plainText");
+    }
+  }, [seedFrom, script]);
   const [extractedBanner, setExtractedBanner] = React.useState(null); // {url, charCount} — tab 4 顶部 banner
   const [tab1Url, setTab1Url] = React.useState("");
   const [tab2Transcript, setTab2Transcript] = React.useState("");
