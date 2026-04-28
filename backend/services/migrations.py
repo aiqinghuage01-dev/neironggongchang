@@ -369,11 +369,34 @@ def _v3_pending_moves_review(con: sqlite3.Connection) -> None:
     )
 
 
+# ──────────────────────────────────────────
+# V4: B'-4 (GPT 修订) — material_assets 加 content_hash / last_seen_at / missing_at
+# 配合 _upsert_asset 三段查找 (path → content_hash → 新 uuid), 让 mv/改名不丢身份.
+# 存量 row content_hash=NULL (没扫描就不算), 下次 scan 第一段 path 命中时补上.
+# ──────────────────────────────────────────
+
+
+def _v4_asset_identity(con: sqlite3.Connection) -> None:
+    rows = con.execute("PRAGMA table_info(material_assets)").fetchall()
+    existing = {r[1] for r in rows}
+    new_cols = [
+        ("content_hash", "TEXT"),
+        ("last_seen_at", "INTEGER"),
+        ("missing_at", "INTEGER"),
+    ]
+    for col, typ in new_cols:
+        if col not in existing:
+            con.execute(f"ALTER TABLE material_assets ADD COLUMN {col} {typ}")
+    # content_hash 用于"按内容找回改名/移动的同一文件", 必须索引否则线性扫表慢
+    con.execute("CREATE INDEX IF NOT EXISTS idx_material_assets_content_hash ON material_assets(content_hash)")
+
+
 # 每条 migration: (version, note, sql_or_callable)
 # 类型为 str 时走 executescript; 为 callable 时调用 fn(conn) 执行 (适合幂等 ALTER 等情况).
 _MIGRATIONS: list[tuple[int, str, str | "callable"]] = [
     (2, "D-087 素材库 5 表 (material_assets/tags/asset_tags/usage_log/pending_moves)", _V2_MATERIALS_LIB),
     (3, "B'-3 pending_moves 加 confidence/no_move/suggestion_version/reviewed_at, 旧条目标 stale", _v3_pending_moves_review),
+    (4, "B'-4 material_assets 加 content_hash/last_seen_at/missing_at + index", _v4_asset_identity),
 ]
 
 

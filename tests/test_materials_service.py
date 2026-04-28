@@ -77,30 +77,47 @@ def tmp_root(monkeypatch, tmp_path):
     yield root
 
 
-# ─── _asset_id 哈希 ──────────────────────────────────────
+# ─── B'-4 (GPT 修订) 新 ID 方案 + content_hash ─────────────
+# 旧 _asset_id=sha1(path+mtime) 已删: 跟 abs_path UNIQUE 互相打架, mtime 一变就生
+# 新 aid 但 INSERT OR IGNORE 因 path 冲突静默失败, 库里没新 row 但函数仍返新 aid.
+# 新方案: 真新文件用 uuid (跟 path/mtime/content 解耦, 永不撞车), 已有 row 走
+# path 命中或 content_hash 命中, 不换 id.
 
 
-def test_asset_id_stable_for_same_input():
-    from backend.services.materials_service import _asset_id
-    a = _asset_id("/path/to/x.jpg", 12345)
-    b = _asset_id("/path/to/x.jpg", 12345)
-    assert a == b
+def test_new_asset_id_generates_unique_16_hex():
+    from backend.services.materials_service import _new_asset_id
+    a = _new_asset_id()
+    b = _new_asset_id()
+    assert a != b  # uuid 几乎不可能撞车
     assert len(a) == 16
     assert all(c in "0123456789abcdef" for c in a)
 
 
-def test_asset_id_changes_on_mtime_change():
-    from backend.services.materials_service import _asset_id
-    a = _asset_id("/path/to/x.jpg", 12345)
-    b = _asset_id("/path/to/x.jpg", 12346)
-    assert a != b
+def test_compute_content_hash_stable_for_same_bytes(tmp_path):
+    from backend.services.materials_service import _compute_content_hash
+    f = tmp_path / "x.bin"
+    f.write_bytes(b"hello world" * 100)
+    assert _compute_content_hash(str(f)) == _compute_content_hash(str(f))
 
 
-def test_asset_id_changes_on_path_change():
-    from backend.services.materials_service import _asset_id
-    a = _asset_id("/a.jpg", 12345)
-    b = _asset_id("/b.jpg", 12345)
-    assert a != b
+def test_compute_content_hash_differs_for_different_content(tmp_path):
+    from backend.services.materials_service import _compute_content_hash
+    a = tmp_path / "a.bin"; a.write_bytes(b"aaaa")
+    b = tmp_path / "b.bin"; b.write_bytes(b"bbbb")
+    assert _compute_content_hash(str(a)) != _compute_content_hash(str(b))
+
+
+def test_compute_content_hash_skips_huge_file(tmp_path):
+    from backend.services.materials_service import _compute_content_hash
+    f = tmp_path / "big.bin"
+    f.write_bytes(b"x" * 1024)  # 1KB
+    # 设小阈值模拟"超大文件"
+    assert _compute_content_hash(str(f), max_bytes=512) is None
+
+
+def test_compute_content_hash_returns_none_for_missing(tmp_path):
+    from backend.services.materials_service import _compute_content_hash
+    assert _compute_content_hash(str(tmp_path / "nope.bin")) is None
 
 
 # ─── _walk_root 白名单 ───────────────────────────────────
@@ -266,6 +283,216 @@ def test_upsert_asset_root_level_file_uses_dot(tmp_db, tmp_thumb_dir, tmp_root):
         con.commit()
     a = get_asset(aid)
     assert a["rel_folder"] == "."
+
+
+# ─── B'-4 (GPT 修订) asset identity 稳定性 ──────────────────
+
+
+def test_upsert_same_path_keeps_id_when_mtime_changes(tmp_db, tmp_thumb_dir, tmp_root):
+    """文件原地修改 (mtime 变) → 同 id, metadata 更新, 不生新 row.
+    旧逻辑: sha1(path+mtime) 让 id 变, INSERT OR IGNORE 因 path UNIQUE 静默失败,
+    库里仍是旧 row 但函数返新 aid + is_new=True (孤儿 aid).
+    新逻辑: 按 path 命中 → UPDATE → 返同 aid + is_new=False.
+    """
+    import os
+    from backend.services.materials_service import _upsert_asset, _ensure_schema
+    from shortvideo.db import get_connection
+    _ensure_schema()
+    target = tmp_root / "00 讲台高光" / "提问" / "raise_hand.jpg"
+    with get_connection() as con:
+        aid1, n1 = _upsert_asset(con, str(target), tmp_root)
+        con.commit()
+    # 改 mtime (模拟用户编辑文件)
+    new_mtime = target.stat().st_mtime + 1000
+    os.utime(target, (new_mtime, new_mtime))
+    with get_connection() as con:
+        aid2, n2 = _upsert_asset(con, str(target), tmp_root)
+        con.commit()
+    assert aid1 == aid2  # 同 id, 旧 logic 这里会断
+    assert n1 is True
+    assert n2 is False
+    # metadata 实际更新了
+    with get_connection() as con:
+        mtime_in_db = con.execute(
+            "SELECT file_ctime FROM material_assets WHERE id=?", (aid1,),
+        ).fetchone()[0]
+    assert mtime_in_db == int(new_mtime)
+
+
+def test_upsert_renamed_file_keeps_id_via_content_hash(tmp_db, tmp_thumb_dir, tmp_root):
+    """改名 (path 变, 内容不变) → 按 content_hash 找回同 row, 不重 INSERT."""
+    import shutil
+    from backend.services.materials_service import _upsert_asset, _ensure_schema
+    from shortvideo.db import get_connection
+    _ensure_schema()
+    target = tmp_root / "00 讲台高光" / "podium.jpg"
+    with get_connection() as con:
+        aid1, _ = _upsert_asset(con, str(target), tmp_root)
+        con.commit()
+    # 改名 (复制到新名后删旧文件 — 模拟 mv)
+    new_path = tmp_root / "00 讲台高光" / "renamed_podium.jpg"
+    shutil.copy2(target, new_path)
+    target.unlink()
+    with get_connection() as con:
+        aid2, n2 = _upsert_asset(con, str(new_path), tmp_root)
+        con.commit()
+    assert aid1 == aid2  # 同 id (按 content_hash 命中)
+    assert n2 is False
+    # abs_path 实际更新到新名
+    with get_connection() as con:
+        new_abs = con.execute(
+            "SELECT abs_path, filename FROM material_assets WHERE id=?", (aid1,),
+        ).fetchone()
+    assert new_abs[0] == str(new_path)
+    assert new_abs[1] == "renamed_podium.jpg"
+
+
+def test_upsert_moved_to_subfolder_keeps_id_via_content_hash(tmp_db, tmp_thumb_dir, tmp_root):
+    """换文件夹 (path 变, 内容不变) → 同 id, rel_folder 更新."""
+    import shutil
+    from backend.services.materials_service import _upsert_asset, _ensure_schema
+    from shortvideo.db import get_connection
+    _ensure_schema()
+    target = tmp_root / "00 讲台高光" / "podium.jpg"
+    with get_connection() as con:
+        aid1, _ = _upsert_asset(con, str(target), tmp_root)
+        con.commit()
+    new_folder = tmp_root / "01 板书课件"
+    new_path = new_folder / "podium.jpg"
+    shutil.copy2(target, new_path)
+    target.unlink()
+    with get_connection() as con:
+        aid2, n2 = _upsert_asset(con, str(new_path), tmp_root)
+        con.commit()
+    assert aid1 == aid2
+    assert n2 is False
+    with get_connection() as con:
+        rel = con.execute(
+            "SELECT rel_folder FROM material_assets WHERE id=?", (aid1,),
+        ).fetchone()[0]
+    assert rel == "01 板书课件"
+
+
+def test_upsert_real_new_file_gets_new_uuid(tmp_db, tmp_thumb_dir, tmp_root):
+    """真新文件 (path 没见过 + content_hash 没见过) → 新 uuid id."""
+    from PIL import Image
+    from backend.services.materials_service import _upsert_asset, _ensure_schema
+    from shortvideo.db import get_connection
+    _ensure_schema()
+    # 先存一张
+    a = tmp_root / "00 讲台高光" / "podium.jpg"
+    with get_connection() as con:
+        aid_a, _ = _upsert_asset(con, str(a), tmp_root)
+        con.commit()
+    # 加一张真新的 (内容也不一样)
+    b = tmp_root / "01 板书课件" / "totally_new.png"
+    Image.new("RGB", (50, 50), color="purple").save(b)
+    with get_connection() as con:
+        aid_b, n_b = _upsert_asset(con, str(b), tmp_root)
+        con.commit()
+    assert n_b is True
+    assert aid_a != aid_b  # 不同 id
+
+
+def test_upsert_renamed_file_preserves_tags_and_usage(tmp_db, tmp_thumb_dir, tmp_root):
+    """改名后 tags / usage / pending 全保留 (不孤儿).
+    这是 GPT 反复强调的核心: 主键不变 → join 表永远 join 得上.
+    """
+    import shutil
+    from backend.services.materials_service import _upsert_asset, _ensure_schema, log_usage
+    from backend.services.materials_pipeline import _write_tags, _write_pending_move
+    from shortvideo.db import get_connection
+    _ensure_schema()
+    target = tmp_root / "00 讲台高光" / "podium.jpg"
+    with get_connection() as con:
+        aid, _ = _upsert_asset(con, str(target), tmp_root)
+        con.commit()
+    # 给它打 tags + usage + pending
+    _write_tags(aid, ["mark1", "mark2"])
+    log_usage(aid, "test_work_1")
+    _write_pending_move(aid, "99 测试", "x", confidence=0.85)
+    # 改名
+    new_path = tmp_root / "00 讲台高光" / "renamed.jpg"
+    shutil.copy2(target, new_path)
+    target.unlink()
+    with get_connection() as con:
+        aid2, _ = _upsert_asset(con, str(new_path), tmp_root)
+        con.commit()
+    assert aid == aid2  # 同 id
+    # tags / usage / pending 全在
+    with get_connection() as con:
+        n_tags = con.execute(
+            "SELECT COUNT(*) FROM material_asset_tags WHERE asset_id=?", (aid,)
+        ).fetchone()[0]
+        n_usage = con.execute(
+            "SELECT COUNT(*) FROM material_usage_log WHERE asset_id=?", (aid,)
+        ).fetchone()[0]
+        n_pending = con.execute(
+            "SELECT COUNT(*) FROM material_pending_moves WHERE asset_id=?", (aid,)
+        ).fetchone()[0]
+    assert n_tags == 2
+    assert n_usage == 1
+    assert n_pending == 1
+
+
+def test_upsert_writes_content_hash_for_new_file(tmp_db, tmp_thumb_dir, tmp_root):
+    """新 INSERT 一定算 content_hash 写入, 给后续 mv 检测用."""
+    from backend.services.materials_service import _upsert_asset, _ensure_schema
+    from shortvideo.db import get_connection
+    _ensure_schema()
+    target = tmp_root / "00 讲台高光" / "podium.jpg"
+    with get_connection() as con:
+        aid, _ = _upsert_asset(con, str(target), tmp_root)
+        con.commit()
+        h = con.execute(
+            "SELECT content_hash FROM material_assets WHERE id=?", (aid,),
+        ).fetchone()[0]
+    assert h is not None
+    assert len(h) == 32
+
+
+def test_upsert_backfills_missing_content_hash_for_legacy_row(tmp_db, tmp_thumb_dir, tmp_root):
+    """存量 row content_hash NULL (V3→V4 升级时还没填) → 下次 scan 命中 path 时顺手补."""
+    from backend.services.materials_service import _upsert_asset, _ensure_schema
+    from shortvideo.db import get_connection
+    _ensure_schema()
+    target = tmp_root / "00 讲台高光" / "podium.jpg"
+    with get_connection() as con:
+        aid, _ = _upsert_asset(con, str(target), tmp_root)
+        # 模拟存量 row 没 hash
+        con.execute("UPDATE material_assets SET content_hash=NULL WHERE id=?", (aid,))
+        con.commit()
+    # 第二次 scan 同 path 同 mtime
+    with get_connection() as con:
+        aid2, n2 = _upsert_asset(con, str(target), tmp_root)
+        con.commit()
+        h = con.execute(
+            "SELECT content_hash FROM material_assets WHERE id=?", (aid,),
+        ).fetchone()[0]
+    assert aid == aid2
+    assert n2 is False
+    assert h is not None  # backfill 成功
+    assert len(h) == 32
+
+
+def test_upsert_updates_last_seen_at(tmp_db, tmp_thumb_dir, tmp_root):
+    """每次扫到都刷 last_seen_at, 给未来 missing 检测用."""
+    import time
+    from backend.services.materials_service import _upsert_asset, _ensure_schema
+    from shortvideo.db import get_connection
+    _ensure_schema()
+    target = tmp_root / "00 讲台高光" / "podium.jpg"
+    with get_connection() as con:
+        aid, _ = _upsert_asset(con, str(target), tmp_root)
+        con.commit()
+    time.sleep(1.1)
+    with get_connection() as con:
+        _upsert_asset(con, str(target), tmp_root)
+        con.commit()
+        seen = con.execute(
+            "SELECT last_seen_at FROM material_assets WHERE id=?", (aid,)
+        ).fetchone()[0]
+    assert seen >= int(time.time()) - 2
 
 
 # ─── scan_root ───────────────────────────────────────────

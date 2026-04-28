@@ -58,12 +58,42 @@ def get_materials_root() -> Path:
     return Path.home() / "Downloads"
 
 
-# ─── sha1 + thumbnail ────────────────────────────────────
+# ─── ID + content_hash + thumbnail ────────────────────
+# B'-4 (GPT 修订): 旧 _asset_id=sha1(path+mtime) 跟 abs_path UNIQUE 互相打架
+# (mtime 变 → 新 hash → SELECT id 找不到 → INSERT OR IGNORE 因 path UNIQUE 静默忽略,
+# 函数仍返新 aid + is_new=True, 但库里没新 row, tags/usage/pending 还挂在旧 id 上).
+# 新方案: 真新文件用 uuid 当 id (随机不撞车), 已有 row 走 path 或 content_hash 命中
+# 不换 id, 让 tags/usage/pending 永不孤儿.
+import uuid as _uuid
 
-def _asset_id(abs_path: str, mtime: float) -> str:
-    """sha1(abs_path + mtime) 截 16 位作 ID. 文件改了 mtime 会变 → 新 row."""
-    h = hashlib.sha1(f"{abs_path}|{int(mtime)}".encode("utf-8")).hexdigest()
-    return h[:16]
+
+def _new_asset_id() -> str:
+    """新 row 用的随机 ID (16 位 hex). 跟 path/mtime/content 完全解耦, 永不撞车."""
+    return _uuid.uuid4().hex[:16]
+
+
+# 大文件不算 hash (慢). 给小/中文件算 sha256 标识"被改名/移动的同一内容".
+_CONTENT_HASH_MAX_BYTES = 100 * 1024 * 1024  # 100MB
+
+
+def _compute_content_hash(abs_path: str, max_bytes: int = _CONTENT_HASH_MAX_BYTES) -> str | None:
+    """sha256(file_bytes) 取前 32 字符. 文件 > max_bytes 返 None (不算).
+    用于"path 找不到时按内容找" — 改名 / 移动同一文件能识别.
+    """
+    try:
+        size = Path(abs_path).stat().st_size
+    except OSError:
+        return None
+    if size > max_bytes:
+        return None
+    h = hashlib.sha256()
+    try:
+        with open(abs_path, "rb") as f:
+            while chunk := f.read(64 * 1024):
+                h.update(chunk)
+    except OSError:
+        return None
+    return h.hexdigest()[:32]
 
 
 def _make_image_thumb(src: Path, dst: Path) -> bool:
@@ -165,34 +195,94 @@ def _walk_root(root: Path):
 
 
 def _upsert_asset(con: sqlite3.Connection, abs_path: str, root: Path) -> tuple[str, bool]:
-    """单文件 upsert. 返回 (asset_id, is_new). 已存在 (sha1 命中) → 跳过 probe + thumb."""
+    """单文件 upsert. 返回 (asset_id, is_new).
+
+    B'-4 (GPT 修订) 三段查找, 不换主键:
+    1. 按 abs_path 找 → 命中 → UPDATE metadata + last_seen_at, 保留 id
+    2. 按 content_hash 找 (路径变了/改名) → 命中 → UPDATE abs_path/rel_folder, 保留 id
+    3. 都没命中 → 真新文件 → 新 uuid id, INSERT
+    永不重新 hash 已有 row 的 id, tags/usage/pending 不孤儿.
+    """
     p = Path(abs_path)
     try:
         st = p.stat()
     except OSError:
         return ("", False)
-    aid = _asset_id(abs_path, st.st_mtime)
-    cur = con.execute("SELECT id FROM material_assets WHERE id=?", (aid,)).fetchone()
-    if cur:
-        return (aid, False)
     ext = p.suffix.lower()
     try:
         rel_folder = str(p.parent.relative_to(root)) if p.parent != root else "."
     except ValueError:
         rel_folder = "."
+    now = int(time.time())
+
+    # 段 1: 按 abs_path 找已有 row
+    existing_by_path = con.execute(
+        "SELECT id, file_ctime, content_hash FROM material_assets WHERE abs_path=?",
+        (abs_path,),
+    ).fetchone()
+    if existing_by_path:
+        aid_old, old_mtime, old_hash = existing_by_path
+        # 文件还在原位, 只更新 last_seen_at + missing_at=NULL.
+        # mtime 变了说明文件真改了 → 重 probe + 重缩略图 + 重算 hash.
+        if int(st.st_mtime) != (old_mtime or 0):
+            info = _probe_video(abs_path) if ext in VIDEO_EXTS else _probe_image(abs_path)
+            thumb = _make_thumb(abs_path, aid_old)
+            new_hash = _compute_content_hash(abs_path)
+            con.execute(
+                "UPDATE material_assets SET file_ctime=?, size_bytes=?, width=?, height=?, "
+                "duration_sec=?, thumb_path=?, content_hash=?, last_seen_at=?, missing_at=NULL "
+                "WHERE id=?",
+                (int(st.st_mtime), st.st_size, info.get("width"), info.get("height"),
+                 info.get("duration_sec"), thumb, new_hash, now, aid_old),
+            )
+        elif old_hash is None:
+            # 存量 row 没 content_hash (V3 → V4 升级时刷不到), 顺手补一次
+            new_hash = _compute_content_hash(abs_path)
+            con.execute(
+                "UPDATE material_assets SET content_hash=?, last_seen_at=?, missing_at=NULL "
+                "WHERE id=?",
+                (new_hash, now, aid_old),
+            )
+        else:
+            con.execute(
+                "UPDATE material_assets SET last_seen_at=?, missing_at=NULL WHERE id=?",
+                (now, aid_old),
+            )
+        return (aid_old, False)
+
+    # 段 2: 按 content_hash 找 (改名/移动同一文件)
+    file_hash = _compute_content_hash(abs_path)
+    if file_hash:
+        existing_by_hash = con.execute(
+            "SELECT id FROM material_assets WHERE content_hash=? LIMIT 1",
+            (file_hash,),
+        ).fetchone()
+        if existing_by_hash:
+            aid_moved = existing_by_hash[0]
+            # 旧 row 的 abs_path 不再有效 (文件被改名/挪走), 接管这条新 path.
+            con.execute(
+                "UPDATE material_assets SET abs_path=?, filename=?, rel_folder=?, "
+                "last_seen_at=?, missing_at=NULL WHERE id=?",
+                (abs_path, p.name, rel_folder, now, aid_moved),
+            )
+            return (aid_moved, False)
+
+    # 段 3: 真新文件 → 新 uuid id
+    aid = _new_asset_id()
     info = _probe_video(abs_path) if ext in VIDEO_EXTS else _probe_image(abs_path)
     thumb = _make_thumb(abs_path, aid)
-    now = int(time.time())
     con.execute(
-        "INSERT OR IGNORE INTO material_assets "
+        "INSERT INTO material_assets "
         "(id, abs_path, filename, ext, rel_folder, size_bytes, width, height, "
-        " duration_sec, file_ctime, imported_at, thumb_path, status, is_pending_review, user_id) "
-        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        " duration_sec, file_ctime, imported_at, thumb_path, status, is_pending_review, user_id, "
+        " content_hash, last_seen_at) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (
             aid, abs_path, p.name, ext, rel_folder,
             st.st_size, info.get("width"), info.get("height"),
-            info.get("duration_sec"), int(st.st_ctime), now, thumb,
+            info.get("duration_sec"), int(st.st_mtime), now, thumb,
             "sorted", 0, "qinghua",
+            file_hash, now,
         ),
     )
     return (aid, True)
