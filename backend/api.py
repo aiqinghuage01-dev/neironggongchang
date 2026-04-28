@@ -2105,10 +2105,13 @@ def material_lib_tag_batch(limit: int = 10, force: bool = False):
 
 
 @app.get("/api/material-lib/pending-list", tags=["档案部"], summary="(D-087 C) 待整理素材列表 (AI 建议归档不同文件夹)")
-def material_lib_pending_list(limit: int = 100):
-    """L1 KPI '待整理' 点进来. 返每条带 suggested_folder + reason + tags 给前端预览决策."""
+def material_lib_pending_list(limit: int = 100, include_legacy: bool = False):
+    """L1 KPI '待整理' 点进来. 返每条带 suggested_folder + reason + tags 给前端预览决策.
+
+    B'-3: 默认只返新一代高置信建议 (suggestion_version>=2). include_legacy=true 加旧 stale.
+    """
     from backend.services import materials_service as ms
-    return {"items": ms.list_pending_review(limit=limit)}
+    return {"items": ms.list_pending_review(limit=limit, include_legacy=include_legacy)}
 
 
 @app.post("/api/material-lib/pending/{asset_id}/approve", tags=["档案部"], summary="(D-087 C) 通过 AI 建议: 改 rel_folder 到建议位置")

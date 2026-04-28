@@ -255,7 +255,8 @@ def get_stats() -> dict[str, Any]:
         total = con.execute("SELECT COUNT(*) FROM material_assets").fetchone()[0]
         # 待整理: AI 打标后建议归档不同文件夹的素材 (D-087 C 工作流)
         pending = con.execute(
-            "SELECT COUNT(*) FROM material_pending_moves WHERE status='pending'"
+            "SELECT COUNT(*) FROM material_pending_moves "
+            "WHERE status='pending' AND COALESCE(suggestion_version, 1) >= 2"
         ).fetchone()[0]
         ai_tagged = con.execute(
             "SELECT COUNT(DISTINCT asset_id) FROM material_asset_tags"
@@ -642,17 +643,26 @@ def log_usage(asset_id: str, used_in: str, position_sec: float | None = None) ->
 # ─── 待整理工作流 (C, PRD §3.3) ──────────────────────────
 
 
-def list_pending_review(limit: int = 100) -> list[dict[str, Any]]:
-    """列待审核素材 (AI 建议归档不同文件夹). 含 suggested_folder + reason + tags."""
+def list_pending_review(limit: int = 100, *, include_legacy: bool = False) -> list[dict[str, Any]]:
+    """列待审核素材 (AI 建议归档不同文件夹). 含 suggested_folder + reason + tags + confidence.
+
+    B'-3: 默认只返新一代建议 (suggestion_version >= 2 且 status='pending').
+    旧 1616 条 status='stale' 不打扰. include_legacy=True 才包括旧的.
+    """
     _ensure_schema()
     out: list[dict[str, Any]] = []
+    if include_legacy:
+        where = "p.status IN ('pending', 'stale')"
+    else:
+        where = "p.status = 'pending' AND COALESCE(p.suggestion_version, 1) >= 2"
     with closing(get_connection()) as con:
         con.row_factory = sqlite3.Row
         rows = con.execute(
-            """SELECT a.*, p.suggested_folder, p.is_new_folder, p.reason
+            f"""SELECT a.*, p.suggested_folder, p.is_new_folder, p.reason,
+                       p.confidence, p.suggestion_version, p.status AS pending_status
                FROM material_assets a
                JOIN material_pending_moves p ON p.asset_id = a.id
-               WHERE p.status = 'pending'
+               WHERE {where}
                ORDER BY a.imported_at DESC
                LIMIT ?""",
             (limit,),

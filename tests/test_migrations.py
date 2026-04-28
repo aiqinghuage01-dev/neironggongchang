@@ -31,8 +31,8 @@ EXPECTED_TABLES = {
 }
 
 # 跟 backend.services.migrations._MIGRATIONS 同步:
-# v1 = D-084 baseline, v2 = D-087 素材库 5 表
-EXPECTED_VERSION = 2
+# v1 = D-084 baseline, v2 = D-087 素材库 5 表, v3 = B'-3 pending_moves 加 confidence/no_move/version/reviewed
+EXPECTED_VERSION = 3
 
 
 @pytest.fixture

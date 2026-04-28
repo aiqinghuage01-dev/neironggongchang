@@ -148,7 +148,7 @@ def _build_prompt(asset: dict[str, Any]) -> str:
         s = float(asset["duration_sec"])
         dur_str = f"{int(s // 60)}分{int(s % 60)}秒" if s >= 60 else f"{int(s)}秒"
     folder_choices = " / ".join(KNOWN_FOLDERS)
-    return f"""你在帮清华哥整理素材库. 给一条素材打标签 + 建议归档.
+    return f"""你在帮清华哥整理素材库. 给一条素材打标签 + 判断要不要换归档位置.
 
 素材信息:
 - 文件名: {asset.get('filename', '')}
@@ -158,20 +158,35 @@ def _build_prompt(asset: dict[str, Any]) -> str:
 {f'- 尺寸: {dim_str}' if dim_str else ''}
 {f'- 时长: {dur_str}' if dur_str else ''}
 
-清华哥的业务分区候选 (建议从中选一个):
+清华哥的业务分区候选 (优先从中选, 不强制):
 {folder_choices}
 
 任务:
-1. 从文件名 / 路径 / 元数据推测这条素材的内容
-2. 输出 5-10 个具体的中文标签 (跟清华哥业务上下文相关的优先, 比如"讲台" "学员" "金句" "板书" 等)
-3. 选最适合的归档分区 (上面 8 个之一); 如果都不合适, is_new=true 且 folder 给一个简短新分区名
+1. 从文件名 / 路径 / 元数据推测内容, 输出 5-10 个具体的中文标签
+2. 判断"当前位置"是不是合理:
+   - 如果当前位置已经合理 (业务上下文匹配, 哪怕不在 8 个分区里), 设 no_move=true, folder 留空, confidence 给你判断的把握
+   - 只有"明显错位置"且高置信时, no_move=false, folder=建议位置, is_new=true/false
+3. confidence ∈ [0, 1] 表示你对"是否换位置"这个建议的把握. 不确定的时候必须 < 0.75 (老板只看高置信建议)
 4. 一句话理由
+
+宁可保守 — confidence 低就 no_move=true 让素材原地待着. 老板没空审 1000+ 条无意义的归档建议.
 
 **严格 JSON 输出 (不加前言, 不加 markdown 代码块包裹)**:
 {{
   "tags": ["标签1", "标签2", ...],
-  "folder": "00 讲台高光",
+  "no_move": true,
+  "folder": null,
   "is_new": false,
+  "confidence": 0.4,
+  "reason": "..."
+}}
+或者 (明显要搬, 高置信):
+{{
+  "tags": [...],
+  "no_move": false,
+  "folder": "04 海报封面",
+  "is_new": false,
+  "confidence": 0.85,
   "reason": "..."
 }}"""
 
@@ -200,7 +215,11 @@ def _parse_llm_json(text: str) -> dict[str, Any] | None:
 
 
 def _normalize_llm_result(obj: dict[str, Any]) -> dict[str, Any]:
-    """LLM 返回值规范化 + 字段清理."""
+    """LLM 返回值规范化 + 字段清理.
+
+    B'-3: 加 confidence + no_move 解析. confidence 缺省/非数 → 0.5 (中等).
+    no_move 默认 False (向后兼容旧 prompt 输出).
+    """
     tags = obj.get("tags") or []
     if not isinstance(tags, list):
         tags = []
@@ -208,10 +227,19 @@ def _normalize_llm_result(obj: dict[str, Any]) -> dict[str, Any]:
     folder = obj.get("folder")
     if folder and not isinstance(folder, str):
         folder = None
+    # confidence: 0..1, 防御非数
+    raw_conf = obj.get("confidence")
+    try:
+        confidence = float(raw_conf) if raw_conf is not None else 0.5
+        confidence = max(0.0, min(1.0, confidence))
+    except (TypeError, ValueError):
+        confidence = 0.5
     return {
         "tags": tags,
         "folder": folder,
         "is_new": bool(obj.get("is_new", False)),
+        "no_move": bool(obj.get("no_move", False)),
+        "confidence": confidence,
         "reason": str(obj.get("reason") or "")[:200],
     }
 
@@ -254,27 +282,42 @@ def _write_tags(asset_id: str, tags: list[str], source: str = "ai", confidence: 
     return written
 
 
+# B'-3 (GPT 修订): 高置信门槛, 老板只看 confidence>=0.75 的建议
+PENDING_MIN_CONFIDENCE = 0.75
+# 当前 prompt/审核标准代号. 旧条目 = 1, 新一代 = 2. list_pending_review 默认只返新一代.
+PENDING_SUGGESTION_VERSION = 2
+
+
 def _write_pending_move(
     asset_id: str,
     suggested_folder: str | None,
     reason: str | None,
     is_new: bool = False,
     *,
+    confidence: float | None = None,
+    no_move: bool = False,
     reset_review: bool = False,
 ) -> str:
     """写归档建议到 material_pending_moves (待审核).
 
-    B'-2 (GPT 修订): 已 approved / rejected 默认不覆盖, 历史审核结论保留;
-    显式 reset_review=True 才重置成 pending. 防止 force 重打把老板的审核结果抹掉.
+    B'-2: 已 approved / rejected 默认不覆盖, 历史审核结论保留; 显式 reset_review=True 才重置.
+    B'-3: confidence 守卫 — 只有 confidence>=0.75 且 no_move=false 才进 pending.
+          AI 判断"当前位置已合理" (no_move=true) → 直接不写; 低置信 → 不打扰.
 
     返回:
-      "written"           — 实写 / 替换 pending
-      "skipped_approved"  — 已通过, 不覆盖
-      "skipped_rejected"  — 已跳过, 不覆盖
-      "noop_no_folder"    — 没建议 folder, 不写
+      "written"             — 实写 / 替换 pending
+      "skipped_approved"    — 已通过, 不覆盖
+      "skipped_rejected"    — 已跳过, 不覆盖
+      "skipped_no_move"     — AI 觉得当前位置就行
+      "skipped_low_conf"    — confidence < 阈值
+      "noop_no_folder"      — 没建议 folder, 不写
     """
+    if no_move:
+        return "skipped_no_move"
     if not suggested_folder:
         return "noop_no_folder"
+    if confidence is None or confidence < PENDING_MIN_CONFIDENCE:
+        return "skipped_low_conf"
     with closing(get_connection()) as con:
         existing = con.execute(
             "SELECT status FROM material_pending_moves WHERE asset_id=?",
@@ -284,10 +327,12 @@ def _write_pending_move(
             return f"skipped_{existing[0]}"
         con.execute(
             "INSERT OR REPLACE INTO material_pending_moves "
-            "(asset_id, suggested_folder, is_new_folder, reason, status, created_at) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
+            "(asset_id, suggested_folder, is_new_folder, reason, status, created_at, "
+            "confidence, no_move, suggestion_version) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (asset_id, suggested_folder[:200], 1 if is_new else 0,
-             (reason or "")[:200], "pending", int(time.time())),
+             (reason or "")[:200], "pending", int(time.time()),
+             float(confidence), 0, PENDING_SUGGESTION_VERSION),
         )
         con.commit()
         return "written"
@@ -335,9 +380,14 @@ def tag_asset(asset_id: str, *, force: bool = False) -> dict[str, Any]:
     # 这样 material_tags.source 能区分纯启发式 vs LLM, 后续筛"低可信 fallback 标签"才准.
     n_tags = _write_tags(asset_id, result["tags"], source=source,
                          confidence=0.7 if source == "llm" else 0.4)
+    # B'-3: 把 confidence + no_move 透传给 _write_pending_move 做门槛判断
     if result.get("folder") and result["folder"] != asset.get("rel_folder"):
-        _write_pending_move(asset_id, result["folder"], result.get("reason"),
-                            is_new=result.get("is_new", False))
+        _write_pending_move(
+            asset_id, result["folder"], result.get("reason"),
+            is_new=result.get("is_new", False),
+            confidence=result.get("confidence"),
+            no_move=bool(result.get("no_move", False)),
+        )
     return {**result, "source": source, "tags_written": n_tags}
 
 

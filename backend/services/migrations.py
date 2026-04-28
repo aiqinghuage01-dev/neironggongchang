@@ -342,8 +342,38 @@ CREATE TABLE IF NOT EXISTS material_pending_moves (
 """
 
 
-_MIGRATIONS: list[tuple[int, str, str]] = [
+# ──────────────────────────────────────────
+# V3: B'-3 (GPT 修订) — pending_moves 加 confidence/no_move/suggestion_version/reviewed_at
+# 旧 1616 条 confidence=NULL, suggestion_version=1 被新策略默认过滤; status 改 'stale' 标记不打扰.
+# 新一代建议 suggestion_version=2, 必须 confidence>=0.75 且 no_move=false 才进 pending.
+# 用 callable 实现幂等 (ALTER TABLE ADD COLUMN 在 SQLite 没有 IF NOT EXISTS, 自己 PRAGMA 判).
+# ──────────────────────────────────────────
+
+
+def _v3_pending_moves_review(con: sqlite3.Connection) -> None:
+    rows = con.execute("PRAGMA table_info(material_pending_moves)").fetchall()
+    existing = {r[1] for r in rows}
+    new_cols = [
+        ("confidence", "REAL"),
+        ("no_move", "INTEGER DEFAULT 0"),
+        ("suggestion_version", "INTEGER DEFAULT 1"),
+        ("reviewed_at", "INTEGER"),
+    ]
+    for col, typ in new_cols:
+        if col not in existing:
+            con.execute(f"ALTER TABLE material_pending_moves ADD COLUMN {col} {typ}")
+    # 旧 pending 条目降级 'stale': 凭文件夹差激进塞的, 没 confidence
+    con.execute(
+        "UPDATE material_pending_moves SET status='stale' "
+        "WHERE status='pending' AND confidence IS NULL"
+    )
+
+
+# 每条 migration: (version, note, sql_or_callable)
+# 类型为 str 时走 executescript; 为 callable 时调用 fn(conn) 执行 (适合幂等 ALTER 等情况).
+_MIGRATIONS: list[tuple[int, str, str | "callable"]] = [
     (2, "D-087 素材库 5 表 (material_assets/tags/asset_tags/usage_log/pending_moves)", _V2_MATERIALS_LIB),
+    (3, "B'-3 pending_moves 加 confidence/no_move/suggestion_version/reviewed_at, 旧条目标 stale", _v3_pending_moves_review),
 ]
 
 
@@ -455,11 +485,14 @@ def apply_migrations() -> int:
                     "VALUES (1, strftime('%s','now'), 'baseline')"
                 )
                 current = 1
-            # Step 4: 顺序应用 v2+ migration
-            for version, note, sql in _MIGRATIONS:
+            # Step 4: 顺序应用 v2+ migration. 支持 SQL str (executescript) 或 callable(con) (幂等).
+            for version, note, sql_or_fn in _MIGRATIONS:
                 if version <= current:
                     continue
-                con.executescript(sql)
+                if callable(sql_or_fn):
+                    sql_or_fn(con)
+                else:
+                    con.executescript(sql_or_fn)
                 con.execute(
                     "INSERT INTO schema_version(version, applied_at, note) "
                     "VALUES (?, strftime('%s','now'), ?)",

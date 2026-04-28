@@ -394,7 +394,8 @@ def test_tag_asset_records_pending_move(tmp_db, tmp_thumb_dir, tmp_root, monkeyp
     scan_root()
     # 取根目录的 outside.jpg (rel_folder = ".")
     aid = next(a["id"] for a in list_assets() if a["filename"] == "outside.jpg")
-    fake = mock_ai('{"tags": ["其他"], "folder": "04 海报封面", "is_new": false, "reason": "看起来是海报"}')
+    fake = mock_ai('{"tags": ["其他"], "folder": "04 海报封面", "is_new": false, '
+                   '"no_move": false, "confidence": 0.85, "reason": "看起来是海报"}')
     monkeypatch.setattr("shortvideo.ai.get_ai_client", lambda **kw: fake)
     tag_asset(aid)
     with get_connection() as con:
@@ -549,10 +550,10 @@ def test_pending_move_skips_approved(tmp_db, tmp_thumb_dir, tmp_root):
     from shortvideo.db import get_connection
     scan_root()
     aid = list_assets()[0]["id"]
-    _write_pending_move(aid, "01 通过组", "first round", is_new=True)
+    _write_pending_move(aid, "01 通过组", "first round", confidence=0.85, is_new=True)
     approve_pending(aid)
     # 第二轮 AI 又建议这条改归档 → 应被守
-    rv = _write_pending_move(aid, "02 不一样", "second round", is_new=True)
+    rv = _write_pending_move(aid, "02 不一样", "second round", confidence=0.85, is_new=True)
     assert rv == "skipped_approved"
     with get_connection() as con:
         row = con.execute(
@@ -571,9 +572,9 @@ def test_pending_move_skips_rejected(tmp_db, tmp_thumb_dir, tmp_root):
     from shortvideo.db import get_connection
     scan_root()
     aid = list_assets()[0]["id"]
-    _write_pending_move(aid, "01 想搬", "first", is_new=True)
+    _write_pending_move(aid, "01 想搬", "first", confidence=0.85, is_new=True)
     reject_pending(aid)
-    rv = _write_pending_move(aid, "02 又想搬", "second", is_new=True)
+    rv = _write_pending_move(aid, "02 又想搬", "second", confidence=0.85, is_new=True)
     assert rv == "skipped_rejected"
     with get_connection() as con:
         st = con.execute(
@@ -589,9 +590,9 @@ def test_pending_move_reset_review_overrides_history(tmp_db, tmp_thumb_dir, tmp_
     from shortvideo.db import get_connection
     scan_root()
     aid = list_assets()[0]["id"]
-    _write_pending_move(aid, "01 旧建议", "old", is_new=True)
+    _write_pending_move(aid, "01 旧建议", "old", confidence=0.85, is_new=True)
     reject_pending(aid)
-    rv = _write_pending_move(aid, "99 新建议", "new", is_new=True, reset_review=True)
+    rv = _write_pending_move(aid, "99 新建议", "new", confidence=0.85, is_new=True, reset_review=True)
     assert rv == "written"
     with get_connection() as con:
         row = con.execute(
@@ -609,8 +610,8 @@ def test_pending_move_overwrites_existing_pending(tmp_db, tmp_thumb_dir, tmp_roo
     from shortvideo.db import get_connection
     scan_root()
     aid = list_assets()[0]["id"]
-    _write_pending_move(aid, "01 第一稿", "v1", is_new=True)
-    rv = _write_pending_move(aid, "02 第二稿", "v2", is_new=True)
+    _write_pending_move(aid, "01 第一稿", "v1", confidence=0.85, is_new=True)
+    rv = _write_pending_move(aid, "02 第二稿", "v2", confidence=0.85, is_new=True)
     assert rv == "written"
     with get_connection() as con:
         row = con.execute(
@@ -624,8 +625,8 @@ def test_pending_move_no_folder_is_noop(tmp_db, tmp_thumb_dir, tmp_root):
     from backend.services.materials_pipeline import _write_pending_move
     scan_root()
     aid = list_assets()[0]["id"]
-    assert _write_pending_move(aid, "", "x", is_new=True) == "noop_no_folder"
-    assert _write_pending_move(aid, None, "x", is_new=True) == "noop_no_folder"
+    assert _write_pending_move(aid, "", "x", confidence=0.85, is_new=True) == "noop_no_folder"
+    assert _write_pending_move(aid, None, "x", confidence=0.85, is_new=True) == "noop_no_folder"
 
 
 def test_tag_asset_falls_back_writes_heuristic_source(tmp_db, tmp_thumb_dir, tmp_root, monkeypatch):
@@ -671,3 +672,170 @@ def test_tag_asset_llm_writes_llm_source(tmp_db, tmp_thumb_dir, tmp_root, monkey
             ("独特LLM标签XYZ",),
         ).fetchall()]
     assert "llm" in srcs
+
+
+# ─── B'-3 confidence + no_move 守卫 ─────────────────────
+
+
+def test_pending_skipped_when_no_move_true(tmp_db, tmp_thumb_dir, tmp_root):
+    """no_move=True → 不写 pending (AI 觉得当前位置就行)."""
+    from backend.services.materials_pipeline import _write_pending_move
+    rv = _write_pending_move("aid_x", "01 任意", "x", confidence=0.9, no_move=True)
+    assert rv == "skipped_no_move"
+
+
+def test_pending_skipped_when_low_confidence(tmp_db, tmp_thumb_dir, tmp_root):
+    """confidence < 0.75 → 不写 (老板只看高置信)."""
+    from backend.services.materials_pipeline import _write_pending_move
+    assert _write_pending_move("aid_x", "01 太弱", "x", confidence=0.5, no_move=False) == "skipped_low_conf"
+    assert _write_pending_move("aid_x", "01 没填", "x", confidence=None, no_move=False) == "skipped_low_conf"
+    assert _write_pending_move("aid_x", "01 卡线下", "x", confidence=0.74, no_move=False) == "skipped_low_conf"
+
+
+def test_pending_written_when_high_confidence_and_move(tmp_db, tmp_thumb_dir, tmp_root):
+    """confidence>=0.75 且 no_move=False → 写, 带新一代标记."""
+    from backend.services.materials_service import scan_root, list_assets
+    from backend.services.materials_pipeline import _write_pending_move
+    from shortvideo.db import get_connection
+    scan_root()
+    aid = list_assets()[0]["id"]
+    rv = _write_pending_move(aid, "99 新建议", "高置信", confidence=0.85)
+    assert rv == "written"
+    with get_connection() as con:
+        row = con.execute(
+            "SELECT confidence, suggestion_version, status FROM material_pending_moves WHERE asset_id=?",
+            (aid,),
+        ).fetchone()
+    assert abs(row[0] - 0.85) < 0.01
+    assert row[1] == 2  # PENDING_SUGGESTION_VERSION
+    assert row[2] == "pending"
+
+
+def test_normalize_extracts_confidence_and_no_move(tmp_db):
+    from backend.services.materials_pipeline import _normalize_llm_result
+    r = _normalize_llm_result({
+        "tags": ["a", "b"],
+        "folder": "01 X",
+        "is_new": False,
+        "no_move": True,
+        "confidence": 0.4,
+        "reason": "hint",
+    })
+    assert r["no_move"] is True
+    assert r["confidence"] == 0.4
+    # confidence 缺省 = 0.5 (中等)
+    r2 = _normalize_llm_result({"tags": [], "reason": "x"})
+    assert r2["confidence"] == 0.5
+    assert r2["no_move"] is False
+    # confidence 边界裁剪
+    r3 = _normalize_llm_result({"confidence": 1.5})
+    assert r3["confidence"] == 1.0
+    r4 = _normalize_llm_result({"confidence": -0.3})
+    assert r4["confidence"] == 0.0
+    # confidence 非数字 → 默认 0.5
+    r5 = _normalize_llm_result({"confidence": "high"})
+    assert r5["confidence"] == 0.5
+
+
+def test_tag_asset_llm_low_conf_no_pending(tmp_db, tmp_thumb_dir, tmp_root, monkeypatch, mock_ai):
+    """LLM 给低 confidence 建议 → 标签写, pending 不写 (即使 folder 跟当前不一样)."""
+    from backend.services.materials_service import scan_root, list_assets
+    from backend.services.materials_pipeline import tag_asset
+    from shortvideo.db import get_connection
+    scan_root()
+    aid = next(a["id"] for a in list_assets() if a["filename"] == "outside.jpg")
+    fake = mock_ai('{"tags": ["t1"], "folder": "04 海报", "is_new": false, '
+                   '"no_move": false, "confidence": 0.4, "reason": "拿不准"}')
+    monkeypatch.setattr("shortvideo.ai.get_ai_client", lambda **kw: fake)
+    r = tag_asset(aid)
+    assert r["confidence"] == 0.4
+    with get_connection() as con:
+        # 标签写了
+        n_tags = con.execute(
+            "SELECT COUNT(*) FROM material_asset_tags WHERE asset_id=?", (aid,)
+        ).fetchone()[0]
+        assert n_tags >= 1
+        # pending 没写
+        row = con.execute(
+            "SELECT * FROM material_pending_moves WHERE asset_id=?", (aid,)
+        ).fetchone()
+    assert row is None
+
+
+def test_tag_asset_llm_no_move_skips_pending(tmp_db, tmp_thumb_dir, tmp_root, monkeypatch, mock_ai):
+    """LLM 说 no_move=true → 即便高 confidence 也不写 pending."""
+    from backend.services.materials_service import scan_root, list_assets
+    from backend.services.materials_pipeline import tag_asset
+    from shortvideo.db import get_connection
+    scan_root()
+    aid = next(a["id"] for a in list_assets() if a["filename"] == "outside.jpg")
+    fake = mock_ai('{"tags": ["x"], "folder": null, "is_new": false, '
+                   '"no_move": true, "confidence": 0.95, "reason": "已合理"}')
+    monkeypatch.setattr("shortvideo.ai.get_ai_client", lambda **kw: fake)
+    tag_asset(aid)
+    with get_connection() as con:
+        row = con.execute(
+            "SELECT * FROM material_pending_moves WHERE asset_id=?", (aid,)
+        ).fetchone()
+    assert row is None
+
+
+def test_list_pending_review_default_excludes_legacy(tmp_db, tmp_thumb_dir, tmp_root):
+    """默认 include_legacy=False, 只返 suggestion_version>=2. 旧 row (v=1, status='stale') 不返."""
+    from backend.services.materials_service import scan_root, list_assets, list_pending_review
+    from shortvideo.db import get_connection
+    scan_root()
+    items = list_assets()
+    aid_legacy = items[0]["id"]
+    aid_new = items[1]["id"]
+    # 模拟旧条目: status='stale', version=1
+    with get_connection() as con:
+        con.execute(
+            "INSERT INTO material_pending_moves "
+            "(asset_id, suggested_folder, is_new_folder, reason, status, created_at, suggestion_version) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (aid_legacy, "01 旧", 0, "old", "stale", 1, 1),
+        )
+        # 新一代: version=2, status='pending', confidence=0.9
+        con.execute(
+            "INSERT INTO material_pending_moves "
+            "(asset_id, suggested_folder, is_new_folder, reason, status, created_at, "
+            "confidence, suggestion_version) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (aid_new, "99 新", 1, "new", "pending", 2, 0.9, 2),
+        )
+        con.commit()
+    rows = list_pending_review()
+    ids = {r["id"] for r in rows}
+    assert aid_new in ids
+    assert aid_legacy not in ids
+    # 加 include_legacy 才有
+    rows2 = list_pending_review(include_legacy=True)
+    ids2 = {r["id"] for r in rows2}
+    assert aid_new in ids2
+    assert aid_legacy in ids2
+
+
+def test_get_stats_pending_count_excludes_legacy(tmp_db, tmp_thumb_dir, tmp_root):
+    """get_stats.pending_review 只数新一代, 不数 legacy stale."""
+    from backend.services.materials_service import scan_root, list_assets, get_stats
+    from shortvideo.db import get_connection
+    scan_root()
+    items = list_assets()
+    a, b = items[0]["id"], items[1]["id"]
+    with get_connection() as con:
+        con.execute(
+            "INSERT INTO material_pending_moves "
+            "(asset_id, suggested_folder, status, created_at, suggestion_version) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (a, "x", "stale", 1, 1),
+        )
+        con.execute(
+            "INSERT INTO material_pending_moves "
+            "(asset_id, suggested_folder, status, created_at, confidence, suggestion_version) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (b, "y", "pending", 2, 0.85, 2),
+        )
+        con.commit()
+    s = get_stats()
+    assert s["pending_review"] == 1  # 只数 b

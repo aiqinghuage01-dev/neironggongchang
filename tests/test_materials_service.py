@@ -656,7 +656,7 @@ def test_pending_review_returns_assets_with_suggestion(tmp_db, tmp_thumb_dir, tm
     from backend.services.materials_pipeline import _write_pending_move
     scan_root()
     aid = list_assets()[0]["id"]
-    _write_pending_move(aid, "02 学生反应", "AI 觉得这是学生场景", is_new=False)
+    _write_pending_move(aid, "02 学生反应", "AI 觉得这是学生场景", confidence=0.85, is_new=False)
     rows = list_pending_review()
     assert len(rows) == 1
     assert rows[0]["id"] == aid
@@ -678,9 +678,9 @@ def test_pending_review_skips_approved_and_rejected(tmp_db, tmp_thumb_dir, tmp_r
     aid_ok = items[0]["id"]
     aid_skip = items[1]["id"]
     aid_keep = items[2]["id"]
-    _write_pending_move(aid_ok, "0X 通过", "x", is_new=True)
-    _write_pending_move(aid_skip, "0X 跳过", "y", is_new=True)
-    _write_pending_move(aid_keep, "0X 留着", "z", is_new=True)
+    _write_pending_move(aid_ok, "0X 通过", "x", confidence=0.85, is_new=True)
+    _write_pending_move(aid_skip, "0X 跳过", "y", confidence=0.85, is_new=True)
+    _write_pending_move(aid_keep, "0X 留着", "z", confidence=0.85, is_new=True)
     approve_pending(aid_ok)
     reject_pending(aid_skip)
     rows = list_pending_review()
@@ -700,7 +700,7 @@ def test_approve_pending_updates_rel_folder(tmp_db, tmp_thumb_dir, tmp_root):
     scan_root()
     aid = list_assets()[0]["id"]
     target_folder = "99 新归档目录"
-    _write_pending_move(aid, target_folder, "AI 想这么放", is_new=True)
+    _write_pending_move(aid, target_folder, "AI 想这么放", confidence=0.85, is_new=True)
     res = approve_pending(aid)
     assert res["ok"] is True
     assert res["new_folder"] == target_folder
@@ -732,7 +732,7 @@ def test_reject_pending_keeps_rel_folder(tmp_db, tmp_thumb_dir, tmp_root):
     scan_root()
     a = list_assets()[0]
     aid, original_folder = a["id"], a["rel_folder"]
-    _write_pending_move(aid, "99 新归档", "AI 觉得", is_new=True)
+    _write_pending_move(aid, "99 新归档", "AI 觉得", confidence=0.85, is_new=True)
     res = reject_pending(aid)
     assert res["ok"] is True
     with closing(get_connection()) as con:
@@ -761,9 +761,9 @@ def test_get_stats_counts_only_pending_status(tmp_db, tmp_thumb_dir, tmp_root):
     scan_root()
     items = list_assets()
     a, b, c = items[0]["id"], items[1]["id"], items[2]["id"]
-    _write_pending_move(a, "x", "x", is_new=True)
-    _write_pending_move(b, "y", "y", is_new=True)
-    _write_pending_move(c, "z", "z", is_new=True)
+    _write_pending_move(a, "x", "x", confidence=0.85, is_new=True)
+    _write_pending_move(b, "y", "y", confidence=0.85, is_new=True)
+    _write_pending_move(c, "z", "z", confidence=0.85, is_new=True)
     approve_pending(a)
     reject_pending(b)
     s = get_stats()
@@ -786,8 +786,8 @@ def test_pending_review_orders_by_imported_desc(tmp_db, tmp_thumb_dir, tmp_root)
         con.execute("UPDATE material_assets SET imported_at=1000 WHERE id=?", (older,))
         con.execute("UPDATE material_assets SET imported_at=2000 WHERE id=?", (newer,))
         con.commit()
-    _write_pending_move(older, "x", "x", is_new=True)
-    _write_pending_move(newer, "y", "y", is_new=True)
+    _write_pending_move(older, "x", "x", confidence=0.85, is_new=True)
+    _write_pending_move(newer, "y", "y", confidence=0.85, is_new=True)
     rows = list_pending_review()
     assert rows[0]["id"] == newer
     assert rows[1]["id"] == older

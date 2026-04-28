@@ -417,7 +417,7 @@ def test_pending_list_returns_assets_with_suggestion(populated_client):
     from backend.services.materials_service import list_assets
     from backend.services.materials_pipeline import _write_pending_move
     aid = list_assets()[0]["id"]
-    _write_pending_move(aid, "02 学生反应", "AI 觉得这是学生", is_new=False)
+    _write_pending_move(aid, "02 学生反应", "AI 觉得这是学生", confidence=0.85, is_new=False)
     r = populated_client.get("/api/material-lib/pending-list")
     items = r.json()["items"]
     assert len(items) == 1
@@ -430,7 +430,7 @@ def test_approve_endpoint_changes_rel_folder(populated_client):
     from backend.services.materials_service import list_assets, get_asset
     from backend.services.materials_pipeline import _write_pending_move
     aid = list_assets()[0]["id"]
-    _write_pending_move(aid, "99 新归档", "AI 觉得", is_new=True)
+    _write_pending_move(aid, "99 新归档", "AI 觉得", confidence=0.85, is_new=True)
     r = populated_client.post(f"/api/material-lib/pending/{aid}/approve")
     assert r.status_code == 200
     body = r.json()
@@ -453,7 +453,7 @@ def test_reject_endpoint_keeps_rel_folder(populated_client):
     from backend.services.materials_pipeline import _write_pending_move
     a = list_assets()[0]
     aid, original = a["id"], a["rel_folder"]
-    _write_pending_move(aid, "99 新归档", "AI 觉得", is_new=True)
+    _write_pending_move(aid, "99 新归档", "AI 觉得", confidence=0.85, is_new=True)
     r = populated_client.post(f"/api/material-lib/pending/{aid}/reject")
     assert r.status_code == 200
     assert r.json()["ok"] is True
@@ -473,8 +473,8 @@ def test_pending_workflow_e2e(populated_client):
     from backend.services.materials_pipeline import _write_pending_move
     items = list_assets()
     a, b = items[0]["id"], items[1]["id"]
-    _write_pending_move(a, "01 通过组", "x", is_new=True)
-    _write_pending_move(b, "02 跳过组", "y", is_new=True)
+    _write_pending_move(a, "01 通过组", "x", confidence=0.85, is_new=True)
+    _write_pending_move(b, "02 跳过组", "y", confidence=0.85, is_new=True)
     assert len(populated_client.get("/api/material-lib/pending-list").json()["items"]) == 2
     populated_client.post(f"/api/material-lib/pending/{a}/approve")
     populated_client.post(f"/api/material-lib/pending/{b}/reject")
