@@ -4,7 +4,43 @@
 
 ---
 
-## 当前状态 (2026-04-28 · D-090 段间图防盗链 + 双 URL 策略 + 经验沉淀)
+## 当前状态 (2026-04-28 · D-091 公众号段间图统一风格选择器)
+
+**版本**: v0.6.4 — Step 5 顶部加全局"统一风格"chip group, 4 张图套同一个风格.
+
+**触发 case** (老板今天 12:50): 4 张段间图能显示了 (D-090 OK), 但 LLM 出 prompt
+时 4 张隐含不同氛围 (有的明亮店铺, 有的昏暗茶室, 有的科技蓝光), 4 张图视觉风格
+不统一, 放在一篇公众号里"有点奇怪". 老板要"我选手绘 4 张都手绘, 选写实 4 张都
+写实"的全局统一选择.
+
+### D-091 实现
+- `web/factory-wechat-v2.jsx` 新增 helper:
+  - `loadGlobalStyleId / saveGlobalStyleId` localStorage 持久化用户偏好
+  - `stripStyleAppendsAtEnd` 把末尾任何已知 PRESET.append strip 掉 (多扫 2 轮防双层)
+  - `applyGlobalStyleToPrompt` strip 旧 + 套新, 幂等
+- `WxStepImages` 加 `globalStyleId` state + `pickGlobalStyle` 切换函数:
+  - 顶部 chip group: 🎨 统一风格 + 6 个 PRESET (真实感/纪实/暖色慢节奏/水墨/卡通/复古)
+  - 默认 "real" (跟现有 backend plan-images prompt "真实感照片风格,暖色调" 对齐)
+  - 切风格: 给 4 张 strip+append 新风格 + 清状态 (status=pending, mmbiz_url=null)
+    + 重置 styleAppliedRef + autoStartedRef → useEffect 自动重生 4 张
+  - 已 done + mmbiz_url 的不动 prompt (避免误改用户已认可的图描述)
+- useEffect 第一次出 plans 时自动套 globalStyle.append (用户改 prompt 不会被覆盖,
+  styleAppliedRef 控制只跑一次)
+- 单张卡片的 chip 还在 (微调用), 跟全局 chip 互不干扰
+
+### 闭环验证 (playwright :8001 真前端)
+- 注入 wf:wechat localStorage snapshot (4 张 pending plan), goto :8001 wechat
+- Stage 1 默认: 真实感 chip brand color 高亮; 4 张 prompt 末尾 ",真实感照片,自然光,暖色调" ✅
+- Stage 2 切水墨: 4 张 prompt 切成 ",中式水墨风,山水意境,留白", real append 全清 ✅
+- Stage 3: localStorage 持久化 "ink" ✅; console + page no error ✅
+- 截图 `/tmp/_ui_shots/d091_01_step5_default.png` + `d091_02_after_pick_ink.png` 视觉确认.
+
+### 测试
+- 535 通过 / 17 skip (jsx helper 没 JS 测试 infra, 走 playwright 端到端).
+
+---
+
+## 上一里程碑 (2026-04-28 · D-090 段间图防盗链 + 双 URL 策略 + 经验沉淀)
 
 **版本**: v0.6.3 — Step 6 排版预览段间图能真显示 (不再"未经允许不可引用").
 新建 `docs/WECHAT-SKILL-LESSONS.md` 公众号 skill 踩坑大全, 一站式查阅 D-039/

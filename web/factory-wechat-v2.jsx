@@ -804,6 +804,7 @@ function WxStepWrite({ article, loading, onPrev, onNext, onRewrite, onRewriteSel
 
 // ─── Step 5 · 段间配图 ───────────────────────────────────────
 // D-033 ① 段间配图 prompt 可改 + 风格预设 + 改完重生
+// D-091: 顶部全局"统一风格"选择器, 4 张套同一个风格 (老板反馈风格不统一会奇怪)
 const IMAGE_STYLE_PRESETS = [
   { id: "real",     label: "📷 真实感照片", append: ",真实感照片,自然光,暖色调" },
   { id: "documentary", label: "🎬 纪实风", append: ",纪实摄影风格,高细节,真实环境" },
@@ -813,15 +814,75 @@ const IMAGE_STYLE_PRESETS = [
   { id: "vintage",  label: "📼 复古怀旧", append: ",复古胶片质感,90 年代色调" },
 ];
 
+// D-091: 全局风格 localStorage 持久化 + strip 旧 append 工具
+const GLOBAL_STYLE_LS_KEY = "wechat:section_image:global_style";
+const DEFAULT_GLOBAL_STYLE_ID = "real";
+
+function loadGlobalStyleId() {
+  try {
+    const v = localStorage.getItem(GLOBAL_STYLE_LS_KEY);
+    if (v && IMAGE_STYLE_PRESETS.some(p => p.id === v)) return v;
+  } catch (_) {}
+  return DEFAULT_GLOBAL_STYLE_ID;
+}
+
+function saveGlobalStyleId(id) {
+  try { localStorage.setItem(GLOBAL_STYLE_LS_KEY, id); } catch (_) {}
+}
+
+// strip 末尾任何 IMAGE_STYLE_PRESETS.append (切多次风格不累积. 单张 chip 仍可后追加微调)
+function stripStyleAppendsAtEnd(prompt) {
+  let out = (prompt || "").trimEnd();
+  // 多扫 2 轮: 防"全局 append + 单张 chip append"双层
+  for (let pass = 0; pass < 2; pass++) {
+    let stripped = false;
+    for (const p of IMAGE_STYLE_PRESETS) {
+      if (out.endsWith(p.append)) {
+        out = out.slice(0, -p.append.length).trimEnd();
+        stripped = true;
+        break;
+      }
+    }
+    if (!stripped) break;
+  }
+  return out;
+}
+
+function applyGlobalStyleToPrompt(prompt, styleId) {
+  const preset = IMAGE_STYLE_PRESETS.find(p => p.id === styleId);
+  if (!preset) return prompt;
+  return stripStyleAppendsAtEnd(prompt) + preset.append;
+}
+
 function WxStepImages({ plans, setPlans, onGen, loading, onPrev, onNext, onRegen, imgChip }) {
+  // D-091: 全局统一风格 (4 张套同一个风格)
+  const [globalStyleId, setGlobalStyleId] = React.useState(loadGlobalStyleId);
+  // 防 plans 第一次进来未套全局风格的标记 (从 plan-images 出来不带 append)
+  const styleAppliedRef = React.useRef(false);
+
   // 自动开跑标记: 同一批 plans 进来时只自动 genAll 一次, 防止用户改 prompt 重生后又被全部覆盖
   const autoStartedRef = React.useRef(false);
   React.useEffect(() => {
     // plans 重新生成 (从 0 → N) 时重置标记 (规划重出 / 第一次进来)
     if (plans.length === 0) {
       autoStartedRef.current = false;
+      styleAppliedRef.current = false;
       return;
     }
+    // D-091: 第一次出现 plans 或刚切完风格 (pickGlobalStyle 会重置 styleAppliedRef)
+    //   → 给所有 plan 套当前 globalStyle.append (已生成的不动 prompt)
+    //   stripStyleAppendsAtEnd + applyGlobalStyleToPrompt 幂等, 切多次不累积
+    if (!styleAppliedRef.current) {
+      styleAppliedRef.current = true;
+      const preset = IMAGE_STYLE_PRESETS.find(p => p.id === globalStyleId);
+      if (preset) {
+        setPlans(prev => prev.map(p => {
+          if (p.mmbiz_url && p.status === "done") return p;  // 已认可的不改 prompt
+          return { ...p, image_prompt: applyGlobalStyleToPrompt(p.image_prompt, globalStyleId) };
+        }));
+      }
+    }
+
     if (autoStartedRef.current) return;
     // 已经全部 done 或 running 不重复跑 (恢复 work 状态进来)
     const hasPending = plans.some(p => p.status !== "done" && p.status !== "running");
@@ -835,7 +896,24 @@ function WxStepImages({ plans, setPlans, onGen, loading, onPrev, onNext, onRegen
         }
       }
     })();
-  }, [plans.length]);  // 只在 plans 数量变化时触发, 改 prompt / mmbiz_url 更新不重复触发
+  }, [plans.length, globalStyleId]);  // D-091: 加 globalStyleId, 切风格触发自动重生
+
+  // D-091: 切换全局风格 — 清 4 张状态, useEffect 会用新风格 strip+套+autoStart
+  function pickGlobalStyle(styleId) {
+    if (styleId === globalStyleId) return;
+    saveGlobalStyleId(styleId);
+    setPlans(prev => prev.map(p => ({
+      ...p,
+      status: "pending",
+      mmbiz_url: null,
+      media_url: null,
+      elapsed_sec: undefined,
+      error: undefined,
+    })));
+    styleAppliedRef.current = false;
+    autoStartedRef.current = false;
+    setGlobalStyleId(styleId);  // 最后 set, 触发 useEffect 重跑
+  }
 
   if (loading || plans.length === 0) return <Spinning icon="🎨" phases={[
     { text: "把文章切成 4 个大段", sub: "按 H2 / 语义转折定界" },
@@ -868,13 +946,45 @@ function WxStepImages({ plans, setPlans, onGen, loading, onPrev, onNext, onRegen
       <div style={{ marginBottom: 16, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
         <div style={{ flex: 1, minWidth: 280 }}>
           <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>段间配图 · {doneCount}/{plans.length} 🎨</div>
-          <div style={{ fontSize: 13, color: T.muted }}>prompt 可改 · 加风格预设 · 改完点「生成/🔄 重生」用新 prompt 重生。每张 30-60s。</div>
+          <div style={{ fontSize: 13, color: T.muted }}>4 张统一风格 · 切风格自动重生 4 张 · 每张 30-60s · 单张 prompt 还能微调。</div>
         </div>
         {imgChip && <ImageEngineChip {...imgChip} />}
         {pending.length > 0 && (
           <Btn variant="primary" onClick={genAll} disabled={runningCount > 0}>
             ✨ 一键生成剩余 {pending.length} 张
           </Btn>
+        )}
+      </div>
+      {/* D-091 全局统一风格 chip · 4 张套同一个风格 */}
+      <div style={{
+        marginBottom: 16, padding: "10px 14px", display: "flex", alignItems: "center",
+        gap: 8, flexWrap: "wrap", background: T.brandSoft,
+        border: `1px solid ${T.brand}33`, borderRadius: 10,
+      }}>
+        <span style={{ fontSize: 12, color: T.brand, fontWeight: 600, whiteSpace: "nowrap" }}>
+          🎨 统一风格
+        </span>
+        {IMAGE_STYLE_PRESETS.map(preset => {
+          const active = globalStyleId === preset.id;
+          return (
+            <button key={preset.id} onClick={() => pickGlobalStyle(preset.id)}
+              disabled={runningCount > 0}
+              title={`4 张全套: ${preset.append}`}
+              style={{
+                padding: "5px 12px", fontSize: 12, borderRadius: 100,
+                background: active ? T.brand : "#fff",
+                color: active ? "#fff" : T.muted,
+                border: `1px solid ${active ? T.brand : T.borderSoft}`,
+                cursor: runningCount > 0 ? "not-allowed" : "pointer",
+                fontFamily: "inherit", fontWeight: active ? 600 : 400,
+                opacity: runningCount > 0 ? 0.5 : 1,
+              }}>
+              {preset.label}
+            </button>
+          );
+        })}
+        {runningCount > 0 && (
+          <span style={{ fontSize: 11, color: T.muted2 }}>(生成中, 等完了再换)</span>
         )}
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 14 }}>

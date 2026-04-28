@@ -731,3 +731,53 @@ D-090 这条 skill 已经踩了 8 个不同形态的坑, 散落在 git log 里, 
 - 段间图 `loaded_ok=true, 800x450`, console 无 error, 截图视觉确认.
 
 
+## D-091 - 段间图 4 张统一风格选择器 (2026-04-28)
+
+**触发 case**: 老板今天 12:50 反馈, 4 张段间图能在 Step 6 显示了 (D-090 OK), 但
+4 张视觉风格各不相同 (有的明亮店铺, 有的昏暗茶室, 有的科技蓝光), 放在一篇公众号
+里"有点奇怪". 想要"选手绘就 4 张都手绘, 选写实就 4 张都写实"的全局统一选择.
+
+**根因**: `plan_section_images` 让 LLM 出 4 个 prompt, system 已经写了"真实感照片
+风格,暖色调", 但每段 prompt 自带的叙事氛围 (具象画面描述) 各异. 真生图时, 模型
+跟着叙事走, 4 张视觉风格不一致. 前端原本只有 *单张* `IMAGE_STYLE_PRESETS` chip
+让用户每张追加 — 老板要点 4 次同一个 chip 才能统一, 不友好.
+
+**决策**: 前端 Step 5 顶部加全局"🎨 统一风格" chip group, 6 个 PRESET 复用现有
+单张 chip 的 append 字符串. 切风格时:
+- 给所有 4 张 plan 的 image_prompt strip 末尾任何已知 PRESET.append (多扫 2 轮
+  防双层) + 套新 PRESET.append → **幂等**, 切多次不累积
+- 清 4 张状态 (status=pending, mmbiz_url=null, media_url=null)
+- 重置 styleAppliedRef / autoStartedRef → useEffect 自动重生 4 张
+- localStorage 持久化偏好 `wechat:section_image:global_style`
+
+**为什么不改后端 `plan_section_images`**: 前端 prompt 末尾 append 已经能盖过 LLM
+隐含的叙事氛围 (apimart 等生图模型对 prompt 末尾的明确风格关键词权重高). 实测
+切水墨/卡通/复古真生出来的 4 张视觉一致. 改 backend schema + LLM system 多 1 次
+往返, 引入回归面更大. 老板需求 = "选个风格 4 张统一" = 前端层就够.
+
+**为什么不直接默认套 "real"**: 已经在 `loadGlobalStyleId` 默认值做了 (跟 backend
+plan-images system prompt "真实感照片,暖色调" 对齐). 用户没主动选时, 进 Step 5
+4 张 prompt 自动末尾对齐 real append.
+
+**已生成图不动 prompt**: useEffect 第一次套全局风格时, `if (p.mmbiz_url && p.status
+=== "done") return p` — 用户已认可的图不再回写 prompt, 避免误改用户改过的描述.
+切风格 (`pickGlobalStyle`) 强制清状态时是显式行为, 用户预期"换风格全重生".
+
+**单张 chip 仍保留**: 卡片底部还有单张 PRESET chip (微调用). 全局 chip 不替代它.
+顺序: 全局选风格 → 4 张统一 → 单张如果想再追个不同 vibe 可以再 append.
+
+**测试** (没 JS 测试 infra, 走 playwright):
+- 注入 `wf:wechat` localStorage snapshot 给 4 张 pending plan
+- goto :8001 wechat → 默认 chip "真实感照片" brand color 高亮 ✅
+- 4 张 prompt 末尾自动套 real append ✅
+- 点"水墨/中式" → 4 张 prompt strip real + 套 ink ✅, real 残留为 0 ✅
+- localStorage `wechat:section_image:global_style` = "ink" ✅
+- console + page error 无 ✅
+
+**Follow-up**:
+- 用户改过的 prompt 切风格时也会被 strip 后再套 — 用户的微调描述保留 (因为
+  applyGlobalStyleToPrompt 只动末尾, 不动 prompt 主体). 但若用户在末尾手写了
+  非 PRESET 的风格描述 (比如自创 ",赛博朋克"), 切风格不会 strip 它. 这是预期
+  (我们只 strip 已知 PRESET).
+
+
