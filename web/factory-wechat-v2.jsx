@@ -379,7 +379,7 @@ function PageWechat({ onNav }) {
         {step === "topic"   && <WxStepTopic topic={topic} setTopic={setTopic} onGo={genTitles} onAuto={startAuto} loading={loading} skillInfo={skillInfo} skipImages={skipImages} setSkipImages={setSkipImages} />}
         {step === "titles"  && <WxStepTitles titles={titles} loading={loading} onPick={genOutline} onPrev={() => setStep("topic")} onRegen={genTitles} autoMode={autoMode} />}
         {step === "outline" && <WxStepOutline outline={outline} setOutline={setOutline} title={pickedTitle} topic={topic} loading={loading} onPrev={() => setStep("titles")} onNext={writeArticle} onRegen={() => genOutline(pickedTitle)} />}
-        {step === "write"   && <WxStepWrite article={article} loading={loading} onPrev={() => setStep("outline")} onNext={planImages} onRewrite={writeArticle} onRewriteSelection={rewriteSelection} onNav={onNav} pickedTitle={pickedTitle} topic={topic} />}
+        {step === "write"   && <WxStepWrite article={article} loading={loading} onPrev={() => setStep("outline")} onNext={planImages} onRewrite={writeArticle} onRewriteSelection={rewriteSelection} onRecovered={setArticle} onNav={onNav} pickedTitle={pickedTitle} topic={topic} outline={outline} />}
         {step === "images"  && <WxStepImages plans={imagePlans} setPlans={setImagePlans} onGen={generateOneImage} loading={loading} onPrev={() => setStep("write")} onNext={() => assembleHtml()} onRegen={planImages}
           imgChip={{ engine: imgEngine, onChange: setImgEngine, defaultEngine: defaultImgEngine, isOverride: isImgOverride }} />}
         {step === "html"    && <WxStepHtml result={htmlResult} loading={loading} onPrev={() => setStep("images")} onNext={genCover} onSwitchTemplate={assembleHtml} />}
@@ -627,8 +627,117 @@ function OutlineField({ label, value, onChange, multi }) {
 }
 
 // ─── Step 4 · 长文 + 三层自检 ───────────────────────────────
-function WxStepWrite({ article, loading, onPrev, onNext, onRewrite, onRewriteSelection, onNav, pickedTitle, topic }) {
-  if (loading || !article) return <Spinning icon="✍️" phases={[
+function _usableWechatArticle(result) {
+  return !!(result && typeof result === "object" && String(result.content || "").trim());
+}
+
+function _matchWechatWriteTask(task, topic, pickedTitle) {
+  if (!task || task.kind !== "wechat.write") return false;
+  const payload = task.payload || {};
+  const result = task.result || {};
+  const title = String(pickedTitle || "").trim();
+  const topicText = String(topic || "").trim();
+  if (title && (payload.title === title || result.title === title)) return true;
+  if (title && String(task.label || "").includes(title.slice(0, 16))) return true;
+  if (topicText && String(payload.topic_preview || "").includes(topicText.slice(0, 24))) return true;
+  return false;
+}
+
+function WxStepWriteRecover({ topic, pickedTitle, outline, onRecovered, onPrev, onRewrite }) {
+  const [checked, setChecked] = React.useState(false);
+  const [recovering, setRecovering] = React.useState(false);
+  const [recoverErr, setRecoverErr] = React.useState("");
+  const [activeTaskId, setActiveTaskId] = React.useState("");
+
+  const poller = useTaskPoller(activeTaskId, {
+    interval: 2500,
+    onComplete: (result) => {
+      if (_usableWechatArticle(result)) onRecovered?.(result);
+      else setRecoverErr("后台说写完了, 但正文是空的。请回到大纲后重新生成。");
+    },
+    onError: (msg) => setRecoverErr(msg || "这次没写成, 可以回大纲重试。"),
+  });
+
+  const recoverLatest = React.useCallback(async () => {
+    setRecoverErr("");
+    setRecovering(true);
+    try {
+      const data = await api.get("/api/tasks?limit=30");
+      const tasks = Array.isArray(data?.tasks) ? data.tasks : [];
+      const candidates = tasks.filter(t => _matchWechatWriteTask(t, topic, pickedTitle));
+      const done = candidates.find(t => t.status === "ok" && _usableWechatArticle(t.result));
+      if (done) {
+        onRecovered?.(done.result);
+        return;
+      }
+      const running = candidates.find(t => t.status === "running" || t.status === "pending");
+      if (running) {
+        setActiveTaskId(running.id);
+        return;
+      }
+      setChecked(true);
+    } catch (e) {
+      setRecoverErr(e.message || "没有接上后台结果。");
+      setChecked(true);
+    } finally {
+      setRecovering(false);
+    }
+  }, [topic, pickedTitle, onRecovered]);
+
+  React.useEffect(() => { recoverLatest(); }, [recoverLatest]);
+
+  if (activeTaskId && poller.task && poller.isRunning) {
+    return (
+      <LoadingProgress
+        task={poller.task}
+        icon="✍️"
+        title="长文还在写"
+        subtitle="已接上后台进度, 写完后会自动显示正文"
+      />
+    );
+  }
+
+  return (
+    <div style={{ padding: "80px 40px 120px", maxWidth: 720, margin: "0 auto" }}>
+      <div style={{
+        background: "#fff", border: `1px solid ${T.border}`, borderRadius: 14,
+        padding: 28, textAlign: "center", boxShadow: "0 10px 28px rgba(15,23,42,.06)",
+      }}>
+        <div style={{ fontSize: 34, marginBottom: 10 }}>✍️</div>
+        <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 8 }}>
+          {recovering ? "正在接回刚才写好的长文..." : "长文没有接上"}
+        </div>
+        <div style={{ fontSize: 13, color: T.muted, lineHeight: 1.8, marginBottom: 18 }}>
+          {checked
+            ? "没有在最近任务里找到这篇文章的完成结果。可以回到大纲重新点一次写长文。"
+            : "如果后台已经写完, 这里会自动把正文带回来。"}
+        </div>
+        {recoverErr && (
+          <div style={{ marginBottom: 14 }}>
+            <InlineError err={recoverErr} />
+          </div>
+        )}
+        <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
+          <button onClick={recoverLatest} disabled={recovering}
+            style={{ padding: "9px 18px", borderRadius: 10, border: `1px solid ${T.border}`, background: "#fff", cursor: recovering ? "default" : "pointer", fontFamily: "inherit" }}>
+            再接一次
+          </button>
+          <button onClick={onPrev}
+            style={{ padding: "9px 18px", borderRadius: 10, border: `1px solid ${T.border}`, background: "#fff", cursor: "pointer", fontFamily: "inherit" }}>
+            回大纲
+          </button>
+          <button onClick={onRewrite} disabled={!outline}
+            style={{ padding: "9px 18px", borderRadius: 10, border: "none", background: outline ? T.brand : T.bg3, color: outline ? "#fff" : T.muted, cursor: outline ? "pointer" : "default", fontFamily: "inherit", fontWeight: 600 }}>
+            重新写长文
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function WxStepWrite({ article, loading, onPrev, onNext, onRewrite, onRewriteSelection, onRecovered, onNav, pickedTitle, topic, outline }) {
+  const writePhases = [
     { text: "读完整人设 + 方法论 + 风格圣经", sub: "who-is-qinghuage + writing-methodology + style-bible · ~7200 token" },
     { text: "铺开场判断", sub: "原则① 先定性再解释 · 避免「不此地无银」" },
     { text: "展开中段 3 条核心论点", sub: "每段 300-500 字 · 带真实细节建画面" },
@@ -637,17 +746,12 @@ function WxStepWrite({ article, loading, onPrev, onNext, onRewrite, onRewriteSel
     { text: "金句收尾 · 埋分享钩子", sub: "1-2 处「截图可发朋友圈」的句子" },
     { text: "跑三层自检", sub: "六原则逐段扫 + 六维评分 ≥105 + 一票否决" },
     { text: "长文 2000-3000 字,慢一点,质量优先", sub: "Opus 本地 proxy · 通常 30-60s" },
-  ]} />;
-  if (!article) return null;
-  const sc = article.self_check || {};
-  const dims = sc.six_dimensions || {};
-  const total = Object.values(dims).reduce((a, b) => a + (b || 0), 0);
-  const pr = sc.six_principles || [];
-  const passed = pr.filter(p => p.pass).length;
-  const veto = sc.one_veto || {};
+  ];
 
-  const [editing, setEditing] = React.useState(article.content);
-  React.useEffect(() => setEditing(article.content), [article.content]);
+  const [editing, setEditing] = React.useState(article?.content || "");
+  React.useEffect(() => {
+    if (article?.content != null) setEditing(article.content);
+  }, [article?.content]);
 
   // D-036 ③ 局部重写 · selection 监听
   const taRef = React.useRef(null);
@@ -681,6 +785,27 @@ function WxStepWrite({ article, loading, onPrev, onNext, onRewrite, onRewriteSel
     "更犀利", "压短到一半", "拉长 + 加学员故事", "加具体数字",
     "口吻更口语", "去掉营销味", "加反差钩子",
   ];
+
+  if (loading) return <Spinning icon="✍️" phases={writePhases} />;
+  if (!article) {
+    return (
+      <WxStepWriteRecover
+        topic={topic}
+        pickedTitle={pickedTitle}
+        outline={outline}
+        onRecovered={onRecovered}
+        onPrev={onPrev}
+        onRewrite={onRewrite}
+      />
+    );
+  }
+
+  const sc = article.self_check || {};
+  const dims = sc.six_dimensions || {};
+  const total = Object.values(dims).reduce((a, b) => a + (b || 0), 0);
+  const pr = sc.six_principles || [];
+  const passed = pr.filter(p => p.pass).length;
+  const veto = sc.one_veto || {};
 
   return (
     <div style={{ padding: "32px 40px 120px", maxWidth: 1080, margin: "0 auto" }}>

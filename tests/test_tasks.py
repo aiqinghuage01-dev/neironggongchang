@@ -62,7 +62,7 @@ def test_update_progress_only_running(tmp_db):
     t.update_progress(tid, "不应写入")
     task = t.get_task(tid)
     assert task["status"] == "ok"
-    assert task["progress_text"] == "写第 3 段"
+    assert task["progress_text"] == "完成"
 
 
 def test_finish_task_ok_and_failed(tmp_db):
@@ -257,8 +257,25 @@ def test_run_async_happy_path(tmp_db):
         time.sleep(0.05)
     rec = t.get_task(tid)
     assert rec["status"] == "ok"
+    assert rec["progress_pct"] == 100
+    assert rec["progress_text"] == "完成"
     assert rec["result"] == {"answer": 42}
     assert rec["estimated_seconds"] == 10
+
+
+def test_finish_task_ok_sets_progress_100(tmp_db):
+    """D-095: 成功任务必须把进度收口到 100, 不停在 95 让前端像卡住."""
+    from backend.services import tasks as t
+
+    tid = t.create_task("wechat.write", label="写长文")
+    t.update_progress(tid, "整理结果...", pct=95)
+    t.finish_task(tid, result={"content": "ok"})
+
+    rec = t.get_task(tid)
+    assert rec["status"] == "ok"
+    assert rec["progress_pct"] == 100
+    assert rec["progress_text"] == "完成"
+    assert rec["result"] == {"content": "ok"}
 
 
 def test_run_async_failure_path(tmp_db):

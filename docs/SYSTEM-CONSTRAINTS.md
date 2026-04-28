@@ -451,6 +451,20 @@ return conn
 - 卡片内短文本用 ErrorText (避开布局)
 - 大块错误屏 (重试 + 修改) 用 ErrorBanner + FailedRetry (`factory-task.jsx`)
 
+### 11.6 持久化恢复态不能用纯动效兜底 (D-095)
+
+**现象**: 公众号 Step 4 的 `wechat.write` 后台任务已经 ok, 但 localStorage 恢复成
+`step=write + article=null`; 旧 UI 把 `!article` 当 loading, 无限显示"写长文"动效.
+
+**硬约束**:
+- step 页面如果依赖 `result` 渲染, `loading=false && result=null` 不能继续显示
+  `<Spinning />`.
+- 必须三选一:
+  1. 用 task_id / 最近 task 结果自动恢复;
+  2. 回退到上一个可编辑 step;
+  3. 显示可操作兜底 (重试 / 回上一步 / 清空).
+- 异步任务完成后要把 `progress_pct` 收口到 100, 避免 95 "整理结果..." 被用户看成卡住.
+
 ---
 
 ## 12. 素材库硬约束 (D-087)

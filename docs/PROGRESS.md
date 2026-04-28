@@ -4,7 +4,39 @@
 
 ---
 
-## 当前状态 (2026-04-28 · D-094 全清单 P1-P3 一次性扫完 + 修)
+## 当前状态 (2026-04-28 · D-095 公众号写长文恢复态卡死修复)
+
+**版本**: v0.7.1 — 修 Step 4 写长文"转了好久"假卡死.
+
+**触发 case**: 老板截图显示公众号页停在 Step 4 `长文 2000-3000 字,慢一点,质量优先`
+动效. 查 DB 发现最近 `wechat.write` 任务已 `ok`, 2964 字正文和自检结果都在
+task.result 里, 但前端 localStorage 恢复的是 `step=write + article=null`. 旧
+`WxStepWrite` 把 `!article` 当成正在生成, 不绑定后台任务也不回填结果, 所以无限转圈.
+
+### D-095 修复
+- `web/factory-wechat-v2.jsx`: Step 4 遇到 `article=null && loading=false` 时不再显示
+  写作动效, 改为 `WxStepWriteRecover`:
+  - 先查 `/api/tasks?limit=30`, 按 title/topic 匹配最近 `wechat.write`.
+  - 找到 `ok + result.content` 自动 `setArticle`, 老板不用重写、不重复烧 Opus.
+  - 找到 running/pending 则接入 `useTaskPoller` + `<LoadingProgress />` 真进度.
+  - 找不到才显示"再接一次 / 回大纲 / 重新写长文"兜底.
+- `backend/services/tasks.py`: `finish_task(status=ok)` 同步把 `progress_pct=100`,
+  `progress_text="完成"`, 后续任务不再停在 95 "整理结果..." 看起来像卡住.
+- `tests/test_tasks.py`: 加 D-095 回归, 确认 ok 任务进度收口 100.
+- `scripts/e2e_wechat_write_recover.js`: 浏览器回归脚本, 种入同款坏快照后确认自动显示
+  2964 字正文.
+
+### 验证
+- `pytest -q tests/test_tasks.py tests/test_wechat_pipeline_async_smoke.py tests/test_llm_empty_content.py` ✅
+- `pytest -q -x` ✅ (全量通过, dhv5 本机缺 skill 的 skip 仍为预期)
+- `node scripts/e2e_wechat_write_recover.js` ✅
+- 截图: `/tmp/_ui_shots/d095_wechat_write_recovered.png` 已读, 页面显示正文 + 自检结果,
+  console/pageerror = 0.
+- 后端已重启到 tmux `nrg-api`, `GET /api/tasks?limit=1` 正常.
+
+---
+
+## 上一里程碑 (2026-04-28 · D-094 全清单 P1-P3 一次性扫完 + 修)
 
 **版本**: v0.7.0 — 老板"我有的是时间, 你慢慢弄, 我要的是别出错". 一次性把 D-092
 列的 13 项清单 (P1 文案 9 + P2 防盗链 7 + P3 template 3) 全过完, 6 处真隐患

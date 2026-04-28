@@ -6,6 +6,18 @@
 
 ---
 
+## [v0.7.1] — 2026-04-28 (D-095 公众号写长文恢复态卡死)
+
+- **修复**: 公众号 Step 4 从 `step=write + article=null` 快照恢复时无限显示写长文动效,
+  即使后台 `wechat.write` 已经完成也不回填正文.
+- **前端**: `WxStepWriteRecover` 自动从最近任务中匹配 title/topic, 找到
+  `ok + result.content` 立即回填; running/pending 任务接入真实进度; 找不到时给
+  "再接一次 / 回大纲 / 重新写长文"兜底.
+- **后端**: `finish_task(status=ok)` 统一把 `progress_pct=100`、`progress_text=完成`,
+  避免成功任务停在 95 "整理结果..." 造成卡住错觉.
+- **测试**: `pytest -q -x` 全量通过; Playwright 回归脚本
+  `scripts/e2e_wechat_write_recover.js` 通过, 截图已确认正文自动恢复.
+
 ## [v0.6.0] — 2026-04-28 (D-087 素材库 + B' GPT 修订收尾)
 
 GPT 第二轮 review 抓到 7 处问题 (P2×6 + P3×1), 老板拍板按 GPT 修订方案落地, 不批量

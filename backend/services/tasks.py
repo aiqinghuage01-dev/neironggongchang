@@ -174,11 +174,19 @@ def finish_task(
         raise ValueError(f"invalid status: {status}")
     _ensure_schema()
     now = int(time.time())
+    done_text = "完成" if status == "ok" else None
     with closing(get_connection()) as con:
-        con.execute(
-            "UPDATE tasks SET status=?, result=?, error=?, finished_ts=?, updated_ts=? WHERE id=?",
-            (status, _dumps(result), (error or "")[:500] if error else None, now, now, task_id),
-        )
+        if status == "ok":
+            con.execute(
+                "UPDATE tasks SET status=?, result=?, error=?, finished_ts=?, updated_ts=?, "
+                "progress_text=?, progress_pct=100 WHERE id=?",
+                (status, _dumps(result), None, now, now, done_text, task_id),
+            )
+        else:
+            con.execute(
+                "UPDATE tasks SET status=?, result=?, error=?, finished_ts=?, updated_ts=? WHERE id=?",
+                (status, _dumps(result), (error or "")[:500] if error else None, now, now, task_id),
+            )
         con.commit()
     # T7: 失败 placeholder 入作品库
     if status == "failed":

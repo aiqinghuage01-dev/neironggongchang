@@ -1045,3 +1045,24 @@ if not key_field:
   快一年了, 老板可能不需要这个元素).
 
 
+## D-095 - 公众号写长文恢复态不能无限动效 (2026-04-28)
+
+**触发**: 老板截图: 公众号 Step 4 一直显示"长文 2000-3000 字,慢一点,质量优先".
+DB 实查最近 `wechat.write` 已 `ok`, `task.result.content` 有 2964 字正文. 问题在前端
+D-016 localStorage 恢复: 快照是 `step=write + article=null`, 旧 `WxStepWrite` 用
+`if (loading || !article) return <Spinning />`, 导致没有后台任务绑定也永久显示生成动效.
+
+**决策**:
+- Step 页面不能把"缺结果"和"正在跑"混为一谈. `loading=false && result=null` 必须走恢复/兜底.
+- 对公众号写长文, 优先从最近 `/api/tasks?limit=30` 找匹配 `wechat.write`:
+  title/topic 匹配 + `status=ok` + `result.content` 非空 → 直接回填 `article`.
+- 如果匹配到 running/pending, 接 `useTaskPoller` + `LoadingProgress` 真进度.
+- 只有找不到任务时才给用户可操作兜底: 再接一次 / 回大纲 / 重新写长文.
+- 后端 `finish_task(ok)` 收口 `progress_pct=100` + `progress_text=完成`; 不再让成功任务停在
+  95 "整理结果..." 造成卡住错觉.
+
+**验证**:
+- `pytest -q -x` 全量通过.
+- Playwright 种入同款坏快照 (`step=write + article=null`) 后, 页面自动显示 2964 字正文 +
+  自检结果, screenshot `/tmp/_ui_shots/d095_wechat_write_recovered.png`.
+
