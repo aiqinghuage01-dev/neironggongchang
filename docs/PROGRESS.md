@@ -4,7 +4,44 @@
 
 ---
 
-## 当前状态 (2026-04-28 · D-089 公众号 Step 6 段间图丢失修复)
+## 当前状态 (2026-04-28 · D-090 段间图防盗链 + 双 URL 策略 + 经验沉淀)
+
+**版本**: v0.6.3 — Step 6 排版预览段间图能真显示 (不再"未经允许不可引用").
+新建 `docs/WECHAT-SKILL-LESSONS.md` 公众号 skill 踩坑大全, 一站式查阅 D-039/
+D-042/D-045/D-046/D-048/D-088/D-089/D-090, 后续 AI 改这块前必扫.
+
+**触发 case**: 老板今天 12:38 D-089 修完后看 Step 6, 段间图显示防盗链占位
+"此图片来自微信公众平台 未经允许不可引用". D-089 让段间图进了 raw_html, 但
+浏览器在 :8001 加载 mmbiz.qpic.cn referer 不对被防盗链挡.
+
+### D-090 修复
+- 后端 `_md_to_wechat_html` 加 `prefer_media: bool` 参数 + `_MEDIA_PREVIEW_BASE`
+  常量. True → 用 media_url 拼 `http://127.0.0.1:8000/media/...`, False → 用
+  mmbiz_url. 缺时退化.
+- `assemble_html` 渲染两份: `wechat_article_raw.html` (preview, media_url) +
+  `wechat_article_raw_push.html` (推送, mmbiz_url). converter 喂 push 版,
+  前端 iframe 拿 preview 版.
+- 前端 (`factory-wechat-v2.jsx` 两处) section_images 透传 `{mmbiz_url, media_url}`
+  双字段, 不再丢 media_url.
+- `tests/test_wechat_html_inject.py` +3 case: prefer_media 用本地代理 / 缺
+  media_url 退化 mmbiz / push 用 mmbiz 不漏 /media/.
+
+### D-090 经验沉淀 (老板要求 "不要每次重新踩")
+- 新建 `docs/WECHAT-SKILL-LESSONS.md` 公众号踩坑 7 节: 双 URL / template 静默
+  fail / LLM 空 content / Phase 4-5 头像+sanitize / fail-fast 不伪 ok / template
+  是 skill 仓库资产 / 改完必跑闭环.
+- `CLAUDE.md` 文档表 + Session 启动 3 步 加索引指向 LESSONS.
+
+### 闭环验证
+- `pytest -x` 531 通过 + 17 skip (新增 3 case).
+- 真前端 :8001 playwright (不是 file://): chromium goto :8001 wechat, fetch
+  /api/wechat/html 真链路, raw_html setContent 后段间图
+  `http://127.0.0.1:8000/media/wechat-images/d090test.png` 浏览器真加载
+  (loaded_ok=true, naturalWidth=800x450), console 无 error. 截图视觉确认.
+
+---
+
+## 上一里程碑 (2026-04-28 · D-089 公众号 Step 6 段间图丢失修复)
 
 **版本**: v0.6.2 — 修 `_inject_into_template` content 替换正则不命中导致段间图被吞.
 

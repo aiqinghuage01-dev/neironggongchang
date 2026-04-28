@@ -36,6 +36,7 @@ cat docs/SYSTEM-CONSTRAINTS.md
 
 # 3. 按需读
 #    - docs/TECHNICAL-DECISIONS.md  <- 技术决策档案
+#    - docs/WECHAT-SKILL-LESSONS.md <- 改 wechat (公众号) 代码前必扫
 #    - PRD_v2.md                    <- 完整 PRD (1000+ 行, 按需读章节)
 ```
 
@@ -50,6 +51,7 @@ cat docs/SYSTEM-CONSTRAINTS.md
 | `docs/SYSTEM-CONSTRAINTS.md` | **系统硬约束** (路径/异步/AI/访客模式等) | 踩新坑写新约束就追加 |
 | `docs/TECHNICAL-DECISIONS.md` | 技术决策档案 (为什么这么做) | 踩到新坑/做新决策就补 |
 | `docs/NEW-SKILL-PLAYBOOK.md` | 新 skill 接入手册 (D-010 范式) | 接新 skill 时必读 |
+| `docs/WECHAT-SKILL-LESSONS.md` | **公众号 skill 踩坑大全** (双 URL/防盗链/template 替换静默 fail/LLM 空内容) | 改 wechat 相关代码前必读 |
 | `CHANGELOG.md` | 版本演进 + 按决策号分组 | 每发版补一节 |
 | `CLAUDE.md` (本文) | AI 入口路标 | 极少改, 改了要简短 |
 | `AGENTS.md` | Codex/GPT 入口路标 (与本文对偶) | 与 CLAUDE 同步更新 |

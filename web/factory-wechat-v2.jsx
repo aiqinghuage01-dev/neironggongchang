@@ -146,7 +146,8 @@ function PageWechat({ onNav }) {
         }
       }
 
-      const section_images = finalPlans.filter(p => p.mmbiz_url).map(p => ({ mmbiz_url: p.mmbiz_url }));
+      // D-090: 双 URL 透传 — media_url 给后端预览渲染避 mmbiz 防盗链, mmbiz_url 给推送
+      const section_images = finalPlans.filter(p => p.mmbiz_url).map(p => ({ mmbiz_url: p.mmbiz_url, media_url: p.media_url || null }));
       await runStep_("html", async () => {
         const r = await api.post("/api/wechat/html", {
           title, content_md: writeR.content, section_images, hero_highlight: title.slice(0, 6),
@@ -250,7 +251,8 @@ function PageWechat({ onNav }) {
     const tpl = (typeof templateName === "string" && templateName)
       ? templateName
       : (htmlResult?.template || "v3-clean");
-    const section_images = imagePlans.filter(p => p.mmbiz_url).map(p => ({ mmbiz_url: p.mmbiz_url }));
+    // D-090: 双 URL — media_url (本地预览, 避 mmbiz 防盗链) + mmbiz_url (推送给微信)
+    const section_images = imagePlans.filter(p => p.mmbiz_url).map(p => ({ mmbiz_url: p.mmbiz_url, media_url: p.media_url || null }));
     return runStep({
       nextStep: "html", rollbackStep: "images", clearSetter: setHtmlResult,
       apiCall: async () => {

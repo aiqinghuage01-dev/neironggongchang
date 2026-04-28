@@ -252,9 +252,9 @@ def assemble_html(
     if not hero_subtitle:
         hero_subtitle = _auto_subtitle(content_md)
 
-    # Markdown → HTML body(用简单正则,不引入 markdown lib,
-    # 因为 skill 写的长文本就是段落式,H2 很少)
-    body_html = _md_to_wechat_html(content_md, section_images or [])
+    # Markdown → HTML body. D-090 双 URL: 渲染两份, 一份 preview (media_url) 一份 push (mmbiz_url).
+    body_html_preview = _md_to_wechat_html(content_md, section_images or [], prefer_media=True)
+    body_html_push = _md_to_wechat_html(content_md, section_images or [], prefer_media=False)
 
     digest = _auto_digest(content_md)
     author_url = _read_asset_text("avatar-wechat-url.txt").strip() or ""
@@ -262,18 +262,33 @@ def assemble_html(
     # 把 body 塞进 template 里 .article-body > .content 的位置
     # template-v3-clean.html 本身是完整 HTML,我们做字符串替换
     hero_title_html = _compose_hero_title_html(title, hero_highlight)
-    html = _inject_into_template(
+    html_preview = _inject_into_template(
         template_html,
         title=title,
         hero_badge=hero_badge,
         hero_title_html=hero_title_html,
         hero_subtitle=hero_subtitle,
-        body_html=body_html,
+        body_html=body_html_preview,
+        avatar_url=author_url,
+    )
+    html_push = _inject_into_template(
+        template_html,
+        title=title,
+        hero_badge=hero_badge,
+        hero_title_html=hero_title_html,
+        hero_subtitle=hero_subtitle,
+        body_html=body_html_push,
         avatar_url=author_url,
     )
 
+    # 兼容下文 `len(re.findall(r"<img\b", html))` 诊断 (取 preview 版数图)
+    html = html_preview
+
     raw_path = PREVIEW_DIR / "wechat_article_raw.html"
-    raw_path.write_text(html, encoding="utf-8")
+    raw_path.write_text(html_preview, encoding="utf-8")
+    # D-090: push 用的 raw HTML (mmbiz_url) 单独落盘喂 converter, 不污染前端预览.
+    push_raw_path = PREVIEW_DIR / "wechat_article_raw_push.html"
+    push_raw_path.write_text(html_push, encoding="utf-8")
 
     # D-043: 诊断落盘 — 段间图丢失的话至少能看到这条记录定位到底是前端没发还是后端丢
     _images_in = section_images or []
@@ -297,9 +312,11 @@ def assemble_html(
 
     scripts_dir = skill_loader.load_skill(SKILL_SLUG)["scripts_dir"]
     converter = scripts_dir / "convert_to_wechat_markup.py"
+    # D-090: 喂 push 版 raw (mmbiz_url) 给 converter, 推送给微信识别自家图床;
+    # 前端预览的 raw_path 用 media_url 走本地 :8000/media 避防盗链.
     _run([
         "python3", str(converter),
-        "--input", str(raw_path),
+        "--input", str(push_raw_path),
         "--output", str(wechat_path),
         "--meta", str(meta_path),
     ], timeout=60, cwd=str(scripts_dir))
@@ -325,8 +342,23 @@ def assemble_html(
     }
 
 
-def _md_to_wechat_html(md: str, section_images: list[dict[str, str]]) -> str:
-    """简易 MD→HTML: 只处理 # / ## / 段落 / 加粗,并按段落数均匀插图。"""
+_MEDIA_PREVIEW_BASE = "http://127.0.0.1:8000"  # 路线 B 部署改 env (LH 本机够用)
+
+
+def _md_to_wechat_html(
+    md: str,
+    section_images: list[dict[str, str]],
+    *,
+    prefer_media: bool = False,
+) -> str:
+    """简易 MD→HTML: 只处理 # / ## / 段落 / 加粗,并按段落数均匀插图。
+
+    D-090 双 URL 策略:
+    - prefer_media=True (前端预览): 优先 media_url -> 拼 http://127.0.0.1:8000/media/...
+      避开 mmbiz.qpic.cn referer 防盗链 ("此图片来自微信公众平台 未经允许不可引用").
+    - prefer_media=False (推送给微信): 用 mmbiz_url, 微信识别自家图床.
+    media_url 缺时退化到 mmbiz_url, 不会抛错; 但前端预览会再次撞防盗链.
+    """
     # 去掉首个 H1(Hero 已经展示标题,正文不再重复)
     lines = md.splitlines()
     if lines and lines[0].startswith("# "):
@@ -346,7 +378,15 @@ def _md_to_wechat_html(md: str, section_images: list[dict[str, str]]) -> str:
 
     imgs_html: list[str] = []
     for item in section_images:
-        url = item.get("mmbiz_url") or ""
+        url = ""
+        if prefer_media:
+            rel = (item.get("media_url") or "").strip()
+            if rel.startswith("/"):
+                url = _MEDIA_PREVIEW_BASE + rel
+            elif rel.startswith("http"):
+                url = rel
+        if not url:
+            url = (item.get("mmbiz_url") or "").strip()
         if url:
             imgs_html.append(
                 f'<p><img src="{url}" style="width:100%;border-radius:10px;margin:24px 0" /></p>'

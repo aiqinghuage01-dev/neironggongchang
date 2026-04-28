@@ -670,3 +670,64 @@ r'(<div class="content"[^>]*>)[\s\S]*?(</div>\s*</div>\s*<div class="footer-fixe
   作为锚点.
 
 
+## D-090 - 段间图防盗链 + 双 URL 策略 + 经验沉淀 (2026-04-28)
+
+**触发 case**: D-089 让段间图真进了 raw_html, 但老板 Step 6 看到的预览框里图都
+是"此图片来自微信公众平台 未经允许不可引用" 占位. 浏览器从 :8001 origin 加载
+mmbiz.qpic.cn 的图, referer 不对被微信图床防盗链挡.
+
+**根因**: 段间图工程上一直有两个 URL (D-039 已注释提到):
+- `mmbiz_url` (微信图床原图, 推送给微信识别自家域)
+- `media_url` (后端拷一份到 data/wechat-images/ + :8000 /media/ 静态路由, 浏览器
+  直接加载不撞防盗链)
+
+但 D-039 只在 Step 5 段间图卡片预览用了 media_url, **Step 6 排版预览 (iframe srcDoc
+拿 raw_html) 一直只用 mmbiz_url**. 前端 `assembleHtml` 把 imagePlans 映射成
+section_images 时只传 `{mmbiz_url}`, 没透传 media_url. 后端 `_md_to_wechat_html`
+也只渲染 mmbiz_url. iframe 一加载就撞防盗链, 老板看到"未经允许不可引用".
+
+**决策**:
+- **后端 `_md_to_wechat_html` 加 `prefer_media: bool` 参数**:
+  - `prefer_media=True`: 优先 media_url, 拼 `http://127.0.0.1:8000/media/...`
+    (用 `_MEDIA_PREVIEW_BASE` 常量, 路线 B 部署改 env). 缺 media_url 退化到
+    mmbiz_url (老数据兼容, 但会再撞防盗链).
+  - `prefer_media=False`: 用 mmbiz_url, 推送给微信.
+- **后端 `assemble_html` 渲染两份 HTML**:
+  - `wechat_article_raw.html` (前端 iframe srcDoc 拿) ← prefer_media=True
+  - `wechat_article_raw_push.html` (converter 输入) ← prefer_media=False
+  - converter 输出 `wechat_article.html` (推送给微信), 内含 mmbiz_url.
+- **前端 `factory-wechat-v2.jsx`** 两处 (auto pipeline + assembleHtml) section_images
+  透传 `{mmbiz_url, media_url}` 双字段.
+
+**为什么不在前端 iframe 加 `<meta name="referrer" content="no-referrer">`**:
+- 仅 Chrome 部分版本生效, 实际反复. 走本地代理 `:8000/media/` 是最稳, 跨浏览器一致.
+
+**为什么不在 backend 反代 mmbiz**:
+- 增加运维负担 + 会被微信限流; media_url 拷贝阶段 (gen_section_image) 已经
+  落本地, 直接用就好.
+
+**部署影响 (路线 B 学员版)**:
+- `_MEDIA_PREVIEW_BASE = "http://127.0.0.1:8000"` 是 LH 本机硬编码. 部署 poju.ai
+  时改成 env / settings 字段读, 别忘了.
+- raw_html 内嵌的 `http://127.0.0.1:...` 千万别推送给微信 — 已经分离两份, 推送
+  走 push 版用 mmbiz_url. 测试 `test_md_to_wechat_html_push_uses_mmbiz_not_media`
+  专门防回归.
+
+**经验沉淀 (老板要求)**: D-039 / D-042 / D-045 / D-046 / D-048 / D-088 / D-089 /
+D-090 这条 skill 已经踩了 8 个不同形态的坑, 散落在 git log 里, 每次新 AI 进来
+都要重读. 建 `docs/WECHAT-SKILL-LESSONS.md` 一站式踩坑大全 + 测试入口索引.
+`CLAUDE.md` 文档表 + Session 启动 3 步 加显式索引. 后续改 wechat 代码先扫
+一遍 LESSONS, 不要重复造轮子.
+
+**测试** (`tests/test_wechat_html_inject.py` 新 +3 / 共 10 项):
+- prefer_media=True 用本地代理 + 不出现 mmbiz.qpic.cn ✅
+- prefer_media=True 缺 media_url 退化 mmbiz_url 不抛错 ✅
+- prefer_media=False 用 mmbiz_url + 不出现 /media/ 不出现 127.0.0.1 ✅
+
+**playwright 真前端闭环** (不是 file://):
+- chromium goto `http://127.0.0.1:8001/?page=wechat`
+- `page.evaluate` 调真 backend `/api/wechat/html` 走完整链路
+- raw_html `setContent` 到新 page → 等 networkidle → 检测 img.naturalWidth
+- 段间图 `loaded_ok=true, 800x450`, console 无 error, 截图视觉确认.
+
+

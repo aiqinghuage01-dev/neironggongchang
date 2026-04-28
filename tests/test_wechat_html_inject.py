@@ -154,3 +154,46 @@ def test_md_to_wechat_html_no_images_when_empty():
     assert "<img" not in out
     assert "段落 A" in out
     assert "段落 B" in out
+
+
+# ─── D-090 双 URL 策略 ────────────────────────────────────
+
+
+def test_md_to_wechat_html_prefer_media_uses_local_proxy():
+    """prefer_media=True → 用 media_url, 拼绝对前缀 http://127.0.0.1:8000/media/...
+    避开 mmbiz.qpic.cn 防盗链 ('未经允许不可引用')."""
+    md = "# 标题\n\n段 1\n\n段 2\n\n段 3\n\n段 4"
+    section_images = [
+        {"mmbiz_url": "http://mmbiz.qpic.cn/sz_mmbiz_jpg/aaa/0?from=appmsg",
+         "media_url": "/media/wechat-images/abc.jpg"},
+    ]
+    out = wechat_scripts._md_to_wechat_html(md, section_images, prefer_media=True)
+    # 用 media_url 拼绝对地址
+    assert "http://127.0.0.1:8000/media/wechat-images/abc.jpg" in out
+    # 不应该出现 mmbiz_url (前端预览页避防盗链)
+    assert "mmbiz.qpic.cn" not in out
+
+
+def test_md_to_wechat_html_prefer_media_falls_back_to_mmbiz_when_no_local():
+    """prefer_media=True 但 media_url 缺 → 退化到 mmbiz_url, 不抛错."""
+    md = "# 标题\n\n段 1\n\n段 2\n\n段 3\n\n段 4"
+    section_images = [
+        {"mmbiz_url": "http://mmbiz.qpic.cn/sz_mmbiz_jpg/aaa/0?from=appmsg"},
+    ]
+    out = wechat_scripts._md_to_wechat_html(md, section_images, prefer_media=True)
+    # 退化到 mmbiz_url (老数据 / 拷贝失败)
+    assert "mmbiz.qpic.cn/sz_mmbiz_jpg/aaa" in out
+
+
+def test_md_to_wechat_html_push_uses_mmbiz_not_media():
+    """prefer_media=False (推送) → 用 mmbiz_url, 不用 media_url, 让微信识别自家图床."""
+    md = "# 标题\n\n段 1\n\n段 2\n\n段 3\n\n段 4"
+    section_images = [
+        {"mmbiz_url": "http://mmbiz.qpic.cn/sz_mmbiz_jpg/aaa/0?from=appmsg",
+         "media_url": "/media/wechat-images/abc.jpg"},
+    ]
+    out = wechat_scripts._md_to_wechat_html(md, section_images, prefer_media=False)
+    assert "mmbiz.qpic.cn/sz_mmbiz_jpg/aaa" in out
+    # 推送 HTML 里不能含本地 /media/ 路径 (微信加载不到 + 暴露本地 ip)
+    assert "/media/wechat-images" not in out
+    assert "127.0.0.1:8000" not in out
