@@ -154,6 +154,96 @@ def test_sweep_stuck_does_not_kill_fresh_running(tmp_db):
     assert t.get_task(tid)["status"] == "running"
 
 
+# ─── B'-1 watchdog 双阈值 (idle + total) ─────────────
+
+
+def test_sweep_stuck_kills_idle_no_heartbeat(tmp_db):
+    """started_ts=now-100 (才起跑), updated_ts=now-700 (心跳停 700s) → idle 超时 kill.
+    旧逻辑只看 started_ts, 这种"刚起跑但卡住没心跳" 会逃过, 现在双阈值能抓.
+    """
+    from backend.services import tasks as t
+    tid = t.create_task("k1", estimated_seconds=10000)  # estimated 很大, 总时长不会被触发
+    now = int(time.time())
+    with sqlite3.connect(str(tmp_db)) as con:
+        con.execute(
+            "UPDATE tasks SET started_ts=?, updated_ts=? WHERE id=?",
+            (now - 100, now - 700, tid),
+        )
+        con.commit()
+    n = t.sweep_stuck()
+    assert n == 1
+    task = t.get_task(tid)
+    assert task["status"] == "failed"
+    assert "idle" in (task["error"] or "")
+
+
+def test_sweep_stuck_total_timeout_even_with_recent_heartbeat(tmp_db):
+    """心跳一直在但跑太久也要杀 (防心跳续命无限活).
+    started_ts=now-50001 (跑了 ~14h), updated_ts=now-5 (心跳新鲜),
+    estimated=10000 → total = max(10000*5, 600) = 50000s.
+    now-started > 50000 → total 超时 kill.
+    """
+    from backend.services import tasks as t
+    tid = t.create_task("k1", estimated_seconds=10000)
+    now = int(time.time())
+    with sqlite3.connect(str(tmp_db)) as con:
+        con.execute(
+            "UPDATE tasks SET started_ts=?, updated_ts=? WHERE id=?",
+            (now - 50001, now - 5, tid),
+        )
+        con.commit()
+    n = t.sweep_stuck()
+    assert n == 1
+    task = t.get_task(tid)
+    assert task["status"] == "failed"
+    assert "total" in (task["error"] or "")
+
+
+def test_sweep_stuck_keeps_running_with_fresh_heartbeat_within_total(tmp_db):
+    """心跳活的 + 总时长还没到 → 不杀.
+    started_ts=now-3000 (跑了 50min), updated_ts=now-30 (心跳新鲜 30s 前),
+    estimated=10000 → total = 50000s, idle = 600s. 都没超 → 不动.
+    """
+    from backend.services import tasks as t
+    tid = t.create_task("k1", estimated_seconds=10000)
+    now = int(time.time())
+    with sqlite3.connect(str(tmp_db)) as con:
+        con.execute(
+            "UPDATE tasks SET started_ts=?, updated_ts=? WHERE id=?",
+            (now - 3000, now - 30, tid),
+        )
+        con.commit()
+    n = t.sweep_stuck()
+    assert n == 0
+    assert t.get_task(tid)["status"] == "running"
+
+
+def test_sweep_stuck_idle_and_total_both_count_separately(tmp_db):
+    """两条任务: 一条 idle 超时, 一条 total 超时. 都被杀, swept=2."""
+    from backend.services import tasks as t
+    tid_idle = t.create_task("k1", estimated_seconds=10000)
+    tid_total = t.create_task("k2", estimated_seconds=10)  # total = max(50, 600) = 600
+    now = int(time.time())
+    with sqlite3.connect(str(tmp_db)) as con:
+        # idle: 心跳 700s 前停了
+        con.execute(
+            "UPDATE tasks SET started_ts=?, updated_ts=? WHERE id=?",
+            (now - 200, now - 700, tid_idle),
+        )
+        # total: 心跳新鲜但总跑了 700s, > 600 total
+        con.execute(
+            "UPDATE tasks SET started_ts=?, updated_ts=? WHERE id=?",
+            (now - 700, now - 5, tid_total),
+        )
+        con.commit()
+    n = t.sweep_stuck()
+    assert n == 2
+    assert t.get_task(tid_idle)["status"] == "failed"
+    assert "idle" in (t.get_task(tid_idle)["error"] or "")
+    assert t.get_task(tid_total)["status"] == "failed"
+    assert "total" in (t.get_task(tid_total)["error"] or "")
+
+
 # ─── start_watchdog idempotent ───────────────────────
 
 def test_start_watchdog_only_starts_once(tmp_db):

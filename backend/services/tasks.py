@@ -271,12 +271,18 @@ def recover_orphans() -> int:
         return cur.rowcount
 
 
-# D-068: 周期 watchdog — 处理"进程没死但任务挂了"的情况
-# (上游 AI proxy hang / httpx 没正确 timeout / sync_fn 死循环 / 网络永久阻塞)
+# D-068 / B'-1 (GPT 修订): 周期 watchdog 双阈值
+# 旧逻辑只看 (now - started_ts), 心跳 update_progress 完全不参与 → 心跳续命是假的.
+# 新逻辑两道关:
+#   1. IDLE timeout    — now - updated_ts > IDLE_LIMIT  (心跳停了, 卡住了)
+#   2. TOTAL timeout   — now - started_ts > TOTAL_LIMIT (心跳一直在但跑太久,
+#                        防止"心跳续命无限活")
+# 任一超就 kill. error 区分原因方便排查.
 # 启动恢复只能处理"进程已重启"的孤儿, watchdog 处理"进程还活着但任务实质卡死"
 _WATCHDOG_INTERVAL_SEC = 60
-_WATCHDOG_MIN_TIMEOUT_SEC = 600   # 兜底: estimated 没填或 0 时, 视为 10 分钟超时
-_WATCHDOG_MULTIPLIER = 5          # 实际超时 = max(estimated*5, MIN_TIMEOUT)
+_WATCHDOG_IDLE_LIMIT_SEC = 600     # 心跳没动超过 10 分钟 → 视为卡死
+_WATCHDOG_MIN_TOTAL_SEC = 600      # 总时长兜底: estimated 没填或 0 时
+_WATCHDOG_MULTIPLIER = 5           # 总时长上限 = max(estimated*5, MIN_TOTAL_SEC)
 
 _watchdog_started = False
 _watchdog_lock = threading.Lock()
@@ -284,26 +290,48 @@ _watchdog_lock = threading.Lock()
 
 def sweep_stuck() -> int:
     """周期 watchdog 一次扫描: 把跑超时的 running 任务标 failed.
-    超时 = max(estimated_seconds*5, 600s). 估时缺失按 600s 兜底.
+
+    双阈值:
+    - IDLE: now - updated_ts > IDLE_LIMIT_SEC (默认 600s, 没心跳)
+    - TOTAL: now - started_ts > max(estimated*5, MIN_TOTAL_SEC) (跑太久)
+    任一超就 kill. error 区分 idle / total 原因.
+
     不动 pending (没起跑无所谓), 不动 ok/failed/cancelled (已收尾).
     D-078: 不动 payload.remote_managed=true (远程任务由 remote_jobs watcher 接管,
     可能合理排队 30min+, watchdog 别假杀). 那批由 remote_jobs.max_wait_sec 保护.
-    返回这次扫到的过期任务数."""
+    返回这次扫到的过期任务数 (idle + total 之和)."""
     _ensure_schema()
     now = int(time.time())
-    threshold_expr = f"MAX(COALESCE(estimated_seconds,0)*{_WATCHDOG_MULTIPLIER}, {_WATCHDOG_MIN_TIMEOUT_SEC})"
+    total_threshold_expr = f"MAX(COALESCE(estimated_seconds,0)*{_WATCHDOG_MULTIPLIER}, {_WATCHDOG_MIN_TOTAL_SEC})"
+    not_remote = "(payload IS NULL OR payload NOT LIKE '%\"remote_managed\": true%')"
+    swept = 0
     with closing(get_connection()) as con:
-        cur = con.execute(
+        # 1. IDLE: 心跳停 (updated_ts 太久没动)
+        cur1 = con.execute(
             f"UPDATE tasks SET status='failed', error=?, finished_ts=?, updated_ts=? "
-            f"WHERE status='running' AND ? - COALESCE(started_ts, updated_ts) > {threshold_expr} "
-            f"AND (payload IS NULL OR payload NOT LIKE '%\"remote_managed\": true%')",
+            f"WHERE status='running' "
+            f"AND ? - COALESCE(updated_ts, started_ts) > ? "
+            f"AND {not_remote}",
             (
-                f"watchdog: 超时未完成(>{_WATCHDOG_MULTIPLIER}x 预估或 >{_WATCHDOG_MIN_TIMEOUT_SEC}s), 任务可能卡在 AI proxy",
+                f"watchdog: idle 超时(>{_WATCHDOG_IDLE_LIMIT_SEC}s 无心跳), 任务可能卡在 AI proxy",
+                now, now, now, _WATCHDOG_IDLE_LIMIT_SEC,
+            ),
+        )
+        swept += cur1.rowcount
+        # 2. TOTAL: 总时长上限 (跑太久, 心跳不能无限续命)
+        cur2 = con.execute(
+            f"UPDATE tasks SET status='failed', error=?, finished_ts=?, updated_ts=? "
+            f"WHERE status='running' "
+            f"AND ? - started_ts > {total_threshold_expr} "
+            f"AND {not_remote}",
+            (
+                f"watchdog: total 超时(>{_WATCHDOG_MULTIPLIER}x 预估或 >{_WATCHDOG_MIN_TOTAL_SEC}s 总时长上限), 即便心跳活也假杀防 AI proxy 慢循环",
                 now, now, now,
             ),
         )
+        swept += cur2.rowcount
         con.commit()
-        return cur.rowcount
+        return swept
 
 
 def _watchdog_tick() -> None:
