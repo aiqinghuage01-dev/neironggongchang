@@ -402,3 +402,83 @@ def test_search_returns_q_in_response(populated_client):
     """响应应该 echo 原 query (前端展示用)."""
     r = populated_client.get("/api/material-lib/search?q=raise")
     assert r.json()["q"] == "raise"
+
+
+# ─── 待整理工作流 (D-087 C, PRD §3.3) ──────────────────
+
+
+def test_pending_list_empty(populated_client):
+    r = populated_client.get("/api/material-lib/pending-list")
+    assert r.status_code == 200
+    assert r.json()["items"] == []
+
+
+def test_pending_list_returns_assets_with_suggestion(populated_client):
+    from backend.services.materials_service import list_assets
+    from backend.services.materials_pipeline import _write_pending_move
+    aid = list_assets()[0]["id"]
+    _write_pending_move(aid, "02 学生反应", "AI 觉得这是学生", is_new=False)
+    r = populated_client.get("/api/material-lib/pending-list")
+    items = r.json()["items"]
+    assert len(items) == 1
+    assert items[0]["id"] == aid
+    assert items[0]["suggested_folder"] == "02 学生反应"
+    assert items[0]["reason"].startswith("AI")
+
+
+def test_approve_endpoint_changes_rel_folder(populated_client):
+    from backend.services.materials_service import list_assets, get_asset
+    from backend.services.materials_pipeline import _write_pending_move
+    aid = list_assets()[0]["id"]
+    _write_pending_move(aid, "99 新归档", "AI 觉得", is_new=True)
+    r = populated_client.post(f"/api/material-lib/pending/{aid}/approve")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["ok"] is True
+    assert body["new_folder"] == "99 新归档"
+    a = get_asset(aid)
+    assert a["rel_folder"] == "99 新归档"
+
+
+def test_approve_endpoint_404_when_no_pending(populated_client):
+    from backend.services.materials_service import list_assets
+    aid = list_assets()[0]["id"]
+    # 没写 pending move 直接 approve
+    r = populated_client.post(f"/api/material-lib/pending/{aid}/approve")
+    assert r.status_code == 404
+
+
+def test_reject_endpoint_keeps_rel_folder(populated_client):
+    from backend.services.materials_service import list_assets, get_asset
+    from backend.services.materials_pipeline import _write_pending_move
+    a = list_assets()[0]
+    aid, original = a["id"], a["rel_folder"]
+    _write_pending_move(aid, "99 新归档", "AI 觉得", is_new=True)
+    r = populated_client.post(f"/api/material-lib/pending/{aid}/reject")
+    assert r.status_code == 200
+    assert r.json()["ok"] is True
+    assert get_asset(aid)["rel_folder"] == original
+
+
+def test_reject_endpoint_404_when_no_pending(populated_client):
+    from backend.services.materials_service import list_assets
+    aid = list_assets()[0]["id"]
+    r = populated_client.post(f"/api/material-lib/pending/{aid}/reject")
+    assert r.status_code == 404
+
+
+def test_pending_workflow_e2e(populated_client):
+    """走通 写 pending → list 看到 → approve 一条 → reject 一条 → list 应空."""
+    from backend.services.materials_service import list_assets
+    from backend.services.materials_pipeline import _write_pending_move
+    items = list_assets()
+    a, b = items[0]["id"], items[1]["id"]
+    _write_pending_move(a, "01 通过组", "x", is_new=True)
+    _write_pending_move(b, "02 跳过组", "y", is_new=True)
+    assert len(populated_client.get("/api/material-lib/pending-list").json()["items"]) == 2
+    populated_client.post(f"/api/material-lib/pending/{a}/approve")
+    populated_client.post(f"/api/material-lib/pending/{b}/reject")
+    after = populated_client.get("/api/material-lib/pending-list").json()["items"]
+    assert after == []
+    # stats.pending_review 也跟着归零
+    assert populated_client.get("/api/material-lib/stats").json()["pending_review"] == 0

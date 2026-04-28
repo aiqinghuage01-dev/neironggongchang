@@ -31,7 +31,7 @@ const T = {
   redSoft: "#f8e7e2",
 };
 
-function Btn({ variant = "default", size = "md", children, icon, onClick, style, disabled }) {
+function Btn({ variant = "default", size = "md", children, icon, onClick, style, disabled, ...rest }) {
   const sizes = {
     sm: { padding: "5px 10px", fontSize: 12, height: 28, borderRadius: 6, gap: 6 },
     md: { padding: "7px 14px", fontSize: 13, height: 34, borderRadius: 8, gap: 7 },
@@ -54,6 +54,7 @@ function Btn({ variant = "default", size = "md", children, icon, onClick, style,
     <button
       onClick={onClick}
       disabled={disabled}
+      {...rest}
       style={{
         display: "inline-flex",
         alignItems: "center",

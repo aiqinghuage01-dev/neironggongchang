@@ -16,15 +16,24 @@ const T_AMBER = "#c08a2e";   // 暖橙 (待整理)
 
 // ─── L1 数据大屏 ─────────────────────────────────────────
 
-function MV2KpiCard({ icon, label, value, sub, accent }) {
+function MV2KpiCard({ icon, label, value, sub, accent, onClick, testid }) {
   const accentColor = accent === "amber" ? T_AMBER : T_GREEN;
   const bg = accent === "amber" ? "#fff7e6" : "#fff";
   const border = accent === "amber" ? `1.5px solid ${T_AMBER}55` : `1px solid ${T.border}`;
+  const clickable = !!onClick;
   return (
-    <div style={{
-      padding: "16px 18px", background: bg, border,
-      borderRadius: 10, minHeight: 110,
-    }}>
+    <div
+      data-testid={testid}
+      onClick={onClick}
+      style={{
+        padding: "16px 18px", background: bg, border,
+        borderRadius: 10, minHeight: 110,
+        cursor: clickable ? "pointer" : "default",
+        transition: "all 0.12s",
+      }}
+      onMouseEnter={e => clickable && (e.currentTarget.style.boxShadow = "0 4px 12px rgba(0,0,0,0.08)")}
+      onMouseLeave={e => clickable && (e.currentTarget.style.boxShadow = "")}
+    >
       <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: T.muted, marginBottom: 8 }}>
         <span>{icon}</span>
         <span>{label}</span>
@@ -150,7 +159,7 @@ function MV2TopUsed({ items, loading, onPickAsset }) {
 }
 
 
-function MV2L1Home({ stats, folders, loading, err, onPickFolder, onScan, scanning, onBatchTag, batchTagging,
+function MV2L1Home({ stats, folders, loading, err, onPickFolder, onScan, scanning, onBatchTag, batchTagging, onAudit,
                     activity, topUsed, sideLoading, search, onSearch, searchResults, searching, onPickAsset }) {
   if (loading) return <div style={{ padding: 60, textAlign: "center", color: T.muted }}>加载中...</div>;
   const remainTag = stats ? Math.max(0, stats.total - stats.ai_tagged) : 0;
@@ -201,9 +210,11 @@ function MV2L1Home({ stats, folders, loading, err, onPickFolder, onScan, scannin
         />
         <MV2KpiCard
           icon="⚠" label="待整理"
+          testid="mv2-l1-pending-kpi"
           value={stats?.pending_review ?? 0}
           sub={stats?.pending_review > 0 ? "点这里 → 一键归档 →" : "暂无待办"}
           accent="amber"
+          onClick={stats?.pending_review > 0 ? onAudit : undefined}
         />
         <MV2KpiCard
           icon="✨" label="已 AI 打标"
@@ -310,6 +321,219 @@ function MV2L1Home({ stats, folders, loading, err, onPickFolder, onScan, scannin
           <MV2TopUsed items={topUsed || []} loading={sideLoading} onPickAsset={onPickAsset} />
         </div>
       </div>
+    </div>
+  );
+}
+
+
+// ─── 待整理审核页 (D-087 C, PRD §3.3) ─────────────────────
+// 左 list (含 thumb + filename + 标签预览), 右大预览 + AI 建议 + 通过/跳过
+
+function MV2Audit({ onBack }) {
+  const [items, setItems] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+  const [err, setErr] = React.useState("");
+  const [selIdx, setSelIdx] = React.useState(0);
+  const [acting, setActing] = React.useState(false);
+
+  async function load() {
+    setLoading(true); setErr("");
+    try {
+      const r = await api.get("/api/material-lib/pending-list?limit=200");
+      setItems(r.items || []);
+      setSelIdx(0);
+    } catch (e) {
+      setErr(e.message);
+    }
+    setLoading(false);
+  }
+  React.useEffect(() => { load(); }, []);
+
+  const cur = items[selIdx];
+
+  async function handleApprove() {
+    if (!cur || acting) return;
+    setActing(true); setErr("");
+    try {
+      await api.post(`/api/material-lib/pending/${cur.id}/approve`);
+      // 本地剔掉这条, 自动跳到下一条
+      const next = items.filter((_, i) => i !== selIdx);
+      setItems(next);
+      setSelIdx(Math.min(selIdx, Math.max(0, next.length - 1)));
+    } catch (e) {
+      setErr(e.message);
+    }
+    setActing(false);
+  }
+
+  async function handleReject() {
+    if (!cur || acting) return;
+    setActing(true); setErr("");
+    try {
+      await api.post(`/api/material-lib/pending/${cur.id}/reject`);
+      const next = items.filter((_, i) => i !== selIdx);
+      setItems(next);
+      setSelIdx(Math.min(selIdx, Math.max(0, next.length - 1)));
+    } catch (e) {
+      setErr(e.message);
+    }
+    setActing(false);
+  }
+
+  if (loading) return <div style={{ padding: 60, textAlign: "center", color: T.muted }}>加载中...</div>;
+
+  return (
+    <div data-testid="mv2-audit-page">
+      {/* 面包屑 + 计数 */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14 }}>
+          <span style={{ cursor: "pointer", color: T_GREEN }} onClick={onBack}>📥 素材库</span>
+          <span style={{ color: T.muted3 }}>/</span>
+          <span style={{ fontWeight: 600 }}>⚠ 待整理</span>
+          <Tag size="sm" color={items.length > 0 ? "amber" : "green"}>{items.length} 条</Tag>
+        </div>
+        <Btn variant="outline" size="sm" onClick={onBack}>← 返回</Btn>
+      </div>
+
+      {err && <InlineError err={err} />}
+
+      {items.length === 0 ? (
+        <div style={{
+          padding: 60, textAlign: "center", background: "#fff",
+          borderRadius: 10, border: `1px solid ${T.border}`,
+        }}>
+          <div style={{ fontSize: 32, marginBottom: 10 }}>✅</div>
+          <div style={{ fontSize: 14, fontWeight: 600, color: T_GREEN, marginBottom: 4 }}>
+            清空了!
+          </div>
+          <div style={{ fontSize: 12, color: T.muted2 }}>
+            所有 AI 归档建议都已处理. 后续 AI 打标会再产生新的待整理.
+          </div>
+        </div>
+      ) : (
+        <div style={{ display: "grid", gridTemplateColumns: "320px 1fr", gap: 16 }}>
+          {/* 左 list */}
+          <div style={{ background: "#fff", borderRadius: 10, border: `1px solid ${T.border}`, overflow: "hidden", maxHeight: "calc(100vh - 200px)", overflowY: "auto" }}>
+            {items.map((it, i) => {
+              const sel = i === selIdx;
+              const thumb = it.thumb_path ? `${api.base}/api/material-lib/thumb/${it.id}` : null;
+              return (
+                <div
+                  key={it.id}
+                  data-testid="mv2-audit-item"
+                  onClick={() => setSelIdx(i)}
+                  style={{
+                    display: "flex", gap: 8, padding: "8px 10px",
+                    background: sel ? "#fff7e6" : "transparent",
+                    borderLeft: sel ? `3px solid ${T_AMBER}` : "3px solid transparent",
+                    borderBottom: `1px solid ${T.borderSoft}`,
+                    cursor: "pointer", alignItems: "center",
+                  }}
+                >
+                  <div style={{
+                    width: 56, height: 40, borderRadius: 4,
+                    background: T.bg2,
+                    backgroundImage: thumb ? `url(${thumb})` : "",
+                    backgroundSize: "cover", backgroundPosition: "center",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    flexShrink: 0,
+                  }}>
+                    {!thumb && <span style={{ fontSize: 14, color: T.muted3 }}>🖼️</span>}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 12, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {it.filename}
+                    </div>
+                    <div style={{ fontSize: 10.5, color: T.muted2, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {it.is_new_folder ? "🆕 " : "→ "}{it.suggested_folder}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* 右 detail */}
+          {cur && (
+            <div style={{ background: "#fff", borderRadius: 10, border: `1px solid ${T.border}`, padding: 16 }}>
+              {/* 大预览 */}
+              <div style={{
+                aspectRatio: "16/9", background: T.bg2, borderRadius: 8, marginBottom: 14,
+                backgroundImage: cur.thumb_path ? `url(${api.base}/api/material-lib/thumb/${cur.id})` : "",
+                backgroundSize: "contain", backgroundPosition: "center", backgroundRepeat: "no-repeat",
+                display: "flex", alignItems: "center", justifyContent: "center",
+              }}>
+                {!cur.thumb_path && <span style={{ fontSize: 36, color: T.muted3 }}>🖼️</span>}
+              </div>
+
+              {/* filename + 当前路径 */}
+              <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>{cur.filename}</div>
+              <div style={{ fontSize: 11.5, color: T.muted2, marginBottom: 14 }}>
+                当前位置: <span style={{ fontFamily: "monospace" }}>{cur.rel_folder || "/"}</span>
+              </div>
+
+              {/* AI 建议 */}
+              <div style={{
+                padding: "12px 14px", background: "#fff7e6",
+                border: `1px solid ${T_AMBER}55`, borderRadius: 8, marginBottom: 14,
+              }}>
+                <div style={{ fontSize: 11, color: T_AMBER, fontWeight: 600, marginBottom: 6 }}>
+                  ✨ AI 归档建议
+                </div>
+                <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>
+                  {cur.is_new_folder ? "🆕 新建" : "→ 移到"} {cur.suggested_folder}
+                </div>
+                {cur.reason && (
+                  <div style={{ fontSize: 11.5, color: T.muted, marginTop: 4 }}>
+                    {cur.reason}
+                  </div>
+                )}
+              </div>
+
+              {/* tags */}
+              {cur.tags && cur.tags.length > 0 && (
+                <div style={{ marginBottom: 14 }}>
+                  <div style={{ fontSize: 11, color: T.muted2, marginBottom: 4 }}>已有标签:</div>
+                  <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                    {cur.tags.map(t => (
+                      <span key={t.id} style={{
+                        fontSize: 10.5, padding: "1px 6px", borderRadius: 3,
+                        background: t.source === "ai" ? "#e8f4ec" : "#f0f0f0",
+                        color: t.source === "ai" ? T_GREEN : T.muted,
+                      }}>{t.source === "ai" ? "✨" : ""}{t.name}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* 操作 */}
+              <div style={{ display: "flex", gap: 8, marginTop: 18 }}>
+                <Btn
+                  variant="primary" size="md"
+                  data-testid="mv2-audit-approve"
+                  disabled={acting}
+                  onClick={handleApprove}
+                  style={{ flex: 1, background: T_GREEN, borderColor: T_GREEN }}
+                >
+                  ✓ 通过 (移到 {cur.suggested_folder})
+                </Btn>
+                <Btn
+                  variant="outline" size="md"
+                  data-testid="mv2-audit-reject"
+                  disabled={acting}
+                  onClick={handleReject}
+                  style={{ flex: 1 }}
+                >
+                  ✕ 跳过 (保持原位置)
+                </Btn>
+              </div>
+              <div style={{ fontSize: 10.5, color: T.muted3, marginTop: 8, textAlign: "center" }}>
+                {selIdx + 1} / {items.length}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -893,7 +1117,7 @@ function MV2L4Preview({ asset: assetMini, onClose, onNav }) {
 // ─── 主组件 (4 层 state machine) ─────────────────────────
 
 function PageMaterialsV2({ onNav }) {
-  const [view, setView] = React.useState("home");  // home | folder | grid | (preview 是叠加 modal)
+  const [view, setView] = React.useState("home");  // home | folder | grid | audit | (preview 是叠加 modal)
   const [topFolder, setTopFolder] = React.useState("");
   const [subFolder, setSubFolder] = React.useState("");
   const [previewAsset, setPreviewAsset] = React.useState(null);
@@ -1044,6 +1268,9 @@ function PageMaterialsV2({ onNav }) {
     setView("home");
     loadHome();
   }
+  function handleAudit() {
+    setView("audit");
+  }
   function handleBackFolder() {
     setView("folder");
   }
@@ -1059,11 +1286,15 @@ function PageMaterialsV2({ onNav }) {
           onPickFolder={handlePickFolder}
           onScan={handleScan} scanning={scanning}
           onBatchTag={handleBatchTag} batchTagging={batchTagging}
+          onAudit={handleAudit}
           activity={activity} topUsed={topUsed} sideLoading={sideLoading}
           search={search} onSearch={setSearch}
           searchResults={searchResults} searching={searching}
           onPickAsset={(a) => setPreviewAsset(a)}
         />
+      )}
+      {view === "audit" && (
+        <MV2Audit onBack={handleBackHome} />
       )}
       {view === "folder" && (
         <MV2L2Folder

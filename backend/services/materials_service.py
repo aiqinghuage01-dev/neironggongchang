@@ -246,15 +246,16 @@ def scan_root(
 # ─── 查询 (给 endpoint 用) ───────────────────────────────
 
 def get_stats() -> dict[str, Any]:
-    """L1 大屏 4 个 KPI 用."""
+    """L1 大屏 4 个 KPI 用. 待整理 = AI 建议归档不同文件夹的素材数 (status='pending')."""
     _ensure_schema()
     now = int(time.time())
     week_start = now - 7 * 86400
     month_start = now - 30 * 86400
     with closing(get_connection()) as con:
         total = con.execute("SELECT COUNT(*) FROM material_assets").fetchone()[0]
+        # 待整理: AI 打标后建议归档不同文件夹的素材 (D-087 C 工作流)
         pending = con.execute(
-            "SELECT COUNT(*) FROM material_assets WHERE is_pending_review=1"
+            "SELECT COUNT(*) FROM material_pending_moves WHERE status='pending'"
         ).fetchone()[0]
         ai_tagged = con.execute(
             "SELECT COUNT(DISTINCT asset_id) FROM material_asset_tags"
@@ -636,3 +637,76 @@ def log_usage(asset_id: str, used_in: str, position_sec: float | None = None) ->
             (asset_id, (used_in or "")[:200], int(time.time()), position_sec),
         )
         con.commit()
+
+
+# ─── 待整理工作流 (C, PRD §3.3) ──────────────────────────
+
+
+def list_pending_review(limit: int = 100) -> list[dict[str, Any]]:
+    """列待审核素材 (AI 建议归档不同文件夹). 含 suggested_folder + reason + tags."""
+    _ensure_schema()
+    out: list[dict[str, Any]] = []
+    with closing(get_connection()) as con:
+        con.row_factory = sqlite3.Row
+        rows = con.execute(
+            """SELECT a.*, p.suggested_folder, p.is_new_folder, p.reason
+               FROM material_assets a
+               JOIN material_pending_moves p ON p.asset_id = a.id
+               WHERE p.status = 'pending'
+               ORDER BY a.imported_at DESC
+               LIMIT ?""",
+            (limit,),
+        ).fetchall()
+        for r in rows:
+            d = dict(r)
+            tag_rows = con.execute(
+                """SELECT t.id, t.name, t.source FROM material_tags t
+                   JOIN material_asset_tags at ON at.tag_id = t.id
+                   WHERE at.asset_id = ?""",
+                (d["id"],),
+            ).fetchall()
+            d["tags"] = [{"id": t[0], "name": t[1], "source": t[2]} for t in tag_rows]
+            out.append(d)
+    return out
+
+
+def approve_pending(asset_id: str) -> dict[str, Any]:
+    """通过 AI 建议: 更新 material_assets.rel_folder + 标 status='approved'.
+
+    虚拟归档 (不真 mv 文件), 真 mv 等老板切到 ~/Desktop/清华哥素材库/ 再做.
+    """
+    _ensure_schema()
+    with closing(get_connection()) as con:
+        row = con.execute(
+            "SELECT suggested_folder FROM material_pending_moves "
+            "WHERE asset_id=? AND status='pending'",
+            (asset_id,),
+        ).fetchone()
+        if not row:
+            return {"ok": False, "error": "no pending move"}
+        target = row[0]
+        con.execute(
+            "UPDATE material_assets SET rel_folder=? WHERE id=?",
+            (target, asset_id),
+        )
+        con.execute(
+            "UPDATE material_pending_moves SET status='approved' WHERE asset_id=?",
+            (asset_id,),
+        )
+        con.commit()
+    return {"ok": True, "asset_id": asset_id, "new_folder": target}
+
+
+def reject_pending(asset_id: str) -> dict[str, Any]:
+    """跳过 AI 建议: 标 status='rejected'. 素材保持原位置."""
+    _ensure_schema()
+    with closing(get_connection()) as con:
+        cur = con.execute(
+            "UPDATE material_pending_moves SET status='rejected' "
+            "WHERE asset_id=? AND status='pending'",
+            (asset_id,),
+        )
+        con.commit()
+        if cur.rowcount == 0:
+            return {"ok": False, "error": "no pending move"}
+    return {"ok": True, "asset_id": asset_id}

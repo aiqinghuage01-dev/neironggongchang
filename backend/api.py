@@ -2101,6 +2101,35 @@ def material_lib_tag_batch(limit: int = 10, force: bool = False):
     return {"task_id": task_id, "status": "running", "estimated_seconds": est}
 
 
+# ─── 待整理工作流 (D-087 C, PRD §3.3) ───────────────────
+
+
+@app.get("/api/material-lib/pending-list", tags=["档案部"], summary="(D-087 C) 待整理素材列表 (AI 建议归档不同文件夹)")
+def material_lib_pending_list(limit: int = 100):
+    """L1 KPI '待整理' 点进来. 返每条带 suggested_folder + reason + tags 给前端预览决策."""
+    from backend.services import materials_service as ms
+    return {"items": ms.list_pending_review(limit=limit)}
+
+
+@app.post("/api/material-lib/pending/{asset_id}/approve", tags=["档案部"], summary="(D-087 C) 通过 AI 建议: 改 rel_folder 到建议位置")
+def material_lib_pending_approve(asset_id: str):
+    """虚拟归档 (改 DB rel_folder, 不真 mv 文件). 真 mv 等老板切到 ~/Desktop/清华哥素材库/."""
+    from backend.services import materials_service as ms
+    out = ms.approve_pending(asset_id)
+    if not out.get("ok"):
+        raise HTTPException(status_code=404, detail=out.get("error", "approve failed"))
+    return out
+
+
+@app.post("/api/material-lib/pending/{asset_id}/reject", tags=["档案部"], summary="(D-087 C) 跳过 AI 建议: 标 rejected, 素材保持原位置")
+def material_lib_pending_reject(asset_id: str):
+    from backend.services import materials_service as ms
+    out = ms.reject_pending(asset_id)
+    if not out.get("ok"):
+        raise HTTPException(status_code=404, detail=out.get("error", "reject failed"))
+    return out
+
+
 @app.delete("/api/materials/{material_id}", tags=["档案部"], summary="删素材")
 def materials_delete(material_id: int):
     delete_material(material_id)

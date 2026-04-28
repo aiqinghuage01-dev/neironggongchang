@@ -639,3 +639,155 @@ def test_search_dedupes_when_filename_and_tag_both_match(tmp_db, tmp_thumb_dir, 
     # 不应该出现两次
     ids = [a["id"] for a in r]
     assert ids.count(target["id"]) == 1
+
+
+# ─── 待整理工作流 (D-087 C, PRD §3.3) ────────────────────
+
+
+def test_pending_review_empty(tmp_db, tmp_thumb_dir, tmp_root):
+    from backend.services.materials_service import list_pending_review, scan_root
+    scan_root()
+    assert list_pending_review() == []
+
+
+def test_pending_review_returns_assets_with_suggestion(tmp_db, tmp_thumb_dir, tmp_root):
+    """写一条 pending_move 后, list_pending_review 应该返这条 asset 的完整 row + suggested."""
+    from backend.services.materials_service import scan_root, list_assets, list_pending_review
+    from backend.services.materials_pipeline import _write_pending_move
+    scan_root()
+    aid = list_assets()[0]["id"]
+    _write_pending_move(aid, "02 学生反应", "AI 觉得这是学生场景", is_new=False)
+    rows = list_pending_review()
+    assert len(rows) == 1
+    assert rows[0]["id"] == aid
+    assert rows[0]["suggested_folder"] == "02 学生反应"
+    assert rows[0]["reason"] == "AI 觉得这是学生场景"
+    assert rows[0]["is_new_folder"] == 0
+    assert "tags" in rows[0]
+
+
+def test_pending_review_skips_approved_and_rejected(tmp_db, tmp_thumb_dir, tmp_root):
+    """approve/reject 后那条不再出现在 pending_review."""
+    from backend.services.materials_service import (
+        scan_root, list_assets, list_pending_review,
+        approve_pending, reject_pending,
+    )
+    from backend.services.materials_pipeline import _write_pending_move
+    scan_root()
+    items = list_assets()
+    aid_ok = items[0]["id"]
+    aid_skip = items[1]["id"]
+    aid_keep = items[2]["id"]
+    _write_pending_move(aid_ok, "0X 通过", "x", is_new=True)
+    _write_pending_move(aid_skip, "0X 跳过", "y", is_new=True)
+    _write_pending_move(aid_keep, "0X 留着", "z", is_new=True)
+    approve_pending(aid_ok)
+    reject_pending(aid_skip)
+    rows = list_pending_review()
+    ids = {r["id"] for r in rows}
+    assert ids == {aid_keep}
+
+
+def test_approve_pending_updates_rel_folder(tmp_db, tmp_thumb_dir, tmp_root):
+    """通过后 material_assets.rel_folder 应改成 suggested_folder, status=approved."""
+    import sqlite3
+    from contextlib import closing
+    from shortvideo.db import get_connection
+    from backend.services.materials_service import (
+        scan_root, list_assets, approve_pending,
+    )
+    from backend.services.materials_pipeline import _write_pending_move
+    scan_root()
+    aid = list_assets()[0]["id"]
+    target_folder = "99 新归档目录"
+    _write_pending_move(aid, target_folder, "AI 想这么放", is_new=True)
+    res = approve_pending(aid)
+    assert res["ok"] is True
+    assert res["new_folder"] == target_folder
+    with closing(get_connection()) as con:
+        rel = con.execute("SELECT rel_folder FROM material_assets WHERE id=?", (aid,)).fetchone()[0]
+        st = con.execute(
+            "SELECT status FROM material_pending_moves WHERE asset_id=?", (aid,)
+        ).fetchone()[0]
+    assert rel == target_folder
+    assert st == "approved"
+
+
+def test_approve_pending_no_record_returns_error(tmp_db, tmp_thumb_dir, tmp_root):
+    """没有 pending move 的 asset 不能 approve."""
+    from backend.services.materials_service import scan_root, list_assets, approve_pending
+    scan_root()
+    aid = list_assets()[0]["id"]
+    res = approve_pending(aid)
+    assert res["ok"] is False
+    assert "no pending" in res["error"].lower()
+
+
+def test_reject_pending_keeps_rel_folder(tmp_db, tmp_thumb_dir, tmp_root):
+    """跳过后 rel_folder 保持不动, status=rejected."""
+    from contextlib import closing
+    from shortvideo.db import get_connection
+    from backend.services.materials_service import scan_root, list_assets, reject_pending
+    from backend.services.materials_pipeline import _write_pending_move
+    scan_root()
+    a = list_assets()[0]
+    aid, original_folder = a["id"], a["rel_folder"]
+    _write_pending_move(aid, "99 新归档", "AI 觉得", is_new=True)
+    res = reject_pending(aid)
+    assert res["ok"] is True
+    with closing(get_connection()) as con:
+        rel = con.execute("SELECT rel_folder FROM material_assets WHERE id=?", (aid,)).fetchone()[0]
+        st = con.execute(
+            "SELECT status FROM material_pending_moves WHERE asset_id=?", (aid,)
+        ).fetchone()[0]
+    assert rel == original_folder  # 没动
+    assert st == "rejected"
+
+
+def test_reject_pending_no_record_returns_error(tmp_db, tmp_thumb_dir, tmp_root):
+    from backend.services.materials_service import scan_root, list_assets, reject_pending
+    scan_root()
+    aid = list_assets()[0]["id"]
+    res = reject_pending(aid)
+    assert res["ok"] is False
+
+
+def test_get_stats_counts_only_pending_status(tmp_db, tmp_thumb_dir, tmp_root):
+    """get_stats.pending_review 只数 status='pending', 不数 approved/rejected."""
+    from backend.services.materials_service import (
+        scan_root, list_assets, get_stats, approve_pending, reject_pending,
+    )
+    from backend.services.materials_pipeline import _write_pending_move
+    scan_root()
+    items = list_assets()
+    a, b, c = items[0]["id"], items[1]["id"], items[2]["id"]
+    _write_pending_move(a, "x", "x", is_new=True)
+    _write_pending_move(b, "y", "y", is_new=True)
+    _write_pending_move(c, "z", "z", is_new=True)
+    approve_pending(a)
+    reject_pending(b)
+    s = get_stats()
+    # 只剩 c 是 pending
+    assert s["pending_review"] == 1
+
+
+def test_pending_review_orders_by_imported_desc(tmp_db, tmp_thumb_dir, tmp_root):
+    """list_pending_review 按 imported_at DESC, 最新进来的素材排前面."""
+    import time
+    from contextlib import closing
+    from shortvideo.db import get_connection
+    from backend.services.materials_service import scan_root, list_assets, list_pending_review
+    from backend.services.materials_pipeline import _write_pending_move
+    scan_root()
+    items = list_assets()
+    older, newer = items[0]["id"], items[1]["id"]
+    # 强行改 imported_at
+    with closing(get_connection()) as con:
+        con.execute("UPDATE material_assets SET imported_at=1000 WHERE id=?", (older,))
+        con.execute("UPDATE material_assets SET imported_at=2000 WHERE id=?", (newer,))
+        con.commit()
+    _write_pending_move(older, "x", "x", is_new=True)
+    _write_pending_move(newer, "y", "y", is_new=True)
+    rows = list_pending_review()
+    assert rows[0]["id"] == newer
+    assert rows[1]["id"] == older

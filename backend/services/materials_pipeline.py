@@ -301,7 +301,7 @@ def tag_asset(asset_id: str, *, force: bool = False) -> dict[str, Any]:
     try:
         from shortvideo.ai import get_ai_client
         ai = get_ai_client(route_key="materials.tag")
-        r = ai.chat(prompt, deep=True, temperature=0.3, max_tokens=400)
+        r = ai.chat(prompt, deep=False, temperature=0.3, max_tokens=400)
         parsed = _parse_llm_json(r.text or "")
         if parsed:
             result = _normalize_llm_result(parsed)
