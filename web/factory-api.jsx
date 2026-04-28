@@ -92,6 +92,8 @@ async function _handleErrorResponse(r) {
   }
   // 5xx 上游波动
   if (r.status >= 500) {
+    const detail = (body && (body.detail || body.error || body.message)) || (typeof body === "string" ? body : "");
+    if (detail) return new Error(String(detail).slice(0, 1200));
     return new Error("AI 上游临时不可用, 一会儿再试");
   }
   // 其他 4xx — 取 detail/message, 不露 stack

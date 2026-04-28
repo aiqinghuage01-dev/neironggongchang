@@ -8,7 +8,9 @@
 """
 from __future__ import annotations
 
+import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -63,6 +65,64 @@ def test_extract_json_returns_none_on_garbage():
     assert wechat_pipeline._extract_json("没有 JSON 的文本", "array") is None
 
 
+def test_gen_titles_passes_avoid_titles_and_filters_duplicates(monkeypatch):
+    """D-096: Step 2 点"再出 3 个"要把上一批传给后端, 后端也要过滤完全重复标题."""
+    captured = {}
+
+    class FakeAi:
+        def chat(self, prompt, **kwargs):
+            captured["prompt"] = prompt
+            captured["kwargs"] = kwargs
+            return SimpleNamespace(
+                text=json.dumps([
+                    {"title": "日更一百条没火？实体老板先别卷数量", "template": "反常识型", "why": "重复"},
+                    {"title": "实体老板别再卷日更数量，先补质量短板", "template": "结论前置型", "why": "换结构"},
+                    {"title": "同样拍一百条，为什么别人爆你不爆？", "template": "对比冲突型", "why": "换钩子"},
+                    {"title": "播放量卡在两位数，老板该停下看这件事", "template": "故事悬念型", "why": "换场景"},
+                ], ensure_ascii=False),
+                total_tokens=123,
+            )
+
+    monkeypatch.setattr(wechat_pipeline, "get_ai_client", lambda route_key=None: FakeAi())
+    monkeypatch.setattr(wechat_pipeline.skill_loader, "load_skill", lambda _slug: {
+        "references": {"who-is-qinghuage": "persona", "style-bible": "style"}
+    })
+
+    out = wechat_pipeline.gen_titles(
+        "日更一百条没火",
+        n=3,
+        avoid_titles=["日更一百条没火？实体老板先别卷数量"],
+        round_id=2,
+    )
+
+    assert "上一批已经出过" in captured["prompt"]
+    assert "第 2 批" in captured["prompt"]
+    assert "日更一百条没火？实体老板先别卷数量" in captured["prompt"]
+    assert len(out) == 3
+    assert all(x["title"] != "日更一百条没火？实体老板先别卷数量" for x in out)
+
+
+def test_gen_titles_raises_when_all_candidates_repeat(monkeypatch):
+    class FakeAi:
+        def chat(self, *_args, **_kwargs):
+            return SimpleNamespace(
+                text=json.dumps([
+                    {"title": "重复标题", "template": "A", "why": "x"},
+                    {"title": " 重复标题 ", "template": "B", "why": "x"},
+                ], ensure_ascii=False),
+                total_tokens=9,
+            )
+
+    monkeypatch.setattr(wechat_pipeline, "get_ai_client", lambda route_key=None: FakeAi())
+    monkeypatch.setattr(wechat_pipeline.skill_loader, "load_skill", lambda _slug: {
+        "references": {"who-is-qinghuage": "persona", "style-bible": "style"}
+    })
+
+    with pytest.raises(RuntimeError) as ei:
+        wechat_pipeline.gen_titles("topic", n=3, avoid_titles=["重复标题"], round_id=3)
+    assert "上一批重复" in str(ei.value)
+
+
 def test_md_to_html_basic():
     md = "# 标题\n\n第一段文字。\n\n## 小节\n\n第二段,**加粗**。\n\n---\n\n第三段。"
     html = wechat_scripts._md_to_wechat_html(md, [])
@@ -82,6 +142,27 @@ def test_md_to_html_inserts_section_images():
     html = wechat_scripts._md_to_wechat_html(md, imgs)
     assert html.count("http://a") == 1
     assert html.count("http://b") == 1
+
+
+def test_skill_python_skips_python_without_wechat_deps(monkeypatch):
+    """D-096: backend .venv 里 python3 可能没有 bs4, HTML 转换要挑系统 Python."""
+    calls = []
+
+    def fake_run(cmd, **_kwargs):
+        calls.append(cmd[0])
+        if cmd[0] == "bad-python":
+            return SimpleNamespace(returncode=1, stdout="", stderr="No module named bs4")
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(wechat_scripts, "_SKILL_PYTHON_CACHE", None)
+    monkeypatch.setenv("WECHAT_SKILL_PYTHON", "bad-python")
+    monkeypatch.setattr(wechat_scripts.subprocess, "run", fake_run)
+
+    exe = wechat_scripts._skill_python()
+    assert exe != "bad-python"
+    assert calls[0] == "bad-python"
+    assert exe in calls
+    monkeypatch.setattr(wechat_scripts, "_SKILL_PYTHON_CACHE", None)
 
 
 def test_auto_digest_cuts_80_chars():

@@ -24,6 +24,7 @@ function PageWechat({ onNav }) {
   // 全流程状态
   const [topic, setTopic] = React.useState("");
   const [titles, setTitles] = React.useState([]);
+  const [titleRound, setTitleRound] = React.useState(1);
   const [pickedTitle, setPickedTitle] = React.useState("");
   const [outline, setOutline] = React.useState(null);
   const [article, setArticle] = React.useState(null);
@@ -59,13 +60,31 @@ function PageWechat({ onNav }) {
     }
   }
 
-  function genTitles() {
+  function genTitles(opts) {
     if (!topic.trim()) return;
+    const regen = !!(opts && opts.regen === true);
+    const nextRound = regen ? titleRound + 1 : 1;
+    const avoidTitles = regen ? titles.map(t => t.title).filter(Boolean) : [];
     return runStep({
-      nextStep: "titles", rollbackStep: "topic", clearSetter: () => setTitles([]),
+      nextStep: "titles", rollbackStep: "topic", clearSetter: () => {
+        setTitles([]);
+        setPickedTitle("");
+        setOutline(null);
+        setArticle(null);
+        setImagePlans([]);
+        setHtmlResult(null);
+        setCoverResult(null);
+        setPushResult(null);
+      },
       apiCall: async () => {
-        const r = await api.post("/api/wechat/titles", { topic: topic.trim(), n: 3 });
+        const r = await api.post("/api/wechat/titles", {
+          topic: topic.trim(),
+          n: 3,
+          avoid_titles: avoidTitles,
+          round: nextRound,
+        });
         setTitles(r.titles || []);
+        setTitleRound(nextRound);
       },
     });
   }
@@ -175,7 +194,7 @@ function PageWechat({ onNav }) {
       { key: "write",   label: "写长文 + 三层自检", sub: "2000-3000 字 · Opus 30-60s,慢但质量优", eta: 60 },
     ];
     if (!skipImg) {
-      base.push({ key: "plan", label: "规划 4 张段间配图 prompt", sub: "具象画面 · 16:9", eta: 5 });
+      base.push({ key: "plan", label: "规划 4 张段间配图", sub: "具象画面 · 16:9", eta: 5 });
       for (let i = 1; i <= 4; i++) {
         base.push({ key: `img${i}`, label: `生图 #${i}`, sub: "apimart gpt-image-2 + 上传微信图床 · 约 30-60s", eta: 40 });
       }
@@ -322,7 +341,7 @@ function PageWechat({ onNav }) {
 
   function reset() {
     setStep("topic"); setErr("");
-    setTitles([]); setPickedTitle("");
+    setTitles([]); setTitleRound(1); setPickedTitle("");
     setOutline(null); setArticle(null);
     setImagePlans([]); setHtmlResult(null);
     setCoverResult(null); setPushResult(null);
@@ -331,11 +350,12 @@ function PageWechat({ onNav }) {
   }
 
   // ─── 工作流持久化 (D-016) · 刷新浏览器不丢中间态 ───────
-  const wfState = { step, topic, titles, pickedTitle, outline, article, imagePlans, htmlResult, coverResult, pushResult, autoMode, skipImages, autoSteps };
+  const wfState = { step, topic, titles, titleRound, pickedTitle, outline, article, imagePlans, htmlResult, coverResult, pushResult, autoMode, skipImages, autoSteps };
   const wfRestore = (s) => {
     if (s.step) setStep(s.step === "auto" ? "topic" : s.step); // auto step 挂起不恢复(重跑成本高),回落到 topic
     if (s.topic != null) setTopic(s.topic);
     if (s.titles) setTitles(s.titles);
+    if (s.titleRound) setTitleRound(s.titleRound);
     if (s.pickedTitle != null) setPickedTitle(s.pickedTitle);
     if (s.outline) setOutline(s.outline);
     if (s.article) setArticle(s.article);
@@ -377,7 +397,7 @@ function PageWechat({ onNav }) {
         )}
         {step === "auto"    && <WxAutoProgress steps={autoSteps} title={pickedTitle} err={err} onAbort={abortAuto} skipImages={skipImages} />}
         {step === "topic"   && <WxStepTopic topic={topic} setTopic={setTopic} onGo={genTitles} onAuto={startAuto} loading={loading} skillInfo={skillInfo} skipImages={skipImages} setSkipImages={setSkipImages} />}
-        {step === "titles"  && <WxStepTitles titles={titles} loading={loading} onPick={genOutline} onPrev={() => setStep("topic")} onRegen={genTitles} autoMode={autoMode} />}
+        {step === "titles"  && <WxStepTitles titles={titles} loading={loading} onPick={genOutline} onPrev={() => setStep("topic")} onRegen={() => genTitles({ regen: true })} autoMode={autoMode} />}
         {step === "outline" && <WxStepOutline outline={outline} setOutline={setOutline} title={pickedTitle} topic={topic} loading={loading} onPrev={() => setStep("titles")} onNext={writeArticle} onRegen={() => genOutline(pickedTitle)} />}
         {step === "write"   && <WxStepWrite article={article} loading={loading} onPrev={() => setStep("outline")} onNext={planImages} onRewrite={writeArticle} onRewriteSelection={rewriteSelection} onRecovered={setArticle} onNav={onNav} pickedTitle={pickedTitle} topic={topic} outline={outline} />}
         {step === "images"  && <WxStepImages plans={imagePlans} setPlans={setImagePlans} onGen={generateOneImage} loading={loading} onPrev={() => setStep("write")} onNext={() => assembleHtml()} onRegen={planImages}
@@ -980,56 +1000,23 @@ function applyGlobalStyleToPrompt(prompt, styleId) {
 }
 
 function WxStepImages({ plans, setPlans, onGen, loading, onPrev, onNext, onRegen, imgChip }) {
-  // D-091: 全局统一风格 (4 张套同一个风格)
-  const [globalStyleId, setGlobalStyleId] = React.useState(loadGlobalStyleId);
-  // 防 plans 第一次进来未套全局风格的标记 (从 plan-images 出来不带 append)
-  const styleAppliedRef = React.useRef(false);
+  // D-096: 风格选择和生成动作分离. 进入 Step 5 先选风格, 再手动生成 4 张或单张.
+  const [globalStyleId, setGlobalStyleId] = React.useState(null);
+  const [styleErr, setStyleErr] = React.useState("");
 
-  // 自动开跑标记: 同一批 plans 进来时只自动 genAll 一次, 防止用户改 prompt 重生后又被全部覆盖
-  const autoStartedRef = React.useRef(false);
   React.useEffect(() => {
-    // plans 重新生成 (从 0 → N) 时重置标记 (规划重出 / 第一次进来)
     if (plans.length === 0) {
-      autoStartedRef.current = false;
-      styleAppliedRef.current = false;
-      return;
+      setGlobalStyleId(null);
+      setStyleErr("");
     }
-    // D-091: 第一次出现 plans 或刚切完风格 (pickGlobalStyle 会重置 styleAppliedRef)
-    //   → 给所有 plan 套当前 globalStyle.append (已生成的不动 prompt)
-    //   stripStyleAppendsAtEnd + applyGlobalStyleToPrompt 幂等, 切多次不累积
-    if (!styleAppliedRef.current) {
-      styleAppliedRef.current = true;
-      const preset = IMAGE_STYLE_PRESETS.find(p => p.id === globalStyleId);
-      if (preset) {
-        setPlans(prev => prev.map(p => {
-          if (p.mmbiz_url && p.status === "done") return p;  // 已认可的不改 prompt
-          return { ...p, image_prompt: applyGlobalStyleToPrompt(p.image_prompt, globalStyleId) };
-        }));
-      }
-    }
-
-    if (autoStartedRef.current) return;
-    // 已经全部 done 或 running 不重复跑 (恢复 work 状态进来)
-    const hasPending = plans.some(p => p.status !== "done" && p.status !== "running");
-    if (!hasPending) return;
-    autoStartedRef.current = true;
-    // 串行跑: 跟手动 "一键生成剩余" 一致
-    (async () => {
-      for (let i = 0; i < plans.length; i++) {
-        if (plans[i].status !== "done" && plans[i].status !== "running") {
-          await onGen(i);
-        }
-      }
-    })();
-  }, [plans.length, globalStyleId]);  // D-091: 加 globalStyleId, 切风格触发自动重生
+  }, [plans.length]);
 
   // D-091b: 切换全局风格 — 调 backend /api/wechat/restyle-prompts 让 LLM 重写 prompt
   // (D-091 v1 错: 只 append 末尾, apimart 模型按主体走, 末尾被忽略 → 4 张图风格不变).
   const [restyling, setRestyling] = React.useState(false);
   async function pickGlobalStyle(styleId) {
     if (styleId === globalStyleId || restyling || runningCount > 0) return;
-    saveGlobalStyleId(styleId);
-    setGlobalStyleId(styleId);
+    setStyleErr("");
     setRestyling(true);
     try {
       // 1. 让 LLM 把每个 prompt 按目标风格重写主体 (3-5s)
@@ -1048,16 +1035,12 @@ function WxStepImages({ plans, setPlans, onGen, loading, onPrev, onNext, onRegen
         elapsed_sec: undefined,
         error: undefined,
       })));
-      // 重置标记: useEffect 重跑时 styleAppliedRef=false 不再走 append 逻辑
-      // (重写过的 prompt 已含风格, 别再 strip/append 把它弄乱), 只触发 autoStart.
-      styleAppliedRef.current = true;  // 不再走 append
-      autoStartedRef.current = false;  // 但要重生 4 张
+      saveGlobalStyleId(styleId);
+      setGlobalStyleId(styleId);
     } catch (e) {
       // restyle 失败 → 回退原 prompt 不动 + 不清状态 + UI 提示
       console.warn("restyle failed, fallback:", e?.message);
-      // 不动 styleId 状态会显示选中错误, 还原:
-      saveGlobalStyleId(globalStyleId);
-      setGlobalStyleId(globalStyleId);
+      setStyleErr(e.message || "风格没切成功,可以再点一次。");
     } finally {
       setRestyling(false);
     }
@@ -1065,23 +1048,35 @@ function WxStepImages({ plans, setPlans, onGen, loading, onPrev, onNext, onRegen
 
   if (loading || plans.length === 0) return <Spinning icon="🎨" phases={[
     { text: "把文章切成 4 个大段", sub: "按 H2 / 语义转折定界" },
-    { text: "为每段设计具象画面 prompt", sub: "真实感照片 · 暖色调 · 避免人脸特写" },
+    { text: "为每段设计具象画面", sub: "真实场景 · 避免人脸特写" },
     { text: "控长度 ≤ 60 字", sub: "具体场景 > 抽象概念" },
-    { text: "进来直接开跑 4 张", sub: "每张约 30-60s · 改 prompt 后单点重生" },
+    { text: "等你选统一风格", sub: "选好后可一键同时生成 4 张" },
   ]} />;
   const doneCount = plans.filter(p => p.status === "done").length;
   const runningCount = plans.filter(p => p.status === "running").length;
   const pending = plans.filter(p => p.status !== "done" && p.status !== "running");
+  const styleReady = !!globalStyleId && !restyling;
 
   async function genAll() {
-    for (let i = 0; i < plans.length; i++) {
-      if (plans[i].status !== "done" && plans[i].status !== "running") {
-        await onGen(i);
-      }
+    if (!styleReady) {
+      setStyleErr("先选一个统一风格,再生成图片。");
+      return;
     }
+    const indices = plans
+      .map((p, i) => ({ p, i }))
+      .filter(x => x.p.status !== "done" && x.p.status !== "running")
+      .map(x => x.i);
+    await Promise.all(indices.map(i => onGen(i)));
   }
   function updatePrompt(i, newPrompt) {
     setPlans(prev => prev.map((p, idx) => idx === i ? { ...p, image_prompt: newPrompt } : p));
+  }
+  async function genOne(i) {
+    if (!styleReady) {
+      setStyleErr("先选一个统一风格,再生成图片。");
+      return;
+    }
+    await onGen(i);
   }
   // D-092: 旧的 appendPreset (单张 chip 末尾 append) 已删 —
   // 跟 D-091 v1 同款失效 (apimart 忽略末尾风格关键词), 留着持续误导用户.
@@ -1092,12 +1087,12 @@ function WxStepImages({ plans, setPlans, onGen, loading, onPrev, onNext, onRegen
       <div style={{ marginBottom: 16, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
         <div style={{ flex: 1, minWidth: 280 }}>
           <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>段间配图 · {doneCount}/{plans.length} 🎨</div>
-          <div style={{ fontSize: 13, color: T.muted }}>4 张统一风格 · 切风格自动重生 4 张 · 每张 30-60s · 单张 prompt 还能微调。</div>
+          <div style={{ fontSize: 13, color: T.muted }}>先选统一风格 · 一键同时生成 4 张 · 也可以改单张提示后单独生成。</div>
         </div>
         {imgChip && <ImageEngineChip {...imgChip} />}
         {pending.length > 0 && (
-          <Btn variant="primary" onClick={genAll} disabled={runningCount > 0}>
-            ✨ 一键生成剩余 {pending.length} 张
+          <Btn variant="primary" onClick={genAll} disabled={runningCount > 0 || restyling || !globalStyleId}>
+            {globalStyleId ? `✨ 一键生成 ${pending.length} 张` : "先选风格"}
           </Btn>
         )}
       </div>
@@ -1114,16 +1109,16 @@ function WxStepImages({ plans, setPlans, onGen, loading, onPrev, onNext, onRegen
           const active = globalStyleId === preset.id;
           return (
             <button key={preset.id} onClick={() => pickGlobalStyle(preset.id)}
-              disabled={runningCount > 0}
+              disabled={runningCount > 0 || restyling}
               title={`4 张全套: ${preset.append}`}
               style={{
                 padding: "5px 12px", fontSize: 12, borderRadius: 100,
                 background: active ? T.brand : "#fff",
                 color: active ? "#fff" : T.muted,
                 border: `1px solid ${active ? T.brand : T.borderSoft}`,
-                cursor: runningCount > 0 ? "not-allowed" : "pointer",
+                cursor: (runningCount > 0 || restyling) ? "not-allowed" : "pointer",
                 fontFamily: "inherit", fontWeight: active ? 600 : 400,
-                opacity: runningCount > 0 ? 0.5 : 1,
+                opacity: (runningCount > 0 || restyling) ? 0.5 : 1,
               }}>
               {preset.label}
             </button>
@@ -1132,7 +1127,11 @@ function WxStepImages({ plans, setPlans, onGen, loading, onPrev, onNext, onRegen
         {runningCount > 0 && (
           <span style={{ fontSize: 11, color: T.muted2 }}>(生成中, 等完了再换)</span>
         )}
+        {restyling && (
+          <span style={{ fontSize: 11, color: T.muted2 }}>正在套风格...</span>
+        )}
       </div>
+      {styleErr && <div style={{ marginBottom: 14 }}><InlineError err={styleErr} /></div>}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 14 }}>
         {plans.map((p, i) => (
           <div key={i} style={{
@@ -1148,7 +1147,7 @@ function WxStepImages({ plans, setPlans, onGen, loading, onPrev, onNext, onRegen
             </div>
             <textarea rows={3} value={p.image_prompt}
               onChange={e => updatePrompt(i, e.target.value)}
-              placeholder="改 prompt 再点重生..."
+              placeholder="改画面描述再点重生..."
               style={{ width: "100%", border: `1px solid ${T.borderSoft}`, borderRadius: 6, padding: 8, fontSize: 12, fontFamily: "inherit", outline: "none", resize: "vertical", color: T.text, lineHeight: 1.6, background: "#fff" }} />
             {/* D-092: 删掉单张风格预设 chip — 末尾 append 对 apimart 无效 (D-091 v1 同款),
                 留着持续误导用户. 单张微调改 textarea + 点"🔄 用新 prompt 重生" 即可.
@@ -1179,8 +1178,8 @@ function WxStepImages({ plans, setPlans, onGen, loading, onPrev, onNext, onRegen
             )}
             <div style={{ display: "flex", justifyContent: "flex-end" }}>
               <Btn size="sm" variant={p.status === "done" ? "outline" : "primary"}
-                onClick={() => onGen(i)} disabled={p.status === "running"}>
-                {p.status === "done" ? "🔄 用新 prompt 重生" : p.status === "running" ? "生成中..." : p.status === "failed" ? "重试" : "生成这张"}
+                onClick={() => genOne(i)} disabled={p.status === "running" || restyling || !globalStyleId}>
+                {p.status === "done" ? "🔄 用新描述重生" : p.status === "running" ? "生成中..." : !globalStyleId ? "先选风格" : p.status === "failed" ? "重试" : "生成这张"}
               </Btn>
             </div>
           </div>
@@ -1188,7 +1187,7 @@ function WxStepImages({ plans, setPlans, onGen, loading, onPrev, onNext, onRegen
       </div>
       <div style={{ display: "flex", gap: 10, marginTop: 18, alignItems: "center" }}>
         <Btn variant="outline" onClick={onPrev}>← 回长文</Btn>
-        <Btn onClick={onRegen}>🔄 重出 prompt</Btn>
+        <Btn onClick={onRegen}>🔄 重新规划配图</Btn>
         <div style={{ flex: 1 }} />
         <div style={{ fontSize: 12, color: T.muted, marginRight: 10 }}>
           {runningCount > 0

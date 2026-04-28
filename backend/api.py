@@ -2446,12 +2446,19 @@ def wechat_skill_info():
 class WechatTitlesReq(BaseModel):
     topic: str = Field(..., description="选题, 例 '一个老板花3万学AI'")
     n: int = Field(3, ge=1, le=8, description="出几个候选标题, 默认 3")
+    avoid_titles: list[str] = Field(default_factory=list, description="上一批标题, 重出时避开")
+    round: int = Field(1, ge=1, le=50, description="第几批标题, 用来增加差异")
 
 
 @app.post("/api/wechat/titles", tags=["公众号"], summary="Step 2 出标题候选")
 def wechat_titles(req: WechatTitlesReq):
     """走 wechat_pipeline.gen_titles, 6 模板差异化 + 禁忌词过滤. 返回 {titles: [...]}."""
-    titles = wechat_pipeline.gen_titles(req.topic, n=req.n)
+    titles = wechat_pipeline.gen_titles(
+        req.topic,
+        n=req.n,
+        avoid_titles=req.avoid_titles,
+        round_id=req.round,
+    )
     return {"titles": titles}
 
 

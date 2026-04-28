@@ -59,6 +59,9 @@ const ERROR_PATTERNS = [
   { match: /生图超时|timeout.*120/i,
     icon: "⏰", title: "B-roll 生图超时 (apimart 120s)",
     suggestion: "apimart 当前慢, 等 30s 重试 / 或换 prompt 简短点" },
+  { match: /convert_to_wechat_markup|bs4|premailer|No module named|ModuleNotFoundError|公众号排版工具|脚本失败 rc=.*wechat_article_raw_push/i,
+    icon: "🧩", title: "公众号排版环境没接上",
+    suggestion: "这是后台排版工具的运行环境问题, 修好后重新点一次「拼 HTML」即可" },
 
   // ─── HTTP / 上游 AI ────────────────────────────────────────
   { match: /timed?out|timeout|超时/i,

@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import re
+import time
 from typing import Any
 
 from backend.services import skill_loader
@@ -40,11 +41,30 @@ def _extract_json(text: str, wrap: str = "array") -> Any:
 
 # ─── Phase 1.5 · 标题 2-3 个候选 ──────────────────────────────
 
-def gen_titles(topic: str, n: int = 3) -> list[dict[str, str]]:
+def _norm_title_for_dedup(title: str) -> str:
+    return re.sub(r"\s+", "", (title or "")).strip()
+
+
+def gen_titles(
+    topic: str,
+    n: int = 3,
+    *,
+    avoid_titles: list[str] | None = None,
+    round_id: int | None = None,
+) -> list[dict[str, str]]:
     """给一个选题,出 n 个候选标题 + 每个标题的 angle/模板类型。"""
     skill = skill_loader.load_skill(SKILL_SLUG)
     persona = skill["references"].get("who-is-qinghuage", "")
     style = skill["references"].get("style-bible", "")
+    avoid_titles = [t.strip() for t in (avoid_titles or []) if isinstance(t, str) and t.strip()]
+    avoid_norm = {_norm_title_for_dedup(t) for t in avoid_titles}
+    batch_no = max(1, int(round_id or 1))
+    batch_seed = f"{batch_no}-{int(time.time() * 1000) % 100000}"
+    avoid_block = ""
+    if avoid_titles:
+        avoid_block = "\n\n【上一批已经出过,本批禁止重复或近似复述】\n" + "\n".join(
+            f"- {t}" for t in avoid_titles[:12]
+        )
 
     system = f"""你在执行公众号文章 skill 的 Phase 1 · 标题工程。
 
@@ -56,6 +76,7 @@ def gen_titles(topic: str, n: int = 3) -> list[dict[str, str]]:
 """
 
     prompt = f"""选题: {topic.strip()}
+本次是第 {batch_no} 批标题,批次种子: {batch_seed}{avoid_block}
 
 基于风格圣经 Section 2 的标题规则,出 {n} 个候选标题。要求:
 - 字数 15-25 字
@@ -63,6 +84,7 @@ def gen_titles(topic: str, n: int = 3) -> list[dict[str, str]]:
 - 可选加悬念缺口
 - 不触碰标题禁忌(震惊体/空泛大词/产品名价格/英文缩写)
 - {n} 个标题用不同模板(结论前置/反常识/数字清单/故事悬念/热点借势/对比冲突)
+- 如果有上一批标题,本批必须换词、换结构、换情绪钩子,不要只是改标点或同义替换
 
 严格 JSON 数组,不加任何前言解释:
 [
@@ -79,18 +101,23 @@ def gen_titles(topic: str, n: int = 3) -> list[dict[str, str]]:
             f"公众号·标题候选 LLM 输出非 JSON 数组 (tokens={r.total_tokens}). "
             f"输出头: {(r.text or '')[:200]!r}"
         )
-    titles = [
-        {
-            "title": (x.get("title") or "").strip(),
+    titles = []
+    for x in arr:
+        if not isinstance(x, dict) or not x.get("title"):
+            continue
+        title = (x.get("title") or "").strip()
+        if avoid_norm and _norm_title_for_dedup(title) in avoid_norm:
+            continue
+        titles.append({
+            "title": title,
             "template": (x.get("template") or "").strip(),
             "why": (x.get("why") or "").strip(),
-        }
-        for x in arr
-        if isinstance(x, dict) and x.get("title")
-    ][:n]
+        })
+        if len(titles) >= n:
+            break
     if not titles:
         raise RuntimeError(
-            f"公众号·标题候选解析后 0 条有效标题 (tokens={r.total_tokens}). "
+            f"公众号·标题候选解析后 0 条有效标题或全和上一批重复 (tokens={r.total_tokens}). "
             f"输出头: {(r.text or '')[:200]!r}"
         )
     return titles

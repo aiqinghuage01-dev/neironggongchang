@@ -38,6 +38,44 @@ class WechatScriptError(RuntimeError):
     pass
 
 
+_SKILL_PYTHON_CACHE: str | None = None
+
+
+def _skill_python(require_modules: tuple[str, ...] = ("bs4", "premailer")) -> str:
+    """公众号 skill 脚本依赖装在系统 Python, 不能跟随 backend .venv 的 python3.
+
+    backend 由 `.venv/bin/uvicorn` 启动时, 子进程里直接调用 `python3` 可能命中
+    `.venv/bin/python3`, 导致 convert_to_wechat_markup.py 找不到 bs4/premailer.
+    """
+    global _SKILL_PYTHON_CACHE
+    if _SKILL_PYTHON_CACHE:
+        return _SKILL_PYTHON_CACHE
+    candidates = [
+        os.environ.get("WECHAT_SKILL_PYTHON", ""),
+        "/Library/Frameworks/Python.framework/Versions/3.14/bin/python3",
+        "/usr/local/bin/python3",
+        "/opt/homebrew/bin/python3",
+        "python3",
+    ]
+    seen: set[str] = set()
+    for exe in candidates:
+        if not exe or exe in seen:
+            continue
+        seen.add(exe)
+        code = "; ".join(f"import {m}" for m in require_modules) or "pass"
+        try:
+            r = subprocess.run([exe, "-c", code], capture_output=True, text=True, timeout=5)
+        except Exception:
+            continue
+        if r.returncode == 0:
+            _SKILL_PYTHON_CACHE = exe
+            return exe
+    raise WechatScriptError(
+        "公众号排版工具缺运行依赖: 找不到已安装 bs4/premailer 的 Python. "
+        "可设置 WECHAT_SKILL_PYTHON 指向系统 python3."
+    )
+
+
 def _run(cmd: list[str], *, timeout: int = 180, cwd: str | None = None) -> subprocess.CompletedProcess:
     """跑 subprocess,失败抛 WechatScriptError 带 stderr+stdout。
 
@@ -421,7 +459,7 @@ def assemble_html(
     # D-090: 喂 push 版 raw (mmbiz_url) 给 converter, 推送给微信识别自家图床;
     # 前端预览的 raw_path 用 media_url 走本地 :8000/media 避防盗链.
     _run([
-        "python3", str(converter),
+        _skill_python(), str(converter),
         "--input", str(push_raw_path),
         "--output", str(wechat_path),
         "--meta", str(meta_path),

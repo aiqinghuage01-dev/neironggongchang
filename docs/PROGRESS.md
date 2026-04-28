@@ -4,7 +4,47 @@
 
 ---
 
-## 当前状态 (2026-04-28 · D-095 公众号写长文恢复态卡死修复)
+## 当前状态 (2026-04-28 · D-096 公众号全链路交互收口)
+
+**版本**: v0.7.2 — 修公众号 Step 2 标题换一批重复、Step 5 配图先选风格再生成、
+Step 6 拼 HTML 错误误导.
+
+**触发 case**: 老板连续指出公众号链路三处"看起来跑了但体验错":
+1. Step 2 点"再出 3 个"仍像同一批标题,感觉写死.
+2. Step 5 段间配图进入后自动开跑,但正确交互应是先选统一风格,再一键 4 张并发
+   或单张生成.
+3. Step 6 拼 HTML 失败时,真实错误被前端包装成"没匹配到已知模式",排查方向被误导.
+
+### D-096 修复
+- `POST /api/wechat/titles`: 增加 `avoid_titles` / `round` 向后兼容字段. 前端点
+  "再出 3 个"时把上一批标题传回后端; 后端 prompt 明确禁止重复/近似复述,并过滤
+  完全重复标题.
+- `web/factory-wechat-v2.jsx`: Step 5 删除"进入页面自动开跑 / 切风格自动重生"逻辑.
+  现在必须先点统一风格,再点"一键生成 N 张"并发提交剩余卡片; 单张按钮也受风格
+  守卫. 切风格仍走 `/api/wechat/restyle-prompts` 用 LLM 重写 prompt 主体.
+- `backend/services/wechat_scripts.py`: 拼 HTML 的转换脚本不再跟随 `.venv` 的
+  `python3`, 改为 `_skill_python()` 自动挑装了 `bs4/premailer` 的系统 Python; 找不到
+  时抛业务错误.
+- `web/factory-api.jsx` + `factory-errors.jsx`: 5xx 有后端 `detail` 时保留真实原因,
+  并新增公众号排版环境错误模式,不再兜成未知错误.
+- `scripts/e2e_wechat_d096_flow.js`: 浏览器回归覆盖 Step 2/5/6 三个入口.
+
+### 验证
+- `pytest -q tests/test_wechat_skill.py tests/test_wechat_html_inject.py` ✅
+- `node scripts/e2e_wechat_d096_flow.js` ✅
+- 真实 `/api/wechat/html` 用最近长文 + 4 张段间图打通: 200, raw HTML 13255 字,
+  wechat HTML 12572 字 ✅
+- `pytest -q -x` ✅
+- `node scripts/e2e_wechat_write_recover.js` ✅ (D-095 回归未坏)
+- 截图已读:
+  `/tmp/_ui_shots/d096_titles_regen.png`,
+  `/tmp/_ui_shots/d096_images_html_success.png`,
+  `/tmp/_ui_shots/d096_html_error_friendly.png`,
+  `/tmp/_ui_shots/d095_wechat_write_recovered.png`.
+
+---
+
+## 上一里程碑 (2026-04-28 · D-095 公众号写长文恢复态卡死修复)
 
 **版本**: v0.7.1 — 修 Step 4 写长文"转了好久"假卡死.
 
