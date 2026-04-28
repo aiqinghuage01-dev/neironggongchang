@@ -197,6 +197,84 @@ def plan_section_images(content: str, title: str, n: int = 4) -> list[dict[str, 
     ][:n]
 
 
+# ─── D-091b · 全局统一风格重写 prompt ────────────────────────
+# D-091 v1 错: 仅 append 风格关键词到 prompt 末尾, apimart 模型按主体叙事走,
+# 末尾权重低被忽略 → 4 张图视觉风格不变 (老板实测怀旧出来还是真实摄影).
+# v2: 让 LLM 把 4 个 prompt 主体重写一遍, 把目标风格融进画面描述 (不只是末尾贴).
+
+# 风格语义说明 (给 LLM 看的, 让它知道每个 styleId 该怎么改 prompt)
+_STYLE_GUIDES: dict[str, dict[str, str]] = {
+    "real": {
+        "label": "真实感照片",
+        "desc": "真实摄影, 自然光, 暖色调, 写实质感, 35mm 镜头, 浅景深, 像生活随手拍",
+    },
+    "documentary": {
+        "label": "纪实风",
+        "desc": "纪实摄影风格, 高细节真实环境, 像新闻照, 自然光线, 抓拍感, 不摆拍",
+    },
+    "warm": {
+        "label": "暖色慢节奏",
+        "desc": "暖黄色调, 柔光, 慢节奏氛围, 像清晨/傍晚, 温馨治愈感, 模糊背景",
+    },
+    "ink": {
+        "label": "水墨/中式",
+        "desc": "中式水墨画风格, 山水意境, 大片留白, 黑白灰为主点缀朱砂, 毛笔笔触, 写意不写实",
+    },
+    "cartoon": {
+        "label": "卡通插画",
+        "desc": "扁平卡通插画, 暖色配色, 简化造型, 描边线稿, 像绘本风格, 不写实",
+    },
+    "vintage": {
+        "label": "复古怀旧",
+        "desc": "复古胶片摄影, 90 年代色调, 颗粒感, 偏黄偏绿暗角, 做旧划痕, 老照片质感",
+    },
+}
+
+
+def restyle_section_prompts(prompts: list[str], style_id: str) -> list[str]:
+    """让 LLM 把每个 prompt 按目标风格重写主体, 4 张统一风格.
+
+    返回长度跟入参一致的新 prompt 数组. LLM 失败/解析失败时退化到原 prompt
+    (前端 fallback: 之前的 append 兜底).
+    """
+    from shortvideo.ai import get_ai_client
+
+    style = _STYLE_GUIDES.get(style_id) or _STYLE_GUIDES["real"]
+    items = [p for p in prompts if isinstance(p, str) and p.strip()]
+    if not items:
+        return list(prompts)
+
+    system = f"""你在重写一组段间配图的 prompt, 让 4 张图视觉风格统一.
+
+目标风格: {style['label']}
+风格特征: {style['desc']}
+
+重写规则 (硬):
+- 保留原 prompt 描述的核心场景和主体 (人/物/动作)
+- 把风格特征融进描述本身, 不只是末尾追加风格关键词
+  (apimart 等模型对 prompt 主体权重高, 风格只能放前置或者改写主体才生效)
+- 输出长度控制在 60 字以内, 每条独立成一行的画面描述
+- 不要 markdown / 不要编号 / 不要解释, 直接输出新 prompt
+"""
+
+    user = "\n".join(f"{i+1}. {p}" for i, p in enumerate(items))
+    user += f"\n\n按 {style['label']} 风格重写以上 {len(items)} 个 prompt, 严格 JSON 数组输出:\n"
+    user += '["重写后的 prompt 1", "重写后的 prompt 2", ...]'
+
+    ai = get_ai_client(route_key="wechat.plan-images")  # 复用现有路由 (deepseek 轻 LLM 够)
+    r = ai.chat(user, system=system, deep=False, temperature=0.6, max_tokens=1500)
+
+    from backend.services import wechat_pipeline as wp
+    arr = wp._extract_json(r.text, "array") or []
+    out: list[str] = []
+    for i, original in enumerate(prompts):
+        if i < len(arr) and isinstance(arr[i], str) and arr[i].strip():
+            out.append(arr[i].strip())
+        else:
+            out.append(original)  # 这条没拿到重写就保留原 prompt
+    return out
+
+
 # ─── Phase 3 · HTML 拼装 + 微信 markup 转换 ───────────────────
 
 TEMPLATE_FILES = {

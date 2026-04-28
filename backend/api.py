@@ -2516,6 +2516,19 @@ def wechat_plan_images(req: WechatPlanImagesReq):
     return {"plans": plans}
 
 
+class WechatRestylePromptsReq(BaseModel):
+    prompts: list[str] = Field(..., description="原 4 个段间图 prompt")
+    style_id: str = Field(..., description="目标风格 id: real/documentary/warm/ink/cartoon/vintage")
+
+
+@app.post("/api/wechat/restyle-prompts", tags=["公众号"], summary="Step 5 全局切风格 — LLM 重写 N 个 prompt 让 4 张视觉统一")
+def wechat_restyle_prompts(req: WechatRestylePromptsReq):
+    """D-091b: 仅 append 风格到 prompt 末尾对 apimart 无效 (老板实测怀旧出来还是真实摄影).
+    走 LLM 把每个 prompt 主体重写, 把风格融进画面描述. 返回 {prompts: [..]}, 顺序对齐入参."""
+    new_prompts = wechat_scripts.restyle_section_prompts(req.prompts, req.style_id)
+    return {"prompts": new_prompts, "style_id": req.style_id}
+
+
 class WechatSectionImageReq(BaseModel):
     prompt: str = Field(..., description="生图 prompt (具象画面 ≤60 字)")
     size: str = Field("16:9", description="尺寸: 16:9 (横版默认) / 9:16 / 1:1")

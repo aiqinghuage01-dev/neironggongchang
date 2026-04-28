@@ -898,21 +898,44 @@ function WxStepImages({ plans, setPlans, onGen, loading, onPrev, onNext, onRegen
     })();
   }, [plans.length, globalStyleId]);  // D-091: 加 globalStyleId, 切风格触发自动重生
 
-  // D-091: 切换全局风格 — 清 4 张状态, useEffect 会用新风格 strip+套+autoStart
-  function pickGlobalStyle(styleId) {
-    if (styleId === globalStyleId) return;
+  // D-091b: 切换全局风格 — 调 backend /api/wechat/restyle-prompts 让 LLM 重写 prompt
+  // (D-091 v1 错: 只 append 末尾, apimart 模型按主体走, 末尾被忽略 → 4 张图风格不变).
+  const [restyling, setRestyling] = React.useState(false);
+  async function pickGlobalStyle(styleId) {
+    if (styleId === globalStyleId || restyling || runningCount > 0) return;
     saveGlobalStyleId(styleId);
-    setPlans(prev => prev.map(p => ({
-      ...p,
-      status: "pending",
-      mmbiz_url: null,
-      media_url: null,
-      elapsed_sec: undefined,
-      error: undefined,
-    })));
-    styleAppliedRef.current = false;
-    autoStartedRef.current = false;
-    setGlobalStyleId(styleId);  // 最后 set, 触发 useEffect 重跑
+    setGlobalStyleId(styleId);
+    setRestyling(true);
+    try {
+      // 1. 让 LLM 把每个 prompt 按目标风格重写主体 (3-5s)
+      const r = await api.post("/api/wechat/restyle-prompts", {
+        prompts: plans.map(p => p.image_prompt || ""),
+        style_id: styleId,
+      });
+      const newPrompts = (r.prompts || []).slice(0, plans.length);
+      // 2. 替换 prompt + 清 4 张状态 (mmbiz_url/media_url=null), useEffect 自动重生
+      setPlans(prev => prev.map((p, i) => ({
+        ...p,
+        image_prompt: newPrompts[i] || p.image_prompt,
+        status: "pending",
+        mmbiz_url: null,
+        media_url: null,
+        elapsed_sec: undefined,
+        error: undefined,
+      })));
+      // 重置标记: useEffect 重跑时 styleAppliedRef=false 不再走 append 逻辑
+      // (重写过的 prompt 已含风格, 别再 strip/append 把它弄乱), 只触发 autoStart.
+      styleAppliedRef.current = true;  // 不再走 append
+      autoStartedRef.current = false;  // 但要重生 4 张
+    } catch (e) {
+      // restyle 失败 → 回退原 prompt 不动 + 不清状态 + UI 提示
+      console.warn("restyle failed, fallback:", e?.message);
+      // 不动 styleId 状态会显示选中错误, 还原:
+      saveGlobalStyleId(globalStyleId);
+      setGlobalStyleId(globalStyleId);
+    } finally {
+      setRestyling(false);
+    }
   }
 
   if (loading || plans.length === 0) return <Spinning icon="🎨" phases={[

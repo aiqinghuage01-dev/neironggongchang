@@ -4,7 +4,49 @@
 
 ---
 
-## 当前状态 (2026-04-28 · D-091 公众号段间图统一风格选择器)
+## 当前状态 (2026-04-28 · D-091b LLM 重写 prompt 主体修正 D-091 v1 末尾 append 无效)
+
+**版本**: v0.6.5 — D-091 v1 仅末尾 append 风格关键词对 apimart 无效 (老板实测怀旧
+出来还是真实摄影). v2 改用 LLM 重写 prompt 主体让 4 张视觉真统一.
+
+**自我反思**: D-091 v1 闭环只验证 "切风格后 prompt 文本末尾改了" + "console clean"
+就当过. 没真烧 apimart 跑一张图看视觉. 这是 D-075 教训复发 — 文本对 ≠ 视觉对.
+老板实测 4 张怀旧出来还是各种风格, 揭穿 v1 的错. CLAUDE.md 完工铁律 §7.1 第 7 条
+"真跑端到端烧 credits 类" 这次必须做. 经验沉淀写进 LESSONS 第 7 节.
+
+### D-091b 修复
+- `backend/services/wechat_scripts.py:restyle_section_prompts(prompts, style_id)`:
+  6 个风格 (real/documentary/warm/ink/cartoon/vintage) 加详细语义说明 (`_STYLE_GUIDES`
+  dict), LLM 系统 prompt 写"风格融进画面主体, 不只末尾追加". deepseek 轻调用 3-5s.
+- `backend/api.py: POST /api/wechat/restyle-prompts` 新 endpoint.
+- `web/factory-wechat-v2.jsx:pickGlobalStyle` 改成 async, 切风格时:
+  1. 调 /api/wechat/restyle-prompts 真让 LLM 重写 4 个 prompt
+  2. 替换 plan.image_prompt + 清状态 (status=pending, mmbiz_url/media_url=null)
+  3. useEffect 自动重生 4 张 (走 D-090 双 URL 链路)
+  4. restyling state 防多点击 / restyle 失败回退原 styleId
+
+### 真烧 apimart 视觉验证 (这次必做)
+- 同 base "木桌散落面包和手机" 走 LLM restyle, vintage + cartoon 各跑 1 张
+- vintage 图 `/Users/black.chen/Desktop/neironggongchang/data/wechat-images/1777353304_*.png`:
+  暗墨绿色调 + 颗粒感 + 老式黑莓键盘机 + 暗角做旧
+- cartoon 图 `/Users/black.chen/Desktop/neironggongchang/data/wechat-images/1777353317_*.png`:
+  扁平描边 + 暖橙色 + 卡通包装 + iPhone + 餐包插画
+- **视觉差异巨大 ✅**, 跟 v1 末尾 append "都长一样" 对比鲜明.
+
+### playwright 闭环 (前端)
+- 注入 wf:wechat snapshot 给 4 张 pending plan
+- 点"复古怀旧" → restyle endpoint 真被调 1 次 (deepseek 3-5s)
+- 4 条 prompt 全部 differ from original (主体改了, 不只是末尾贴)
+- 4/4 含 vintage 关键词 (90/胶片/颗粒/老式/暗角/泛黄/做旧/老照片/褪色/CRT/钨丝/噪点)
+- console + page no error
+- 截图 `/tmp/_ui_shots/d091b_01_after_pick_vintage.png` 视觉确认
+
+### 测试
+- 535 通过 / 17 skip (jsx helper 没 JS 测试 infra). 后端 restyle 已 curl 真测 3 风格.
+
+---
+
+## 上一里程碑 (2026-04-28 · D-091 公众号段间图统一风格选择器 — v1 错误, 见 D-091b 修)
 
 **版本**: v0.6.4 — Step 5 顶部加全局"统一风格"chip group, 4 张图套同一个风格.
 
