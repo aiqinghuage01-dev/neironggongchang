@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from openai import OpenAI
 
 from .config import settings
-from .llm_retry import with_retry
+from .llm_retry import TransientLLMError, with_retry
 
 
 @dataclass
@@ -48,14 +48,29 @@ class DeepSeekClient:
         if system:
             messages.append({"role": "system", "content": system})
         messages.append({"role": "user", "content": prompt})
-        # D-082c: transient (5xx / timeout / rate limit / network) 自动重试 1 次
-        resp = with_retry(
-            lambda: self._client.chat.completions.create(
+
+        # D-082c: transient (5xx / timeout / rate limit / network) 自动重试 1 次.
+        # D-088: 空 content + completion_tokens > 0 视同 transient (跟 claude_opus 同步).
+        def _call_and_extract():
+            resp = self._client.chat.completions.create(
                 model=self.model,
                 messages=messages,
                 temperature=temperature,
                 max_tokens=max_tokens,
-            ),
+            )
+            content_raw = resp.choices[0].message.content or ""
+            text = content_raw.strip()
+            usage = resp.usage
+            completion_tok = getattr(usage, "completion_tokens", 0) or 0
+            if not text and completion_tok > 0:
+                raise TransientLLMError(
+                    f"DeepSeek 返回空内容但消耗了 {completion_tok} completion tokens "
+                    f"(model={self.model}) — 视为 transient, 重试"
+                )
+            return resp, text
+
+        resp, text = with_retry(
+            _call_and_extract,
             max_retries=1,
             on_retry=lambda n, e: logging.getLogger("deepseek").warning(
                 f"transient err, retrying #{n}: {str(e)[:150]}"
@@ -63,10 +78,10 @@ class DeepSeekClient:
         )
         usage = resp.usage
         return LLMResult(
-            text=resp.choices[0].message.content.strip(),
-            prompt_tokens=usage.prompt_tokens,
-            completion_tokens=usage.completion_tokens,
-            total_tokens=usage.total_tokens,
+            text=text,
+            prompt_tokens=getattr(usage, "prompt_tokens", 0) or 0,
+            completion_tokens=getattr(usage, "completion_tokens", 0) or 0,
+            total_tokens=getattr(usage, "total_tokens", 0) or 0,
         )
 
     def rewrite_script(self, original: str, style_hint: str = "") -> LLMResult:

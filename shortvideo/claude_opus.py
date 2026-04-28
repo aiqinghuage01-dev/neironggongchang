@@ -16,7 +16,7 @@ import httpx
 from openai import OpenAI
 
 from .deepseek import LLMResult
-from .llm_retry import with_retry
+from .llm_retry import TransientLLMError, with_retry
 
 # 默认配置(设置页可覆盖)
 DEFAULT_BASE_URL = "http://localhost:3456/v1"
@@ -56,15 +56,32 @@ class ClaudeOpusClient:
         if system:
             messages.append({"role": "system", "content": system})
         messages.append({"role": "user", "content": prompt})
-        # D-082c: transient 错误 (5xx / timeout / connection / rate limit) 自动重试 1 次
+
+        # D-082c: transient 错误 (5xx / timeout / connection / rate limit) 自动重试 1 次.
+        # D-088: 空 content + completion_tokens > 0 视同 transient — Opus/OpenClaw 偶发
+        # 把 max_tokens 全烧在 thinking 上没产 text block, 上层不重试就把空文吐给业务,
+        # 自检还能脑补出"107/120 通过". 把空判挪进 retry 包内.
+        def _call_and_extract():
+            resp = self._client.chat.completions.create(
+                model=self.model,
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+            )
+            content_raw = resp.choices[0].message.content or ""
+            text = content_raw.strip()
+            usage = resp.usage
+            completion_tok = getattr(usage, "completion_tokens", 0) or 0
+            if not text and completion_tok > 0:
+                raise TransientLLMError(
+                    f"Claude Opus 返回空内容但消耗了 {completion_tok} completion tokens "
+                    f"(model={self.model}) — 视为 transient, 重试"
+                )
+            return resp, text
+
         try:
-            resp = with_retry(
-                lambda: self._client.chat.completions.create(
-                    model=self.model,
-                    messages=messages,
-                    temperature=temperature,
-                    max_tokens=max_tokens,
-                ),
+            resp, text = with_retry(
+                _call_and_extract,
                 max_retries=1,
                 on_retry=lambda n, e: logging.getLogger("claude_opus").warning(
                     f"transient err, retrying #{n}: {str(e)[:150]}"
@@ -74,7 +91,7 @@ class ClaudeOpusClient:
             raise ClaudeOpusError(f"Claude Opus 调用失败({self.base_url} · {self.model}): {e}") from e
         usage = resp.usage
         return LLMResult(
-            text=resp.choices[0].message.content.strip() if resp.choices[0].message.content else "",
+            text=text,
             prompt_tokens=getattr(usage, "prompt_tokens", 0) or 0,
             completion_tokens=getattr(usage, "completion_tokens", 0) or 0,
             total_tokens=getattr(usage, "total_tokens", 0) or 0,

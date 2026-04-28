@@ -552,4 +552,56 @@ PROGRESS.md 行内的 1 行说明 + 这里的 1 句"为什么这么做"是日常
 - 访客模式独立作品库 (隔离 namespace, 老板用完能"导出/清空"整批) — 一期不做
 
 
+## D-088 - LLM 空 content 当 transient 重试 + 写长文 fail-fast (2026-04-28)
+
+**触发 case**: 老板今早 11:03 跑公众号 Step 4 写长文, UI 显示标题 + "0 字 · write 6558
+tok · check 6686 tok · 三层自检 ✅ 6/6 · 107/120 通过 · 无禁区" 但正文区域空白.
+DB 查 task `b72844d1f97...` 状态 = ok, `result.content = ""`, `tokens.write=6558`.
+
+**根因 (两层)**:
+1. **Opus / OpenClaw proxy 偶发**: 烧了 6558 completion_tokens 但 message.content 为空.
+   推测 max_tokens=6000 全烧在 thinking 上没产 text block, 或代理转发丢 content 字段.
+2. **DeepSeek 自检 hallucinate**: 给空字符串当文章, 还硬给 107/120 通过 + 编"文章整体
+   调性到位, 开场用学员案例直接切入冲突..." 总评. 自检 prompt 没要求"先确认文章非空".
+
+**为什么 D-082c with_retry 没救**:
+- 旧代码 `with_retry(lambda: client.chat.completions.create(...))` 只包了 HTTP 请求,
+  没包 text 提取. HTTP 200 (有 token 计数) 走完成功路径, content 解析在 retry 之外,
+  空字符串静默吐给上游. with_retry 关键字嗅探 ("timeout"/"503"/...) 当然不命中.
+- 自检环节又是另一个 LLM 调用, 各跑各的, DeepSeek 不知道 content 是空的就给打分了.
+
+**决策**:
+- **客户端层 (claude_opus / deepseek)**: 把 text 解析挪进 retry 包内, 显式判 "空 content
+  + completion_tokens > 0" → 抛新 sentinel 类 `TransientLLMError`. with_retry 优先用
+  isinstance 判 transient (比关键字嗅探更显式可靠), 重试 1 次. 持续空才向上 raise.
+- **业务层兜底 (wechat_pipeline.write_article)**: 客户端层重试都失败的极端 case, content
+  空就直接 raise RuntimeError, 不进自检. 让 task 状态 = failed 给 UI 明确错误, 而不是
+  让 DeepSeek 在空字符串上 hallucinate 通过.
+- 顺手修 deepseek 在 content=None 时 `.strip()` 直接 AttributeError 的隐 bug.
+
+**为什么不只在客户端层做**:
+- 客户端层重试 1 次, 已挡住 80%+ 偶发. 但持续故障 (Opus 模型连续两次都没出 text block,
+  或上游有结构性问题) 仍可能空. 业务层兜底 + 不让自检在空文上跑 = 双保险, 更重要的是
+  防住 "假 107/120 通过" 这种 worst-of-both-worlds 数据进 task DB.
+
+**为什么不在自检 prompt 里加"先判文章是否为空"**:
+- 不可靠 — DeepSeek 已多次证明会 hallucinate. 治本是不让它看到空文章, 不是求它别瞎说.
+
+**测试** (`tests/test_llm_empty_content.py`, 8 项):
+- claude_opus 空+token>0 重试成功 / 持续空抛 ClaudeOpusError 含 token 数 /
+  空+token=0 不重试返空 (合法 0-output) / content=None 不 AttributeError /
+  正常路径不重试.
+- deepseek: 同上两个核心 case.
+- wechat_pipeline.write_article 空 content → 抛 RuntimeError 含 token 数 +
+  断言 self-check ai 没被调用 (回归: 防 hallucinate 重新长出来).
+
+**影响范围**: 所有走 `shortvideo.ai.get_ai_client` 的功能 (公众号 / 投流 / 录音改写 /
+热点改写 / 内容策划 / 即梦 prompt / 数字人脚本 ...). 任何空 content 现在都会先重试 1
+次, 还空就向上抛清楚的错误, 而不是静默吐空内容让上层伪成功.
+
+**Follow-up**:
+- 监控接 retry stats: `shortvideo.llm_retry.get_retry_stats()` 已有计数 (T9). 看 7 天
+  内空 content 触发率, 若 > 1% 考虑把 max_retries 加到 2.
+- 若 OpenClaw / Opus 修复了 thinking 不出 text 的 bug, 这层防御无害保留.
+
 

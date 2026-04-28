@@ -177,6 +177,17 @@ def write_article(topic: str, title: str, outline: dict[str, Any]) -> dict[str, 
     write_r = ai.chat(write_prompt, system=system, deep=False, temperature=0.85, max_tokens=6000)
     content = (write_r.text or "").strip()
 
+    # D-088 fail-fast: content 空就不能进自检.
+    # 历史 case (b72844d1f97...): Opus 烧了 6558 tok 但返回空, 自检还硬给 107/120 通过 +
+    # 编出"文章整体调性到位"总评 -> 老板看到空白页面但提示"自检通过", 完全误导.
+    # 客户端层 (claude_opus.py / deepseek.py) D-088 已加 transient 重试; 这里兜底:
+    # 实在重试都失败, 至少抛清楚的 RuntimeError 让 task 状态 = failed, UI 看到真实原因.
+    if not content:
+        raise RuntimeError(
+            f"Claude Opus 写长文返回空内容 (write_tokens={write_r.total_tokens}). "
+            f"上游可能 max_tokens 全烧 thinking 没出 text block. 请重试一次."
+        )
+
     # 三层自检 — 让 AI 对自己写的文章逐层打分
     check_system = f"""你在执行公众号文章 skill 的 Phase 2 末尾 · 三层自检。
 基于下面的风格圣经,对给定文章进行检查。

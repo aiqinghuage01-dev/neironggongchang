@@ -4,7 +4,35 @@
 
 ---
 
-## 当前状态 (2026-04-28 · D-087 素材库 + B' GPT 修订收尾)
+## 当前状态 (2026-04-28 · D-088 LLM 空内容防御 + 公众号写长文 fail-fast)
+
+**版本**: v0.6.1 — D-088 LLM 客户端空 content 当 transient 重试 + wechat write 兜底.
+
+**触发 case** (老板今早 11:03 真踩到): `wechat.write` task `b72844d1f97...` 状态 = ok,
+content="" 但 `tokens.write=6558` — Opus 烧了 6558 tok 没出 text block (max_tokens
+全烧 thinking / OpenClaw 转发丢字段). DeepSeek 自检在空文章上还硬给 107/120 通过 +
+编"文章整体调性到位"总评. UI 显示 "0 字 · 自检通过" 的空白页面, 完全误导.
+
+### D-088 修复
+- `shortvideo/llm_retry.py` 加 `TransientLLMError(RuntimeError)` sentinel 类 +
+  `is_transient_error` 优先 isinstance 判定 (比关键字嗅探显式可靠).
+- `shortvideo/claude_opus.py` + `shortvideo/deepseek.py` 把 text 解析挪进 retry
+  lambda. `content="" + completion_tokens>0` → 抛 TransientLLMError → with_retry
+  重试 1 次, 持续空才向上 ClaudeOpusError. 顺手修 deepseek 在 content=None 时
+  `.strip()` 直接 AttributeError 的隐 bug.
+- `backend/services/wechat_pipeline.py:write_article` 兜底: content 空就 raise
+  RuntimeError, 不进自检 (避免 DeepSeek 在空字符串上 hallucinate 通过).
+- `tests/test_llm_empty_content.py` 8 个 case 覆盖: 空+token>0 重试成功 / 持续空抛
+  ClaudeOpusError / 空+token=0 不重试 / None content 不 AttributeError / 正常一次
+  过 (Opus + DeepSeek 各覆盖) / write_article 空 content 不进自检.
+
+### 测试
+- 537 + 8 = 545 通过, 1 skip.
+- 后端冒烟: import + sentinel 命中 + write_article fail-fast 路径. 全过.
+
+---
+
+## 上一里程碑 (2026-04-28 · D-087 素材库 + B' GPT 修订收尾)
 
 **版本**: v0.6.0 — 素材库 MVP + GPT 第二轮修订 (B'-1 ~ B'-5 全落地).
 

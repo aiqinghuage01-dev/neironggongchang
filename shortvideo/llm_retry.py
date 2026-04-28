@@ -24,7 +24,18 @@ TRANSIENT_KEYWORDS = (
 )
 
 
+class TransientLLMError(RuntimeError):
+    """显式标记的 transient 故障 — with_retry 必重试.
+
+    用于 LLM 客户端检测到上游"虽返回 200 + 烧了 completion_tokens, 但 content 是空"
+    这种伪成功 (D-088): OpenClaw proxy / Opus 偶发把 max_tokens 全烧在 thinking 里没
+    出 text block, 或代理转发丢 content. 用 sentinel 类比关键字嗅探更显式可靠.
+    """
+
+
 def is_transient_error(e: BaseException) -> bool:
+    if isinstance(e, TransientLLMError):
+        return True
     msg = str(e).lower()
     return any(kw in msg for kw in TRANSIENT_KEYWORDS)
 

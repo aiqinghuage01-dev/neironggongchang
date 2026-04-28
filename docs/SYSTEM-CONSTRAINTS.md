@@ -125,10 +125,26 @@ result = client.chat("你的提示词", system="可选的任务级 system", deep
 **为什么**: 关卡层自动:
 - 注入清华哥人设 (访客模式自动切中性 ~100 字 system)
 - 智能路由轻/重任务 → DeepSeek/Opus (D-011, 11 条默认路由)
-- 自动 retry 1 次 (D-082c, 5xx/timeout/rate-limit 兜底)
+- 自动 retry 1 次 (D-082c, 5xx/timeout/rate-limit 兜底; D-088 空 content + token>0 也算)
 - 打 ai_calls usage 点 (D-015, 首页统计 + 成本核算)
 
 绕过 = 丢 4 项, 任意一项都是债.
+
+### 2.1.5 业务层不能信任空字符串当成功 (D-088)
+
+LLM 客户端虽已有 D-088 空 content 重试, 但持续故障仍可能向上抛或重试也失败时返空.
+**业务方拿到 `LLMResult.text` 后, 自己别在空字符串上往后跑**, 尤其禁止:
+- 把空字符串喂给"自检/审核 LLM" 让它打分 (DeepSeek 会 hallucinate 通过, 见 D-088 历史)
+- 拿空字符串入库当成功结果
+
+**正例** (`backend/services/wechat_pipeline.py:write_article`):
+```python
+write_r = ai.chat(...)
+content = (write_r.text or "").strip()
+if not content:
+    raise RuntimeError(f"Claude Opus 写长文返回空内容 (write_tokens={write_r.total_tokens})")
+# 之后才能进自检
+```
 
 ### 2.2 deep 参数语义
 - `deep=True` 全量人设 ~7500 token (业务画像 + 写作风格 + 协作偏好等) — **默认值**
