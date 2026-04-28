@@ -2013,6 +2013,18 @@ def material_lib_usage(req: MaterialUsageReq):
     return {"ok": True}
 
 
+@app.get("/api/material-lib/recent-activity", tags=["档案部"], summary="(D-087) L1 右栏 📈 最近活动 timeline")
+def material_lib_recent_activity(limit: int = 10):
+    from backend.services import materials_service as ms
+    return {"events": ms.list_recent_activity(limit=limit)}
+
+
+@app.get("/api/material-lib/top-used", tags=["档案部"], summary="(D-087) L1 右栏 🏆 最常用 Top 5")
+def material_lib_top_used(limit: int = 5):
+    from backend.services import materials_service as ms
+    return {"items": ms.list_top_used(limit=limit)}
+
+
 # ─── D-087 Day 2: AI 打标 ───────────────────────────────
 
 

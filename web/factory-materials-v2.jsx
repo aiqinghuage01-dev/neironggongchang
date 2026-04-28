@@ -82,31 +82,118 @@ function _hashStr(s) {
 }
 
 
-function MV2L1Home({ stats, folders, loading, err, onPickFolder, onScan, scanning, onBatchTag, batchTagging }) {
+// ─── L1 右栏: 最近活动 timeline ────────────────────────────
+
+function MV2RecentActivity({ events, loading }) {
+  return (
+    <div style={{
+      background: "#fff", border: `1px solid ${T.border}`, borderRadius: 10,
+      padding: "14px 16px", marginBottom: 12,
+    }}>
+      <div style={{ fontSize: 12.5, fontWeight: 600, color: T.text, marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}>
+        📈 最近活动
+      </div>
+      {loading ? (
+        <div style={{ fontSize: 11.5, color: T.muted2 }}>加载中...</div>
+      ) : events.length === 0 ? (
+        <div style={{ fontSize: 11.5, color: T.muted3 }}>· 还没有活动 (扫描后会有)</div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+          {events.slice(0, 5).map((e, i) => (
+            <div key={i} style={{ fontSize: 11.5, color: T.muted, lineHeight: 1.5 }}>
+              <span style={{ color: T.muted3 }}>·</span>{" "}
+              <span style={{ color: T.muted2 }}>{e.when}</span>{" "}
+              · <span style={{ color: T.text }}>{e.text}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+// ─── L1 右栏: 最常用 Top 5 ───────────────────────────────
+
+function MV2TopUsed({ items, loading, onPickAsset }) {
+  return (
+    <div style={{
+      background: "#fff", border: `1px solid ${T.border}`, borderRadius: 10,
+      padding: "14px 16px",
+    }}>
+      <div style={{ fontSize: 12.5, fontWeight: 600, color: T.text, marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}>
+        🏆 最常用 Top 5
+      </div>
+      {loading ? (
+        <div style={{ fontSize: 11.5, color: T.muted2 }}>加载中...</div>
+      ) : items.length === 0 ? (
+        <div style={{ fontSize: 11.5, color: T.muted3 }}>还没用过任何素材<br/>(用了之后这里会有 Top 5)</div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          {items.slice(0, 5).map((it, i) => (
+            <div key={it.id} onClick={() => onPickAsset && onPickAsset(it)} style={{
+              display: "flex", alignItems: "center", gap: 8,
+              fontSize: 11.5, cursor: onPickAsset ? "pointer" : "default",
+              padding: "3px 0",
+            }}>
+              <span style={{ color: T.muted3, fontWeight: 600, width: 14 }}>{i + 1}.</span>
+              <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: T.text }} title={it.filename}>
+                {it.filename}
+              </span>
+              <span style={{ color: T_GREEN, fontWeight: 600 }}>{it.hits}×</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+function MV2L1Home({ stats, folders, loading, err, onPickFolder, onScan, scanning, onBatchTag, batchTagging,
+                    activity, topUsed, sideLoading, search, onSearch, onPickAsset }) {
   if (loading) return <div style={{ padding: 60, textAlign: "center", color: T.muted }}>加载中...</div>;
+  const remainTag = stats ? Math.max(0, stats.total - stats.ai_tagged) : 0;
   return (
     <div>
-      {/* Header */}
-      <div style={{ marginBottom: 18 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <h1 style={{ fontSize: 22, fontWeight: 700, margin: 0 }}>📥 素材库 · 总览</h1>
-          <Tag color="green" size="sm">已连接本地</Tag>
+      {/* Header (顶部 全宽 含搜索框) */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16, gap: 16 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <h1 style={{ fontSize: 22, fontWeight: 700, margin: 0 }}>📥 素材库 · 总览</h1>
+            <Tag color="green" size="sm">已连接本地</Tag>
+          </div>
+          <div style={{ fontSize: 12, color: T.muted2, marginTop: 6 }}>
+            {stats?.root || "—"}
+            {stats != null && (
+              <span style={{ marginLeft: 12 }}>
+                · 总 {stats.total} 条
+                {stats.week_added > 0 && <span> · 本周 +{stats.week_added}</span>}
+              </span>
+            )}
+          </div>
         </div>
-        <div style={{ fontSize: 12, color: T.muted2, marginTop: 6 }}>
-          {stats?.root || "—"}
-          {stats != null && (
-            <span style={{ marginLeft: 12 }}>
-              · 总 {stats.total} 条
-              {stats.week_added > 0 && <span> · 本周 +{stats.week_added}</span>}
-            </span>
-          )}
-        </div>
+        {/* 全库搜索框 (设计稿右上) */}
+        <input
+          type="text" value={search || ""}
+          onChange={e => onSearch && onSearch(e.target.value)}
+          placeholder="🔍 全库搜索 · 标签 / 文件名"
+          data-testid="mv2-l1-search"
+          style={{
+            width: 320, padding: "9px 12px",
+            border: `1px solid ${T.border}`, borderRadius: 100,
+            fontSize: 13, fontFamily: "inherit", background: "#fff",
+            outline: "none",
+          }}
+          onFocus={e => e.target.style.borderColor = T_GREEN}
+          onBlur={e => e.target.style.borderColor = T.border}
+        />
       </div>
 
       {err && <InlineError err={err} />}
 
-      {/* 4 KPI 横条 */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 18 }}>
+      {/* 4 KPI 横条 (全宽) */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 16 }}>
         <MV2KpiCard
           icon="📦" label="总素材"
           value={stats?.total ?? 0}
@@ -130,20 +217,20 @@ function MV2L1Home({ stats, folders, loading, err, onPickFolder, onScan, scannin
         />
       </div>
 
-      {/* 主分区 + 操作 */}
+      {/* 主分区操作条 */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
         <div style={{ fontSize: 13, color: T.muted, fontWeight: 500 }}>
           主分区 · {folders.length} 个 · <span style={{ color: T.muted2 }}>点击进入</span>
         </div>
         <div style={{ display: "flex", gap: 6 }}>
-          {stats && (stats.total - stats.ai_tagged) > 0 && (
+          {remainTag > 0 && (
             <Btn
               variant="outline" size="sm"
               data-testid="mv2-l1-batch-tag-btn"
               onClick={onBatchTag} disabled={batchTagging}
               style={{ borderColor: T_GREEN, color: T_GREEN }}
             >
-              {batchTagging ? "AI 打标中..." : `✨ AI 打 10 条待标 (剩 ${stats.total - stats.ai_tagged})`}
+              {batchTagging ? "AI 打标中..." : `✨ AI 打 10 条 (剩 ${remainTag})`}
             </Btn>
           )}
           <Btn variant="outline" size="sm" onClick={onScan} disabled={scanning}>
@@ -152,25 +239,35 @@ function MV2L1Home({ stats, folders, loading, err, onPickFolder, onScan, scannin
         </div>
       </div>
 
-      {/* 8 文件夹大卡片 (2 列 4 行) */}
-      {folders.length === 0 ? (
-        <div style={{ padding: 60, background: "#fff", borderRadius: 10, border: `1px solid ${T.border}`, textAlign: "center", color: T.muted }}>
-          <div style={{ fontSize: 28, marginBottom: 8 }}>📂</div>
-          <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>素材库还是空的</div>
-          <div style={{ fontSize: 12, color: T.muted2, marginBottom: 14 }}>
-            把素材放到 {stats?.root || "~/Downloads/"}, 然后点 "🔄 重新扫描" 入库
-          </div>
-          <Btn variant="primary" size="md" onClick={onScan} disabled={scanning}>
-            {scanning ? "扫描中..." : "▶ 立即扫描"}
-          </Btn>
+      {/* 主区 (左 文件夹大卡片 70%) + 右栏 (最近活动 + Top 5, 30%) */}
+      <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 280px", gap: 16 }}>
+        {/* 左: 8 文件夹大卡片 (2 列) */}
+        <div>
+          {folders.length === 0 ? (
+            <div style={{ padding: 60, background: "#fff", borderRadius: 10, border: `1px solid ${T.border}`, textAlign: "center", color: T.muted }}>
+              <div style={{ fontSize: 28, marginBottom: 8 }}>📂</div>
+              <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>素材库还是空的</div>
+              <div style={{ fontSize: 12, color: T.muted2, marginBottom: 14 }}>
+                把素材放到 {stats?.root || "~/Downloads/"}, 然后点 "🔄 重新扫描" 入库
+              </div>
+              <Btn variant="primary" size="md" onClick={onScan} disabled={scanning}>
+                {scanning ? "扫描中..." : "▶ 立即扫描"}
+              </Btn>
+            </div>
+          ) : (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 10 }}>
+              {folders.slice(0, 8).map(f => (
+                <MV2FolderCard key={f.folder} folder={f} onClick={() => onPickFolder(f.folder)} />
+              ))}
+            </div>
+          )}
         </div>
-      ) : (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 10 }}>
-          {folders.slice(0, 8).map(f => (
-            <MV2FolderCard key={f.folder} folder={f} onClick={() => onPickFolder(f.folder)} />
-          ))}
+        {/* 右栏 */}
+        <div>
+          <MV2RecentActivity events={activity || []} loading={sideLoading} />
+          <MV2TopUsed items={topUsed || []} loading={sideLoading} onPickAsset={onPickAsset} />
         </div>
-      )}
+      </div>
     </div>
   );
 }
@@ -278,18 +375,173 @@ function MV2L2Folder({ topFolder, mode, onModeChange, onBack, onPickAsset, onPic
 
 // ─── L3 网格 (A 模式: 顶部 tab + 5 列网格) ─────────────────
 
+// ─── L3 右栏: 选中预览 (设计稿 A 方案核心特征) ──────────
+
+function MV2L3SidePreview({ asset: assetMini, onPickAsset, onNav, onTagged }) {
+  const [asset, setAsset] = React.useState(null);
+  const [loading, setLoading] = React.useState(false);
+  const [err, setErr] = React.useState("");
+  const [tagging, setTagging] = React.useState(false);
+
+  async function load() {
+    if (!assetMini) { setAsset(null); return; }
+    setLoading(true); setErr("");
+    try {
+      const a = await api.get(`/api/material-lib/asset/${assetMini.id}`);
+      setAsset(a);
+    } catch (e) {
+      setErr(e.message);
+    }
+    setLoading(false);
+  }
+  React.useEffect(() => { load(); }, [assetMini && assetMini.id]);
+
+  async function handleTag(force) {
+    if (!asset) return;
+    setTagging(true); setErr("");
+    try {
+      await api.post(`/api/material-lib/tag/${asset.id}${force ? "?force=true" : ""}`);
+      await load();
+      if (onTagged) onTagged();
+    } catch (e) {
+      setErr(e.message);
+    }
+    setTagging(false);
+  }
+
+  async function handleUseInVideo() {
+    if (!asset) return;
+    try {
+      await api.post("/api/material-lib/usage", { asset_id: asset.id, used_in: "make-page" });
+    } catch {}
+    window.dispatchEvent(new CustomEvent("ql-nav", { detail: { page: "make" } }));
+    if (onNav) onNav("make");
+  }
+
+  if (!asset && !loading) {
+    return (
+      <div style={{
+        padding: "60px 16px", textAlign: "center", color: T.muted3, fontSize: 12,
+        background: "#fff", border: `1px solid ${T.border}`, borderRadius: 10, position: "sticky", top: 16,
+      }}>
+        点左侧素材卡<br/>查看预览
+      </div>
+    );
+  }
+
+  const isVideo = asset && [".mp4", ".mov", ".m4v", ".avi", ".mpg"].includes(asset.ext);
+  const thumbUrl = asset && asset.thumb_path ? `${api.base}/api/material-lib/thumb/${asset.id}` : "";
+
+  return (
+    <div style={{
+      background: "#fff", border: `1px solid ${T.border}`, borderRadius: 10,
+      overflow: "hidden", position: "sticky", top: 16,
+    }}>
+      {loading ? (
+        <div style={{ padding: 30, textAlign: "center", color: T.muted2 }}>加载中...</div>
+      ) : (
+        <>
+          {/* 缩略图 */}
+          <div style={{
+            aspectRatio: "16/9", background: T.bg2,
+            backgroundImage: thumbUrl ? `url(${thumbUrl})` : "",
+            backgroundSize: "cover", backgroundPosition: "center",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            position: "relative", cursor: "pointer",
+          }} onClick={() => onPickAsset && onPickAsset(asset)}
+            title="点击全屏预览">
+            {!thumbUrl && (
+              <span style={{ color: T.muted3, fontSize: 22 }}>{isVideo ? "🎬" : "🖼️"}</span>
+            )}
+            {asset.duration_sec && (
+              <span style={{
+                position: "absolute", bottom: 6, right: 6,
+                background: "rgba(0,0,0,0.65)", color: "#fff",
+                fontSize: 11, padding: "2px 6px", borderRadius: 3,
+              }}>▶ {_fmtDur(asset.duration_sec)}</span>
+            )}
+          </div>
+          {/* 信息 */}
+          <div style={{ padding: "12px 14px", display: "flex", flexDirection: "column", gap: 10 }}>
+            <div>
+              <div style={{ fontSize: 12.5, fontWeight: 600, wordBreak: "break-all" }}>{asset.filename}</div>
+              <div style={{ fontSize: 10.5, color: T.muted2, marginTop: 2 }}>
+                {asset.size_bytes ? `${(asset.size_bytes / 1024 / 1024).toFixed(1)} MB` : ""}
+                {asset.width && asset.height ? ` · ${asset.width}×${asset.height}` : ""}
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize: 10.5, color: T.muted, marginBottom: 3 }}>📁 文件位置</div>
+              <div style={{ fontSize: 10, color: T.muted2, padding: "5px 7px", background: T.bg2, borderRadius: 4, wordBreak: "break-all" }}>
+                {asset.rel_folder === "." ? "(根目录)" : asset.rel_folder}
+              </div>
+            </div>
+            <div>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 3 }}>
+                <span style={{ fontSize: 10.5, color: T.muted }}>🏷 标签</span>
+                <button
+                  onClick={() => handleTag(asset.tags.length > 0)}
+                  disabled={tagging}
+                  data-testid="mv2-l3-side-tag-btn"
+                  style={{
+                    fontSize: 10, padding: "1px 7px", borderRadius: 3,
+                    background: "transparent", border: `1px solid ${T_GREEN}`,
+                    color: T_GREEN, cursor: tagging ? "wait" : "pointer", fontFamily: "inherit",
+                  }}
+                >
+                  {tagging ? "..." : asset.tags.length > 0 ? "✨ 重打" : "✨ AI 打标"}
+                </button>
+              </div>
+              {asset.tags.length === 0 ? (
+                <div style={{ fontSize: 10.5, color: T_AMBER }}>⚠ 待标</div>
+              ) : (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>
+                  {asset.tags.slice(0, 8).map(t => (
+                    <span key={t.id} style={{
+                      fontSize: 10, padding: "1px 5px", borderRadius: 3,
+                      background: t.source === "ai" ? "#e8f5e9" : "#e3f2fd",
+                      color: t.source === "ai" ? "#2e7d32" : "#1565c0",
+                      border: t.source === "ai" ? "1px dashed #81c784" : "none",
+                    }}>{t.source === "ai" ? "✨" : ""}{t.name}</span>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div>
+              <div style={{ fontSize: 10.5, color: T.muted, marginBottom: 2 }}>🎯 命中</div>
+              <div style={{ fontSize: 11 }}>
+                {asset.hits === 0 ? <span style={{ color: T.muted3 }}>还没用过</span> : `用过 ${asset.hits} 次`}
+              </div>
+            </div>
+            {err && <InlineError err={err} />}
+            <Btn variant="primary" size="md" onClick={handleUseInVideo} style={{ width: "100%" }}>
+              ✨ 用它做视频
+            </Btn>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+
 function MV2L3Grid({ folder, onPickAsset, onBack, embedded }) {
   const [items, setItems] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [err, setErr] = React.useState("");
   const [sort, setSort] = React.useState("imported");
   const [limit] = React.useState(60);
+  // L3 内部状态: 选中的素材 (右栏预览). 双击全屏走 onPickAsset → L4 modal.
+  const [selected, setSelected] = React.useState(null);
 
   async function load() {
     setLoading(true); setErr("");
     try {
       const r = await api.get(`/api/material-lib/list?folder=${encodeURIComponent(folder)}&sort=${sort}&limit=${limit}`);
       setItems(r.items || []);
+      if (r.items && r.items.length > 0 && !selected) {
+        setSelected(r.items[0]);  // 默认选第一个, 右栏立即有内容
+      }
     } catch (e) {
       setErr(e.message);
     }
@@ -297,8 +549,8 @@ function MV2L3Grid({ folder, onPickAsset, onBack, embedded }) {
   }
   React.useEffect(() => { load(); }, [folder, sort]);
 
-  return (
-    <div>
+  const grid = (
+    <>
       {!embedded && (
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14 }}>
@@ -318,9 +570,7 @@ function MV2L3Grid({ folder, onPickAsset, onBack, embedded }) {
           </div>
         </div>
       )}
-
       {err && <InlineError err={err} />}
-
       {loading ? (
         <div style={{ padding: 40, textAlign: "center", color: T.muted }}>加载中...</div>
       ) : items.length === 0 ? (
@@ -328,12 +578,31 @@ function MV2L3Grid({ folder, onPickAsset, onBack, embedded }) {
           这里还没素材
         </div>
       ) : (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 8 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8 }}>
           {items.map(a => (
-            <MV2AssetCard key={a.id} asset={a} onClick={() => onPickAsset(a, folder)} />
+            <MV2AssetCard
+              key={a.id} asset={a}
+              selected={selected && selected.id === a.id}
+              onClick={() => setSelected(a)}
+              onDoubleClick={() => onPickAsset && onPickAsset(a, folder)}
+            />
           ))}
         </div>
       )}
+    </>
+  );
+
+  // embedded (L2 切 A 模式时调) 不走右栏布局
+  if (embedded) return grid;
+
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 320px", gap: 16 }}>
+      <div>{grid}</div>
+      <MV2L3SidePreview
+        asset={selected}
+        onPickAsset={onPickAsset}
+        onTagged={load}
+      />
     </div>
   );
 }
@@ -341,7 +610,7 @@ function MV2L3Grid({ folder, onPickAsset, onBack, embedded }) {
 
 // ─── 素材卡片 (L2/L3 共用) ─────────────────────────────────
 
-function MV2AssetCard({ asset, onClick, selected }) {
+function MV2AssetCard({ asset, onClick, onDoubleClick, selected }) {
   const isVideo = [".mp4", ".mov", ".m4v", ".avi", ".mpg"].includes(asset.ext);
   const dur = asset.duration_sec ? _fmtDur(asset.duration_sec) : null;
   const tags = asset.tags || [];
@@ -350,7 +619,7 @@ function MV2AssetCard({ asset, onClick, selected }) {
     ? `${api.base}/api/material-lib/thumb/${asset.id}`
     : null;
   return (
-    <div onClick={onClick} data-testid="mv2-asset-card" style={{
+    <div onClick={onClick} onDoubleClick={onDoubleClick} data-testid="mv2-asset-card" style={{
       borderRadius: 8, overflow: "hidden", cursor: "pointer",
       border: selected ? `2px solid ${T_GREEN}` : `1px solid ${T.border}`,
       background: "#fff", transition: "all 0.12s", position: "relative",
@@ -591,24 +860,32 @@ function PageMaterialsV2({ onNav }) {
   // 大屏数据
   const [stats, setStats] = React.useState(null);
   const [folders, setFolders] = React.useState([]);
+  const [activity, setActivity] = React.useState([]);
+  const [topUsed, setTopUsed] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
+  const [sideLoading, setSideLoading] = React.useState(true);
   const [err, setErr] = React.useState("");
   const [scanning, setScanning] = React.useState(false);
   const [batchTagging, setBatchTagging] = React.useState(false);
+  const [search, setSearch] = React.useState("");
 
   async function loadHome() {
-    setLoading(true); setErr("");
+    setLoading(true); setSideLoading(true); setErr("");
     try {
-      const [s, f] = await Promise.all([
+      const [s, f, a, t] = await Promise.all([
         api.get("/api/material-lib/stats"),
         api.get("/api/material-lib/folders"),
+        api.get("/api/material-lib/recent-activity?limit=6"),
+        api.get("/api/material-lib/top-used?limit=5"),
       ]);
       setStats(s);
       setFolders(f.folders || []);
+      setActivity(a.events || []);
+      setTopUsed(t.items || []);
     } catch (e) {
       setErr(e.message);
     }
-    setLoading(false);
+    setLoading(false); setSideLoading(false);
   }
   React.useEffect(() => { loadHome(); }, []);
 
@@ -692,13 +969,16 @@ function PageMaterialsV2({ onNav }) {
   }
 
   return (
-    <div style={{ maxWidth: 1240, margin: "0 auto", padding: "20px 24px" }}>
+    <div style={{ padding: "20px 24px" }}>
       {view === "home" && (
         <MV2L1Home
           stats={stats} folders={folders} loading={loading} err={err}
           onPickFolder={handlePickFolder}
           onScan={handleScan} scanning={scanning}
           onBatchTag={handleBatchTag} batchTagging={batchTagging}
+          activity={activity} topUsed={topUsed} sideLoading={sideLoading}
+          search={search} onSearch={setSearch}
+          onPickAsset={(a) => setPreviewAsset(a)}
         />
       )}
       {view === "folder" && (

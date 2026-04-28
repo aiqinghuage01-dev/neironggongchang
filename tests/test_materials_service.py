@@ -485,3 +485,57 @@ def test_get_materials_root_default():
     p = get_materials_root()
     # 至少是 Path 对象, 含 'Downloads'
     assert "Downloads" in str(p) or p.exists()
+
+
+# ─── L1 右栏 endpoint (D-087 整改) ────────────────────────
+
+
+def test_recent_activity_after_scan(tmp_db, tmp_thumb_dir, tmp_root):
+    """扫描后应有 import 事件."""
+    from backend.services.materials_service import scan_root, list_recent_activity
+    scan_root()
+    events = list_recent_activity()
+    # 应该至少有一条 "今天 同步 N 个素材"
+    assert any(e["kind"] == "import" for e in events)
+    today_event = next((e for e in events if e["kind"] == "import"), None)
+    assert today_event is not None
+    assert "同步" in today_event["text"]
+
+
+def test_recent_activity_includes_usage(tmp_db, tmp_thumb_dir, tmp_root):
+    """log_usage 后应有 usage 事件."""
+    from backend.services.materials_service import scan_root, list_assets, log_usage, list_recent_activity
+    scan_root()
+    aid = list_assets()[0]["id"]
+    log_usage(aid, "测试视频.mp4")
+    events = list_recent_activity()
+    assert any(e["kind"] == "usage" for e in events)
+    u = next(e for e in events if e["kind"] == "usage")
+    assert "测试视频" in u["text"]
+
+
+def test_recent_activity_empty_db(tmp_db, tmp_thumb_dir):
+    from backend.services.materials_service import list_recent_activity
+    events = list_recent_activity()
+    assert events == []
+
+
+def test_top_used_empty(tmp_db, tmp_thumb_dir, tmp_root):
+    """没 usage 时返空 list."""
+    from backend.services.materials_service import scan_root, list_top_used
+    scan_root()
+    assert list_top_used() == []
+
+
+def test_top_used_sorted_by_hits(tmp_db, tmp_thumb_dir, tmp_root):
+    from backend.services.materials_service import scan_root, list_assets, log_usage, list_top_used
+    scan_root()
+    items = list_assets()
+    log_usage(items[0]["id"], "x")
+    log_usage(items[0]["id"], "y")
+    log_usage(items[1]["id"], "z")
+    top = list_top_used()
+    assert len(top) == 2
+    assert top[0]["id"] == items[0]["id"]
+    assert top[0]["hits"] == 2
+    assert top[1]["hits"] == 1

@@ -432,6 +432,122 @@ def thumb_abs_path(asset_id: str) -> Path | None:
     return p if p.exists() else None
 
 
+# ─── L1 右栏: 最近活动 + Top 5 ─────────────────────────────
+
+
+def list_recent_activity(limit: int = 10) -> list[dict[str, Any]]:
+    """L1 右栏 📈 最近活动 timeline. 混合事件流:
+    - 按天聚合 imported_at: "今天 同步 N 个素材"
+    - usage_log: "X 时刻 用了 Y 做 Z"
+    - pending_moves status='approved': "审核 N 条"
+
+    返回 [{when, kind, text, ts}, ...] 按 ts desc.
+    """
+    _ensure_schema()
+    now = int(time.time())
+    today_start = int(time.mktime(time.strptime(time.strftime("%Y-%m-%d"), "%Y-%m-%d")))
+    yesterday_start = today_start - 86400
+    events: list[dict[str, Any]] = []
+    with closing(get_connection()) as con:
+        # 入库事件 (按天聚合最近 7 天)
+        rows = con.execute(
+            """SELECT
+                CASE
+                    WHEN imported_at >= ? THEN 'today'
+                    WHEN imported_at >= ? THEN 'yesterday'
+                    ELSE strftime('%m-%d', imported_at, 'unixepoch')
+                END AS day_label,
+                MAX(imported_at) AS max_ts,
+                COUNT(*) AS n
+            FROM material_assets
+            WHERE imported_at >= ?
+            GROUP BY day_label
+            ORDER BY max_ts DESC""",
+            (today_start, yesterday_start, now - 7 * 86400),
+        ).fetchall()
+        for r in rows:
+            label = "今天" if r[0] == "today" else "昨天" if r[0] == "yesterday" else r[0]
+            events.append({
+                "when": label,
+                "kind": "import",
+                "text": f"同步 {r[2]} 个素材",
+                "ts": r[1],
+            })
+        # 使用事件 (最近)
+        urows = con.execute(
+            """SELECT used_at, used_in, COUNT(*) AS n
+               FROM material_usage_log
+               WHERE used_at >= ?
+               GROUP BY used_in, strftime('%Y-%m-%d %H', used_at, 'unixepoch')
+               ORDER BY used_at DESC LIMIT ?""",
+            (now - 7 * 86400, limit),
+        ).fetchall()
+        for r in urows:
+            ts = r[0]
+            label = (
+                f"今天 {time.strftime('%H:%M', time.localtime(ts))}" if ts >= today_start
+                else f"昨天 {time.strftime('%H:%M', time.localtime(ts))}" if ts >= yesterday_start
+                else time.strftime("%m-%d", time.localtime(ts))
+            )
+            target = (r[1] or "").strip() or "未命名"
+            events.append({
+                "when": label,
+                "kind": "usage",
+                "text": f"用了 {r[2]} 个做《{target[:20]}》",
+                "ts": ts,
+            })
+        # 审核事件
+        prows = con.execute(
+            """SELECT created_at, COUNT(*) AS n FROM material_pending_moves
+               WHERE status='approved' AND created_at >= ?
+               GROUP BY date(created_at, 'unixepoch')
+               ORDER BY created_at DESC LIMIT 3""",
+            (now - 7 * 86400,),
+        ).fetchall()
+        for r in prows:
+            ts = r[0]
+            label = (
+                "今天" if ts >= today_start
+                else "昨天" if ts >= yesterday_start
+                else time.strftime("%m-%d", time.localtime(ts))
+            )
+            events.append({
+                "when": label,
+                "kind": "approve",
+                "text": f"审核了 {r[1]} 条",
+                "ts": ts,
+            })
+    events.sort(key=lambda e: e["ts"], reverse=True)
+    return events[:limit]
+
+
+def list_top_used(limit: int = 5) -> list[dict[str, Any]]:
+    """L1 右栏 🏆 最常用 Top 5. SQL JOIN hits DESC."""
+    _ensure_schema()
+    with closing(get_connection()) as con:
+        con.row_factory = sqlite3.Row
+        rows = con.execute(
+            """SELECT a.id, a.filename, a.thumb_path, a.rel_folder,
+                      COUNT(u.id) AS hits
+               FROM material_assets a
+               JOIN material_usage_log u ON u.asset_id = a.id
+               GROUP BY a.id
+               ORDER BY hits DESC
+               LIMIT ?""",
+            (limit,),
+        ).fetchall()
+    return [
+        {
+            "id": r["id"],
+            "filename": r["filename"],
+            "thumb_path": r["thumb_path"],
+            "rel_folder": r["rel_folder"],
+            "hits": r["hits"],
+        }
+        for r in rows
+    ]
+
+
 def log_usage(asset_id: str, used_in: str, position_sec: float | None = None) -> None:
     """记录素材被用. PRD §3.5 "做视频" 对接接口."""
     _ensure_schema()
