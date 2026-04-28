@@ -72,8 +72,14 @@ def gen_titles(topic: str, n: int = 3) -> list[dict[str, str]]:
     ai = get_ai_client(route_key="wechat.titles")
     # skill 自带完整人设,关闭关卡层的 Obsidian persona 以免双注入
     r = ai.chat(prompt, system=system, deep=False, temperature=0.9, max_tokens=1500)
-    arr = _extract_json(r.text, "array") or []
-    return [
+    # D-094: 解析失败 → raise, 不让 titles=[] 流出去 (前端 Step 2 标题挑空白卡死).
+    arr = _extract_json(r.text, "array")
+    if not arr:
+        raise RuntimeError(
+            f"公众号·标题候选 LLM 输出非 JSON 数组 (tokens={r.total_tokens}). "
+            f"输出头: {(r.text or '')[:200]!r}"
+        )
+    titles = [
         {
             "title": (x.get("title") or "").strip(),
             "template": (x.get("template") or "").strip(),
@@ -82,6 +88,12 @@ def gen_titles(topic: str, n: int = 3) -> list[dict[str, str]]:
         for x in arr
         if isinstance(x, dict) and x.get("title")
     ][:n]
+    if not titles:
+        raise RuntimeError(
+            f"公众号·标题候选解析后 0 条有效标题 (tokens={r.total_tokens}). "
+            f"输出头: {(r.text or '')[:200]!r}"
+        )
+    return titles
 
 
 # ─── Phase 2 · 简明大纲(5-7 行,供清华哥确认) ──────────────────
@@ -116,12 +128,24 @@ def gen_outline(topic: str, title: str) -> dict[str, Any]:
 }}"""
     ai = get_ai_client(route_key="wechat.outline")
     r = ai.chat(prompt, system=system, deep=False, temperature=0.7, max_tokens=1200)
-    obj = _extract_json(r.text, "object") or {}
+    # D-094: 解析失败 → raise. 不让 opening/core_points 全空当大纲出去 (前端 Step 3 看 0 行大纲卡死).
+    obj = _extract_json(r.text, "object")
+    if obj is None:
+        raise RuntimeError(
+            f"公众号·大纲 LLM 输出非 JSON (tokens={r.total_tokens}). 输出头: {(r.text or '')[:200]!r}"
+        )
+    opening = obj.get("opening", "").strip() if isinstance(obj.get("opening"), str) else ""
+    core_points = [p for p in (obj.get("core_points") or []) if isinstance(p, str) and p.strip()]
+    if not opening or not core_points:
+        raise RuntimeError(
+            f"公众号·大纲必填字段 opening / core_points 缺失 (tokens={r.total_tokens}). "
+            f"输出头: {(r.text or '')[:200]!r}"
+        )
     return {
-        "opening": obj.get("opening", "").strip(),
-        "core_points": [p for p in (obj.get("core_points") or []) if isinstance(p, str)],
-        "business_bridge": obj.get("business_bridge", "").strip(),
-        "closing": obj.get("closing", "").strip(),
+        "opening": opening,
+        "core_points": core_points,
+        "business_bridge": obj.get("business_bridge", "").strip() if isinstance(obj.get("business_bridge"), str) else "",
+        "closing": obj.get("closing", "").strip() if isinstance(obj.get("closing"), str) else "",
         "estimated_words": int(obj.get("estimated_words") or 2500),
         "raw_tokens": r.total_tokens,
     }
@@ -297,6 +321,13 @@ def rewrite_section(full_article: str, selected: str, instruction: str = "") -> 
     ai = get_ai_client(route_key="wechat.rewrite-section")
     r = ai.chat(prompt, system=system, deep=False, temperature=0.85, max_tokens=2500)
     new_text = (r.text or "").strip()
+
+    # D-094: 局部重写空 → raise. 之前空 new_text 流回前端 → 前端用 new_text 替换原选段
+    # → 文章那段变空白, 老板看选段消失以为 bug. 让 task 失败有明确错误.
+    if not new_text:
+        raise RuntimeError(
+            f"公众号·局部重写 LLM 返空 (tokens={r.total_tokens}). 上游可能 max_tokens 全烧 thinking. 请重试."
+        )
 
     # 拼接: 把新段替换到 full_article 里
     new_full = full_article.replace(selected, new_text, 1) if selected in full_article else None

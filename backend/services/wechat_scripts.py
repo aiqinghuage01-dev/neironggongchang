@@ -186,8 +186,15 @@ def plan_section_images(content: str, title: str, n: int = 4) -> list[dict[str, 
     ai = get_ai_client(route_key="wechat.plan-images")
     from backend.services import wechat_pipeline as wp
     r = ai.chat(prompt, system=system, deep=False, temperature=0.7, max_tokens=1500)
-    arr = wp._extract_json(r.text, "array") or []
-    return [
+    arr = wp._extract_json(r.text, "array")
+    # D-094: 不让 LLM 解析失败 fallback 成空 plans → 前端 Step 5 spinning 卡死.
+    # 老板看不到错只能干等. 失败 raise, UI 看到明确"重试"按钮.
+    if not arr:
+        raise WechatScriptError(
+            f"段间图 prompt 规划 LLM 输出非 JSON 数组 (tokens={r.total_tokens}). "
+            f"输出头: {(r.text or '')[:200]!r}"
+        )
+    plans = [
         {
             "section_hint": (x.get("section_hint") or "").strip(),
             "image_prompt": (x.get("image_prompt") or "").strip(),
@@ -195,6 +202,12 @@ def plan_section_images(content: str, title: str, n: int = 4) -> list[dict[str, 
         for x in arr
         if isinstance(x, dict) and x.get("image_prompt")
     ][:n]
+    if not plans:
+        raise WechatScriptError(
+            f"段间图 prompt 规划解析后 0 条有效 plan (LLM 输出格式不对). "
+            f"输出头: {(r.text or '')[:200]!r}"
+        )
+    return plans
 
 
 # ─── D-091b · 全局统一风格重写 prompt ────────────────────────
@@ -265,13 +278,28 @@ def restyle_section_prompts(prompts: list[str], style_id: str) -> list[str]:
     r = ai.chat(user, system=system, deep=False, temperature=0.6, max_tokens=1500)
 
     from backend.services import wechat_pipeline as wp
-    arr = wp._extract_json(r.text, "array") or []
+    arr = wp._extract_json(r.text, "array")
+    # D-094: LLM 解析失败 → raise, 不要默默全 fallback 原 prompt 让用户看图没变以为 bug.
+    # 前端 pickGlobalStyle 已 try/catch + 失败回退 styleId, 走 raise 路径用户看到明确错误.
+    if not arr:
+        raise RuntimeError(
+            f"段间图风格重写 LLM 输出非 JSON 数组 (tokens={r.total_tokens}). "
+            f"输出头: {(r.text or '')[:200]!r}"
+        )
     out: list[str] = []
+    rewritten_count = 0
     for i, original in enumerate(prompts):
         if i < len(arr) and isinstance(arr[i], str) and arr[i].strip():
             out.append(arr[i].strip())
+            rewritten_count += 1
         else:
-            out.append(original)  # 这条没拿到重写就保留原 prompt
+            out.append(original)  # 这一条没拿到重写就保留原 prompt (其他条仍生效)
+    # 全部 fallback 也 raise — 等于 LLM 完全没工作, 用户看图没变以为 bug
+    if rewritten_count == 0:
+        raise RuntimeError(
+            f"段间图风格重写 LLM 输出 0 条有效结果, 全部 fallback 原 prompt. "
+            f"输出头: {(r.text or '')[:200]!r}"
+        )
     return out
 
 
@@ -509,23 +537,35 @@ def _inject_into_template(template: str, *, title: str, hero_badge: str,
     """
     t = template
     # 替换 hero-badge 文本
-    t = re.sub(
+    # D-094: hero 三 sub 加 subn 命中检测 (D-089 同款防御).
+    # 注意: v3-clean template 没有 <div class="hero-badge"> 元素 (只有 .hero-emoji
+    # + hero-title + hero-subtitle). hero_badge 参数实际从未渲染, 是 D-089 之前没察觉
+    # 的同款静默 fail. 不 raise (template 真没这元素是已知现状), 但 log warning 让以后
+    # 模板加了这元素能感知到; hero-title / hero-subtitle 必须命中, 不命中 raise.
+    t, _n_badge = re.subn(
         r'(<div class="hero-badge"[^>]*>)[^<]*(</div>)',
         rf'\g<1>{hero_badge}\g<2>',
         t, count=1,
     )
-    # 替换 hero-title 整个 innerHTML
-    t = re.sub(
+    if _n_badge != 1:
+        import logging
+        logging.getLogger("wechat_scripts.inject").debug(
+            f"hero-badge 锚点不命中 (template 无此元素, 现状已知). hero_badge={hero_badge!r} 没渲染."
+        )
+    t, _n_title = re.subn(
         r'(<div class="hero-title"[^>]*>)[\s\S]*?(</div>)',
         rf'\g<1>{hero_title_html}\g<2>',
         t, count=1,
     )
-    # 替换 hero-subtitle
-    t = re.sub(
+    if _n_title != 1:
+        raise WechatScriptError("HTML template 注入失败: hero-title 锚点不命中, 模板结构改了?")
+    t, _n_sub = re.subn(
         r'(<div class="hero-subtitle"[^>]*>)[^<]*(</div>)',
         rf'\g<1>{hero_subtitle}\g<2>',
         t, count=1,
     )
+    if _n_sub != 1:
+        raise WechatScriptError("HTML template 注入失败: hero-subtitle 锚点不命中, 模板结构改了?")
     # 替换 content 内容 (D-089).
     # 旧锚点 `</div>\s*</div>\s*<div class="footer-fixed"` 期望 content + article-body 都
     # 显式闭合, 但 template-v3-clean.html 这两个 div 是隐式不闭的 (浏览器宽容渲染),

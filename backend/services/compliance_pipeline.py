@@ -93,12 +93,19 @@ def _scan_violations(text: str, industry: str, skill: dict) -> dict[str, Any]:
 }}"""
     ai = get_ai_client(route_key="compliance.check")
     r = ai.chat(prompt, system=_build_system_full(skill), deep=False, temperature=0.3, max_tokens=3000)
-    obj = _extract_json(r.text, "object") or {}
-    obj.setdefault("industry", industry)
-    obj.setdefault("violations", [])
-    obj.setdefault("stats", {"high": 0, "medium": 0, "low": 0, "total": 0})
-    obj.setdefault("summary", "")
-    return {**obj, "_tokens": r.total_tokens}
+    # D-094: 不让 JSON 解析失败 fallback 成"0 违规通过". "审查通过"是高信任决策,
+    # 假通过比假不通过糟. _extract_json 返 None = LLM 真没出 JSON, 直接 raise.
+    parsed = _extract_json(r.text, "object")
+    if parsed is None:
+        raise RuntimeError(
+            f"违规审查·扫违规 LLM JSON 解析失败 (tokens={r.total_tokens}). "
+            f"输出头: {r.text[:200]!r}. 不能伪装成 0 违规通过."
+        )
+    parsed.setdefault("industry", industry)
+    parsed.setdefault("violations", [])
+    parsed.setdefault("stats", {"high": 0, "medium": 0, "low": 0, "total": 0})
+    parsed.setdefault("summary", "")
+    return {**parsed, "_tokens": r.total_tokens}
 
 
 # ─── ②③ 写一版 (AI 调用 2 / 3) ────────────────────────────
@@ -149,16 +156,28 @@ def _write_version(text: str, industry: str, scan: dict, mode: str, skill: dict)
 }}"""
     ai = get_ai_client(route_key="compliance.check")
     r = ai.chat(prompt, system=_build_system_rewrite(skill), deep=False, temperature=0.3, max_tokens=2500)
-    obj = _extract_json(r.text, "object") or {}
-    if "content" not in obj:
-        obj["content"] = ""
-    obj.setdefault("word_count", len(obj.get("content", "")))
-    obj.setdefault("compliance", compliance_target)
-    obj.setdefault("description", desc_template)
+    # D-094: 同 _scan_violations, JSON 解析失败 / content 空都 raise. UI 显示
+    # "保守版/营销版" 但点开空文是更糟的伪成功 (老板会以为改写完了).
+    parsed = _extract_json(r.text, "object")
+    if parsed is None:
+        raise RuntimeError(
+            f"违规审查·{mode}版改写 LLM JSON 解析失败 (tokens={r.total_tokens}). "
+            f"输出头: {r.text[:200]!r}."
+        )
+    content = (parsed.get("content") or "").strip()
+    if not content:
+        raise RuntimeError(
+            f"违规审查·{mode}版改写 LLM 返空 content (tokens={r.total_tokens}). "
+            f"上游可能 max_tokens 全烧 thinking. 请重试."
+        )
+    parsed["content"] = content
+    parsed.setdefault("word_count", len(content))
+    parsed.setdefault("compliance", compliance_target)
+    parsed.setdefault("description", desc_template)
     if mode == "营销":
-        obj.setdefault("kept_marketing", [])
-    obj["_tokens"] = r.total_tokens
-    return obj
+        parsed.setdefault("kept_marketing", [])
+    parsed["_tokens"] = r.total_tokens
+    return parsed
 
 
 # ─── 同步全流程 (向下兼容 + 单测用) ────────────────────────

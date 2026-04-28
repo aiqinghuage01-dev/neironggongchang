@@ -268,7 +268,61 @@ except Exception as e:
 
 ---
 
-## 11. 改完必跑的闭环 (CLAUDE.md 完工铁律)
+## 11. `or {}` / `or []` fallback 是 D-088 同款假成功的祖传写法 (D-094 教训)
+
+历次 D-088/D-089/D-091 v1/D-093 都是变形的"看似工作其实没工作"陷阱. D-094 一次性
+扫全项目 9 个文案 pipeline + 3 个前端预览 + 3 个 template, 发现祖传写法:
+
+```python
+obj = _extract_json(r.text, "object") or {}
+return {"levels": obj.get("levels") or [], ...}
+```
+
+这种写法的问题:
+- LLM 返非 JSON → `_extract_json` 返 None → `or {}` 兜底成空 dict
+- `obj.get("levels") or []` 又兜底成空数组
+- 上层拿到 `{levels: [], summary: "", ...}` 完全合法的"伪成功"对象
+- task 状态 = ok, UI 看到"完成", 但点开是空页/空卡/0 选项卡死
+
+**铁律**: 任何 `_extract_json(...)` 后跟 `or {}` / `or []` 必看一眼:
+- LLM 真返这个空数据时, **业务上能接受这是"成功"吗**?
+  - 例: compliance 0 违规 = 合法成功 (LLM 真返了 violations=[], 不是解析失败)
+  - 反例: 投流 batch=[] = 不合法 (LLM 没出文案)
+- 如果不能接受, 改 `parsed = _extract_json(...)`; `if parsed is None: raise`.
+- 关键字段缺也 raise (如 `levels=[]` / `content=""`).
+
+**修法模板** (D-094 重复用了 12 次):
+```python
+parsed = _extract_json(r.text, "object")
+if parsed is None:
+    raise RuntimeError(
+        f"X 步骤 LLM 输出非 JSON (tokens={r.total_tokens}). "
+        f"输出头: {(r.text or '')[:200]!r}"
+    )
+key_field = parsed.get("xxx")
+if not key_field:  # 或更细的有效性判断
+    raise RuntimeError(f"X 步骤关键字段缺失 ...")
+```
+
+**这次 D-094 修了的 pipeline 列表**:
+- compliance_pipeline: _scan_violations + _write_version
+- touliu_pipeline.generate
+- planner_pipeline: identify_levels + write_plan
+- baokuan_pipeline: extract_dna + rewrite
+- wechat_pipeline: gen_titles + gen_outline + rewrite_section
+- hotrewrite_pipeline.analyze
+- voicerewrite_pipeline.analyze
+- wechat_scripts: plan_section_images + restyle_section_prompts
+
+**已确认 *不* 改的**:
+- materials_pipeline: 设计区分 LLM source / heuristic source + confidence (0.7/0.4),
+  失败 fallback heuristic 不假装是 LLM 标签, 已对.
+- dhv5_pipeline: 已经 raise Dhv5Error 路径, 不需要改.
+- 公众号 cover 4 选 1: 真 4 张视觉风格区分 (D-092 验证), 不动.
+
+---
+
+## 12. 改完必跑的闭环 (CLAUDE.md 完工铁律)
 
 公众号 skill 任何后端改动后:
 

@@ -1012,7 +1012,10 @@ function DhvBatchTaskCard({ taskId, transcript, idx }) {
 
       {poller.isOk && result?.output_url && (
         <div style={{ background: T.bg2, borderRadius: 6, overflow: "hidden" }}>
-          <video src={result.output_url} controls style={{ width: "100%", display: "block" }} />
+          {/* D-094: 之前 src=result.output_url 没包 api.media, 视频拼到 :8001 加载 404
+              其他几处 (line 606/716/876) 都包了, 这里漏. 数字人视频路径形如
+              /skills/dhv5/outputs/xxx.mp4, 实际服务在 :8000. */}
+          <video src={api.media(result.output_url)} controls style={{ width: "100%", display: "block" }} />
           <div style={{ fontSize: 10, color: T.muted2, padding: "4px 8px", fontFamily: "SF Mono, monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {(result.output_path || "").split("/").pop()} · {Math.round((result.size_bytes || 0) / 1024)} KB
           </div>

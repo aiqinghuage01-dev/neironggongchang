@@ -65,13 +65,23 @@ def analyze_baokuan(text: str) -> dict[str, Any]:
 }}"""
     ai = get_ai_client(route_key="baokuan.analyze")
     r = ai.chat(prompt, system=system, deep=False, temperature=0.6, max_tokens=800)
-    obj = _extract_json(r.text, "object") or {}
+    # D-094: 解析失败 → raise, 不让前端拿到全空 dna 当成功 (UI 显示 3 行空白卡片).
+    obj = _extract_json(r.text, "object")
+    if obj is None:
+        raise RuntimeError(
+            f"爆款解析·DNA LLM 输出非 JSON (tokens={r.total_tokens}). "
+            f"输出头: {(r.text or '')[:200]!r}"
+        )
+    why_hot = (obj.get("why_hot") or "").strip()
+    emotion_hook = (obj.get("emotion_hook") or "").strip()
+    structure = (obj.get("structure") or "").strip()
+    if not (why_hot and emotion_hook and structure):
+        raise RuntimeError(
+            f"爆款解析·DNA 三字段缺一 (why_hot/emotion_hook/structure 必须都非空) "
+            f"tokens={r.total_tokens}. 输出头: {(r.text or '')[:200]!r}"
+        )
     return {
-        "dna": {
-            "why_hot": (obj.get("why_hot") or "").strip(),
-            "emotion_hook": (obj.get("emotion_hook") or "").strip(),
-            "structure": (obj.get("structure") or "").strip(),
-        },
+        "dna": {"why_hot": why_hot, "emotion_hook": emotion_hook, "structure": structure},
         "raw_tokens": r.total_tokens,
     }
 
@@ -210,15 +220,27 @@ def rewrite(
 
     ai = get_ai_client(route_key="baokuan.rewrite")
     r = ai.chat(prompt, system=system, deep=False, temperature=0.85, max_tokens=6000)
-    obj = _extract_json(r.text, "object") or {}
-    raw_versions = obj.get("versions") or []
+    # D-094: 解析失败 → raise. 不让 versions=[] 流出去 (UI 看 V1/V2/V3 卡片但点开是空文).
+    obj = _extract_json(r.text, "object")
+    if obj is None:
+        raise RuntimeError(
+            f"爆款改写 LLM 输出非 JSON (tokens={r.total_tokens}). 输出头: {(r.text or '')[:200]!r}"
+        )
+    raw_versions = obj.get("versions")
+    if not isinstance(raw_versions, list) or not raw_versions:
+        raise RuntimeError(
+            f"爆款改写 LLM 没出 versions 数组 (tokens={r.total_tokens}). 输出头: {(r.text or '')[:200]!r}"
+        )
 
     # 兜底: 按预期 key 顺序对齐, 缺的填空
     by_key = {(v.get("key") or "").upper(): v for v in raw_versions if isinstance(v, dict)}
     out_versions = []
+    empty_count = 0
     for k in versions_to_gen:
         v = by_key.get(k, {})
         content = (v.get("content") or "").strip()
+        if not content:
+            empty_count += 1
         out_versions.append({
             "key": k,
             "label": VERSION_DEFS[k]["label"],
@@ -226,6 +248,11 @@ def rewrite(
             "word_count": len(re.sub(r"\s+", "", content)),
             "gen_id": f"{k}-{int(time.time())}",
         })
+    if empty_count == len(versions_to_gen):
+        # 全部空 = LLM 返了 versions 数组但 content 全空, 同样是伪成功
+        raise RuntimeError(
+            f"爆款改写 LLM versions 全部 content 空 (tokens={r.total_tokens}). 输出头: {(r.text or '')[:200]!r}"
+        )
 
     return {
         "versions": out_versions,

@@ -170,7 +170,17 @@ def generate_batch(
 
     ai = get_ai_client(route_key="touliu.generate")
     r = ai.chat(prompt, system=system, deep=False, temperature=0.85, max_tokens=12000)
-    obj = _extract_json(r.text, "object") or {}
+    # D-094: 不让 JSON 解析失败 fallback 成 batch=[] 假成功 (前端看 0 条投流文案以为正常).
+    obj = _extract_json(r.text, "object")
+    if obj is None:
+        raise RuntimeError(
+            f"投流文案 LLM 输出非 JSON (tokens={r.total_tokens}). 输出头: {(r.text or '')[:200]!r}"
+        )
+    raw_batch = obj.get("batch")
+    if not isinstance(raw_batch, list) or not raw_batch:
+        raise RuntimeError(
+            f"投流文案 LLM 没出 batch 数组 (tokens={r.total_tokens}). 输出头: {(r.text or '')[:200]!r}"
+        )
 
     batch = [
         {
@@ -184,8 +194,13 @@ def generate_batch(
             "channel": (item.get("channel") or channel).strip(),
             "director_check": item.get("director_check") or {},
         }
-        for i, item in enumerate(obj.get("batch") or [])
+        for i, item in enumerate(raw_batch)
+        if isinstance(item, dict)
     ][:n]
+    if not batch:
+        raise RuntimeError(
+            f"投流文案 LLM batch 解析后 0 条有效, 全部不是 dict. 输出头: {(r.text or '')[:200]!r}"
+        )
 
     return {
         "style_summary": obj.get("style_summary") or {},

@@ -76,17 +76,33 @@ def analyze_recording(transcript: str) -> dict[str, Any]:
 注意: angles 最多 2 个,不要给 3 个以上。"""
     ai = get_ai_client(route_key="voicerewrite.analyze")
     r = ai.chat(prompt, system=system, deep=False, temperature=0.7, max_tokens=2500)
-    obj = _extract_json(r.text, "object") or {}
+    # D-094: 解析失败 → raise, 不让 skeleton={}/angles=[] 流出去.
+    obj = _extract_json(r.text, "object")
+    if obj is None:
+        raise RuntimeError(
+            f"录音改写·骨架 LLM 输出非 JSON (tokens={r.total_tokens}). 输出头: {(r.text or '')[:200]!r}"
+        )
+    skeleton = obj.get("skeleton") or {}
+    if not isinstance(skeleton, dict) or not skeleton.get("core_view"):
+        raise RuntimeError(
+            f"录音改写·骨架 skeleton.core_view 缺失 (tokens={r.total_tokens}). 输出头: {(r.text or '')[:200]!r}"
+        )
+    angles = [
+        {
+            "label": (a.get("label") or "").strip(),
+            "why": (a.get("why") or "").strip(),
+            "opening_draft": (a.get("opening_draft") or "").strip(),
+        }
+        for a in (obj.get("angles") or [])
+        if isinstance(a, dict) and a.get("label")
+    ][:2]
+    if not angles:
+        raise RuntimeError(
+            f"录音改写·骨架 angles 0 条有效 (tokens={r.total_tokens}). 输出头: {(r.text or '')[:200]!r}"
+        )
     return {
-        "skeleton": obj.get("skeleton", {}),
-        "angles": [
-            {
-                "label": (a.get("label") or "").strip(),
-                "why": (a.get("why") or "").strip(),
-                "opening_draft": (a.get("opening_draft") or "").strip(),
-            }
-            for a in (obj.get("angles") or [])
-        ][:2],
+        "skeleton": skeleton,
+        "angles": angles,
         "raw_tokens": r.total_tokens,
     }
 

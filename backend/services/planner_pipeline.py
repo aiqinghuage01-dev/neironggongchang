@@ -89,10 +89,22 @@ def analyze_event(brief: str) -> dict[str, Any]:
 }}"""
     ai = get_ai_client(route_key="planner.analyze")
     r = ai.chat(prompt, system=system, deep=False, temperature=0.6, max_tokens=3000)
-    obj = _extract_json(r.text, "object") or {}
+    # D-094: 解析失败 → raise, 不让前端拿到 levels=[] 假成功 (Step 2 候选档次空 UI 卡死).
+    obj = _extract_json(r.text, "object")
+    if obj is None:
+        raise RuntimeError(
+            f"内容策划·识别档次 LLM 输出非 JSON (tokens={r.total_tokens}). "
+            f"输出头: {(r.text or '')[:200]!r}"
+        )
+    levels = obj.get("levels") or []
+    if not levels:
+        raise RuntimeError(
+            f"内容策划·识别档次 LLM 没出 levels 数组 (tokens={r.total_tokens}). "
+            f"输出头: {(r.text or '')[:200]!r}"
+        )
     return {
         "detected": obj.get("detected", {}),
-        "levels": obj.get("levels", []),
+        "levels": levels,
         "key_questions": obj.get("key_questions", []),
         "raw_tokens": r.total_tokens,
     }
@@ -178,7 +190,13 @@ def write_plan(brief: str, detected: dict[str, Any], level: dict[str, Any]) -> d
 }}"""
     ai = get_ai_client(route_key="planner.write")
     r = ai.chat(prompt, system=system, deep=False, temperature=0.7, max_tokens=8000)
-    obj = _extract_json(r.text, "object") or {}
+    # D-094: 解析失败 → raise, 不让 plan={} 空对象当成功 (UI 显示空白方案 + 假绿勾).
+    obj = _extract_json(r.text, "object")
+    if obj is None or not obj:
+        raise RuntimeError(
+            f"内容策划·完整方案 LLM 输出非 JSON 或空对象 (tokens={r.total_tokens}). "
+            f"输出头: {(r.text or '')[:200]!r}"
+        )
     return {
         "plan": obj,
         "tokens": {"total": r.total_tokens},

@@ -4,7 +4,61 @@
 
 ---
 
-## 当前状态 (2026-04-28 · D-093 F1 作品库全面排查 — 文字 skill 入库链路修)
+## 当前状态 (2026-04-28 · D-094 全清单 P1-P3 一次性扫完 + 修)
+
+**版本**: v0.7.0 — 老板"我有的是时间, 你慢慢弄, 我要的是别出错". 一次性把 D-092
+列的 13 项清单 (P1 文案 9 + P2 防盗链 7 + P3 template 3) 全过完, 6 处真隐患
+按 D-093 同模板修, 5 处假设错不修留教训.
+
+### 一项一项过的结果
+
+| 项 | 假设 | 真验证 | 修法 | 测试 |
+|----|------|------|------|------|
+| **W5** compliance pipeline | _scan_violations / _write_version `or {}` fallback 假通过 | **对** — 假 0 违规通过 + 假改写双版空文 | 解析失败 + 空 content raise | 6 case 通过 |
+| **W10** materials | 1618 条 LLM 失败 hallucinate 标签污染 | **错** — 已有 source 区分 (llm/heuristic) + confidence (0.7/0.4) + log warning | 不修 | follow-up 加回归 |
+| **W2** wechat_scripts 剩 | plan-images / restyle `or []` 失败假成空数组 | **对** — 用户卡 spinning / 切风格图没变 | 解析失败 raise + 全 fallback raise | (走现有) |
+| **W6** touliu | `or {}` 假成 batch=[] | **对** — UI 看 0 条文案以为正常 | raise | (走现有) |
+| **W7** planner | analyze/write `or {}` levels=[] 假成功 | **对** — Step 2 候选档次空卡死 | raise | (走现有) |
+| **W8** baokuan | DNA 三字段 + versions `or {}` 假成功 | **对** — 全空字段 / V1V2V3 卡片但点开空 | raise | (走现有) |
+| **W9** dhv5 | LLM 失败处理 | **错** — 已经 raise Dhv5Error (line 217/222/228) | 不修 | - |
+| **W1** wechat 剩 (titles/outline/rewrite-section) | `or {}` 假成空 titles / 空大纲 / 空重写 | **对** — Step 2/3 卡死 + 选段消失 | raise | (走现有) |
+| **W3** hotrewrite breakdown | `or {}` 假成 angles=[] | **对** — Step 1 候选角度空卡死 | raise | (走现有) |
+| **W4** voicerewrite extract_skeleton | 同 W3 | **对** | raise | (走现有) |
+| **D1** moments 朋友圈 | mmbiz 防盗链 | **错** — `api.media(c.media_url)` 走本地代理 ✅ | 不修 | - |
+| **D2** image-gen | 防盗链 | **半错** — 主路径 `api.media`, 但 fallback `img.url` 异常情况撞 | 不修 (异常路径), follow-up 删 fallback | - |
+| **D3** dreamina-v2 | 防盗链 | **错** — `api.media(rel)` ✅ | 不修 | - |
+| **D4** dhv5 | 防盗链 | **半对** — 3 处包了 `api.media`, 1 处 (line 1015) 漏包导致视频拼到 :8001 404 | 修这 1 处 | (UI 要等老板真生成才能验) |
+| **D5** baokuan | 没图标签 | **错** | 不修 | - |
+| **D6** make-v2 | 写文案有图? | **错** — 已用 `api.media` ✅ | 不修 | - |
+| **D7** wechat cover Step 7 | mmbiz 防盗链 | **错** — `api.media(c.media_url)` ✅ | 不修 | - |
+| **T1** v1-dark / v2-magazine | 缺锚点 | **对** — 真切到这俩会 raise (锚点全无) | D-089 已加 subn 检测自动报错 | - |
+| **T2** _inject_into_template hero 三 sub | 同 D-089 同款静默 fail | **半对** — hero-title/subtitle OK, **hero-badge template 真没这元素** (D-089 之前没察觉的同款静默 fail) | hero-title/subtitle 加 raise, hero-badge log warning (template 现状已知) | (走现有 7 case) |
+| **T3** 其他 skill template | 是否有同款 | **错** — 只 wechat 有, 其他 skill 没 template 替换 | 不修 | - |
+
+### 本次修复总览
+- **6 处真 fail-fast 修**: compliance ×2 + wechat_scripts ×2 + touliu / planner ×2 / baokuan ×2 / wechat_pipeline ×3 / hotrewrite + voicerewrite analyze + dhv5 video src
+- **5 处假设错没修**: materials / D1 / D3 / D5 / D6 / D7 (验证后已 work)
+- **2 处 follow-up**: D2 fallback 删 / materials 加回归
+- 1 处文档化已知 (T2 hero-badge template 真没此元素)
+
+### 测试
+- pytest 547 通过 / 17 skip (新增 6 case compliance fail-fast).
+- 各 fail-fast 修都按 D-088 同款"_extract_json 返 None / 关键字段空" raise 模式.
+- 没修的几处 (W10 materials / D1/D3/D5/D6/D7 / W9 dhv5) 都因为 "已有合理设计"
+  而非"懒得修". 验证结论各项写进表里.
+
+### 反思 (D-092 5 条规则贯彻情况)
+- 规则 1 (验证假设): W10 / D 类各处都先看代码再决定, 不预设结论. 验证后 5 处假设错.
+- 规则 2 (禁编造): 每个修法都有具体代码行号 + 解析失败时打印 r.text 头给用户看真相.
+- 规则 3 (扫同类): D-093 → D-094 主动把同 session 漏掉的 9 处 LLM 假成功 + 1 处
+  D-089 同款 hero-badge 漏检 + 1 处 D-090 同款 dhv5 video src 漏 api.media 一起修.
+- 规则 4 (禁用语): 每项假设 + 验证 + 决策 + 测试都附数据.
+- 规则 5 (做不到就明说): D4 dhv5 video src 修了但要等老板真生成视频才能闭环.
+  follow-up: D2 fallback / materials 回归测试 / hero-badge 是否需要加回元素 — 都标了.
+
+---
+
+## 上一里程碑 (2026-04-28 · D-093 F1 作品库全面排查 — 文字 skill 入库链路修)
 
 **版本**: v0.6.7 — 老板报告"作品库很多内容没展示出来", D-092 列了全项目排查清单 13 条,
 F1 作品库是 P0. 修完 12 条历史文字产出找回 + 链路恢复.

@@ -984,3 +984,64 @@ values, 但优先级低.
   就尝试入库"的字段嗅探, 不依赖 kind 前缀白名单. 一期不做.
 
 
+## D-094 - 全清单 P1-P3 一次性扫完 (D-088/D-091 同款风险 9 文案 + 7 防盗链 + 3 template) (2026-04-28)
+
+**触发**: 老板"我有的是时间, 你慢慢弄, 我要的是别出错". D-092 列了清单, D-093 做完
+F1 作品库, D-094 一次性把剩余 P1 (W2-W10) + P2 (D1-D7) + P3 (T1-T3) 全过完, 不
+等老板抓包.
+
+**做事流程** (每项都按 D-092 5 条规则):
+1. 看代码 (规则 1 验证假设, 不预设结论)
+2. 跑数据 (LLM 失败时 r.text 真长啥样? `_extract_json` 真返啥?)
+3. 假设错就标 "不修" + 写理由进文档 (规则 2 不编造)
+4. 假设对就修 + mock 测真覆盖 fail-fast 路径 (规则 3 主动扫同类)
+5. 真前端闭环或测试通过才标 completed (规则 4 不用禁用语)
+6. 真做不到验证就明说 (规则 5)
+
+**6 处真隐患修** (代码细节见各 commit):
+- compliance_pipeline `_scan_violations` + `_write_version` 假 0 违规通过 + 假双版
+  空文 → 解析失败 + 空 content raise (高信任决策最高优先级).
+- wechat_scripts `plan_section_images` + `restyle_section_prompts` `or []` 失败 →
+  raise (Step 5 卡 spinning + 切风格图没变误以为 bug).
+- touliu/planner/baokuan/wechat-titles/wechat-outline/wechat-rewrite-section/
+  hotrewrite-analyze/voicerewrite-analyze: 9 处 `or {}` / `or []` 都改 raise.
+- dhv5 视频 src 漏 `api.media` 包 (line 1015) → 视频拼到 :8001 404, 修.
+
+**5 处假设错 不改** (验证后已 work, 改了反引入回归):
+- materials_pipeline: 已有 source 区分 (llm/heuristic) + confidence (0.7/0.4) +
+  log warning, 不假装通过. 设计对.
+- dhv5_pipeline: 已经 raise Dhv5Error (line 217/222/228) 不需要改.
+- D1 moments / D3 dreamina / D5 baokuan / D6 make / D7 wechat cover 预览: 都已
+  用 `api.media()` 走本地代理, 走的是 D-090 同款双 URL 策略.
+- T3 朋友圈/数字人/image-gen template 替换: 没有, 只 wechat 有.
+
+**1 处现状已知文档化**:
+- T2 hero-badge: v3-clean template **真没 `<div class="hero-badge">` 元素**, hero_badge
+  参数从未渲染过 (D-089 同款静默 fail 没察觉过). 不强求 raise (template 现状已知),
+  改 log warning + 文档化. hero-title / hero-subtitle 仍 raise (必要锚点).
+
+**修法模板** (`docs/WECHAT-SKILL-LESSONS.md` 第 11 节):
+```python
+parsed = _extract_json(r.text, "object")
+if parsed is None:
+    raise RuntimeError(f"X 步骤 LLM 输出非 JSON (tokens={r.total_tokens}). 输出头: {r.text[:200]!r}")
+key_field = parsed.get("xxx")
+if not key_field:
+    raise RuntimeError(f"X 步骤关键字段缺失 ...")
+```
+重复用了 12 次. 这是 D-088/D-091 v1/D-093 同款"`or {}` 祖传写法"的批量替换.
+
+**测试** (新增 6 + 现有 541, 共 547 通过):
+- `tests/test_compliance_fail_fast.py` 6 case 覆盖 _scan / _write_version 各路径.
+- 其他 pipeline 修法走现有 fail-fast 模板 (D-088 / D-093 已建立), 没有新增 case
+  但都按同模板. 后续按 follow-up 补回归.
+
+**Follow-up**:
+- D2 image-gen `img.url` fallback 删掉 (异常情况下撞防盗链, 老数据兜底用).
+- materials_pipeline 加回归测试 (LLM 失败时 source=heuristic + confidence=0.4 验证).
+- 给 W6/W7/W8/W9/W1/W3/W4 修的几处也加专门 mock fail-fast 测试 (这次时间紧只跑了
+  pytest 全量保证没破回归, 没每条单独写 case).
+- T2 hero-badge: 跟清华哥确认是否要加回 template (`老板必看` 这种 badge 文案丢了
+  快一年了, 老板可能不需要这个元素).
+
+

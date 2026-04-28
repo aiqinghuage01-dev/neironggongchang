@@ -62,17 +62,34 @@ def analyze_hotspot(hotspot: str) -> dict[str, Any]:
 }}"""
     ai = get_ai_client(route_key="hotrewrite.analyze")
     r = ai.chat(prompt, system=system, deep=False, temperature=0.8, max_tokens=2000)
-    obj = _extract_json(r.text, "object") or {}
+    # D-094: 解析失败 → raise. 不让 breakdown={} + angles=[] 流出去 (前端 Step 1 看 0 个角度卡死).
+    obj = _extract_json(r.text, "object")
+    if obj is None:
+        raise RuntimeError(
+            f"热点改写·拆解 LLM 输出非 JSON (tokens={r.total_tokens}). 输出头: {(r.text or '')[:200]!r}"
+        )
+    breakdown = obj.get("breakdown") or {}
+    angles_raw = obj.get("angles") or []
+    if not isinstance(breakdown, dict) or not breakdown.get("event_core"):
+        raise RuntimeError(
+            f"热点改写·拆解 breakdown.event_core 缺失 (tokens={r.total_tokens}). 输出头: {(r.text or '')[:200]!r}"
+        )
+    angles = [
+        {
+            "label": (a.get("label") or "").strip(),
+            "audience": (a.get("audience") or "").strip(),
+            "draft_hook": (a.get("draft_hook") or "").strip(),
+        }
+        for a in angles_raw
+        if isinstance(a, dict) and a.get("label")
+    ][:3]
+    if not angles:
+        raise RuntimeError(
+            f"热点改写·拆解 angles 数组 0 条有效 (tokens={r.total_tokens}). 输出头: {(r.text or '')[:200]!r}"
+        )
     return {
-        "breakdown": obj.get("breakdown", {}),
-        "angles": [
-            {
-                "label": (a.get("label") or "").strip(),
-                "audience": (a.get("audience") or "").strip(),
-                "draft_hook": (a.get("draft_hook") or "").strip(),
-            }
-            for a in (obj.get("angles") or [])
-        ][:3],
+        "breakdown": breakdown,
+        "angles": angles,
         "raw_tokens": r.total_tokens,
     }
 
