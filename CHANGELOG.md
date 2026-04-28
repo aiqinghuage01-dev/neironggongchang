@@ -6,6 +6,57 @@
 
 ---
 
+## [v0.6.0] — 2026-04-28 (D-087 素材库 + B' GPT 修订收尾)
+
+GPT 第二轮 review 抓到 7 处问题 (P2×6 + P3×1), 老板拍板按 GPT 修订方案落地, 不批量
+重 hash 主键, 加双阈值 watchdog, pending 加 confidence 守卫, asset identity 走
+path → content_hash → 新 uuid 三段查找, run_async 加 ctx 兼容入口.
+
+### B'-1 watchdog 双阈值 (commit 0b2ccd9)
+- **修**: `tasks.sweep_stuck` 旧 SQL 用 `COALESCE(started_ts, updated_ts)`, started_ts
+  一定有 → updated_ts 完全不参与判断. D-087 报告"心跳续命"是假的.
+- **改法**: idle threshold (now-updated_ts > 600s 无心跳) + total threshold
+  (now-started_ts > max(estimated*5, 600)). 任一超就杀, error 区分原因.
+- **测试**: +4 (idle/total/心跳活+总未到/两并发各杀)
+
+### B'-2 pending 不覆盖审核 + heuristic source (commit 2df8516)
+- **修**: `INSERT OR REPLACE material_pending_moves` 把 approved/rejected 整行重置 pending.
+  老板 force 重打时审核结论默默丢. heuristic 来源被强转 'ai', material_tags.source 失真.
+- **改法**: `_write_pending_move` 加 `reset_review` 守卫 + 返 status string.
+  `_write_tags(source=source)` 直传, 不强转.
+- **测试**: +7
+
+### B'-3 pending 加 confidence + no_move + 旧 1616 标 stale (commit 00e9654)
+- **修**: 旧 prompt 强制选归档分区, ~/Downloads 混杂目录每条都被建议移动 → 1616 条
+  pending. 老板审 1600+ 次机械点击 = 体验灾难.
+- **改法**: migration V3 加 confidence/no_move/suggestion_version/reviewed_at 4 列
+  (用 callable migration 实现 ALTER 幂等). prompt 让 AI 输出"明显合理就 no_move=true,
+  低置信就 confidence<0.75". `_write_pending_move` 守 confidence>=0.75 且 no_move=false.
+  list_pending_review 默认只返 suggestion_version>=2, include_legacy=true 才返旧.
+- **实库**: schema_version=3 应用, 1616 旧条目→stale, KPI 1616→0.
+- **测试**: +10
+
+### B'-4 asset identity 稳定化 (commit dfd775f)
+- **修**: 旧 `_asset_id=sha1(abs_path+mtime)` 跟 `abs_path UNIQUE` 互相打架. mtime 变 →
+  新 hash → SELECT 找不到 → INSERT OR IGNORE 因 path 冲突静默失败, 函数仍返新 aid +
+  is_new=True. 库里没新 row 但调用方拿到孤儿 aid. mv/改名同样让素材身份断裂.
+- **改法**: migration V4 加 content_hash/last_seen_at/missing_at + index. 删旧
+  `_asset_id`. 加 `_new_asset_id`(uuid) + `_compute_content_hash`(sha256, 100MB
+  以下). `_upsert_asset` 三段查找: abs_path 命中 / content_hash 命中 / 真新.
+  存量 row content_hash NULL 时 path 命中顺手 backfill.
+- **实库**: schema_version=4 应用, 1618 条 id 不动.
+- **测试**: +12, -3 旧 sha1 测试
+
+### B'-5 run_async sync_fn_with_ctx (本节)
+- **修**: materials.tag_batch worker "反查最近 running same kind"拿 task_id 有竞态.
+- **改法**: `tasks.run_async` 加可选 `sync_fn_with_ctx`, `TaskContext` 类闭包闭进 worker.
+  旧 `sync_fn` 入口零侵入.
+- **测试**: +4
+
+### 测试总数
+- D-087 全链路 162 + B'-1..5 +18 = 全套 535+ 通过, 1 skip
+
+
 ## [v0.5.5] — 2026-04-28 (D-087 素材库重建 · Day 1+UI)
 
 清华哥重建素材库板块. 设计稿 4 张交互稿 + PRD 给定. 路线 B (web 工厂内, 不做 Electron).

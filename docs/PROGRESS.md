@@ -4,52 +4,69 @@
 
 ---
 
-## 当前状态(2026-04-28 · D-087 素材库重建 · Day 1+UI)
+## 当前状态 (2026-04-28 · D-087 素材库 + B' GPT 修订收尾)
 
-**版本**: v0.5.5 — 素材库板块 web 路线全栈 (后端 + 4 层 UI + e2e).
+**版本**: v0.6.0 — 素材库 MVP + GPT 第二轮修订 (B'-1 ~ B'-5 全落地).
 
-**清华哥 PRD + 4 张交互稿** → 重建素材库. 关键决策"打开一个网站就实现所有功能"=
-不做 Electron, 嵌入 web 工厂. 设计稿左侧侧栏就是工厂标准侧栏验证了这条.
+**清华哥 PRD + 4 张交互稿** → 重建素材库, web-only.
+**老板核心诉求** (跟 image-gen / dreamina 联动): "命中关键词后, 优先先找我们素材库
+里面的内容, 然后没有的再用 ai 去生成素材". 当前 B' 收口让素材身份/审核流程稳,
+为 #41 (image-gen 接素材库命中) 铺路, 这一步还没做.
 
-**Day 1 (commit ffe5b7a) 后端基础**:
-- migration v2 加 5 表 (material_assets/tags/asset_tags/usage_log/pending_moves)
-- materials_service.py: scan + 缩略图 (ffmpeg + Pillow) + 查询 (~310 行)
-- 8 API endpoint (/api/material-lib/*)
-- 65 单测 + 集成测试全过
+### D-087 commit 链
+| Commit | 内容 |
+|--------|------|
+| `ffe5b7a` Day1 | 后端基础 5 表 + 8 API + 65 测试 |
+| `a271c91` Day1.5 | 4 层 UI 骨架 + e2e 闭环 |
+| `15a8f33` Day2 | AI 打标 pipeline (LLM + 启发式 fallback) + 32 测试 |
+| `bf52ce7` Day2.5 | L1+L4 加 AI 打标 UI 入口 |
+| `695d612` 整改 | 严格按设计稿重写 L1 大屏 + L3 右栏 |
+| `92d22c5` | L1 全库搜索 (filename / tag / folder) |
+| `01bfb2f` B | 全量打标支持 + 前端按钮 (旧版心跳续命) |
+| `1ae420e` C | 待整理工作流 (审核 AI 归档建议) |
+| `995059a` B 修速度 | materials.tag 路由 deepseek (60h → 80min) |
+| `0b2ccd9` B'-1 | watchdog 双阈值 (idle + total) |
+| `2df8516` B'-2 | pending 不覆盖审核 + heuristic 真 source |
+| `00e9654` B'-3 | pending 加 confidence/no_move + 旧 1616 标 stale |
+| `dfd775f` B'-4 | asset identity 稳定化 (不重 hash 主键) |
+| (本节) B'-5 | run_async sync_fn_with_ctx 兼容入口 |
 
-**Day 1.5 (commit 即将) 4 层 UI**:
-- factory-materials-v2.jsx: L1 数据大屏 + L2 C/A 模式 + L3 子分类网格 + L4 黑底大预览
-- 路由切换: case "materials" → PageMaterialsV2, 老 page 改名 materials-legacy 兜底
-- 4 层 e2e 闭环全过, 0 console error
-- 真扫 ~/Downloads 30 文件 4 秒入库, 视频缩略图 + 真视频预览 OK
+### 关键事实
+- **17 endpoint** 全在 `/api/material-lib/`: stats / folders / subfolders / list /
+  asset/{id} / thumb/{id} / file/{id} / scan / usage / recent-activity / top-used /
+  search / tag/{id} / tag-batch / pending-list / pending/{id}/approve / pending/{id}/reject
+- **5 表 (V2) + 7 列扩展 (V3+V4)**: material_assets (+content_hash/last_seen_at/missing_at),
+  material_pending_moves (+confidence/no_move/suggestion_version/reviewed_at)
+- **schema_version = 4** (D-084 baseline → V2 素材库 → V3 pending 评级 → V4 asset identity)
+- **535 测试 + 1 skip 全过** (D-087 全链路 162, B'-1..5 +18)
+- **真库**: 1618 素材 100% AI 打标 (DeepSeek 走 materials.tag 路由), pending KPI = 0
+  (1616 旧条目 V3 migration 标 stale 不打扰, approved 1, rejected 1)
+- **打标速度**: deepseek 2-3s/条, 全量 1618 条 ≈ 80 分钟 (旧 Opus 60h+)
+- **LLM 输入仅文本** (filename + folder + 元数据), 没用 Vision
 
-**Day 2 范围 (清华哥追加)**:
-- AI 视觉打标 pipeline (Vision via OpenClaw, 注入清华哥业务上下文)
-- 文件名启发式 fallback (Vision 不通时降级)
-- L3 网格卡片 ✨ AI 标签 chip
-- 真烧 credits 仅探活 (1-2 次), 全量打标等老板回来确认
+### B' 收口 (按 GPT 第二轮 review 修订, 不动主键不重 hash)
+- B'-1 watchdog 双阈值: idle (心跳停 600s) + total (跑超 estimated*5), 任一超就杀.
+  纠正 D-087 误说"心跳续命" — 旧 SQL 用 COALESCE(started_ts, updated_ts), updated_ts
+  完全不参与, 心跳是假续命.
+- B'-2 pending 守 approved/rejected: force 重打不抹历史结论.
+  heuristic source 直传不强转 ai: material_tags.source 现在能区分 llm/heuristic/manual.
+- B'-3 pending 加 confidence + no_move: prompt 让 AI 输出把握 + 是否换位置.
+  门槛 confidence>=0.75 + no_move=false 才入 pending. 旧 1616 条 status=stale 默认
+  不打扰, list_pending_review/get_stats 默认排除 legacy.
+- B'-4 asset identity: 删 sha1(path+mtime) (跟 abs_path UNIQUE 互相打架, mtime 一变
+  让函数返孤儿 aid). 新 row 用 uuid, 已有 row 走 abs_path 命中 → content_hash 命中
+  → 真新文件 三段查找. tags/usage/pending 永不孤儿, mv/改名按内容找回.
+- B'-5 run_async 加 sync_fn_with_ctx 兼容入口: 长任务 (tag_batch) 不再 DB 反查
+  "最近 running same kind" 拿自己 task_id (并发时拿错), ctx.task_id 闭包闭进 worker.
+  旧 sync_fn 入口零侵入.
 
-**关键设计决策**:
-- 表前缀 material_* 避开老 V1 materials (爆款参考业务)
-- 设计稿 A/B/C 三方案选 **C 默认 + A 可切, B 不做** (路径地图融合 = A 模式右栏选中预览替代)
-- 主色深绿 #2a6f4a + 暖橙 #c08a2e (PRD §9 配色严格落实)
-- 文件 ID 用 sha1(path+mtime) 截 16 位
-- 长扫描走 D-068 tasks.run_async daemon + 防卡死
-
-**清华哥要求兑现 (\"细致一点\")**:
-- ✅ pytest 438 (+65 新, 0 回归), 1 skip 不变
-- ✅ test_migrations.py 6 处 assert 同步 (加 EXPECTED_VERSION=2 常量)
-- ✅ 4 层 e2e 闭环, 0 console error / 0 page error
-- ✅ 真烧 (30 文件扫描 + 缩略图 + 视频预览) 跑过
-- ✅ data-testid 给关键卡片防 selector 脆弱
-- ✅ SYSTEM-CONSTRAINTS §12 (7 节硬约束) 落字
-- ✅ CHANGELOG v0.5.5 + PROGRESS 同步
-
-**老板回来要决策**:
-- (a) AI 打标全量跑 (1100+ 真素材, 烧 1-2 美元 credits) 还是按需打
-- (b) 老 PageMaterials 4 tab (热点/选题/爆款参考/空镜录音) 数据要不要挪进新 page 角落
-- (c) image-gen / dreamina "命中关键词先找素材库" 对接 (改两个生产页)
-- (d) ~/Downloads 切到 ~/Desktop/清华哥素材库/ (只需改 settings.materials_root)
+### 老板回来还要决策
+- **#41 A: image-gen / dreamina 命中先找素材库** (老板核心诉求, 还没做).
+  GPT 建议: SQL LIKE + tags/folder 够用, 1618 条不需要 embedding.
+- 老 PageMaterials 4 tab (热点/选题/爆款参考/空镜录音) 数据要不要挪进新 page 角落.
+- ~/Downloads 切到 ~/Desktop/清华哥素材库/ + 真 mv 文件链路 (现在 approve 只改 DB
+  rel_folder, 不真 mv).
+- pending 旧 1616 条要不要按新 prompt 重跑高置信版 (一键升级).
 
 ---
 
