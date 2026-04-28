@@ -605,3 +605,68 @@ DB 查 task `b72844d1f97...` 状态 = ok, `result.content = ""`, `tokens.write=6
 - 若 OpenClaw / Opus 修复了 thinking 不出 text 的 bug, 这层防御无害保留.
 
 
+## D-089 - 公众号 Step 6 段间图丢失修复 (2026-04-28)
+
+**触发 case**: 老板今天 12:25 跑公众号 Step 6 排版预览, 看到 template 自带 demo
+占位 ("昨天中午, 工作室里就我一个人, 泡了杯茶坐在茶台前...") 而不是真文章, 4 张
+已生成的段间图全没贴进 HTML. `/tmp/preview/last_assemble_request.json` 里
+`section_images_with_mmbiz_url=4` 但 `img_in_raw_html=1` (只剩头像).
+
+**根因**: `_inject_into_template` content 区正则:
+```python
+r'(<div class="content"[^>]*>)[\s\S]*?(</div>\s*</div>\s*<div class="footer-fixed")'
+```
+要求 content 后紧跟 `</div></div><div class="footer-fixed">` 序列, 用作"content
++ article-body 都关闭, 然后开 footer-fixed"的锚点. 但 `template-v3-clean.html`
+里:
+- `<div class="content">` (line 233)
+- 中间一堆 demo 内容
+- 没显式 `</div>` 关 content
+- 没显式 `</div>` 关 article-body
+- 一段 HTML 注释 `<!-- ========== 固定结尾 ========== -->`
+- `<div class="footer-fixed">` (line 353)
+
+浏览器宽容渲染下隐式闭合, 但正则字面找不到 `</div></div>`. `re.sub` 静默不替换
+(count=1, 0 匹配 = 原字符串返回), 整个 content 区原 demo 占位被吐给前端, body_html
+(含 4 张段间图 `<img>`) 跟着全丢. 加上前面 hero-badge / hero-title / hero-subtitle
+三个独立 sub 都命中了, 老板看到 hero 是真标题但正文是 demo 占位 — 完全误导.
+
+**为什么 D-043 (公众号 BUG 第五轮) 没修干净**:
+- D-043 加了 `last_assemble_request.json` 诊断落盘 (img_in_raw_html 那条), 但只是
+  落盘记录, 没 fail-fast. 写诊断 ≠ 修 bug — 老板手不会主动去看 /tmp/preview.
+
+**为什么 c744b75 (4-28 早上的修) 没修干净**:
+- 那次只动前端 (Step 5 自动开跑 4 张 + 拼 HTML 时校验), 没动后端 inject. 所以前端
+  虽然真把 4 张图发到后端了, 后端 inject 把它们一起丢光.
+
+**决策**:
+1. **正则改宽容区间**: `<div class="content"...> ... <div class="footer-fixed"`,
+   不要求中间精确 `</div></div>`. 替换内容包括原 content 区 demo + 注释 + 空白.
+2. **subn + 命中数检测**: `_n != 1` 直接 raise WechatScriptError, 把"静默 fail
+   还吐残品"变"立即报错". 老板看到错误回到 Step 5, 比看到没图的 HTML 拼好后才
+   发现强 100 倍.
+3. 不动 skill 仓库的 template (那是清华哥手动维护, 我无权擅改).
+
+**为什么不直接给 template 加显式 `</div></div>`**:
+- skill 仓库不是我的权限. 改 backend 让它兼容现状, 比改 skill 干净.
+- 即使 skill 加了 close div, 三个 template 的关闭风格各异 (v1-dark 全 inline 没
+  class, v2-magazine 用其它 class), backend 正则需要更宽容才能跨 template work.
+  本次只确保 v3-clean (默认) work, v1/v2 缺锚点也会 raise (本来就是坏的, 报错
+  反而是好事).
+
+**测试** (`tests/test_wechat_html_inject.py`, 7 项, 0.03s):
+- 真 v3-clean template + body_html → 替换 demo 占位 ✅
+- 真 v3-clean template + 4 张段间图 → 4 个 mmbiz_url 都在 raw HTML ✅
+- hero-title 区被替换 ✅
+- 缺 footer-fixed → raise WechatScriptError ✅
+- 缺 content div → raise ✅
+- `_md_to_wechat_html` 76 段 + 4 图均布 ✅
+- 没图时输出不含 `<img>` ✅
+- curl 真后端 + playwright 闭环: img_count=5, demo 替换走, 视觉截图确认.
+
+**Follow-up**:
+- v1-dark / v2-magazine 现在缺 `<div class="content">` 锚点会直接 raise. 老板没在
+  用这俩 (v3 是默认), 但若以后切换到, 需要在 skill 仓库给它们加显式 content div
+  作为锚点.
+
+

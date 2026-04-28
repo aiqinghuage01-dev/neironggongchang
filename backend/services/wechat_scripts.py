@@ -408,12 +408,22 @@ def _inject_into_template(template: str, *, title: str, hero_badge: str,
         rf'\g<1>{hero_subtitle}\g<2>',
         t, count=1,
     )
-    # 替换 content 内容
-    t = re.sub(
-        r'(<div class="content"[^>]*>)[\s\S]*?(</div>\s*</div>\s*<div class="footer-fixed")',
+    # 替换 content 内容 (D-089).
+    # 旧锚点 `</div>\s*</div>\s*<div class="footer-fixed"` 期望 content + article-body 都
+    # 显式闭合, 但 template-v3-clean.html 这两个 div 是隐式不闭的 (浏览器宽容渲染),
+    # 实际不存在 `</div></div><div class="footer-fixed">` 序列 → 正则永远不命中,
+    # re.sub 静默 fail, content 区原 demo 占位被吐给用户. 同时 4 张段间图 (在 body_html
+    # 里) 也跟着被丢光. 改成宽容区间 + 用 subn 检测命中数, 不命中 raise.
+    t, _n = re.subn(
+        r'(<div class="content"[^>]*>)[\s\S]*?(<div class="footer-fixed")',
         rf'\g<1>\n{body_html}\n\g<2>',
         t, count=1,
     )
+    if _n != 1:
+        raise WechatScriptError(
+            "HTML template 注入失败: 找不到 <div class=\"content\"> 到 "
+            "<div class=\"footer-fixed\"> 的替换区间. 模板结构是不是被改了?"
+        )
     # 替换头像 URL(如果 template 里是占位符)
     if avatar_url:
         t = re.sub(r'src="\{[^}]*avatar[^}]*\}"', f'src="{avatar_url}"', t)

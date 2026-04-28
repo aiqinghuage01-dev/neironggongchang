@@ -4,7 +4,36 @@
 
 ---
 
-## 当前状态 (2026-04-28 · D-088 LLM 空内容防御 + 公众号写长文 fail-fast)
+## 当前状态 (2026-04-28 · D-089 公众号 Step 6 段间图丢失修复)
+
+**版本**: v0.6.2 — 修 `_inject_into_template` content 替换正则不命中导致段间图被吞.
+
+**触发 case** (老板今天 12:25 真踩到, 紧接 D-088): Step 5 4 张段间图都生成成功
+(debug 显示 `section_images_with_mmbiz_url=4`), Step 6 排版预览却看到 template
+自带 demo 占位 ("昨天中午, 工作室里就我一个人, 泡了杯茶坐在茶台前..."), 4 张
+段间图全没贴进 HTML. `last_assemble_request.json` 里 `img_in_raw_html=1` (只剩
+头像那一张).
+
+### D-089 根因 + 修复
+- 根因: `_inject_into_template` 替换 content 区的正则要求
+  `</div>\s*</div>\s*<div class="footer-fixed"` 紧贴, 但 `template-v3-clean.html`
+  里 content + article-body 都是隐式不闭 div (浏览器宽容渲染), 实际不存在那个
+  序列 → `re.sub(count=1)` 无声 fail, 整段 demo 占位被原样吐给前端, body_html
+  (含 4 张段间图 `<img>`) 跟着丢光.
+- 修复: 改用宽容区间 `<div class="content"...> ... <div class="footer-fixed"`,
+  用 `re.subn` 拿到命中数, `n != 1` 直接 raise WechatScriptError, 不静默给残品.
+- 测试 `tests/test_wechat_html_inject.py`: 7 case 覆盖正常注入 + 4 张段间图都
+  在 + hero 替换 + 占位被替换 + 缺锚点 raise + md→html 段间图均布.
+- 真后端 curl smoke + playwright 闭环: img_count=5 (4 段间 + 1 头像), demo
+  "昨天中午" 已替换走, 4 张测试 url 都在; 视觉截图确认 5 节正文 + 段间图分布
+  + 固定结尾 + 头像都正确.
+
+### 测试
+- 528 + 7 = 535 通过, 17 skip (dhv5 / 朋友环境 dev-only).
+
+---
+
+## 上一里程碑 (2026-04-28 · D-088 LLM 空内容防御 + 公众号写长文 fail-fast)
 
 **版本**: v0.6.1 — D-088 LLM 客户端空 content 当 transient 重试 + wechat write 兜底.
 
