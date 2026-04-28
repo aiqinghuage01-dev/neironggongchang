@@ -4,7 +4,48 @@
 
 ---
 
-## 当前状态 (2026-04-28 · D-091b LLM 重写 prompt 主体修正 D-091 v1 末尾 append 无效)
+## 当前状态 (2026-04-28 · D-092 举一反三 — 同 session 3 次踩"看似工作其实没工作"的反思)
+
+**版本**: v0.6.6 — 老板批评"做事毛躁举一反三". 主动扫 D-088/D-091 v1 同类风险,
+3 项一项一项处理: 验证 → 决策 → 修.
+
+### 反思 (D-092 触发)
+- 同 session 连续踩 3 次"代理指标对了真实指标错"的坑:
+  D-088 (task ok 但 content 空) → D-089 v1 (file:// 看 raw_html 含 img 当过) →
+  D-091 v1 (prompt 文本变了当过, 没真烧图).
+- 老板每次抓包我才修, 没主动找同类隐患. 老板原话: "你这不是忽悠人吗? 你自己不
+  知道测一下再告诉我? ... 变笨了一样, 做事毛躁."
+- 5 条新规则写进 `docs/WECHAT-SKILL-LESSONS.md` 第 8 节, 以后必守.
+
+### 主动扫同类隐患 (3 项验证 + 决策)
+
+| 风险 | 假设 | 真验证后结论 | 修法 |
+|------|------|------------|------|
+| 1. cover 4 选 1 末尾 append | 跟 D-091 v1 同款失效 | **错** — Read 老板历史 4 张候选肉眼对比, 视觉真区分 (蓝调极简/真实场景/深色 VS/复古怀旧) | 不改 (改了反引入回归) |
+| 2. hotrewrite + voicerewrite 自检 | 跟 D-088 同款空 content hallucinate 通过 | **对** — 代码确实直接进自检无空判 | 加 fail-fast raise (D-088 同款) |
+| 3. 段间图单张 chip | 跟 D-091 v1 末尾 append 同款无效 | **对** — 单张 chip 调用的就是 `appendPreset` 末尾追加 | 删掉 (留着持续误导) |
+
+### D-092 修复
+- `backend/services/hotrewrite_pipeline.py:120`: content 空 raise RuntimeError
+  含 token 数, 不进自检.
+- `backend/services/voicerewrite_pipeline.py:155`: script 空 raise (单次 LLM JSON
+  路径, 即使 self_check fallback 是 overall_pass=False 也加保护防 task 状态 ok 含
+  空 script).
+- `web/factory-wechat-v2.jsx`: 删掉单张卡片底部 6 个风格 chip (`appendPreset`
+  + chip JSX). 保留 textarea + "🔄 用新 prompt 重生" 微调路径.
+- `tests/test_llm_empty_content.py` +3 case: hotrewrite 空 → raise + 不进自检 /
+  voicerewrite 空 script → raise / hotrewrite 正常路径不抛 (回归保护).
+
+### 闭环验证 (按新规则 1: 真自己跑, 不靠"代码看着对")
+- pytest -x 534 通过 / 17 skip (新增 3 case).
+- playwright `/tmp/_d092_chip_removed.js`: 真前端 :8001 注入 wf snapshot, 验顶部
+  全局 chip 仍在 + 5 个风格 label 各只在 textContent 出现 1 次 (单张 chip 真删干净)
+  + 4 textarea + 4 重生按钮还在 + console 无 error. 截图 d092_01_chip_removed.png
+  视觉确认.
+
+---
+
+## 上一里程碑 (2026-04-28 · D-091b LLM 重写 prompt 主体修正 D-091 v1 末尾 append 无效)
 
 **版本**: v0.6.5 — D-091 v1 仅末尾 append 风格关键词对 apimart 无效 (老板实测怀旧
 出来还是真实摄影). v2 改用 LLM 重写 prompt 主体让 4 张视觉真统一.

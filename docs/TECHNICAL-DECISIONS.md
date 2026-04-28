@@ -846,3 +846,64 @@ prompt 文本变了不代表生图引擎按它重新出图.
   不一样, 这层 LLM 重写仍有效 (因为是改主体不是末尾).
 
 
+## D-092 - 举一反三: 同 session 3 次踩"代理指标对真实指标错"的反思 + 同类风险扫描 (2026-04-28)
+
+**触发**: 老板原话 "你现在感觉变笨了一样, 做事很毛躁很容易出问题, 举一反三一下".
+同 session 已连续踩 3 次同类陷阱:
+- D-088: task status=ok 但 result.content="" (字段对 vs 真实成品错)
+- D-089 v1: file:// 看 raw_html 含 4 张 img 当过 (代理指标对 vs 真前端 :8001 撞防盗链错)
+- D-091 v1: prompt 文本末尾 append 改了当过 (文本对 vs 视觉对错)
+
+**根本问题诊断**: 我把"我能验证的代理指标"当成"老板能感知的真实指标". 这是
+D-075 教训的同型变种. 每次形态不同, 本质都是: 跑一个比真实使用便宜的 sanity 路径
+就当过, 没跑真实使用路径.
+
+**5 条新规则** (写进 `docs/WECHAT-SKILL-LESSONS.md` 第 8 节, 以后必守):
+1. 承诺前先问"我怎么验证这个真生效"— 必须老板能感知的指标, 不是我能跑通的代理.
+2. 禁写编造的判断 ("实测有效"/"X 模型对 Y 权重高" 没真测过的不写). 写在档案的
+   编造比无知更糟.
+3. 每次抓到一个错, 主动扫一遍找同类. 不再"老板抓一个我修一个".
+4. 完工总结禁用语 "应该好了" / "请验收" 没真烧 token 的不许说.
+5. 做不到验证就明说, 别假装做了.
+
+**同类风险扫描 (规则 3 应用)**:
+
+扫了 3 处, 1 个修正假设 + 2 个真隐患:
+
+### 风险 1: cover 4 选 1 末尾 append (D-091 v1 同款怀疑)
+- 假设: `gen_cover_batch` 用 `prompts = [f"{base} · {COVER_STYLE_VARIANTS[i % 4]}"]`,
+  跟 D-091 v1 同款"末尾 append 失效".
+- 真验证: Read 老板 4-25 真生成的 4 张候选 (`data/wechat-cover-batch/wxcover_1777080221-343_*.png`),
+  视觉真区分 — 蓝调极简 / 真实餐厅场景 / 深色 VS 大字 / 复古怀旧漫画.
+- **结论**: 假设错, **不修**. 改了反而把 work 的东西弄坏.
+- **教训**: 直觉同款的两处仍要各自验证, 不要一杆子打死.
+
+### 风险 2: hotrewrite + voicerewrite 自检 (D-088 同款)
+- 看代码: `hotrewrite_pipeline.py:120` 空 content 直接进自检无 fail-fast.
+  `voicerewrite_pipeline.py:155` 单次 LLM JSON 即使 fallback 已 `overall_pass=False`
+  也无 raise.
+- 真隐患, **修**. D-088 同款加 `if not content: raise RuntimeError(...)`.
+- 测试 mock 跑了 fail-fast 路径 (规则 1: 不靠"代码看着对"). 3 新 case 全过.
+
+### 风险 3: 段间图单张 chip (D-091 v1 同款)
+- 单张 `appendPreset` 跟全局 v1 完全同款 — 末尾追加风格. 同样无效.
+- **删了** (方案 A): 留着持续误导用户. 微调走 textarea + "🔄 用新 prompt 重生".
+- 替代方案 B (改成单张 LLM restyle) 没采用, 跟全局风格语义重复.
+- 替代方案 C (改文案警告"末尾追加可能不生效") 没采用, 没人会喜欢这种 UI.
+
+**修复内容**:
+- `backend/services/hotrewrite_pipeline.py`: content 空 raise (D-088 同款).
+- `backend/services/voicerewrite_pipeline.py`: script 空 raise (D-088 同款).
+- `web/factory-wechat-v2.jsx`: 删 `appendPreset` + 单张卡片 chip JSX.
+- `tests/test_llm_empty_content.py` +3 case (mock 真跑 fail-fast 路径).
+- `docs/WECHAT-SKILL-LESSONS.md` 第 8 节 (5 条新规则) + 第 9 节 (cover 反例).
+
+**闭环验证 (规则 1 应用)**:
+- pytest 534 通过.
+- playwright 真前端 :8001 (`/tmp/_d092_chip_removed.js`): 注入 wf snapshot, 验
+  顶部全局 chip 在 + 5 个风格 label 各 textContent 1 次 (单张 chip 真删) + 4
+  textarea + 4 重生按钮 + console no error. 截图视觉确认.
+- 用 textContent 而非 innerHTML 数 (innerHTML 把 chip title hover 文本也算进去
+  会假阳性). 这本身也是规则 1 的应用 — 测试逻辑也得真验证, 不靠"看着对".
+
+

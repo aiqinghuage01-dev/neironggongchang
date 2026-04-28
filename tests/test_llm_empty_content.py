@@ -192,3 +192,95 @@ def test_write_article_raises_on_empty_content_skipping_self_check():
     assert "空内容" in str(ei.value)
     assert "6600" in str(ei.value)
     assert not check_called, "空文章不应进自检, 否则 DeepSeek 会脑补 107/120"
+
+
+# ─── D-092 hotrewrite + voicerewrite 同款 fail-fast (D-088 举一反三) ─────────
+
+
+def test_hotrewrite_write_script_raises_on_empty_content():
+    """hotrewrite_pipeline.write_script 空 content → raise, 不进自检 (D-088 同款防护)."""
+    from backend.services import hotrewrite_pipeline
+
+    fake_write_r = MagicMock(text="", total_tokens=5500)
+    fake_write_ai = MagicMock()
+    fake_write_ai.chat = MagicMock(return_value=fake_write_r)
+
+    check_called = []
+    fake_check_ai = MagicMock()
+    fake_check_ai.chat = MagicMock(side_effect=lambda *a, **kw: check_called.append(1) or MagicMock(text="{}", total_tokens=200))
+
+    def get_ai_client_mock(route_key=None, **_):
+        if route_key == "hotrewrite.self-check":
+            return fake_check_ai
+        return fake_write_ai
+
+    fake_skill = {
+        "skill_md": "skill body",
+        "references": {"who-is-qinghuage": "p", "writing-methodology": "m"},
+    }
+    with patch.object(hotrewrite_pipeline, "get_ai_client", side_effect=get_ai_client_mock), \
+         patch.object(hotrewrite_pipeline.skill_loader, "load_skill", return_value=fake_skill):
+        with pytest.raises(RuntimeError) as ei:
+            hotrewrite_pipeline.write_script(
+                hotspot="某热点",
+                breakdown={"event_core": "x", "conflict": "y", "emotion": "z"},
+                angle={"label": "L", "audience": "A", "draft_hook": "H"},
+            )
+    assert "空内容" in str(ei.value)
+    assert "5500" in str(ei.value)
+    assert not check_called, "hotrewrite 空 content 不应进自检"
+
+
+def test_voicerewrite_write_script_raises_on_empty_content():
+    """voicerewrite_pipeline.write_script 空 script → raise, 不返伪结果让 task ok 含空文."""
+    from backend.services import voicerewrite_pipeline
+
+    # voicerewrite 单次 LLM 输出 JSON, 模拟 LLM 返空字符串
+    fake_r = MagicMock(text='{"script": "", "word_count": 0, "self_check": {"overall_pass": true}}', total_tokens=4000)
+    fake_ai = MagicMock()
+    fake_ai.chat = MagicMock(return_value=fake_r)
+
+    fake_skill = {
+        "skill_md": "skill body",
+        "references": {"who-is-qinghuage": "p", "transcript-checklist": "c"},
+    }
+    with patch.object(voicerewrite_pipeline, "get_ai_client", return_value=fake_ai), \
+         patch.object(voicerewrite_pipeline.skill_loader, "load_skill", return_value=fake_skill):
+        with pytest.raises(RuntimeError) as ei:
+            voicerewrite_pipeline.write_script(
+                transcript="录音转写文本",
+                skeleton={"core_view": "x", "key_experiences": ["a"], "insights": ["b"], "weak_to_delete": [], "tone_anchors": []},
+                angle={"label": "L", "why": "w", "opening_draft": "O"},
+            )
+    assert "空" in str(ei.value)
+    assert "4000" in str(ei.value)
+
+
+def test_hotrewrite_normal_content_no_raise():
+    """hotrewrite 正常内容路径不抛 (回归保护, 防 fail-fast 误伤)."""
+    from backend.services import hotrewrite_pipeline
+
+    fake_write_r = MagicMock(text="正常的热点改写文案" * 100, total_tokens=5500)
+    fake_check_r = MagicMock(text='{"pass": true, "summary": "ok"}', total_tokens=300)
+    fake_write_ai = MagicMock()
+    fake_write_ai.chat = MagicMock(return_value=fake_write_r)
+    fake_check_ai = MagicMock()
+    fake_check_ai.chat = MagicMock(return_value=fake_check_r)
+
+    def get_ai_client_mock(route_key=None, **_):
+        return fake_check_ai if route_key == "hotrewrite.self-check" else fake_write_ai
+
+    fake_skill = {
+        "skill_md": "skill body",
+        "references": {"who-is-qinghuage": "p", "writing-methodology": "m"},
+    }
+    with patch.object(hotrewrite_pipeline, "get_ai_client", side_effect=get_ai_client_mock), \
+         patch.object(hotrewrite_pipeline.skill_loader, "load_skill", return_value=fake_skill):
+        r = hotrewrite_pipeline.write_script(
+            hotspot="某热点",
+            breakdown={"event_core": "x", "conflict": "y", "emotion": "z"},
+            angle={"label": "L", "audience": "A", "draft_hook": "H"},
+        )
+    assert r["content"]
+    assert r["word_count"] > 0
+    assert r["self_check"]["pass"] is True

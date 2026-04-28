@@ -155,6 +155,14 @@ def write_script(transcript: str, skeleton: dict[str, Any], angle: dict[str, Any
     obj = _extract_json(r.text, "object") or {}
 
     content = (obj.get("script") or "").strip()
+    # D-088 同款 fail-fast: script 空就别返伪结果让 UI 显示空白文案 + 假绿勾.
+    # voicerewrite 单次 LLM 就出 script+self_check, 即使 self_check 已退化到 overall_pass=False
+    # 也别让 task 以 ok 状态结存空 script (UI 看 ok 不会去重跑).
+    if not content:
+        raise RuntimeError(
+            f"录音改写 LLM 返空 script (tokens={r.total_tokens}). "
+            f"可能 JSON 解析失败或上游 thinking 没出 text. 请重试一次."
+        )
     word_count = obj.get("word_count") or len(re.sub(r"\s+", "", content))
     return {
         "content": content,

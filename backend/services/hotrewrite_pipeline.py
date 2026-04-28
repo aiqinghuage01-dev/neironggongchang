@@ -119,6 +119,14 @@ def write_script(hotspot: str, breakdown: dict[str, Any], angle: dict[str, Any])
     write_r = ai.chat(write_prompt, system=system, deep=False, temperature=0.85, max_tokens=5000)
     content = (write_r.text or "").strip()
 
+    # D-088 同款 fail-fast: content 空就不能进自检, 防 LLM 在空字符串上 hallucinate 通过.
+    # (客户端 D-088 已加空 content + token>0 transient 重试 1 次, 这里兜底持续故障.)
+    if not content:
+        raise RuntimeError(
+            f"热点改写 LLM 返空内容 (write_tokens={write_r.total_tokens}). "
+            f"上游可能 max_tokens 全烧 thinking 没出 text block. 请重试一次."
+        )
+
     # 六维自检 + 一票否决
     check_system = f"""你在执行《热点文案改写V2》skill 的 Step 5 · 六维质检。
 基于下面 skill 完整方法论(看 Step 5)对文案做质检。

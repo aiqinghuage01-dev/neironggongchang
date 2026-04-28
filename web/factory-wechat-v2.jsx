@@ -958,11 +958,9 @@ function WxStepImages({ plans, setPlans, onGen, loading, onPrev, onNext, onRegen
   function updatePrompt(i, newPrompt) {
     setPlans(prev => prev.map((p, idx) => idx === i ? { ...p, image_prompt: newPrompt } : p));
   }
-  function appendPreset(i, preset) {
-    setPlans(prev => prev.map((p, idx) => idx === i ? {
-      ...p, image_prompt: (p.image_prompt || "").trimEnd() + preset.append,
-    } : p));
-  }
+  // D-092: 旧的 appendPreset (单张 chip 末尾 append) 已删 —
+  // 跟 D-091 v1 同款失效 (apimart 忽略末尾风格关键词), 留着持续误导用户.
+  // 用户微调单张直接改 textarea 文本 + 点"🔄 用新 prompt 重生" 即可.
 
   return (
     <div style={{ padding: "32px 40px 120px", maxWidth: 1200, margin: "0 auto" }}>
@@ -1027,20 +1025,9 @@ function WxStepImages({ plans, setPlans, onGen, loading, onPrev, onNext, onRegen
               onChange={e => updatePrompt(i, e.target.value)}
               placeholder="改 prompt 再点重生..."
               style={{ width: "100%", border: `1px solid ${T.borderSoft}`, borderRadius: 6, padding: 8, fontSize: 12, fontFamily: "inherit", outline: "none", resize: "vertical", color: T.text, lineHeight: 1.6, background: "#fff" }} />
-            {/* 风格预设 chip · 点击 append 到 prompt 末尾 */}
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-              {IMAGE_STYLE_PRESETS.map(preset => (
-                <button key={preset.id} onClick={() => appendPreset(i, preset)}
-                  title={`追加: ${preset.append}`}
-                  style={{
-                    padding: "3px 8px", fontSize: 10.5, borderRadius: 100,
-                    background: T.bg2, border: `1px solid ${T.borderSoft}`,
-                    color: T.muted, cursor: "pointer", fontFamily: "inherit",
-                  }}>
-                  {preset.label}
-                </button>
-              ))}
-            </div>
+            {/* D-092: 删掉单张风格预设 chip — 末尾 append 对 apimart 无效 (D-091 v1 同款),
+                留着持续误导用户. 单张微调改 textarea + 点"🔄 用新 prompt 重生" 即可.
+                想换风格走顶部"统一风格" chip (走 LLM 重写主体). */}
             {p.mmbiz_url ? (
               // D-039: 用 media_url 走本地 /media/ 避开 mmbiz.qpic.cn 防盗链;
               // 旧数据没有 media_url 时降级到 mmbiz_url (会显示"未经允许不可引用"占位)
