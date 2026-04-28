@@ -244,6 +244,100 @@ def test_sweep_stuck_idle_and_total_both_count_separately(tmp_db):
     assert "total" in (t.get_task(tid_total)["error"] or "")
 
 
+# ─── B'-5 run_async sync_fn_with_ctx 兼容入口 ─────────
+
+
+def test_run_async_old_sync_fn_still_works(tmp_db):
+    """旧 sync_fn 入口不变, 老调用方零改动."""
+    import time
+    from backend.services import tasks as t
+
+    def _job():
+        return {"answer": 42}
+
+    tid = t.run_async(kind="test.legacy", sync_fn=_job, estimated_seconds=10)
+    # 等 daemon 跑完 (单纯函数, 几十 ms)
+    for _ in range(50):
+        task = t.get_task(tid)
+        if task["status"] in ("ok", "failed"):
+            break
+        time.sleep(0.05)
+    assert task["status"] == "ok"
+    assert task["result"] == {"answer": 42}
+
+
+def test_run_async_with_ctx_receives_task_id(tmp_db):
+    """sync_fn_with_ctx 收到 ctx.task_id 跟外面拿到的 task_id 一致."""
+    import time
+    from backend.services import tasks as t
+
+    captured_ids = []
+
+    def _job(ctx):
+        captured_ids.append(ctx.task_id)
+        ctx.update_progress("跑了一半", pct=50)
+        return {"ok": True}
+
+    tid = t.run_async(kind="test.ctx", sync_fn_with_ctx=_job, estimated_seconds=10)
+    for _ in range(50):
+        task = t.get_task(tid)
+        if task["status"] in ("ok", "failed"):
+            break
+        time.sleep(0.05)
+    assert task["status"] == "ok"
+    # ctx.task_id 跟 run_async 返的 task_id 一致, 闭包没拿错
+    assert captured_ids == [tid]
+
+
+def test_run_async_with_ctx_progress_updates_correct_task(tmp_db):
+    """两个 ctx-aware task 并发, 各自更新自己的 progress, 不串扰.
+    旧"反查最近 running" 在这里会让先起的任务把进度更新到后起的 task 上.
+    """
+    import time
+    import threading
+    from backend.services import tasks as t
+
+    # 单线程串行起两个 task, 验证各自的 progress_text 不串
+    barrier = threading.Event()
+
+    def _slow_job(ctx):
+        # 等另一个 task 也起来再写 progress, 模拟"两个并发 running"
+        barrier.wait(timeout=2)
+        ctx.update_progress(f"job for {ctx.task_id}", pct=50)
+        return {"id": ctx.task_id}
+
+    tid1 = t.run_async(kind="test.parallel", sync_fn_with_ctx=_slow_job, estimated_seconds=10)
+    tid2 = t.run_async(kind="test.parallel", sync_fn_with_ctx=_slow_job, estimated_seconds=10)
+    barrier.set()
+    for _ in range(60):
+        a = t.get_task(tid1)
+        b = t.get_task(tid2)
+        if a["status"] in ("ok", "failed") and b["status"] in ("ok", "failed"):
+            break
+        time.sleep(0.05)
+    assert a["status"] == "ok"
+    assert b["status"] == "ok"
+    assert a["result"]["id"] == tid1
+    assert b["result"]["id"] == tid2
+
+
+def test_run_async_rejects_both_or_neither(tmp_db):
+    """sync_fn 和 sync_fn_with_ctx 必须二选一."""
+    import pytest
+    from backend.services import tasks as t
+
+    def _f1():
+        return None
+
+    def _f2(ctx):
+        return None
+
+    with pytest.raises(ValueError, match="二选一"):
+        t.run_async(kind="x", sync_fn=_f1, sync_fn_with_ctx=_f2)
+    with pytest.raises(ValueError, match="二选一"):
+        t.run_async(kind="x")
+
+
 # ─── start_watchdog idempotent ───────────────────────
 
 def test_start_watchdog_only_starts_once(tmp_db):

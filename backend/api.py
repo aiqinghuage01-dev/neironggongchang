@@ -2050,41 +2050,25 @@ def material_lib_tag_batch(limit: int = 10, force: bool = False):
     """异步批量打 N 条 (默认 10, 全量打标传大 limit 如 5000).
 
     全量打标 (~1600 条) 需要 ~1 小时 + ~$2-3 credits. 真烧前确认.
-    daemon 内每条 update_progress 推送防 D-068 watchdog 误杀 (estimated * 5 不够时被假杀).
+    B'-5: 走 sync_fn_with_ctx, ctx.task_id 闭包闭进 progress_cb, 不再 DB 反查
+    "最近 running" — 两个并发任务时反查会拿错 id 让心跳更到别人 task 上.
     """
     from backend.services import materials_pipeline as mp
     from backend.services import tasks as tasks_service
-    from shortvideo.db import get_connection
-    from contextlib import closing
 
     # estimated 按 5s/条算 (LLM 平均响应 ~3s + DB 写入 buffer)
     est = max(60, limit * 5)
 
-    def _do():
-        # 反查自己的 task_id (kind='materials.tag_batch' 最近 running)
-        my_tid = None
-        try:
-            with closing(get_connection()) as con:
-                r = con.execute(
-                    "SELECT id FROM tasks WHERE kind='materials.tag_batch' "
-                    "AND status='running' ORDER BY started_ts DESC LIMIT 1"
-                ).fetchone()
-                if r:
-                    my_tid = r[0]
-        except Exception:
-            pass
-
+    def _do_with_ctx(ctx):
         def progress_cb(i, total, aid):
-            # 每条都 update_progress (防 watchdog + 让前端看到实时进度)
-            if my_tid and total > 0:
+            # 每条都 update_progress (防 watchdog + 让前端看到实时进度).
+            # ctx.task_id 直接闭包, 没竞态.
+            if total > 0:
                 try:
                     pct = int(i * 100 / total)
-                    tasks_service.update_progress(
-                        my_tid, f"打标中 {i}/{total}", pct=pct,
-                    )
+                    ctx.update_progress(f"打标中 {i}/{total}", pct=pct)
                 except Exception:
                     pass
-
         return mp.tag_batch(limit=limit, force=force, on_progress=progress_cb)
 
     task_id = tasks_service.run_async(
@@ -2096,7 +2080,7 @@ def material_lib_tag_batch(limit: int = 10, force: bool = False):
         payload={"limit": limit, "force": force},
         estimated_seconds=est,
         progress_text=f"AI 给 {limit} 条素材打标中...",
-        sync_fn=_do,
+        sync_fn_with_ctx=_do_with_ctx,
     )
     return {"task_id": task_id, "status": "running", "estimated_seconds": est}
 

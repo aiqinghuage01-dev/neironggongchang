@@ -517,11 +517,15 @@ def test_api_tag_batch_returns_task_id(tmp_db, tmp_thumb_dir, tmp_root, monkeypa
     real_finish = tasks_service.finish_task
 
     def sync_run(*, kind, label=None, ns=None, page_id=None, step=None,
-                 payload=None, estimated_seconds=None, progress_text=None, sync_fn):
+                 payload=None, estimated_seconds=None, progress_text=None,
+                 sync_fn=None, sync_fn_with_ctx=None):
         tid = real_create(kind=kind, label=label, ns=ns, page_id=page_id, step=step,
                           payload=payload, estimated_seconds=estimated_seconds)
         try:
-            res = sync_fn()
+            if sync_fn_with_ctx is not None:
+                res = sync_fn_with_ctx(tasks_service.TaskContext(tid))
+            else:
+                res = sync_fn()
             real_finish(tid, result=res, status="ok")
         except Exception as e:
             real_finish(tid, error=str(e), status="failed")

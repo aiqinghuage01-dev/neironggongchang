@@ -485,6 +485,24 @@ def counts() -> dict[str, int]:
     return out
 
 
+class TaskContext:
+    """B'-5 (GPT 修订): 长任务里 sync_fn_with_ctx 收到的上下文.
+
+    用 ctx.task_id / ctx.update_progress / ctx.is_cancelled 直接操作自己的 task,
+    不需要反查 DB "最近 running 的 same kind" — 那个反查在两个并发任务时会拿错
+    task_id, 让心跳更新到别人的 task 上 (D-068 watchdog 因此判断不准, 进度也错).
+    """
+
+    def __init__(self, task_id: str):
+        self.task_id = task_id
+
+    def update_progress(self, text: str, pct: int | None = None) -> None:
+        update_progress(self.task_id, text, pct=pct)
+
+    def is_cancelled(self) -> bool:
+        return is_cancelled(self.task_id)
+
+
 def run_async(
     *,
     kind: str,
@@ -495,27 +513,35 @@ def run_async(
     payload: Any = None,
     estimated_seconds: int | None = None,
     progress_text: str = "AI 处理中...",
-    sync_fn,
+    sync_fn=None,
+    sync_fn_with_ctx=None,
 ) -> str:
     """D-037b5 helper: 把一个同步函数包成异步任务, 立即返 task_id.
 
-    spawn daemon thread 跑 sync_fn(), 推 5%/15%/95%/100% 真里程碑:
+    spawn daemon thread 跑 sync_fn() / sync_fn_with_ctx(ctx), 推 5%/15%/95%/100% 真里程碑:
       - 5%  "准备 prompt..."
       - 15% progress_text (AI 真活的开始)
-      - sync_fn() 跑 (这段 AI 黑盒, 进度条卡 15% 不动 = 真进度: AI 在想)
+      - sync_fn 跑 (这段 AI 黑盒, 进度条卡 15% 不动 = 真进度: AI 在想)
       - is_cancelled 检查
       - 95% "整理结果..."
       - finish_task(result, status=ok)
 
     异常路径: sync_fn 抛 → finish_task(error=..., status=failed)
 
-    适用场景: 单次 AI 调用 + 不拆段的 skill (baokuan / hotrewrite / voicerewrite / planner / ...).
-    复杂场景 (如 compliance 拆 3 段) 仍要自己写 worker.
+    sync_fn vs sync_fn_with_ctx (B'-5):
+      sync_fn():           老入口, 不动. 单次 AI 调用 (baokuan/hotrewrite/...) 不需要 task_id.
+      sync_fn_with_ctx(ctx): 长任务用 (素材 tag_batch / scan), 拿 ctx.update_progress 推每条进度,
+                            不再靠 "DB 反查最近 same kind running" 拿 task_id (有竞态).
+    二选一, 同时传两个或都不传都报错.
     """
+    if (sync_fn is None) == (sync_fn_with_ctx is None):
+        raise ValueError("run_async: 必须二选一传 sync_fn 或 sync_fn_with_ctx")
+
     task_id = create_task(
         kind=kind, label=label, ns=ns, page_id=page_id, step=step,
         payload=payload, estimated_seconds=estimated_seconds,
     )
+    ctx = TaskContext(task_id)
 
     # D-070: 访客模式跨 daemon thread 传递. capture 当前 request 的 guest 值,
     # 在 worker 里 set_guest(captured) — 否则 daemon thread 起来时 contextvar
@@ -528,7 +554,10 @@ def run_async(
         try:
             update_progress(task_id, "准备 prompt...", pct=5)
             update_progress(task_id, progress_text, pct=15)
-            result = sync_fn()
+            if sync_fn_with_ctx is not None:
+                result = sync_fn_with_ctx(ctx)
+            else:
+                result = sync_fn()
             if is_cancelled(task_id):
                 return
             update_progress(task_id, "整理结果...", pct=95)
