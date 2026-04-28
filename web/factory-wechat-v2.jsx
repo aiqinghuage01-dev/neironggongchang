@@ -812,11 +812,34 @@ const IMAGE_STYLE_PRESETS = [
 ];
 
 function WxStepImages({ plans, setPlans, onGen, loading, onPrev, onNext, onRegen, imgChip }) {
+  // 自动开跑标记: 同一批 plans 进来时只自动 genAll 一次, 防止用户改 prompt 重生后又被全部覆盖
+  const autoStartedRef = React.useRef(false);
+  React.useEffect(() => {
+    // plans 重新生成 (从 0 → N) 时重置标记 (规划重出 / 第一次进来)
+    if (plans.length === 0) {
+      autoStartedRef.current = false;
+      return;
+    }
+    if (autoStartedRef.current) return;
+    // 已经全部 done 或 running 不重复跑 (恢复 work 状态进来)
+    const hasPending = plans.some(p => p.status !== "done" && p.status !== "running");
+    if (!hasPending) return;
+    autoStartedRef.current = true;
+    // 串行跑: 跟手动 "一键生成剩余" 一致
+    (async () => {
+      for (let i = 0; i < plans.length; i++) {
+        if (plans[i].status !== "done" && plans[i].status !== "running") {
+          await onGen(i);
+        }
+      }
+    })();
+  }, [plans.length]);  // 只在 plans 数量变化时触发, 改 prompt / mmbiz_url 更新不重复触发
+
   if (loading || plans.length === 0) return <Spinning icon="🎨" phases={[
     { text: "把文章切成 4 个大段", sub: "按 H2 / 语义转折定界" },
     { text: "为每段设计具象画面 prompt", sub: "真实感照片 · 暖色调 · 避免人脸特写" },
     { text: "控长度 ≤ 60 字", sub: "具体场景 > 抽象概念" },
-    { text: "规划好了,下一页你可以逐张生图", sub: "每张约 30-60s · apimart gpt-image-2" },
+    { text: "进来直接开跑 4 张", sub: "每张约 30-60s · 改 prompt 后单点重生" },
   ]} />;
   const doneCount = plans.filter(p => p.status === "done").length;
   const runningCount = plans.filter(p => p.status === "running").length;
@@ -920,8 +943,16 @@ function WxStepImages({ plans, setPlans, onGen, loading, onPrev, onNext, onRegen
         <Btn variant="outline" onClick={onPrev}>← 回长文</Btn>
         <Btn onClick={onRegen}>🔄 重出 prompt</Btn>
         <div style={{ flex: 1 }} />
-        <div style={{ fontSize: 12, color: T.muted, marginRight: 10 }}>有图没图都能继续,没图的段不配</div>
-        <Btn variant="primary" onClick={onNext}>拼 HTML →</Btn>
+        <div style={{ fontSize: 12, color: T.muted, marginRight: 10 }}>
+          {runningCount > 0
+            ? `还有 ${runningCount} 张在生成中, 等完成再拼`
+            : doneCount === 0
+              ? "至少 1 张完成才能拼 HTML, 不然文章没插图"
+              : doneCount < plans.length
+                ? `已 ${doneCount}/${plans.length} 张, 没生成的段不配图`
+                : "全部完成, 拼 HTML 会插入 4 张图"}
+        </div>
+        <Btn variant="primary" onClick={onNext} disabled={runningCount > 0 || doneCount === 0}>拼 HTML →</Btn>
       </div>
     </div>
   );
