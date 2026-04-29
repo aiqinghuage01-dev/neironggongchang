@@ -4,7 +4,26 @@
 
 ---
 
-## 当前状态 (2026-04-29 · D-105 cmux fallback 防重复打开)
+## 当前状态 (2026-04-29 · D-106 cmux 只保留 5 个 Agent 工作区)
+
+**版本**: v0.7.6-agent5 — cmux fallback 打开后自动清理默认空 Home 工作区.
+
+### D-106 修复
+- `scripts/start_multi_agents_cmux.sh`: fallback/open 后确认 5 个 Agent 工作区都在
+  当前 cmux window 内时, 自动关闭 cmux 默认创建的 `~` 空工作区.
+- 目标状态固定为 1 个 cmux window + 5 个 workspace:
+  `总控 / 内容开发 / 媒体开发 / QA 测试 / Claude 审查`.
+
+### 验证
+- `bash -n scripts/start_multi_agents_cmux.sh` ✅
+- `bash scripts/start_multi_agents_cmux.sh --dry-run` ✅
+- `bash scripts/start_multi_agents_cmux.sh` 在已有 5 个 workspace 时全部 skip, 不再重复打开 ✅
+- AppleScript 实测当前 cmux: `windows=1`, `tabs=5` ✅
+- 5 个工作区路径分别是主仓库 + `content-dev / media-dev / qa / review` ✅
+
+---
+
+## 上一里程碑 (2026-04-29 · D-105 cmux fallback 防重复打开)
 
 **版本**: v0.7.6-agent4 — cmux fallback 不再重复打开同一个 Agent workspace.
 

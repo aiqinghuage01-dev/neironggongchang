@@ -338,6 +338,55 @@ end run
 OSA
 }
 
+cleanup_cmux_default_home_workspace() {
+  local dirs=()
+  local role
+  for role in "${roles[@]}"; do
+    dirs+=("$(role_dir "$role")")
+  done
+
+  osascript - "${dirs[@]}" <<'OSA' >/dev/null 2>&1 || true
+on run argv
+  tell application "cmux"
+    if (count of windows) is 0 then return
+
+    set matched to 0
+    repeat with t in tabs of front window
+      set wd to ""
+      try
+        set wd to working directory of focused terminal of t as text
+      end try
+      repeat with targetDir in argv
+        if wd is (targetDir as text) then
+          set matched to matched + 1
+          exit repeat
+        end if
+      end repeat
+    end repeat
+    if matched < 5 then return
+
+    set homeDir1 to POSIX path of (path to home folder)
+    if homeDir1 ends with "/" then
+      set homeDir2 to text 1 thru -2 of homeDir1
+    else
+      set homeDir2 to homeDir1
+    end if
+
+    repeat with i from (count of tabs of front window) to 1 by -1
+      set t to item i of tabs of front window
+      set wd to ""
+      try
+        set wd to working directory of focused terminal of t as text
+      end try
+      if wd is homeDir1 or wd is homeDir2 then
+        close tab t
+      end if
+    end repeat
+  end tell
+end run
+OSA
+}
+
 roles=(controller content media qa review)
 
 echo "Repo:   ${repo_root}"
@@ -402,6 +451,9 @@ if [[ "$dry_run" -eq 1 ]]; then
   echo "Dry run only. No cmux workspace created."
   exit 0
 fi
+
+sleep 0.5
+cleanup_cmux_default_home_workspace
 
 cat <<EOF
 
