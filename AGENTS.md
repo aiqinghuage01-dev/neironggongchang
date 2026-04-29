@@ -38,6 +38,7 @@ cat docs/SYSTEM-CONSTRAINTS.md
 # 3. 按需读
 #    - docs/TECHNICAL-DECISIONS.md  <- 技术决策档案
 #    - docs/WECHAT-SKILL-LESSONS.md <- 改 wechat (公众号) 代码前必扫
+#    - docs/MULTI_AGENT_WORKFLOW.md <- 多 Agent 并行协作规则
 #    - PRD_v2.md                    <- 完整 PRD (1000+ 行, 按需读章节)
 ```
 
@@ -53,6 +54,8 @@ cat docs/SYSTEM-CONSTRAINTS.md
 | `docs/TECHNICAL-DECISIONS.md` | 技术决策档案 (为什么这么做) | 踩到新坑/做新决策就补 |
 | `docs/NEW-SKILL-PLAYBOOK.md` | 新 skill 接入手册 (D-010 范式) | 接新 skill 时必读 |
 | `docs/WECHAT-SKILL-LESSONS.md` | **公众号 skill 踩坑大全** (双 URL/防盗链/template 替换静默 fail/LLM 空内容) | 改 wechat 相关代码前必读 |
+| `docs/MULTI_AGENT_WORKFLOW.md` | 多 Agent 协作规则 + worktree 分工 | 开多窗口/多模型前必读 |
+| `docs/AGENT_BOARD.md` | 多 Agent 任务看板 | 仅总控 Agent 维护 |
 | `CHANGELOG.md` | 版本演进 + 按决策号分组 | 每发版补一节 |
 | `AGENTS.md` (本文) | Codex/GPT 入口路标 | 与 CLAUDE.md 同步更新 |
 | `CLAUDE.md` | Claude 入口路标 (与本文对偶) | 与 AGENTS 同步更新 |
@@ -144,6 +147,8 @@ neironggongchang/
     SYSTEM-CONSTRAINTS.md <- 系统硬约束 (写新代码前必读)
     TECHNICAL-DECISIONS.md <- 决策档案
     NEW-SKILL-PLAYBOOK.md <- 接入新 skill 手册
+    MULTI_AGENT_WORKFLOW.md <- 多 Agent 协作规则
+    AGENT_BOARD.md       <- 多 Agent 当前看板
   backend/
     api.py               <- FastAPI 主文件 (110+ endpoint)
     services/            <- 23 个 service (tasks/remote_jobs/guest_mode/...)
