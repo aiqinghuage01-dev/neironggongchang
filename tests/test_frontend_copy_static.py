@@ -43,3 +43,11 @@ def test_beta_page_does_not_embed_internal_dashboard():
     src = (ROOT / "web/factory-beta.jsx").read_text(encoding="utf-8")
     assert "<iframe" not in src
     assert "src={AGENT_DASHBOARD_URL}" not in src
+
+
+def test_beta_task_title_sanitizes_paths_and_internal_terms():
+    src = (ROOT / "web/factory-beta.jsx").read_text(encoding="utf-8")
+    assert r"/\/(?:Users|private)\/\S+/g" in src
+    assert "submit_id" in src
+    assert r"\b(?:submit_id|prompt|tokens?|credits?|watcher|daemon|provider)\s*[:=]\s*\S+" in src
+    assert r"\bstatus\s*[:=]\s*\S+" in src

@@ -12,7 +12,7 @@
 | 内容开发 Agent | 空闲 | `~/Desktop/nrg-worktrees/content-dev` | T-021/T-022 已合入 main; 等新内容任务 |
 | 媒体开发 Agent | 空闲 | `~/Desktop/nrg-worktrees/media-dev` | T-047 已完成并合入 main; 等新媒体任务 |
 | QA 测试 Agent | 待领取 | `~/Desktop/nrg-worktrees/qa`, `~/Desktop/nrg-worktrees/qa-1`, `~/Desktop/nrg-worktrees/qa-2` | T-066 已通过; 等后续 QA |
-| 审查 Agent | 待领取 | `~/Desktop/nrg-worktrees/review` | T-064 已完成, 等后续返修审查任务 |
+| 审查 Agent | 待领取 | `~/Desktop/nrg-worktrees/review` | T-067 自动 worker 启动阻塞, 已由总控手动审查补齐 |
 
 ---
 
@@ -72,6 +72,7 @@
 | T-064 | D-126/T-062 只读审查 | 审查 Agent / 总控返修 | 已完成 -> 已返修 | 只读审查; 不改代码 | Review 无 P0; P1 即梦失败任务卡 `id/watcher` 外露已修; P2 命名/默认探活测试已补 |
 | T-065 | T-063/T-064 返修后全站只读复测 | QA 测试 Agent / 总控关闭 | done | 只读 QA; 禁止停启 8000/8001; 不调用 `/api/health` 当门禁; 不烧 credits | QA 主页面通过但 frame-aware 扫描发现 `beta` iframe 外露本机路径/工程词; 总控移除 iframe 后由 T-066 复测通过 |
 | T-066 | T-048/T-065 返修后 frame-aware 全站复测 | QA 测试 Agent | done | 只读 QA; 禁止停启 8000/8001; 不调用 `/api/health` 当门禁; 不烧 credits | 21 页 + 所有 frame 禁止词 0; `wechat/voicerewrite/beta` 通过; Dreamina 失败任务假数据不露 `id/submit_id/watcher/status=`; 报告 `docs/agent-handoff/QA_T066_FRAMEAWARE_RETEST_20260430.md` |
+| T-067 | T-048/T-065/T-066 返修后代码只读审查 | 审查 Agent / 总控接管 | done | `web/factory-beta.jsx`, `tests/test_frontend_copy_static.py`; 只读审查后小修 | 自动 review worker 假忙 0 字节日志; 总控手动审查发现 beta 标题脱敏正则不严并已修复; 目标测试/full pytest/Playwright 假状态通过 |
 
 ---
 

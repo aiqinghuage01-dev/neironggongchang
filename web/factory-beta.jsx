@@ -180,8 +180,10 @@ function BetaTaskRow({ task }) {
 
 function safeTaskTitle(title) {
   return String(title || "未命名任务")
-    .replace(/\/Users\/[^\\s]+/g, "本机目录")
-    .replace(/OpenClaw|DeepSeek|Opus|LLM|prompt|tokens?|credits?|Downloads|traceback|Pydantic|watcher|daemon|provider/gi, "内部信息")
+    .replace(/\/(?:Users|private)\/\S+/g, "本机目录")
+    .replace(/\b(?:submit_id|prompt|tokens?|credits?|watcher|daemon|provider)\s*[:=]\s*\S+/gi, "内部信息")
+    .replace(/\bstatus\s*[:=]\s*\S+/gi, "任务状态")
+    .replace(/OpenClaw|DeepSeek|Opus|LLM|prompt|tokens?|credits?|Downloads|traceback|Pydantic|watcher|daemon|provider|submit_id|\bAPI\b/gi, "内部信息")
     .replace(/\b(?:404|500|502|503|504)\b/g, "异常状态");
 }
 
