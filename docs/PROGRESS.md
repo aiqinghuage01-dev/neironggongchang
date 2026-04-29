@@ -4,11 +4,11 @@
 
 ---
 
-## 当前状态 (2026-04-29 · QA-WECHAT-20260429 公众号真测不通过待修)
+## 当前状态 (2026-04-29 · QA 真测不通过待修)
 
-**版本**: v0.7.6-agent10 — 多 QA 启动能力已在 D-111 落地; 公众号 8 步真测跑到草稿箱, 但发现 2 个 P1, 暂不算公众号链路验收通过。
+**版本**: v0.7.6-agent10 — 多 QA 启动能力已在 D-111 落地; 公众号和直接出图均已做最小真烧, 但发现阻塞问题, 暂不算对应链路验收通过。
 
-### QA 证据
+### QA 证据 · 公众号
 - QA 报告已合入主线: `docs/agent-handoff/QA_WECHAT_20260429.md`
   - QA 原提交: `cb3454c`
   - 主线证据提交: `9031337`
@@ -17,16 +17,28 @@
 - WeChat 相关 pytest 通过; `node scripts/e2e_wechat_d096_flow.js` 通过.
 - QA 额外发现: `node scripts/e2e_wechat_write_recover.js` 因本地任务库缺脚本预期历史任务超时, 不作为本轮链路结论依据.
 
-### 阻塞 P1
+### QA 证据 · 直接出图
+- QA2 报告已合入主线: `docs/agent-handoff/QA2_IMAGEGEN_20260429.md`
+  - QA2 原提交: `4f44f7a`
+  - 主线证据提交: `6f9fc3f`
+- 真烧 task: `72012fe3c6844be6a8a37bc7ab9213ea`, remote job done, 图片已下载并入作品库.
+- console error: 0; pageerror: 0.
+- 截图已核: `/tmp/_ui_shots/qa2_imagegen_04_final.png` 显示 `出图完成 · 0/0 成功`; `/tmp/_ui_shots/qa2_imagegen_05_works.png` 显示作品库已有该图.
+- pytest 未跑; 本轮未改业务代码, 仅做最小 credits 真链路和浏览器闭环.
+
+### 阻塞问题
 1. Step 4 手动编辑后的长文只停在 `WxStepWrite` 局部 state, 后续 `plan-images` / HTML / 草稿仍用旧 `article.content`.
 2. 推送草稿前 `sanitize_for_push` 把真实生成的 4 张段间图和头像全部剥掉: 原 HTML `img=5`, 推送前 HTML `img=0`.
+3. 直接出图 apimart 单图 watcher 后端链路成功, 但前端结果区按 `result.images` 展示, task.result 只有 raw `url/task_id`, 最终显示 `0/0 成功`.
 
 ### 下一步
 - `docs/AGENT_BOARD.md` 已登记:
   - `T-004`: 修手动编辑正文未进入后续流程.
   - `T-005`: 修 sanitize 误剥真实段间图/头像.
   - `T-006`: 修后公众号 8 步链路复测.
-- 两个 P1 修完并由 QA 真测通过前, 不能说公众号链路完成.
+  - `T-007`: 修直接出图结果区不展示 apimart 单图产物.
+  - `T-008`: 修后直接出图最小真烧复测.
+- 上述问题修完并由 QA 真测通过前, 不能说对应链路完成.
 
 ---
 
