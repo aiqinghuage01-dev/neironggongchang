@@ -4,21 +4,59 @@ set -euo pipefail
 usage() {
   cat <<'USAGE'
 Usage:
-  bash scripts/start_extra_qa_cmux.sh [count]
+  bash scripts/start_extra_qa_cmux.sh [count] [options]
+
+Options:
+  --prepare-only          Only create/sync QA worktrees; do not open cmux.
+  --force-open-fallback   If cmux CLI socket is unavailable, use macOS
+                          'open -a cmux <dir>' anyway. This can create
+                          extra blank windows on some cmux versions.
+  --cmux <path>           cmux CLI path. Default: app bundled CLI.
+  -h, --help              Show this help.
 
 Examples:
-  bash scripts/start_extra_qa_cmux.sh      # opens qa-1, qa-2, qa-3
-  bash scripts/start_extra_qa_cmux.sh 2    # opens qa-1, qa-2
+  bash scripts/start_extra_qa_cmux.sh      # prepares qa-1, qa-2, qa-3
+  bash scripts/start_extra_qa_cmux.sh 2    # prepares qa-1, qa-2
 USAGE
 }
 
-count="${1:-3}"
-case "$count" in
-  -h|--help)
-    usage
-    exit 0
-    ;;
-esac
+count="3"
+count_set=0
+open_workspaces=1
+force_open_fallback=0
+cmux_cli="/Applications/cmux.app/Contents/Resources/bin/cmux"
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --prepare-only)
+      open_workspaces=0
+      shift
+      ;;
+    --force-open-fallback)
+      force_open_fallback=1
+      shift
+      ;;
+    --cmux)
+      cmux_cli="${2:?--cmux requires a path}"
+      shift 2
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      if [[ "$1" =~ ^[0-9]+$ && "$count_set" -eq 0 ]]; then
+        count="$1"
+        count_set=1
+        shift
+      else
+        echo "Unknown option: $1" >&2
+        usage
+        exit 2
+      fi
+      ;;
+  esac
+done
 
 if ! [[ "$count" =~ ^[0-9]+$ ]] || [[ "$count" -lt 1 || "$count" -gt 5 ]]; then
   echo "count must be an integer from 1 to 5" >&2
@@ -107,6 +145,8 @@ write_role_files() {
 - 真点页面、真填内容、真看结果.
 - 默认允许最小 credits 真烧闭环, 但不要重复烧.
 - 没有截图、console/pageerror、curl/pytest/task id 证据, 不要说"通过".
+- 完成后把报告写到 docs/agent-handoff/ 并 commit.
+- 不让老板复制粘贴报告全文; 总控通过收件箱读取.
 
 老板短口令:
 - "测数字人" = 数字人最小 3-5 秒真烧测试.
@@ -141,7 +181,61 @@ EOF
   chmod +x "${dir}/开工"
 }
 
-echo "Opening ${count} extra QA workspaces..."
+ensure_cmux_ready() {
+  [[ "$open_workspaces" -eq 1 ]] || return 1
+  [[ -x "$cmux_cli" ]] || return 1
+
+  open -a cmux >/dev/null 2>&1 || true
+
+  local i
+  for i in {1..20}; do
+    if "$cmux_cli" ping >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 0.5
+  done
+
+  return 1
+}
+
+cmux_has_workspace_for_dir() {
+  local dir="$1"
+  osascript - "$dir" <<'OSA' >/dev/null 2>&1
+on run argv
+  set targetDir to item 1 of argv
+  tell application "cmux"
+    if (count of windows) is 0 then error "no windows"
+    repeat with t in tabs of front window
+      try
+        set wd to working directory of focused terminal of t as text
+        if wd is targetDir then return "yes"
+      end try
+    end repeat
+  end tell
+  error "not found"
+end run
+OSA
+}
+
+workspace_command() {
+  printf '%s\n' 'clear; cat .agent-role.md; echo; echo "本 QA workspace 已准备好。启动: 开工"; echo "备用: ./start 或 ./开工"'
+}
+
+echo "Preparing ${count} extra QA workspaces..."
+
+cmux_ready=0
+if [[ "$open_workspaces" -eq 1 ]]; then
+  if ensure_cmux_ready; then
+    cmux_ready=1
+  elif [[ "$force_open_fallback" -eq 1 ]]; then
+    echo "cmux CLI socket is unavailable; force-opening with macOS open fallback." >&2
+    echo "If cmux creates blank extra windows, rerun without --force-open-fallback." >&2
+  else
+    open_workspaces=0
+    echo "cmux CLI socket is unavailable, so this script will prepare QA worktrees only." >&2
+    echo "This avoids the duplicate blank-window issue from macOS open fallback." >&2
+  fi
+fi
 
 for i in $(seq 1 "$count"); do
   slug="qa-${i}"
@@ -149,12 +243,26 @@ for i in $(seq 1 "$count"); do
   ensure_worktree "$slug"
   sync_to_main_if_clean "$dir"
   write_role_files "$slug"
-  open -a cmux "$dir"
+
+  if [[ "$open_workspaces" -eq 1 ]]; then
+    if cmux_has_workspace_for_dir "$dir"; then
+      echo "Skip existing cmux QA workspace: ${slug} (${dir})"
+    elif [[ "$cmux_ready" -eq 1 ]]; then
+      "$cmux_cli" new-workspace \
+        --name "NRG QA ${i}" \
+        --description "QA 测试 Agent ${i} · codex/${slug}" \
+        --cwd "$dir" \
+        --command "$(workspace_command)" >/dev/null
+    else
+      open -a cmux "$dir"
+      sleep 0.2
+    fi
+  fi
 done
 
 cat <<EOF
 
-Done. Extra QA workspaces are open or requested in cmux.
+Done. Extra QA workspaces are prepared.
 
 In each QA workspace, type:
   开工

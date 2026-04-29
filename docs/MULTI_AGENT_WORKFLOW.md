@@ -67,7 +67,9 @@
 bash scripts/start_extra_qa_cmux.sh 3
 ```
 
-打开后每个 QA workspace 输入:
+脚本会优先用 cmux CLI 创建 workspace. 如果 cmux CLI socket 不可用, 只准备 worktree, 不再强行 `open -a` 打开, 避免出现一堆空白窗口.
+
+打开后的每个 QA workspace 输入:
 
 ```bash
 开工
@@ -79,6 +81,77 @@ bash scripts/start_extra_qa_cmux.sh 3
 - `qa-3`: 公众号 HTML 预览 / 作品库回归
 
 不要让 3 个 QA 同时测同一个外部 credits 链路, 避免重复烧.
+
+---
+
+## 3.3 共享收件箱模式
+
+老板不应该在多个窗口之间复制粘贴报告. 默认用文件当中转站:
+
+```text
+开发 / QA / Review Agent
+  -> 自己把报告写到 docs/agent-handoff/
+  -> 自己 commit 到本分支
+  -> 只回一句: 报告路径 + commit + 是否需要总控处理
+
+总控 Agent
+  -> 主动扫描所有 worktree 的 docs/agent-handoff/
+  -> 自己读取报告、排序、分派返工或安排 QA
+```
+
+总控扫描命令:
+
+```bash
+python3 scripts/agent_inbox.py --hours 24
+```
+
+按任务查:
+
+```bash
+python3 scripts/agent_inbox.py --task T-013 --all
+```
+
+老板短口令:
+
+```text
+收件箱
+```
+
+总控听到后必须自己运行 `scripts/agent_inbox.py`, 不要要求老板粘贴报告内容.
+
+Agent 完成时只需要给老板一句收据:
+
+```text
+T-013 已写交接: docs/agent-handoff/QA_T013_20260429.md
+commit: abc1234
+请总控收件箱处理。
+```
+
+如果 2-3 个 QA 完成时间不同, 总控不要等老板逐条转发; 直接按收件箱里已有报告先处理, 后到的报告下一轮再扫.
+
+### 自动监控
+
+如果老板不想说口令, 开一个本地监控器:
+
+```bash
+bash scripts/start_agent_monitor.sh
+```
+
+它会每 10 秒扫描所有 worktree 的 `docs/agent-handoff/`, 发现新报告或报告更新时发 macOS 通知.
+
+也可以双击桌面:
+
+```text
+打开内容工厂Agent监控.app
+```
+
+监控器只负责提醒, 不改代码、不合并、不烧 credits. 真正需要业务选择时, 才交给老板确认.
+
+停止监控器:
+
+```bash
+bash scripts/start_agent_monitor.sh --stop
+```
 
 ---
 
@@ -175,6 +248,8 @@ bash scripts/start_extra_qa_cmux.sh 3
 一键准备 5 个 cmux workspace:
 
 最简单: 双击桌面上的 `打开内容工厂5个Agent.app`.
+
+如果想让报告完成时自动提醒, 再双击桌面上的 `打开内容工厂Agent监控.app`.
 
 如果桌面按钮丢了, 重新安装:
 

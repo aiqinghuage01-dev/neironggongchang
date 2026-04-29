@@ -17,3 +17,6 @@ YYYYMMDD-T001-controller-summary.md
 - 审查 Agent 用 `TEMPLATE_REVIEW_REPORT.md`.
 - 总控可以把关键结论汇总进 `docs/AGENT_BOARD.md` 和 `docs/PROGRESS.md`.
 - 不要把密钥、`.env`、真实 token 粘进报告.
+- Agent 完成后必须自己写报告并 commit, 不让老板复制粘贴报告全文.
+- 总控用 `python3 scripts/agent_inbox.py --hours 24` 扫描所有 worktree 报告.
+- 需要自动提醒时, 开 `bash scripts/start_agent_monitor.sh`.

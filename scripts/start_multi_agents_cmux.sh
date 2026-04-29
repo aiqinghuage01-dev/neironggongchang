@@ -275,12 +275,14 @@ write_role_files() {
 - 严格按本角色文件范围工作.
 - 副 Agent 不改 docs/PROGRESS.md.
 - 没有证据不要说"完成".
+- 完成后把报告写到 docs/agent-handoff/ 并 commit.
+- 不让老板复制粘贴报告全文; 总控通过收件箱读取.
 
 老板短口令:
 - "领 T-XXX" = 去 docs/AGENT_BOARD.md 找任务并按角色开工.
 - "测一下" = QA 按 ROLE_QA 做真实测试.
 - "审一下" = 审查 Agent 只读审查, 不改代码.
-- "汇总一下" = 总控读取报告并决定合并或返工.
+- "汇总一下" / 收件箱 = 总控运行 python3 scripts/agent_inbox.py --hours 24, 自己读取报告并决定合并或返工.
 EOF
 
   if [[ "$tool" == "claude" ]]; then

@@ -48,3 +48,10 @@ GPT 5.5 / Codex.
 ## 交付报告
 
 使用 `docs/agent-handoff/TEMPLATE_QA_REPORT.md`.
+
+完成后必须:
+- 把报告写进 `docs/agent-handoff/`.
+- commit 测试报告和必要证据脚本; 不改业务代码.
+- 在报告里写清楚「下一步建议」和「是否需要老板确认」.
+- 只给老板一句收据: 报告路径 + commit + 是否需要总控处理.
+- 不要求老板复制粘贴报告全文; 总控会通过收件箱读取.

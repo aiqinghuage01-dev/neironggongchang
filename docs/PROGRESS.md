@@ -4,12 +4,14 @@
 
 ---
 
-## 当前状态 (2026-04-29 · T-012 作品库回归通过)
+## 当前状态 (2026-04-29 · 多 Agent 收件箱监控)
 
-**版本**: v0.7.6-agent14 — 作品库 T-009/T-010/T-011 已经 T-012 独立 QA 回归通过; 公众号真实草稿推送 T-006 已通过; 直接出图 apimart 单图 T-007/T-008 已通过。
+**版本**: v0.7.6-agent15 — 多 Agent 协作改为共享收件箱 + 自动监控提醒; 作品库 T-009/T-010/T-011 已经 T-012 独立 QA 回归通过; 公众号真实草稿推送 T-006 已通过; 直接出图 apimart 单图 T-007/T-008 已通过。
 
 ### 当前进行
 - 仅剩 T-013: 直接出图 apimart download 失败路径待补 fault injection; T-012 通过不代表项目整体通过。
+- 多 Agent 协作流程已调整: Agent 自己写 `docs/agent-handoff/` 报告并 commit, 总控用收件箱脚本主动扫描, 老板不再做人肉复制粘贴中转。
+- 额外 QA cmux 脚本已改为 socket 不可用时只准备 worktree, 不再强行 fallback 打开多个空白窗口。
 
 ### QA 证据 · 公众号
 - QA 报告已合入主线: `docs/agent-handoff/QA_WECHAT_20260429.md`
@@ -126,6 +128,26 @@
   - `T-012`: 已完成, 修后作品库全链路回归.
   - `T-013`: 补直接出图 download 失败路径 fault injection.
 - T-013 完成并由 QA 真测通过前, 不能说项目整体完成.
+
+---
+
+## 上一里程碑 (2026-04-29 · D-116 Agent 收件箱监控)
+
+**版本**: v0.7.6-agent15 — 多 Agent 协作从“老板复制粘贴报告”改为“共享收件箱 + 自动监控提醒”。
+
+### D-116 修复
+- 新增 `scripts/agent_inbox.py`: 扫描主 repo 和 `~/Desktop/nrg-worktrees/*/docs/agent-handoff/` 的报告, 支持 `--hours`, `--task`, `--json`, `--watch`, `--notify`.
+- 新增 `scripts/start_agent_monitor.sh`: 用 macOS LaunchAgent 后台监控收件箱, 新报告/更新报告时发通知; 支持 `--stop` / `--status`.
+- `scripts/install_agent_desktop_launcher.sh`: 额外安装桌面按钮 `打开内容工厂Agent监控.app`.
+- 角色文档和报告模板新增「下一步建议」「是否需要老板确认」, 明确 Agent 完成后自己写报告并 commit, 不让老板传话.
+- `scripts/start_extra_qa_cmux.sh`: cmux CLI socket 不可用时默认只准备 QA worktree, 避免 fallback 造成重复空白窗口.
+
+### D-116 验证
+- `python3 scripts/agent_inbox.py --hours 48` -> 能读取主 repo 与 worktree 报告.
+- `python3 scripts/agent_inbox.py --task T-012 --all --json` -> 能按任务过滤.
+- `bash -n scripts/start_agent_monitor.sh scripts/start_extra_qa_cmux.sh scripts/install_agent_desktop_launcher.sh`.
+- `bash scripts/install_agent_desktop_launcher.sh` -> 桌面 5 Agent 按钮和 Agent 监控按钮已生成.
+- `bash scripts/start_agent_monitor.sh` + `--status` -> LaunchAgent 可启动并保持后台运行.
 
 ---
 
