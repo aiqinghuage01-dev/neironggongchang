@@ -48,13 +48,13 @@ function PageHome({ onNav }) {
               onClick={() => onNav("moments")}
             />
             <BigAction
-              icon="✏️" title="写文案" subtitle="投流 / 改写 / 策划 / 审查 6 个 AI 工具"
+              icon="✏️" title="写文案" subtitle="投流 / 改写 / 策划 / 审查 6 个写作工具"
               stat="6 个工具按场景分"
               onClick={() => onNav("write")}
             />
             <BigAction
-              icon="🎨" title="出图片" subtitle="直接出图 / 即梦 AIGC · 一句话出图"
-              stat="2 个引擎按场景选"
+              icon="🎨" title="出图片" subtitle="直接出图 / 即梦图片视频 · 一句话出图"
+              stat="2 种方式按场景选"
               onClick={() => onNav("image")}
             />
             <BigAction

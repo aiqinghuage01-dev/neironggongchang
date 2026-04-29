@@ -56,7 +56,7 @@ function PageWrite({ onNav }) {
     <div style={{ display: "flex", flexDirection: "column", height: "100%", position: "relative" }}>
       <div style={{ padding: "22px 32px 18px", background: "#fff", borderBottom: `1px solid ${T.border}` }}>
         <div style={{ fontSize: 22, fontWeight: 600, letterSpacing: -0.2 }}>✏️ 写文案</div>
-        <div style={{ fontSize: 13, color: T.muted, marginTop: 6 }}>用 AI 帮你产出文案 · 6 个工具按场景分</div>
+        <div style={{ fontSize: 13, color: T.muted, marginTop: 6 }}>让小华帮你产出文案 · 6 个工具按场景分</div>
       </div>
 
       <div style={{ flex: 1, overflow: "auto", padding: "20px 32px 60px", background: T.bg }}>
@@ -64,9 +64,9 @@ function PageWrite({ onNav }) {
 
           {/* === 顶部 4 个 stats 卡 === */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 24 }}>
-            <StatBlock label="📝 今日产出" value={todayText} sub={`条文案 · 来自 6 个 AI 工具`} />
+            <StatBlock label="📝 今日产出" value={todayText} sub={`条文案 · 来自 6 个写作工具`} />
             <StatBlock label="🔥 今日热门" value={hottestTool ? hottestTool.label : "—"} sub={hottest ? `用了 ${hottest[1]} 次` : "今天还没用过"} small />
-            <StatBlock label="⚡ AI token" value={(todayTokens/1000).toFixed(1) + "K"} sub={`今日 · ¥${todayCost.toFixed(2)}`} />
+            <StatBlock label="⚡ 今日用量" value={Math.round(todayTokens * 0.7 / 1000) + "K字"} sub={`今日 · 约 ¥${todayCost.toFixed(2)}`} />
             <StatBlock label="📂 累计作品" value={totalText} sub="去作品库看全部 →" sublink={() => onNav("works")} />
           </div>
 
@@ -181,7 +181,6 @@ function RecentTextCard({ w, onClick }) {
     onMouseLeave={e => { e.currentTarget.style.transform = ""; e.currentTarget.style.boxShadow = ""; }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
         <span style={{ padding: "3px 10px", borderRadius: 100, background: bg, color: fg, fontSize: 11.5, fontWeight: 500 }}>{lbl}</span>
-        {w.tokens_used > 0 && <span style={{ fontSize: 11, color: T.muted2 }}>{w.tokens_used} token</span>}
         <div style={{ flex: 1 }} />
         <span style={{ fontSize: 11, color: T.muted2 }}>今天 {time}</span>
       </div>
