@@ -37,6 +37,35 @@ def _to_media_url(local_path: Path | str | None) -> str | None:
         return None
 
 
+def _mark_local_delivery_failed(rj: dict[str, Any], result: Any, error: str) -> None:
+    """Remote image is done, but local delivery failed; finish the user task as failed.
+
+    remote_jobs marks the provider row done before calling on_done. If we only log here,
+    the shared watcher will still finish the associated task as ok with a raw result.
+    """
+    if isinstance(result, dict):
+        result.update({"error": error, "download_failed": True})
+
+    rj_id = rj.get("id")
+    if rj_id:
+        try:
+            from backend.services import remote_jobs
+            remote_jobs.mark_failed(rj_id, error=error)
+        except Exception as e:
+            log.error(f"apimart mark remote_job failed skipped: {e}")
+
+    task_id = rj.get("task_id")
+    if not task_id:
+        return
+    try:
+        from backend.services import tasks as tasks_service
+        task = tasks_service.get_task(task_id)
+        if task and task["status"] in ("running", "pending"):
+            tasks_service.finish_task(task_id, result=result, error=error, status="failed")
+    except Exception as e:
+        log.error(f"apimart mark task failed skipped: {e}")
+
+
 def _poll_for_watcher(submit_id: str) -> dict[str, Any]:
     """submit_id = apimart task_id.
     T12: APIMART_MOCK=1 跳过真 API 立即返 done + 现成 png 假产物.
@@ -112,7 +141,9 @@ def _on_done_for_watcher(rj: dict[str, Any], result: Any) -> None:
     payload = rj.get("submit_payload") or {}
     url = (result or {}).get("url", "")
     if not url:
+        err = "apimart error: 图片已生成, 但没有拿到下载地址; 本次没有写入作品库, 请重试"
         log.warning(f"apimart {rj['submit_id']} done but no url, raw={result}")
+        _mark_local_delivery_failed(rj, result, err)
         return
 
     # 决定 dest 路径
@@ -140,7 +171,9 @@ def _on_done_for_watcher(rj: dict[str, Any], result: Any) -> None:
             with ApimartClient() as c:
                 c.download(url, dest)
     except Exception as e:
+        err = f"apimart error: 图片已生成, 但下载到本地失败; 本次没有写入作品库, 请重试 ({type(e).__name__})"
         log.error(f"apimart download {url[:80]} → {dest} failed: {e}")
+        _mark_local_delivery_failed(rj, result, err)
         return
 
     elapsed_sec = max(0, int(time.time()) - int(rj.get("submitted_at") or time.time()))
@@ -215,7 +248,7 @@ def submit_and_register(
     task_id 是上层 tasks DB 的 id (跟 apimart 内部 task_id 不同, 容易混). watcher 拿到 done 后:
       1. 下载到 dest_path (没指定走默认)
       2. 入作品库 (kind 决定 type/source_skill)
-      3. finish_associated_task(ok)
+      3. 下载成功则 finish_associated_task(ok); 下载失败则标记关联 task failed
     """
     from shortvideo.apimart import ApimartClient
     from backend.services import remote_jobs
