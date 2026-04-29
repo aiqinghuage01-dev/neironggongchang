@@ -366,7 +366,7 @@ function PageImageGen({ onNav }) {
 
             {result && (
               <div style={{ marginTop: 16, fontSize: 12, color: T.muted, textAlign: "center" }}>
-                上次出了 {(result.images || []).length} 张, 点上方"出图"会清空再来
+                上次出了 {normalizeImageGenImages(result).length} 张, 点上方"出图"会清空再来
               </div>
             )}
           </div>
@@ -425,10 +425,45 @@ function PageImageGen({ onNav }) {
 }
 
 // ─── 结果展示 (双卡 / 多卡 grid) ───────────────────────────
+function normalizeImageGenImages(result) {
+  if (!result) return [];
+  if (Array.isArray(result.images)) return result.images;
+  if (Array.isArray(result.covers)) return result.covers;
+
+  const directUrl = result.url || result.media_url || result.local_path;
+  if (directUrl || result.task_id || result.apimart_task_id || result.submit_id) {
+    return [{
+      url: result.url || null,
+      local_path: result.local_path || null,
+      media_url: result.media_url || null,
+      task_id: result.task_id || result.apimart_task_id || result.submit_id || null,
+      elapsed_sec: result.elapsed_sec,
+    }];
+  }
+
+  const rawImages = result.raw?.data?.result?.images;
+  if (Array.isArray(rawImages) && rawImages.length > 0) {
+    return rawImages.map((img) => {
+      const u = img && img.url;
+      return {
+        url: Array.isArray(u) ? u[0] : u,
+        task_id: result.task_id || null,
+        elapsed_sec: result.elapsed_sec,
+      };
+    }).filter(img => img.url);
+  }
+  return [];
+}
+
 function ImageGenResults({ result, prompt, onAgain, onReset }) {
-  const images = result.images || [];
+  const images = normalizeImageGenImages(result);
   const ok = images.filter(i => !i.error);
   const failed = images.filter(i => i.error);
+  const metaParts = [
+    result.engine || "apimart",
+    result.size,
+    result.elapsed_sec != null ? `总耗时 ${result.elapsed_sec}s` : null,
+  ].filter(Boolean);
 
   return (
     <div style={{ padding: "32px 40px 60px", maxWidth: 1280, margin: "0 auto" }}>
@@ -438,7 +473,7 @@ function ImageGenResults({ result, prompt, onAgain, onReset }) {
             {ok.length === images.length ? "✨" : ok.length === 0 ? "😅" : "⚠️"} 出图完成 · {ok.length}/{images.length} 成功
           </div>
           <div style={{ fontSize: 12, color: T.muted, marginTop: 4 }}>
-            {result.engine} · {result.size} · 总耗时 {result.elapsed_sec}s
+            {metaParts.join(" · ")}
           </div>
         </div>
         <Btn variant="outline" onClick={onAgain}>🔄 同 prompt 再来一批</Btn>
@@ -589,7 +624,7 @@ function ImgBatchTaskCard({ taskId, prompt, idx, n }) {
   const poller = useTaskPoller(taskId);
   const result = poller.task?.result || null;
   // 兼容两种格式: image_engine.generate (images) / wechat gen_cover_batch (covers)
-  const images = result?.images || result?.covers || [];
+  const images = normalizeImageGenImages(result);
   const okImages = images.filter(i => !i.error && (i.media_url || i.local_path || i.url));
   const elapsed = poller.elapsedSec || 0;
   const pct = poller.progressPct || (poller.isRunning ? 15 : 0);

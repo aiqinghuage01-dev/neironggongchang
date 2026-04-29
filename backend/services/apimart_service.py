@@ -16,12 +16,25 @@ scope:
 from __future__ import annotations
 
 import logging
+import shutil
 import time
 import uuid
 from pathlib import Path
 from typing import Any
 
 log = logging.getLogger("apimart_service")
+
+
+def _to_media_url(local_path: Path | str | None) -> str | None:
+    """Convert a generated file under data/ to the frontend /media URL."""
+    if not local_path:
+        return None
+    try:
+        from shortvideo.config import DATA_DIR
+        rel = Path(local_path).resolve().relative_to(DATA_DIR.resolve())
+        return f"/media/{rel.as_posix()}"
+    except Exception:
+        return None
 
 
 def _poll_for_watcher(submit_id: str) -> dict[str, Any]:
@@ -114,12 +127,41 @@ def _on_done_for_watcher(rj: dict[str, Any], result: Any) -> None:
         dest = d / f"apimart_{rj['submit_id'][:12]}_{uuid.uuid4().hex[:6]}.png"
 
     try:
-        from shortvideo.apimart import ApimartClient
-        with ApimartClient() as c:
-            c.download(url, dest)
+        src_local = (result or {}).get("local_path") if isinstance(result, dict) else None
+        if src_local and Path(src_local).exists():
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            if Path(src_local).resolve() != dest.resolve():
+                shutil.copy2(src_local, dest)
+        elif isinstance(url, str) and url.startswith("file://") and Path(url[7:]).exists():
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(Path(url[7:]), dest)
+        else:
+            from shortvideo.apimart import ApimartClient
+            with ApimartClient() as c:
+                c.download(url, dest)
     except Exception as e:
         log.error(f"apimart download {url[:80]} → {dest} failed: {e}")
         return
+
+    elapsed_sec = max(0, int(time.time()) - int(rj.get("submitted_at") or time.time()))
+    media_url = _to_media_url(dest)
+    image_result = {
+        "url": url,
+        "local_path": str(dest),
+        "media_url": media_url,
+        "task_id": rj["submit_id"],
+        "elapsed_sec": elapsed_sec,
+    }
+    if isinstance(result, dict):
+        result.update({
+            "images": [image_result],
+            "engine": "apimart",
+            "n": 1,
+            "size": payload.get("size") or "1:1",
+            "elapsed_sec": elapsed_sec,
+            "local_path": str(dest),
+            "media_url": media_url,
+        })
 
     # 入作品库 (按 kind 分流)
     kind = payload.get("kind", "image")
