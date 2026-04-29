@@ -147,6 +147,9 @@ write_role_files() {
 - 没有截图、console/pageerror、curl/pytest/task id 证据, 不要说"通过".
 - 完成后把报告写到 docs/agent-handoff/ 并 commit.
 - 不让老板复制粘贴报告全文; 总控通过收件箱读取.
+- 启动后先领共享任务队列, 不等老板手工派:
+  python3 "${repo_root}/scripts/agent_queue.py" claim --role qa --agent "${slug}" --format prompt
+- 领到任务就执行; 完成后用 agent_queue.py done/block 更新状态; 然后继续 claim 下一条.
 
 老板短口令:
 - "测数字人" = 数字人最小 3-5 秒真烧测试.

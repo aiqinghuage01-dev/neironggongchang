@@ -55,3 +55,19 @@ GPT 5.5 / Codex.
 - 在报告里写清楚「下一步建议」和「是否需要老板确认」.
 - 只给老板一句收据: 报告路径 + commit + 是否需要总控处理.
 - 不要求老板复制粘贴报告全文; 总控会通过收件箱读取.
+
+## 自动领任务
+
+开工后先运行:
+
+```bash
+python3 ~/Desktop/neironggongchang/scripts/agent_queue.py claim --role media --agent media-dev --format prompt
+```
+
+如果领到任务, 直接按任务说明执行. 完成后:
+
+```bash
+python3 ~/Desktop/neironggongchang/scripts/agent_queue.py done T-XXX --agent media-dev --report <报告路径> --commit <commit>
+```
+
+如果需要老板做业务选择, 才用 `block --owner-decision`. 完成或阻塞后继续 claim 下一条媒体开发任务.

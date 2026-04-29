@@ -56,6 +56,26 @@ python3 scripts/agent_inbox.py --hours 24
 bash scripts/start_agent_monitor.sh
 ```
 
+## 自动任务队列
+
+老板只在总控窗口说业务目标. 总控不要让老板复制任务给副 Agent, 而是写入共享队列:
+
+```bash
+python3 ~/Desktop/neironggongchang/scripts/agent_queue.py add --id T-XXX --role qa --title "..." --instructions "..." --acceptance "..."
+```
+
+查看队列:
+
+```bash
+python3 ~/Desktop/neironggongchang/scripts/agent_queue.py list
+```
+
+总控职责:
+- 把需要开发/QA/Review 的下一步写入队列.
+- 任务说明必须包含范围、验收标准、是否允许真烧 credits.
+- 只有需要老板做业务选择时才打断老板.
+- 不要求老板去别的窗口转发任务.
+
 ## 每次交付
 
 - 今日任务拆分.

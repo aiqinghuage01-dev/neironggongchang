@@ -141,6 +141,17 @@ role_tool() {
   esac
 }
 
+role_queue_role() {
+  case "$1" in
+    controller) printf '%s\n' "controller" ;;
+    content) printf '%s\n' "content" ;;
+    media) printf '%s\n' "media" ;;
+    qa) printf '%s\n' "qa" ;;
+    review) printf '%s\n' "review" ;;
+    *) return 1 ;;
+  esac
+}
+
 agent_display_name() {
   case "$1" in
     controller) printf '%s\n' "NRG 总控" ;;
@@ -236,13 +247,14 @@ EOF
 
 write_role_files() {
   local role="$1"
-  local dir title doc branch tool display_name codex_search_arg
+  local dir title doc branch tool display_name queue_role codex_search_arg
   dir="$(role_dir "$role")"
   title="$(role_title "$role")"
   doc="$(role_doc "$role")"
   branch="$(role_branch "$role")"
   tool="$(role_tool "$role")"
   display_name="$(agent_display_name "$role")"
+  queue_role="$(role_queue_role "$role")"
   codex_search_arg=""
   if [[ "$codex_search" == "1" || "$codex_search" == "true" || "$codex_search" == "yes" ]]; then
     codex_search_arg="--search"
@@ -277,6 +289,9 @@ write_role_files() {
 - 没有证据不要说"完成".
 - 完成后把报告写到 docs/agent-handoff/ 并 commit.
 - 不让老板复制粘贴报告全文; 总控通过收件箱读取.
+- 启动后先领共享任务队列, 不等老板手工派:
+  python3 "${repo_root}/scripts/agent_queue.py" claim --role ${queue_role} --agent "${display_name}" --format prompt
+- 领到任务就执行; 完成后用 agent_queue.py done/block 更新状态; 然后继续 claim 下一条.
 
 老板短口令:
 - "领 T-XXX" = 去 docs/AGENT_BOARD.md 找任务并按角色开工.

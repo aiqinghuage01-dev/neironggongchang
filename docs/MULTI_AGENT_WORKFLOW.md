@@ -155,6 +155,63 @@ bash scripts/start_agent_monitor.sh --stop
 
 ---
 
+## 3.4 自动任务队列
+
+共享收件箱解决「报告不用老板转发」, 自动任务队列解决「任务不用老板转发」.
+
+队列位置:
+
+```text
+~/Desktop/nrg-agent-queue/tasks.json
+```
+
+这个目录不属于任何单个 git worktree, 所以总控、内容开发、媒体开发、QA、Review 都能读写同一份队列.
+
+总控派任务时写入队列:
+
+```bash
+python3 ~/Desktop/neironggongchang/scripts/agent_queue.py add \
+  --id T-015 \
+  --role qa \
+  --title "投流 n=1 页面真烧复测" \
+  --instructions "只提交 1 次投流 n=1 页面真烧; task ok 才算通过; 不通过就写报告并停止." \
+  --acceptance "页面/接口有结果; console/pageerror=0; 记录耗时和 AI usage." \
+  --priority 10
+```
+
+Agent 开工后自己领任务:
+
+```bash
+python3 ~/Desktop/neironggongchang/scripts/agent_queue.py claim --role qa --agent qa-1 --format prompt
+```
+
+完成后自己更新队列:
+
+```bash
+python3 ~/Desktop/neironggongchang/scripts/agent_queue.py done T-015 --agent qa-1 --report docs/agent-handoff/QA_T015_20260429.md --commit abc1234
+```
+
+需要老板确认时才阻塞:
+
+```bash
+python3 ~/Desktop/neironggongchang/scripts/agent_queue.py block T-016 --agent qa-1 --reason "热点 4 版会额外真烧 credits, 是否继续?" --owner-decision
+```
+
+队列状态:
+
+```bash
+python3 ~/Desktop/neironggongchang/scripts/agent_queue.py list
+```
+
+Agent 规则:
+- 开工后先 claim 队列, 不等老板手工派.
+- 有任务就直接做; 没任务才等待.
+- 完成后写交接报告 + commit + `agent_queue.py done`.
+- 阻塞只能因为需要老板做业务选择、缺密钥/外部服务、或依赖任务未完成.
+- 完成/阻塞后继续 claim 下一条适合自己角色的任务.
+
+---
+
 ## 4. 禁止并行改的高风险文件
 
 这些文件像主水管, 同一时间只允许一个 Agent 改:

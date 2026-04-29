@@ -4,16 +4,17 @@
 
 ---
 
-## 当前状态 (2026-04-29 · 总控审查: T-013/T-014 待 QA)
+## 当前状态 (2026-04-29 · 自动任务队列已启用)
 
-**版本**: v0.7.6-agent17 — 总控审查完成: T-013/T-014 均有开发自验证据, 但还没有独立 QA 通过; T-015/T-016 仍是最终收口阻塞. 作品库/公众号/直接出图前序任务仍保持通过。
+**版本**: v0.7.6-agent18 — 多 Agent 协作新增共享任务队列; 总控把任务写入 `~/Desktop/nrg-agent-queue/`, QA/开发/Review 启动后自己领取, 老板不再做人肉传话筒。T-013/T-014 均有开发自验证据, 但还没有独立 QA 通过; T-015/T-016 仍是最终收口阻塞。
 
 ### 当前进行
 - T-014: 内容开发提交 `5d4fc59`, 隔离端口真实 curl `n=1` 53 秒 `ok`; 只能算开发自验通过, 等 T-015 独立 QA 页面真烧.
-- T-015: 下一步优先分配 QA-1, 只提交 1 次投流 `n=1`, 必须交截图/console/pageerror/task/AI usage 证据.
-- T-016: 仍阻塞在 T-015 之后; 投流通过后再复测录音改写真实 LLM 和热点改写 4 版真实链路.
+- T-015: 已入共享任务队列, role=`qa`, priority=10; QA Agent 新启动后会自己 claim, 只提交 1 次投流 `n=1`, 必须交截图/console/pageerror/task/AI usage 证据.
+- T-016: 已入共享任务队列, role=`qa`, depends_on=`T-015`; T-015 未 done 前不会被自动领取.
 - T-013: 媒体开发提交 `99f1fb3`, fault injection 自验通过; `codex/media-dev` 落后主线, 不可整分支合并, 只能同步主线后再合或 cherry-pick 单提交.
 - 多 Agent 协作流程已调整: Agent 自己写 `docs/agent-handoff/` 报告并 commit, 总控用收件箱脚本主动扫描, 老板不再做人肉复制粘贴中转。
+- 自动任务队列已启用: `python3 ~/Desktop/neironggongchang/scripts/agent_queue.py list` 可看队列; `claim` / `done` / `block --owner-decision` 分别用于领任务、完成、需要老板选择时阻塞.
 - 额外 QA cmux 脚本已改为 socket 不可用时只准备 worktree, 不再强行 fallback 打开多个空白窗口。
 
 ### 总控审查证据
@@ -23,6 +24,7 @@
 - QA-1 待命报告: `docs/agent-handoff/QA1_READY_20260429.md` (worktree: `qa-1`).
 - 总控审查报告: `docs/agent-handoff/CONTROLLER_AUDIT_20260429.md`.
 - 合并风险: `git diff main..codex/media-dev` 显示该分支会删除 `scripts/agent_inbox.py`, `scripts/start_agent_monitor.sh` 和多份主线报告/角色文档; 不允许整分支 merge.
+- 任务队列: `~/Desktop/nrg-agent-queue/tasks.json` 已有 T-015 / T-016.
 
 ### QA 证据 · 公众号
 - QA 报告已合入主线: `docs/agent-handoff/QA_WECHAT_20260429.md`
@@ -142,9 +144,28 @@
   - `T-012`: 已完成, 修后作品库全链路回归.
   - `T-013`: 待 QA, 但先处理 media 分支合并风险.
   - `T-014`: 待 QA.
-  - `T-015`: 下一步优先分配 QA-1.
-  - `T-016`: 等 T-015 通过后再启动.
+  - `T-015`: 已进入共享任务队列, QA Agent 自动领取.
+  - `T-016`: 已进入共享任务队列, 依赖 T-015 done.
 - T-013/T-014/T-015/T-016 完成并由 QA 真测通过前, 不能说项目整体完成.
+
+---
+
+## 上一里程碑 (2026-04-29 · D-118 自动任务队列)
+
+**版本**: v0.7.6-agent18 — 多 Agent 协作新增共享任务队列, 解决老板仍需复制任务给各 Agent 的问题。
+
+### D-118 修复
+- 新增 `scripts/agent_queue.py`: 本机共享任务队列, 默认目录 `~/Desktop/nrg-agent-queue/`.
+- 支持 `add` / `list` / `claim` / `done` / `block --owner-decision` / `reset`.
+- 队列支持 `depends_on`, T-016 已依赖 T-015, 避免投流未通过时自动继续烧录音/热点 credits.
+- 更新角色文档和 cmux 启动角色说明: Agent 开工后先 claim 自己角色的任务, 完成后自己写报告、commit、更新队列状态, 再继续 claim 下一条.
+- `docs/AGENT_BOARD.md`: T-015/T-016 标记为队列中.
+
+### D-118 验证
+- `python3 -m py_compile scripts/agent_queue.py scripts/agent_inbox.py`.
+- `bash -n scripts/start_multi_agents_cmux.sh scripts/start_extra_qa_cmux.sh scripts/start_agent_monitor.sh`.
+- 临时队列验证 `add -> claim --format prompt -> done -> list --format json` 通过.
+- 真实队列已初始化: T-015 queued, T-016 queued + depends_on=T-015.
 
 ---
 
