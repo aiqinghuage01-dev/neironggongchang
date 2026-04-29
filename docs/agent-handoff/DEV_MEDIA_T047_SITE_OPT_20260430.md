@@ -43,11 +43,11 @@
 ## 验证证据
 
 - 静态检查: `git diff --check` 通过。
-- Pytest:  
-  `/Users/black.chen/Desktop/neironggongchang/.venv/bin/pytest -q tests/test_works_api.py tests/test_apimart_service.py tests/test_materials_lib_api.py`  
+- Pytest:
+  `/Users/black.chen/Desktop/neironggongchang/.venv/bin/pytest -q tests/test_works_api.py tests/test_apimart_service.py tests/test_materials_lib_api.py`
   结果: `61 passed`。
-- API 真请求:  
-  `curl -s http://127.0.0.1:18000/api/material-lib/categories`  
+- API 真请求:
+  `curl -s http://127.0.0.1:18000/api/material-lib/categories`
   证据: `source_label` 返回 `临时素材源`。
 - Playwright 浏览器闭环:
   - 覆盖页面: `dreamina`, `imagegen`, `dhv5`, `works`, `materials`。

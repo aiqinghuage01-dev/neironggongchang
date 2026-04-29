@@ -8,9 +8,9 @@
 
 | 角色 | 状态 | 工作区 | 当前任务 |
 |---|---|---|---|
-| 总控 Agent | 自动派工已接入 | `~/Desktop/neironggongchang` | T-058 返修已通过 T-059 独立 QA; 继续按队列推进 |
+| 总控 Agent | 自动派工已接入 | `~/Desktop/neironggongchang` | T-059/T-047 已合入 main; 继续按队列推进 |
 | 内容开发 Agent | 空闲 | `~/Desktop/nrg-worktrees/content-dev` | T-021/T-022 已合入 main; 等新内容任务 |
-| 媒体开发 Agent | 空闲 | `~/Desktop/nrg-worktrees/media-dev` | T-035/T-038 重复 worker 已由总控停止并 block |
+| 媒体开发 Agent | 空闲 | `~/Desktop/nrg-worktrees/media-dev` | T-047 已完成并合入 main; 等新媒体任务 |
 | QA 测试 Agent | 空闲 | `~/Desktop/nrg-worktrees/qa`, `~/Desktop/nrg-worktrees/qa-1`, `~/Desktop/nrg-worktrees/qa-2` | T-059 已通过; 等新 QA 任务 |
 | 审查 Agent | 空闲 | `~/Desktop/nrg-worktrees/review` | T-043 已完成 |
 
@@ -57,7 +57,8 @@
 | T-043 | D-125 素材库改动只读审查 | 审查 Agent / 总控返修 | 已完成 | 只读审查 + 总控修复 | 审查无 P0; 总控已修 P1/P2: missing_at 过滤、featured 降级、limit 校验、空态引导、补 featured 测试 |
 | T-044 | 全站内容链路低风险页面巡检 | QA 测试 Agent / 总控返修 | 已完成 | 只读 QA + 总控修复 | 投流失败恢复态不再露 `没匹配到已知模式/原始 message`; 显示友好失败卡; T-055 再做独立回归 |
 | T-045 | 全站媒体链路低风险页面巡检 | QA 测试 Agent / 总控返修 | 已完成 | 只读 QA + 总控修复 | 直接出图/作品库去技术词, 作品库绝对路径过滤, 数字人 picker 只列视频并隐藏本机路径; T-055 再做独立回归 |
-| T-046~T-053 | 全站优化自动补任务窗口 | 自动创建 | pending | content/media/qa/review 分批 | `scripts/start_site_optimization_watch.sh` 未来 8 小时每 2 小时检查; 工作台空闲时自动派开发修复、QA 回归、Review 审查 |
+| T-046~T-053 | 全站优化自动补任务窗口 | 自动创建 | 进行中 | content/media/qa/review 分批 | T-046/T-047 已完成; 工作台空闲时继续自动派开发修复、QA 回归、Review 审查 |
+| T-047 | 全站媒体与资产区体验优化第一轮 | 媒体开发 Agent / 总控合入 | 已完成 | `backend/api.py`, `web/factory-dhv5-v2.jsx`, `web/factory-dreamina-v2.jsx`, `web/factory-image-gen.jsx`, `web/factory-image.jsx`, `web/factory-materials-v2.jsx`, `web/factory-shell.jsx`, `web/factory-works.jsx` | 媒体/资产区去技术词与内部词, 素材源显示“临时素材源”; pytest/curl/Playwright 通过, 未烧媒体生成 credits |
 | T-054 | 投流恢复后录音改写 + 热点改写真链路复测 | QA 测试 Agent | blocked | 只读 QA 报告; 不改功能代码 | QA 结论: 录音改写真链路通过; 热点改写 4 版 task `673043b93c2f40338e1bb00fa314ad91` 因 Opus/OpenClaw timeout 失败, 未重复提交 |
 | T-055 | T-042/T-044/T-045 返修后综合回归 | QA 测试 Agent | 已完成 | 只读 QA | QA 通过: 战略部/投流失败恢复/直接出图/作品库/数字人 picker console/pageerror/requestfailed/http error=0, 不烧 credits, 禁止词与本机路径不外露 |
 | T-056 | 全页面本机路径与技术词体验清理 | 总控 Agent | 已完成 | `web/factory-materials-v2.jsx`, `web/factory-strategy.jsx`, `web/factory-home.jsx` | 素材库默认不露 `/Users`; 战略部观察台不露 provider 工程词; 首页不露 `prompt`; 23 页可见文案扫描 + full pytest 通过 |
@@ -83,6 +84,7 @@
 - T-058 QA blocked: no-credit 独立复核确认旧 task 第 4 版正文仍用户可见 `已走技能/需要进一步操作吗`; 报告 `/Users/black.chen/Desktop/nrg-worktrees/qa/docs/agent-handoff/QA_T058_HOTREWRITE_FALLBACK_20260430.md`, commit `c662933`。
 - T-058 返修: 任务详情/列表 API 对热点改写旧结果做展示清洗, 不改原始 DB; 同一旧 task curl 详情/列表均 `v4_has_skill=false`, `v4_has_next=false`; Playwright 页面 textarea 同样干净, 截图 `/tmp/_ui_shots/t058_hotrewrite_existing_task_v4_fixed.png`。
 - T-059 QA 通过: 报告 `docs/agent-handoff/QA_T059_HOTREWRITE_LEGACY_NO_CREDIT_20260430.md`; QA commit `79c8b7d`, main cherry-pick `2461f37`; 旧 task 详情/列表和页面第 4 版 textarea 均干净, `forbiddenPosts=0`, pytest 10 passed, 未烧新热点 credits。
+- T-047 媒体/资产区优化已合入: 报告 `docs/agent-handoff/DEV_MEDIA_T047_SITE_OPT_20260430.md`; media commit `f118857`, main cherry-pick `284958e`; 即梦/直接出图/数字人/作品库/素材库可见技术词清理, Playwright 覆盖 6 个媒体页面, console/pageerror/requestfailed/http error=0。
 - D-124 素材库总控交接: `docs/agent-handoff/CONTROLLER_MATERIALS_T026_MAIN_20260429.md`.
 - D-124 验证: `python3 -m pytest -q` -> 通过; `git diff --check` -> clean; 临时 API `:18000` curl `/categories`、`/match`、`/classify-batch?limit=100` 通过; Playwright 截图 `/tmp/_ui_shots/t026_materials_desktop_home.png`, `/tmp/_ui_shots/t026_materials_desktop_category.png`, `/tmp/_ui_shots/t026_materials_desktop_match.png`, `/tmp/_ui_shots/t026_materials_mobile_home.png`, console error/pageerror/requestfailed/http error=0.
 - 总控本轮交接: `docs/agent-handoff/CONTROLLER_T013_T017_20260429_2011.md`.
