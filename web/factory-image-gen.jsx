@@ -10,6 +10,10 @@ const IMG_GEN_SIZES = [
   { id: "4:3",  label: "4:3 横版",   desc: "ppt/网页配图" },
 ];
 
+function imageEngineLabel(engine) {
+  return engine === "dreamina" ? "即梦" : "快速出图";
+}
+
 function PageImageGen({ onNav }) {
   const [prompt, setPrompt] = React.useState("");
   const [size, setSize] = React.useState("16:9");
@@ -92,7 +96,7 @@ function PageImageGen({ onNav }) {
     setErr(""); setResult(null); setTaskId(null);
     try {
       if (readyRefs.length > 0 && imgEngine === "dreamina") {
-        setErr("即梦引擎暂不支持参考图, 切回 apimart 试试");
+        setErr("即梦暂不支持参考图, 切回快速出图试试");
         return;
       }
       const r = await api.post("/api/image/generate", {
@@ -106,7 +110,7 @@ function PageImageGen({ onNav }) {
   // D-076: 批量提交 — N prompt × n 张, 立即返 N 个 task_id
   const batchPrompts = promptList.map(p => (p.text || "").trim()).filter(Boolean);
   async function generateBatch() {
-    if (batchPrompts.length === 0) { setErr("至少填一条" + (isCoverPreset ? "标题" : "prompt")); return; }
+    if (batchPrompts.length === 0) { setErr("至少填一条" + (isCoverPreset ? "标题" : "画面描述")); return; }
     setErr(""); setBatchTasks([]); setResult(null); setTaskId(null);
     try {
       if (isCoverPreset) {
@@ -118,7 +122,7 @@ function PageImageGen({ onNav }) {
         return;
       }
       if (readyRefs.length > 0 && imgEngine === "dreamina") {
-        setErr("即梦引擎暂不支持参考图, 切回 apimart 试试");
+        setErr("即梦暂不支持参考图, 切回快速出图试试");
         return;
       }
       const r = await api.post("/api/image/batch-generate", {
@@ -152,7 +156,7 @@ function PageImageGen({ onNav }) {
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <div style={{ width: 26, height: 26, borderRadius: 7, background: T.text, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13 }}>🖼️</div>
           <div style={{ fontSize: 13.5, fontWeight: 600 }}>直接出图</div>
-          <span style={{ fontSize: 11, color: T.muted, marginLeft: 6 }}>不走业务流程, prompt → 图</span>
+          <span style={{ fontSize: 11, color: T.muted, marginLeft: 6 }}>不走业务流程, 画面描述 → 图</span>
         </div>
         <div style={{ flex: 1 }} />
         <button onClick={() => onNav && onNav("home")} style={{ background: "transparent", border: "none", color: T.muted, fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}>← 返回</button>
@@ -175,8 +179,8 @@ function PageImageGen({ onNav }) {
               </div>
               <div style={{ fontSize: 13, color: T.muted, lineHeight: 1.6, marginBottom: 12 }}>
                 {batchMode
-                  ? "N 个 prompt 一次跑 · 共享比例/张数/引擎/参考图 · ≤20 条"
-                  : "贴 prompt · 选比例 · 选张数 · 默认 apimart, 旁边 chip 切即梦"}
+                  ? "多条画面描述一次跑 · 共享比例/张数/出图方式/参考图 · ≤20 条"
+                  : "写画面描述 · 选比例 · 选张数 · 默认快速出图, 旁边可切即梦"}
               </div>
               <div style={{ display: "inline-flex", gap: 4, padding: 4, background: T.bg2, borderRadius: 100, border: `1px solid ${T.borderSoft}` }}>
                 <button onClick={() => setBatchMode(false)} style={imgPillStyle(!batchMode)}>📷 单跑</button>
@@ -215,7 +219,7 @@ function PageImageGen({ onNav }) {
               <div style={{ background: "#fff", border: `1.5px solid ${T.brand}`, boxShadow: `0 0 0 5px ${T.brandSoft}`, borderRadius: 16, padding: 14, marginBottom: 14 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
                   <div style={{ fontSize: 11.5, color: T.muted2, fontWeight: 600, letterSpacing: "0.08em" }}>
-                    {isCoverPreset ? "📰 标题列表" : "📝 PROMPT 列表"}
+                    {isCoverPreset ? "📰 标题列表" : "📝 画面描述列表"}
                   </div>
                   <span style={{ fontSize: 11, color: T.muted2 }}>{promptList.length} 条 · 上限 {PROMPT_MAX}</span>
                   <div style={{ flex: 1 }} />
@@ -238,7 +242,7 @@ function PageImageGen({ onNav }) {
                       padding: 10, border: `1.5px dashed ${T.border}`, borderRadius: 10,
                       textAlign: "center", color: T.muted, fontSize: 12.5, cursor: "pointer", background: T.bg2,
                       fontFamily: "inherit",
-                    }}>+ 添加{isCoverPreset ? "标题" : " prompt"}</div>
+                    }}>+ 添加{isCoverPreset ? "标题" : "画面描述"}</div>
                   )}
                 </div>
 
@@ -291,7 +295,7 @@ function PageImageGen({ onNav }) {
                   ))}
                 </div>
                 <div style={{ fontSize: 11, color: T.muted2, marginTop: 8 }}>
-                  💡 {imgEngine === "dreamina" ? "即梦 60-120s/张" : "apimart 30-60s/张"}, 张数越多越慢
+                  💡 {imgEngine === "dreamina" ? "即梦 60-120s/张" : "快速出图 30-60s/张"}, 张数越多越慢
                 </div>
               </div>
             </div>
@@ -304,7 +308,7 @@ function PageImageGen({ onNav }) {
                 <span style={{ fontSize: 11, color: T.muted2 }}>
                   可选 · 最多 4 张 · 传了 AI 会基于图来改
                   {imgEngine === "dreamina" && (
-                    <span style={{ color: T.amber, marginLeft: 6 }}>⚠ 即梦暂不支持, 切 apimart</span>
+                    <span style={{ color: T.amber, marginLeft: 6 }}>⚠ 即梦暂不支持, 切快速出图</span>
                   )}
                 </span>
               </div>
@@ -406,10 +410,10 @@ function PageImageGen({ onNav }) {
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 20, fontWeight: 700 }}>📦 批量出图中 · {batchTasks.length} 个 task</div>
                 <div style={{ fontSize: 12, color: T.muted, marginTop: 4 }}>
-                  每条 prompt 出 {n} 张, 共 {batchTasks.length * n} 张. 并行起跑.
+                  每条画面描述出 {n} 张, 共 {batchTasks.length * n} 张. 并行起跑.
                 </div>
               </div>
-              <Btn variant="outline" onClick={() => setBatchTasks([])}>← 改 prompt</Btn>
+              <Btn variant="outline" onClick={() => setBatchTasks([])}>← 改描述</Btn>
               <Btn variant="primary" onClick={() => { setBatchTasks([]); setPromptList([{ id: `p-${Date.now()}`, text: "" }]); }}>📦 再来一批</Btn>
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(360px, 1fr))", gap: 14 }}>
@@ -460,7 +464,7 @@ function ImageGenResults({ result, prompt, onAgain, onReset }) {
   const ok = images.filter(i => !i.error);
   const failed = images.filter(i => i.error);
   const metaParts = [
-    result.engine || "apimart",
+    imageEngineLabel(result.engine || "apimart"),
     result.size,
     result.elapsed_sec != null ? `总耗时 ${result.elapsed_sec}s` : null,
   ].filter(Boolean);
@@ -476,8 +480,8 @@ function ImageGenResults({ result, prompt, onAgain, onReset }) {
             {metaParts.join(" · ")}
           </div>
         </div>
-        <Btn variant="outline" onClick={onAgain}>🔄 同 prompt 再来一批</Btn>
-        <Btn variant="primary" onClick={onReset}>✨ 换 prompt</Btn>
+        <Btn variant="outline" onClick={onAgain}>🔄 同描述再来一批</Btn>
+        <Btn variant="primary" onClick={onReset}>✨ 换描述</Btn>
       </div>
 
       <div style={{
@@ -490,7 +494,7 @@ function ImageGenResults({ result, prompt, onAgain, onReset }) {
 
       {failed.length > 0 && (
         <div style={{ marginTop: 16, padding: 12, background: T.redSoft, color: T.red, borderRadius: 8, fontSize: 12.5 }}>
-          ⚠️ {failed.length} 张失败 (常见: AI 上游限流 / 网络抖动). 点上方 "🔄 同 prompt 再来一批" 重试.
+          ⚠️ {failed.length} 张失败 (常见: AI 上游限流 / 网络抖动). 点上方 "🔄 同描述再来一批" 重试.
         </div>
       )}
     </div>
@@ -507,7 +511,7 @@ function ImageCard({ img, idx, prompt }) {
       </div>
     );
   }
-  const previewSrc = img.media_url ? api.media(img.media_url) : img.url;
+  const previewSrc = api.media(img.media_url || img.url);
   function copyUrl() {
     if (!img.url) return;
     try { navigator.clipboard.writeText(img.url); } catch (_) {}
@@ -549,7 +553,7 @@ function ImageCard({ img, idx, prompt }) {
           padding: "4px 10px", fontSize: 11.5, background: copied ? T.brandSoft : "#fff",
           border: `1px solid ${copied ? T.brand : T.border}`, borderRadius: 6,
           color: copied ? T.brand : T.muted, cursor: "pointer", fontFamily: "inherit", fontWeight: 500,
-        }}>{copied ? "✓ 复制 URL" : "📋 URL"}</button>
+        }}>{copied ? "✓ 复制链接" : "📋 链接"}</button>
         <button onClick={downloadImg} style={{
           padding: "4px 10px", fontSize: 11.5, background: "#fff",
           border: `1px solid ${T.border}`, borderRadius: 6,
@@ -595,7 +599,7 @@ function ImgPromptCard({ idx, text, n, engine, placeholderHint, onChange, onDup,
           display: "flex", alignItems: "center", justifyContent: "center",
         }}>{idx}</div>
         <div style={{ fontSize: 10.5, color: T.muted, fontFamily: "SF Mono, monospace" }}>
-          {engine || "apimart"} · {n} 张
+          {imageEngineLabel(engine || "apimart")} · {n} 张
         </div>
         <div style={{ flex: 1 }} />
         <button onClick={onDup} title="复制" style={{
@@ -668,7 +672,7 @@ function ImgBatchTaskCard({ taskId, prompt, idx, n }) {
       {poller.isOk && okImages.length > 0 && (
         <div style={{ display: "grid", gridTemplateColumns: okImages.length === 1 ? "1fr" : "1fr 1fr", gap: 6 }}>
           {okImages.map((img, j) => {
-            const src = img.media_url ? api.media(img.media_url) : img.url;
+            const src = api.media(img.media_url || img.url);
             return (
               <div key={j} style={{ background: T.bg2, borderRadius: 6, overflow: "hidden", aspectRatio: "16/9" }}>
                 {src && <ImageWithLightbox src={src} downloadName={`batch-${idx}-${j}.png`} caption={prompt.slice(0, 100)}

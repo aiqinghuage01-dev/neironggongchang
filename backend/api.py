@@ -681,6 +681,13 @@ def tasks_list(
     }
 
 
+@app.get("/api/tasks/counts", tags=["全局任务"], summary="任务状态计数")
+def tasks_counts():
+    """任务状态计数。必须放在 /api/tasks/{task_id} 前, 避免 counts 被当成 task_id。"""
+    from backend.services import tasks as tasks_service
+    return tasks_service.counts()
+
+
 @app.get("/api/tasks/{task_id}", tags=["全局任务"], summary="任务详情 (404 if not found)")
 def tasks_get(task_id: str):
     from backend.services import tasks as tasks_service
@@ -1614,6 +1621,15 @@ def stats_home():
 
 
 # ---- 作品库 ----
+def _work_media_url(p: Path) -> str | None:
+    """Only expose files that are actually served by /media."""
+    try:
+        p.resolve().relative_to(DATA_DIR.resolve())
+    except Exception:
+        return None
+    return media_url(p)
+
+
 def _work_to_api_dict(w, *, full_text: bool = False) -> dict[str, Any]:
     """Serialize a Work row for the works UI with media URLs and asset state."""
     local_url = None
@@ -1623,19 +1639,13 @@ def _work_to_api_dict(w, *, full_text: bool = False) -> dict[str, Any]:
     if w.local_path:
         p = Path(w.local_path)
         if p.exists():
-            try:
-                local_url = media_url(p)
-            except Exception:
-                pass
+            local_url = _work_media_url(p)
         else:
             local_missing = True
     if w.thumb_path:
         p2 = Path(w.thumb_path)
         if p2.exists():
-            try:
-                thumb_url = media_url(p2)
-            except Exception:
-                pass
+            thumb_url = _work_media_url(p2)
         else:
             thumb_missing = True
     # 图片类:缩略图 = 原图(没单独抽缩略)

@@ -251,7 +251,7 @@ function SelfCheckChip({ pass, score, max = 120, threshold, label, summary, dims
 // 按 settings 改了默认时 hook 会通过 storage 事件感知刷新, 不用手动 reload.
 
 const IMAGE_ENGINE_META = {
-  apimart:  { icon: "🎨", label: "apimart", desc: "GPT-Image-2 · 默认 · 30-60s/张" },
+  apimart:  { icon: "🎨", label: "快速出图", desc: "默认 · 30-60s/张" },
   dreamina: { icon: "🎬", label: "即梦",     desc: "字节即梦 · 60-120s/张" },
 };
 const IMAGE_ENGINE_KEY = "image_engine_override";
@@ -425,7 +425,7 @@ function ImageWithLightbox({ src, alt, style, caption, downloadName, ...rest }) 
               color: copied ? "#000" : "#fff",
               border: "none", borderRadius: 100, cursor: "pointer", fontFamily: "inherit",
               transition: "background 0.15s",
-            }}>{copied ? "✓ 已复制 URL" : "📋 复制 URL"}</button>
+            }}>{copied ? "✓ 已复制链接" : "📋 复制链接"}</button>
             <button onClick={download} style={{
               padding: "8px 18px", fontSize: 13, fontWeight: 600,
               background: "rgba(255,255,255,0.18)", color: "#fff",

@@ -4,7 +4,7 @@
 const IMAGE_TOOLS = [
   {
     page: "imagegen", icon: "🖼️", label: "直接出图",
-    desc: "一句 prompt → N 张候选 · 16:9 / 9:16 / 1:1 / 3:4 / 4:3 任选 · apimart GPT-Image-2 默认 30-60s/张",
+    desc: "一句画面描述 → N 张候选 · 16:9 / 9:16 / 1:1 / 3:4 / 4:3 任选 · 默认 30-60s/张",
     steps: 1, route_prefix: "image-gen", source_skill: "image-gen",
   },
   {
@@ -74,7 +74,7 @@ function PageImage({ onNav }) {
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 24 }}>
             <StatBlock label="🖼️ 今日出图" value={todayImages} sub={`张 · 共 ${todayMB} MB`} />
             <StatBlock label="📂 累计图片" value={totalImages} sub="作品库看全部 →" sublink={() => onNav("works")} />
-            <StatBlock label="⚡ AI 消耗" value={`¥${(usage?.overall?.cost_cny || 0).toFixed(2)}`} sub="今日 apimart + 即梦" />
+            <StatBlock label="⚡ AI 消耗" value={`¥${(usage?.overall?.cost_cny || 0).toFixed(2)}`} sub="今日快速出图 + 即梦" />
             <StatBlock label="🌟 今日偏好" value={hottestLabel} sub={hottest ? `用了 ${hottest[1]} 次` : "今天还没出图"} small />
           </div>
 

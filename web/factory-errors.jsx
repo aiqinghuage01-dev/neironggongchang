@@ -32,7 +32,7 @@ const ERROR_PATTERNS = [
     suggestion: "登录柿榴 Web 后台 → 充值 → 回来重试 · 这是 #1 高频原因" },
   { match: /createByText.*code=1|video\/createByText/i,
     icon: "🛠️", title: "柿榴 createByText 失败",
-    suggestion: "看原始错误 msg · 常见: 算力不足 / speaker_id 不存在 / avatar_id 不存在" },
+    suggestion: "常见原因是账号额度不足、声音或数字人配置失效。先去设置里重选配置, 再重试一次。" },
   { match: /speaker.*not.*found|speaker_id.*invalid|声音.*不存在/i,
     icon: "🎙️", title: "声音 speaker_id 找不到",
     suggestion: "去 ⚙️ 设置 看下当前 speaker 列表, 可能柿榴那边删了 · 重选一个声音" },
@@ -52,7 +52,7 @@ const ERROR_PATTERNS = [
     suggestion: "回 Step 2 重新合成数字人 (柿榴文件可能被清理)" },
   { match: /file not found|文件不存在|no such file/i,
     icon: "📂", title: "文件找不到",
-    suggestion: "看原始 message 哪个文件 · 可能被清理或路径变了" },
+    suggestion: "可能是本地文件被移动或清理了。回上一步重新生成或重新选择素材。" },
   { match: /transcript.*不能为空|文案空了/i,
     icon: "📝", title: "文案是空的",
     suggestion: "回 Step 1 写一段口播文案 (≥ 30 字)" },
@@ -81,10 +81,10 @@ const ERROR_PATTERNS = [
     suggestion: "后端崩了一下, 等 10s 重试 · 重复出现去看 server log" },
   { match: /pydantic|validation.*error|greater_than|less_than|missing|field required|422/i,
     icon: "🚫", title: "请求参数不对",
-    suggestion: "可能少填或填错了某个字段, 看原始 message 后半段定位 · 或回上一步检查" },
+    suggestion: "可能少填或填错了某个字段。回上一步检查必填内容后再提交。" },
   { match: /HTTP 4\d\d|bad request|invalid/i,
     icon: "🚫", title: "请求格式有问题",
-    suggestion: "可能少填东西? 检查上一步是否完整 · 或看 message 后半段细节" },
+    suggestion: "可能少填东西。检查上一步是否完整, 再提交一次。" },
 
   // ─── 飞轮业务 (保留兼容 factory-flywheel) ────────────────
   { match: /scene_idx.*超界|out.?of.?range/i,
@@ -98,7 +98,7 @@ const ERROR_PATTERNS = [
     suggestion: "在场景卡里填一行 prompt (≥ 5 字) 再点生图" },
   { match: /柿榴|qingdou/i,
     icon: "🛠️", title: "柿榴异常",
-    suggestion: "看下面原始 message · 如果是网络/超时, 等 10s 重试 · 否则去柿榴 Web 后台看账号状态" },
+    suggestion: "如果是网络或超时, 等 10 秒重试; 如果持续失败, 去柿榴后台看账号状态。" },
 ];
 
 
@@ -110,7 +110,13 @@ function humanizeError(rawMsg) {
       return { icon: p.icon, title: p.title, suggestion: p.suggestion, raw: msg, matched: true };
     }
   }
-  return { icon: "⚠️", title: "出错了 (没匹配到已知模式)", suggestion: "下面是原始 message · 大多重试一次能过", raw: msg, matched: false };
+  return {
+    icon: "⚠️",
+    title: "这次没跑成",
+    suggestion: "先重试一次; 如果连续失败, 展开详情给我排查。",
+    raw: msg,
+    matched: false,
+  };
 }
 
 
@@ -153,10 +159,10 @@ function ErrorBanner({ err, actions, compact }) {
           {h.suggestion && (
             <div style={{ fontSize: compact ? 11 : 12, color: T.red, marginTop: 2, opacity: 0.85 }}>{h.suggestion}</div>
           )}
-          {/* 没匹配 pattern → 原始 msg 默认展开 (用户能直接看到内容); 匹配了 → 折叠 */}
-          <details style={{ marginTop: 6 }} open={!h.matched}>
+          {/* 技术详情默认折叠, 避免把底层错误直接露给老板。 */}
+          <details style={{ marginTop: 6 }}>
             <summary style={{ fontSize: 10.5, color: T.red, cursor: "pointer", opacity: 0.7 }}>
-              {h.matched ? "看原始错误" : "原始错误 (默认展开):"}
+              查看详情
             </summary>
             <pre style={{
               fontSize: 11, fontFamily: "SF Mono, monospace", color: T.red,
@@ -199,7 +205,7 @@ function InlineError({ err, actions, maxWidth = 820 }) {
           )}
           <details style={{ marginTop: 4 }}>
             <summary style={{ fontSize: 10, opacity: 0.7, cursor: "pointer" }}>
-              {h.matched ? "看原始错误" : "原始错误:"}
+              查看详情
             </summary>
             <pre style={{
               fontSize: 10.5, fontFamily: "SF Mono, monospace",

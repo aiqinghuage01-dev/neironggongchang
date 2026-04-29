@@ -47,7 +47,7 @@ function PageTouliu({ onNav }) {
   // D-037b6: 轮询 generate 任务
   const poller = useTaskPoller(taskId, {
     onComplete: (r) => { setResult(r); setTaskId(null); },
-    onError: (e) => { setErr(e || "生成失败"); /* 留 taskId 让 FailedRetry 渲染 */ },
+    onError: () => { /* 留 taskId 让 FailedRetry 渲染, 不在页面顶部重复打一条错误 */ },
   });
 
   async function generate() {
@@ -97,7 +97,7 @@ function PageTouliu({ onNav }) {
           onClear={() => { reset(); wf.dismissSnapshot(); }}
           label="投流文案工作流" />
         {/* D-086: 走全站 InlineError */}
-        {err && <InlineError err={err} maxWidth={1040} />}
+        {err && !poller.isFailed && !poller.isCancelled && <InlineError err={err} maxWidth={1040} />}
         {step === "input"  && <TLStepInput pitch={pitch} setPitch={setPitch} industry={industry} setIndustry={setIndustry}
           targetAction={targetAction} setTargetAction={setTargetAction} n={n} setN={setN} channel={channel} setChannel={setChannel}
           loading={loading} onGo={generate} skillInfo={skillInfo} />}

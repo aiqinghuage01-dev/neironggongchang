@@ -117,3 +117,27 @@ def test_image_missing_file_gets_explicit_asset_status(client, tmp_path):
     assert body["asset_status"] == "missing_file"
     assert body["preview_available"] is False
     assert body["download_available"] is False
+
+
+def test_image_existing_outside_media_root_does_not_expose_absolute_path(client, tmp_path):
+    from shortvideo.works import insert_work
+
+    outside = tmp_path / "pytest-fake.png"
+    outside.write_bytes(b"fake image")
+    wid = insert_work(
+        title="outside image",
+        final_text="",
+        type="image",
+        source_skill="wechat-section-image",
+        local_path=str(outside),
+        thumb_path=str(outside),
+        status="ready",
+    )
+    r = client.get(f"/api/works/{wid}")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["thumb_url"] is None
+    assert body["local_url"] is None
+    assert body["asset_status"] == "record_only"
+    assert body["preview_available"] is False
+    assert body["download_available"] is False

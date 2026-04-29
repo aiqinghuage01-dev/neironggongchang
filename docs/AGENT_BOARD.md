@@ -11,8 +11,8 @@
 | 总控 Agent | 自动派工已接入 | `~/Desktop/neironggongchang` | 已启动 8 小时全站优化定时巡检: 每 2 小时检查一次, 空闲则自动补下一批任务 |
 | 内容开发 Agent | 空闲 | `~/Desktop/nrg-worktrees/content-dev` | T-021/T-022 已合入 main; 等新内容任务 |
 | 媒体开发 Agent | 空闲 | `~/Desktop/nrg-worktrees/media-dev` | T-035/T-038 重复 worker 已由总控停止并 block |
-| QA 测试 Agent | 进行中 | `~/Desktop/nrg-worktrees/qa`, `~/Desktop/nrg-worktrees/qa-1`, `~/Desktop/nrg-worktrees/qa-2` | T-041/T-042/T-044 running; T-045 queued |
-| 审查 Agent | 进行中 | `~/Desktop/nrg-worktrees/review` | T-043 running |
+| QA 测试 Agent | 进行中 | `~/Desktop/nrg-worktrees/qa`, `~/Desktop/nrg-worktrees/qa-1`, `~/Desktop/nrg-worktrees/qa-2` | T-054 claimed; T-055 claimed |
+| 审查 Agent | 空闲 | `~/Desktop/nrg-worktrees/review` | T-043 已完成 |
 
 ---
 
@@ -53,12 +53,13 @@
 | T-038 | 素材库返修第 4 轮 | 媒体开发 Agent | blocked | 同 T-026 | 自动返工循环残留任务; 总控已在 main@7ac7379 完成并关闭 T-026/T-027/T-028 |
 | T-036~T-040 | 素材库后续审查/QA/返工循环 | 自动创建 | 停止 | 同 T-026/T-027/T-028 | D-124 本轮已由总控收束; 如后续要做视觉识别/物理整理, 另起新任务 |
 | T-041 | D-125 素材库正式端口独立复测 | QA 测试 Agent | claimed | 只读 QA | 正式 8000/8001 端口复测素材库首页精选/大类/预览/剪辑检索/移动端 |
-| T-042 | 全站基础导航与页面状态 smoke | QA 测试 Agent | claimed | 只读 QA | 全站主要入口加载、截图、console/pageerror/requestfailed 汇总 |
+| T-042 | 全站基础导航与页面状态 smoke | QA 测试 Agent / 总控返修 | 已完成 | 只读 QA + 总控修复 | QA 阻塞的 `/api/tasks/counts` 404 与作品库本机绝对路径破图已由总控修复并自验; T-055 再做独立回归 |
 | T-043 | D-125 素材库改动只读审查 | 审查 Agent / 总控返修 | 已完成 | 只读审查 + 总控修复 | 审查无 P0; 总控已修 P1/P2: missing_at 过滤、featured 降级、limit 校验、空态引导、补 featured 测试 |
-| T-044 | 全站内容链路低风险页面巡检 | QA 测试 Agent | claimed | 只读 QA | 公众号/投流/热点/录音/朋友圈/策划/合规页面巡检, 不重复烧 credits |
-| T-045 | 全站媒体链路低风险页面巡检 | QA 测试 Agent | queued | 只读 QA | 素材库/作品库/直接出图/即梦/数字人/声音视频入口巡检 |
+| T-044 | 全站内容链路低风险页面巡检 | QA 测试 Agent / 总控返修 | 已完成 | 只读 QA + 总控修复 | 投流失败恢复态不再露 `没匹配到已知模式/原始 message`; 显示友好失败卡; T-055 再做独立回归 |
+| T-045 | 全站媒体链路低风险页面巡检 | QA 测试 Agent / 总控返修 | 已完成 | 只读 QA + 总控修复 | 直接出图/作品库去技术词, 作品库绝对路径过滤, 数字人 picker 只列视频并隐藏本机路径; T-055 再做独立回归 |
 | T-046~T-053 | 全站优化自动补任务窗口 | 自动创建 | pending | content/media/qa/review 分批 | `scripts/start_site_optimization_watch.sh` 未来 8 小时每 2 小时检查; 工作台空闲时自动派开发修复、QA 回归、Review 审查 |
 | T-054 | 投流恢复后录音改写 + 热点改写真链路复测 | QA 测试 Agent | queued | 只读 QA 报告; 不改功能代码 | 最小真实 LLM 复测: 录音改写 analyze/write + 热点改写 4 版; 每条链路只提交一次, 记录 task/usage/截图 |
+| T-055 | T-042/T-044/T-045 返修后综合回归 | QA 测试 Agent | claimed | 只读 QA | 不烧 credits; 复测战略部 console、投流失败恢复、直接出图/作品库绝对路径和技术词、数字人视频 picker |
 
 ---
 
@@ -70,6 +71,7 @@
 - D-125 报告: `docs/agent-handoff/CONTROLLER_MATERIALS_D125_QA_20260429.md`.
 - 投流 T-021/T-022 已合入 main: `3ba6254`, `1384513`, `205d109`; QA 真烧 task `2ca3ceaff54e481c8045573afc7cd50b` -> `ok`, `route_key=touliu.generate.quick`, `engine=opus`, 页面展示 1 条; main 投流相关测试 34 passed, 全量 pytest 通过; 已新增 T-054 恢复下游录音/热点真链路。
 - T-043 返修: `docs/agent-handoff/CONTROLLER_T043_MATERIALS_REPAIR_20260430.md`; featured 排除 `missing_at`, limit=0/49 返 422, featured 失败首页可降级, 空态显示识别引导; 素材库相关测试 175 passed, 全量 pytest 通过, Playwright 正常路径 console/pageerror/requestfailed/http error=0.
+- T-042/T-044/T-045 返修: `docs/agent-handoff/CONTROLLER_T042_T044_T045_REPAIR_20260430.md`; `/api/tasks/counts` 200, 作品库本机绝对路径不再暴露, 投流失败恢复不露内部错误, 直接出图/作品库/数字人 picker 去技术词与错误选择; targeted pytest 4 passed, 全量 pytest 通过, Playwright console error=0.
 - D-124 素材库总控交接: `docs/agent-handoff/CONTROLLER_MATERIALS_T026_MAIN_20260429.md`.
 - D-124 验证: `python3 -m pytest -q` -> 通过; `git diff --check` -> clean; 临时 API `:18000` curl `/categories`、`/match`、`/classify-batch?limit=100` 通过; Playwright 截图 `/tmp/_ui_shots/t026_materials_desktop_home.png`, `/tmp/_ui_shots/t026_materials_desktop_category.png`, `/tmp/_ui_shots/t026_materials_desktop_match.png`, `/tmp/_ui_shots/t026_materials_mobile_home.png`, console error/pageerror/requestfailed/http error=0.
 - 总控本轮交接: `docs/agent-handoff/CONTROLLER_T013_T017_20260429_2011.md`.

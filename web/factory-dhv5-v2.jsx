@@ -54,9 +54,8 @@ function PageDhv5({ onNav }) {
   async function loadWorks() {
     if (worksList !== null) return;
     try {
-      const list = await api.get("/api/works?limit=50");
-      // 只要有 local_url 的 (柿榴出过 mp4 的)
-      setWorksList((list || []).filter(w => w.local_url));
+      const list = await api.get("/api/works?limit=80&type=video&source_skill=shortvideo&since=all");
+      setWorksList((list || []).filter(w => w.type === "video" && w.local_url));
     } catch (e) { setErr(e.message); }
   }
 
@@ -66,17 +65,17 @@ function PageDhv5({ onNav }) {
     setErr("");
     try {
       const r = await api.get(`/api/works/${w.id}/local-path`);
-      if (r.exists && r.local_path) {
+      if (r.exists && r.local_path && /\.mp4$/i.test(String(r.local_path))) {
         setDhVideoPath(r.local_path);
       } else {
-        setErr(`作品 #${w.id} 文件不存在: ${r.local_path || "(无路径)"}`);
+        setErr("这条作品不是可用的数字人视频, 请换一条视频作品");
       }
     } catch (e) { setErr(e.message); }
   }
 
   function goToAlign() {
     setErr("");
-    if (!dhVideoPath.trim()) { setErr("先填数字人 mp4 路径"); return; }
+    if (!dhVideoPath.trim()) { setErr("先选择数字人视频"); return; }
     if (!selectedTemplateId) { setErr("先选一个模板"); return; }
     setStep("align");
     setAlignedScenes(null);  // 切模板要重对齐
@@ -187,7 +186,7 @@ function PageDhv5({ onNav }) {
 
   async function startBatchRender() {
     if (validBatchTranscripts.length === 0) { setErr("至少填一条文案"); return; }
-    if (!dhVideoPath.trim() || !selectedTemplateId) { setErr("先选数字人 + 模板"); return; }
+    if (!dhVideoPath.trim() || !selectedTemplateId) { setErr("先选数字人视频 + 模板"); return; }
     setErr(""); setRendering(true);
     try {
       const r = await api.post("/api/dhv5/batch-render", {
@@ -300,8 +299,8 @@ function PageDhv5({ onNav }) {
               · 三态 A/B/C 交替 (全屏真人 / 网格图+大字 / 手机屏+浮动头像)
             </div>
             <div style={{ flex: 1 }} />
-            <span style={{ fontSize: 11, color: T.muted2 }} title="模板存储路径">
-              templates/ 在 ~/Desktop/skills/digital-human-video-v5/
+            <span style={{ fontSize: 11, color: T.muted2 }}>
+              模板由本机技能库提供
             </span>
           </div>
 
@@ -340,7 +339,7 @@ function PageDhv5({ onNav }) {
                 ? <>
                     <div style={{ fontSize: 32, marginBottom: 10 }}>📂</div>
                     <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6, color: T.text }}>还没有模板</div>
-                    <div style={{ fontSize: 12 }}>到 ~/Desktop/skills/digital-human-video-v5/templates/ 加 .yaml 文件</div>
+                    <div style={{ fontSize: 12 }}>当前本机还没有可用模板, 可以先走「做视频」主流程。</div>
                   </>
                 : <>当前筛选下没匹配的模板 · 改下筛选试试</>}
             </div>
@@ -367,7 +366,7 @@ function PageDhv5({ onNav }) {
               </div>
               <Btn variant="outline" onClick={() => setSelectedTemplateId(null)}>换一个</Btn>
               <Btn variant="primary" disabled={!dhReady} onClick={goToAlign}>
-                {dhReady ? "下一步: 文案对齐 →" : "↑ 先填数字人 mp4 路径"}
+                {dhReady ? "下一步: 文案对齐 →" : "↑ 先选择数字人视频"}
               </Btn>
             </div>
           )}
@@ -619,7 +618,7 @@ function PageDhv5({ onNav }) {
               <div style={{ padding: 16, background: "#fff", border: `1.5px solid ${T.brand}`, boxShadow: `0 0 0 4px ${T.brandSoft}`, borderRadius: 12, display: "flex", alignItems: "center", gap: 14 }}>
                 <div style={{ fontSize: 26 }}>♻️</div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: T.text }}>用同一段数字人 mp4 再套一个模板?</div>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: T.text }}>用同一段数字人视频再套一个模板?</div>
                   <div style={{ fontSize: 12, color: T.muted, marginTop: 3 }}>
                     数字人投入一次, 套不同模板出 N 版 — v5 的核心价值
                   </div>
@@ -639,11 +638,12 @@ function PageDhv5({ onNav }) {
 
 // ─── 顶部锁定: 数字人 mp4 选择 ─────────────────────────────
 function DhvHumanPicker({ value, onChange, worksList, onLoadWorks, showPicker, setShowPicker, onPickWork }) {
+  const displayValue = value ? (String(value).split("/").pop() || "已选择数字人视频") : "";
   return (
     <div style={{ padding: 14, background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 12 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
         <div style={{ width: 22, height: 22, borderRadius: 6, background: T.brandSoft, color: T.brand, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700 }}>1</div>
-        <div style={{ fontSize: 14, fontWeight: 600, color: T.text }}>数字人 mp4 (上游, 一次做完可复用)</div>
+        <div style={{ fontSize: 14, fontWeight: 600, color: T.text }}>数字人视频 (上游, 一次做完可复用)</div>
         <div style={{ flex: 1 }} />
         <Btn size="sm" variant="outline" onClick={() => { setShowPicker(!showPicker); if (!showPicker) onLoadWorks(); }}>
           {showPicker ? "× 关" : "📂 从作品库挑"}
@@ -651,9 +651,9 @@ function DhvHumanPicker({ value, onChange, worksList, onLoadWorks, showPicker, s
       </div>
       <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
         <input
-          value={value}
+          value={displayValue}
           onChange={e => onChange(e.target.value)}
-          placeholder="本地 mp4 绝对路径, 例: /Users/.../works/xxx.mp4 (柿榴出的)"
+          placeholder="从作品库选择一段数字人视频, 或粘贴本机视频路径"
           style={{
             flex: 1, padding: "8px 12px", border: `1px solid ${T.border}`, borderRadius: 8,
             fontSize: 12, fontFamily: "SF Mono, Menlo, monospace", outline: "none", background: "#fff",
@@ -668,12 +668,12 @@ function DhvHumanPicker({ value, onChange, worksList, onLoadWorks, showPicker, s
             <div style={{ padding: 20, textAlign: "center", color: T.muted2, fontSize: 12 }}>加载作品库…</div>
           ) : worksList.length === 0 ? (
             <div style={{ padding: 20, textAlign: "center", color: T.muted2, fontSize: 12 }}>
-              作品库还没有数字人 mp4 · 去 🎬 做视频 先做一段
+              作品库还没有数字人视频 · 去 🎬 做视频 先做一段
             </div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
               {worksList.slice(0, 30).map(w => (
-                <div key={w.id} onClick={() => { onChange(w.local_url || ""); onPickWork(w); }}
+                <div key={w.id} onClick={() => { onPickWork(w); }}
                   style={{
                     padding: "8px 10px", background: "#fff", borderRadius: 6, cursor: "pointer",
                     fontSize: 12, display: "flex", gap: 8, alignItems: "center",
@@ -684,8 +684,7 @@ function DhvHumanPicker({ value, onChange, worksList, onLoadWorks, showPicker, s
                 </div>
               ))}
               <div style={{ padding: "6px 10px", fontSize: 10.5, color: T.muted2, textAlign: "center" }}>
-                ⚠️ 当前 picker 仅显示, 实际路径需手填 — 因 works API 暂只返 /media URL
-                (D-059c 会加 work_id → 绝对路径解析)
+                只展示可复用的视频作品, 图片和文字作品不会出现在这里。
               </div>
             </div>
           )}
@@ -786,7 +785,7 @@ function Dhv5Header({ step, template, dhVideoPath, onBack }) {
         <div style={{ marginLeft: 12, display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, color: T.muted }}>
           <span>📋 {template.name}</span>
           <span style={{ color: T.muted3 }}>·</span>
-          <span title={dhVideoPath} style={{ maxWidth: 240, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          <span style={{ maxWidth: 240, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             🎬 {dhVideoPath?.split("/").pop() || "(未填)"}
           </span>
         </div>
@@ -848,7 +847,7 @@ function Dhv5SceneRow({ idx, scene, onChange, expanded, onToggleExpand, brollUrl
         </span>
         {hasBroll && (
           <button onClick={onToggleExpand}
-            title={expanded ? "收起 B-roll panel" : "展开 B-roll panel · 改 prompt + 重生图"}
+            title={expanded ? "收起补画面" : "展开补画面 · 改画面描述 + 重生图"}
             style={{
               padding: "5px 10px", fontSize: 11, borderRadius: 100, border: `1px solid ${expanded ? T.brand : T.borderSoft}`,
               background: expanded ? T.brandSoft : "#fff",
@@ -884,7 +883,7 @@ function Dhv5SceneRow({ idx, scene, onChange, expanded, onToggleExpand, brollUrl
             <textarea
               value={promptVal}
               onChange={e => onChange(promptField, e.target.value)}
-              placeholder={`${isB ? "横版 4:3" : "竖版 9:16"} broll prompt (可改)`}
+              placeholder={`${isB ? "横版 4:3" : "竖版 9:16"} 补画面描述 (可改)`}
               rows={3}
               style={{
                 width: "100%", padding: 8, border: `1px solid ${T.borderSoft}`, borderRadius: 6,
@@ -893,7 +892,7 @@ function Dhv5SceneRow({ idx, scene, onChange, expanded, onToggleExpand, brollUrl
               }} />
             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
               <span style={{ fontSize: 10, color: T.muted2, fontFamily: "SF Mono, monospace" }}>
-                走 ~/.claude/skills/poju-image-gen apimart · 30-60s/张
+                走快速出图 · 30-60s/张
               </span>
               <div style={{ flex: 1 }} />
               {brollUrl && (

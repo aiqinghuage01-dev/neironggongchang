@@ -133,7 +133,7 @@ function PageWorks({ onNav }) {
           <div style={{ flex: 1 }} />
           {(tab === "all" || tabType(tab)) && (
             <input
-              placeholder="🔍 搜标题 / 文案 / prompt"
+              placeholder="🔍 搜标题 / 文案 / 画面描述"
               value={q} onChange={e => setQ(e.target.value)}
               style={{ width: 260, padding: "8px 14px", fontSize: 13, border: `1px solid ${T.border}`, borderRadius: 100, outline: "none", background: T.bg2, fontFamily: "inherit" }}
             />

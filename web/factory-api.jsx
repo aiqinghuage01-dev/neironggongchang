@@ -151,7 +151,10 @@ const api = {
   },
   media(relUrl) {
     if (!relUrl) return "";
-    return relUrl.startsWith("http") ? relUrl : `${API_BASE}${relUrl}`;
+    const s = String(relUrl).trim();
+    if (/^(https?:|data:|blob:)/i.test(s)) return s;
+    if (s.startsWith("/media/") || s.startsWith("/skills/")) return `${API_BASE}${s}`;
+    return "";
   },
 };
 
