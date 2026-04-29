@@ -1,4 +1,4 @@
-// factory-beta.jsx — 科技与狠活: 研发部状态面板嵌入页
+// factory-beta.jsx — 科技与狠活: 研发部状态摘要页
 
 const AGENT_DASHBOARD_URL = "http://127.0.0.1:8765/";
 
@@ -55,25 +55,134 @@ function PageBeta() {
         </div>
       </div>
 
-      <div style={{ flex: 1, overflow: "hidden", background: "#0F1217", padding: status === "online" ? 0 : "28px" }}>
+      <div style={{ flex: 1, overflow: "auto", background: T.bg, padding: "28px" }}>
         {status === "online" ? (
-          <iframe
-            title="内容工厂研发部状态面板"
-            src={AGENT_DASHBOARD_URL}
-            style={{
-              width: "100%",
-              height: "100%",
-              border: 0,
-              display: "block",
-              background: "#0F1217",
-            }}
-          />
+          <BetaDashboardSummary summary={summary} />
         ) : (
           <DashboardOffline status={status} onRetry={checkDashboard} />
         )}
       </div>
     </div>
   );
+}
+
+function BetaDashboardSummary({ summary }) {
+  const slots = summary?.slots || [];
+  const tasks = summary?.tasks || [];
+  const counts = summary?.counts || {};
+  const runningSlots = slots.filter((slot) => slot.status === "running");
+  const activeTasks = tasks.filter((task) => task.status === "claimed" || task.status === "queued");
+  const doneCount = counts.done || 0;
+  const blockedCount = counts.blocked || 0;
+
+  return (
+    <div style={{ maxWidth: 1180, margin: "0 auto", display: "flex", flexDirection: "column", gap: 18 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 14 }}>
+        <BetaStat title="正在干活" value={runningSlots.length} hint="自动岗位" tone={runningSlots.length > 0 ? "green" : "gray"} />
+        <BetaStat title="队列中" value={counts.queued || 0} hint="等待领取" tone={(counts.queued || 0) > 0 ? "amber" : "gray"} />
+        <BetaStat title="已领取" value={counts.claimed || 0} hint="正在推进" tone={(counts.claimed || 0) > 0 ? "green" : "gray"} />
+        <BetaStat title="需处理" value={blockedCount} hint={`已完成 ${doneCount}`} tone={blockedCount > 0 ? "amber" : "gray"} />
+      </div>
+
+      <section style={{ background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 12, padding: 18 }}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 14 }}>
+          <div style={{ fontSize: 16, fontWeight: 700, color: T.text }}>谁在上岗</div>
+          <div style={{ fontSize: 12, color: T.muted }}>只显示老板需要看的状态</div>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
+          {slots.map((slot) => (
+            <BetaSlotCard key={slot.slot_id} slot={slot} />
+          ))}
+        </div>
+      </section>
+
+      <section style={{ background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 12, padding: 18 }}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 14 }}>
+          <div style={{ fontSize: 16, fontWeight: 700, color: T.text }}>当前任务</div>
+          <div style={{ fontSize: 12, color: T.muted }}>不展示日志和本机路径</div>
+        </div>
+        {activeTasks.length > 0 ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {activeTasks.slice(0, 8).map((task) => (
+              <BetaTaskRow key={task.id} task={task} />
+            ))}
+          </div>
+        ) : (
+          <div style={{ padding: 18, background: T.bg2, borderRadius: 10, color: T.muted, fontSize: 13 }}>
+            当前没有正在排队或推进中的任务。
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function BetaStat({ title, value, hint, tone }) {
+  const color = tone === "green" ? T.brand : tone === "amber" ? "#B55B00" : T.muted;
+  const bg = tone === "green" ? "#E7F6EE" : tone === "amber" ? "#FFF0EA" : "#fff";
+  return (
+    <div style={{ background: bg, border: `1px solid ${T.borderSoft}`, borderRadius: 12, padding: 16 }}>
+      <div style={{ fontSize: 12, color: T.muted, marginBottom: 8 }}>{title}</div>
+      <div style={{ fontSize: 28, fontWeight: 750, color }}>{value}</div>
+      <div style={{ fontSize: 12, color: T.muted2, marginTop: 4 }}>{hint}</div>
+    </div>
+  );
+}
+
+function BetaSlotCard({ slot }) {
+  const running = slot.status === "running";
+  const stale = slot.status === "stale";
+  const task = slot.task || null;
+  const statusLabel = running ? "工作中" : stale ? "需要重启" : "空闲";
+  const roleLabel = {
+    controller: "总控",
+    content: "内容开发",
+    media: "媒体开发",
+    qa: "测试",
+    review: "审查",
+  }[slot.role] || "协作岗位";
+  return (
+    <div style={{
+      border: `1px solid ${running ? T.brand + "66" : stale ? "#E66B2F66" : T.borderSoft}`,
+      borderRadius: 10,
+      padding: 14,
+      background: running ? "#F4FBF7" : stale ? "#FFF7F0" : T.bg2,
+    }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+        <span style={{ width: 8, height: 8, borderRadius: 99, background: running ? T.brand : stale ? "#E66B2F" : T.muted3 }} />
+        <div style={{ fontSize: 14, fontWeight: 700, color: T.text, flex: 1 }}>{slot.agent_name || roleLabel}</div>
+        <span style={{ fontSize: 12, color: running ? T.brand : stale ? "#B55B00" : T.muted }}>{statusLabel}</span>
+      </div>
+      <div style={{ fontSize: 12, color: T.muted, marginBottom: 8 }}>{roleLabel}</div>
+      <div style={{ fontSize: 12.5, color: T.text, lineHeight: 1.6 }}>
+        {task ? safeTaskTitle(task.title) : "当前没有任务。"}
+      </div>
+    </div>
+  );
+}
+
+function BetaTaskRow({ task }) {
+  const label = task.status === "claimed" ? "已领取" : task.status === "queued" ? "排队中" : "处理中";
+  return (
+    <div style={{
+      display: "flex", alignItems: "center", gap: 12,
+      padding: "12px 14px", background: T.bg2, borderRadius: 10,
+      border: `1px solid ${T.borderSoft}`,
+    }}>
+      <Tag size="xs" color={task.status === "claimed" ? "green" : "gray"}>{label}</Tag>
+      <div style={{ flex: 1, minWidth: 0, fontSize: 13.5, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        {safeTaskTitle(task.title)}
+      </div>
+      <div style={{ fontSize: 12, color: T.muted }}>{task.claimed_by ? "有人在跟" : "等人接手"}</div>
+    </div>
+  );
+}
+
+function safeTaskTitle(title) {
+  return String(title || "未命名任务")
+    .replace(/\/Users\/[^\\s]+/g, "本机目录")
+    .replace(/OpenClaw|DeepSeek|Opus|LLM|prompt|tokens?|credits?|Downloads|traceback|Pydantic|watcher|daemon|provider/gi, "内部信息")
+    .replace(/\b(?:404|500|502|503|504)\b/g, "异常状态");
 }
 
 function StatusPill({ label, ok, quiet }) {

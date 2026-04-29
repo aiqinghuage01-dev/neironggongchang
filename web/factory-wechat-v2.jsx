@@ -1,6 +1,6 @@
 // factory-wechat-v2.jsx — 公众号 skill 全链路 GUI (D-010)
 // Skill 源: ~/Desktop/skills/公众号文章/
-// 8 步: 选题 → 3标题挑 → 大纲确认 → 长文+自检 → 段间配图 → HTML → 封面 → 推送草稿箱
+// 8 步: 选题 → 3标题挑 → 大纲确认 → 长文+自检 → 段间配图 → 排版 → 封面 → 推送草稿箱
 //
 // 覆盖 factory-article.jsx 的 PageWechat(在 index.html 里加载顺序靠后)
 
@@ -10,7 +10,7 @@ const WX_STEPS = [
   { id: "outline",  n: 3, label: "确认大纲" },
   { id: "write",    n: 4, label: "写长文" },
   { id: "images",   n: 5, label: "段间配图" },
-  { id: "html",     n: 6, label: "HTML" },
+  { id: "html",     n: 6, label: "排版" },
   { id: "cover",    n: 7, label: "封面" },
   { id: "push",     n: 8, label: "推送" },
 ];
@@ -191,16 +191,16 @@ function PageWechat({ onNav }) {
   function makeAutoPlan(skipImg) {
     const base = [
       { key: "outline", label: "出大纲", sub: "读方法论 7 步骨架", eta: 5 },
-      { key: "write",   label: "写长文 + 三层自检", sub: "2000-3000 字 · Opus 30-60s,慢但质量优", eta: 60 },
+      { key: "write",   label: "写长文 + 三层自检", sub: "2000-3000 字 · 质量优先,会稍慢一点", eta: 60 },
     ];
     if (!skipImg) {
       base.push({ key: "plan", label: "规划 4 张段间配图", sub: "具象画面 · 16:9", eta: 5 });
       for (let i = 1; i <= 4; i++) {
-        base.push({ key: `img${i}`, label: `生图 #${i}`, sub: "apimart gpt-image-2 + 上传微信图床 · 约 30-60s", eta: 40 });
+        base.push({ key: `img${i}`, label: `生图 #${i}`, sub: "生成后自动放进公众号图片库 · 约 30-60s", eta: 40 });
       }
     }
-    base.push({ key: "html", label: "拼 V3 Clean HTML + 转微信 markup", sub: "premailer 内联 + section/span-leaf", eta: 2 });
-    base.push({ key: "cover", label: "生封面 900×383", sub: "Chrome headless 截图", eta: 6 });
+    base.push({ key: "html", label: "生成公众号排版", sub: "自动适配微信编辑器", eta: 2 });
+    base.push({ key: "cover", label: "生封面 900×383", sub: "生成公众号封面图", eta: 6 });
     return base.map(s => ({ ...s, status: "pending" }));
   }
 
@@ -326,7 +326,7 @@ function PageWechat({ onNav }) {
   }
 
   function push() {
-    if (!htmlResult) { setErr("HTML 还没生成,先回去拼一下"); return; }
+    if (!htmlResult) { setErr("排版还没生成,先回去拼一下"); return; }
     if (!coverResult) { setErr("封面还没生成,回去先生 4 张"); return; }
     // 从 covers 数组挑选中的那张
     let coverPath = "";
@@ -342,7 +342,7 @@ function PageWechat({ onNav }) {
       return;
     }
     if (!htmlResult.wechat_html_path) {
-      setErr("HTML 路径丢失,回去重新拼 HTML"); setStep("html"); return;
+      setErr("排版文件丢失,回去重新拼排版"); setStep("html"); return;
     }
     return runStep({
       nextStep: "push", rollbackStep: "cover", clearSetter: setPushResult,
@@ -778,14 +778,14 @@ function WxStepWriteRecover({ topic, pickedTitle, outline, onRecovered, onPrev, 
 
 function WxStepWrite({ article, loading, onPrev, onNext, onRewrite, onRewriteSelection, onRecovered, onArticleChange, onNav, pickedTitle, topic, outline }) {
   const writePhases = [
-    { text: "读完整人设 + 方法论 + 风格圣经", sub: "who-is-qinghuage + writing-methodology + style-bible · ~7200 token" },
+    { text: "读完整人设 + 方法论 + 风格圣经", sub: "把清华哥常用表达和写作规矩带上" },
     { text: "铺开场判断", sub: "原则① 先定性再解释 · 避免「不此地无银」" },
     { text: "展开中段 3 条核心论点", sub: "每段 300-500 字 · 带真实细节建画面" },
     { text: "前 40% 完成人设预埋链", sub: "资历 → 阵营 → 双边理解 → 反自夸" },
     { text: "桥接业务 · 6 步序列", sub: "干货在前 → 工具框架化 → 低压 CTA" },
     { text: "金句收尾 · 埋分享钩子", sub: "1-2 处「截图可发朋友圈」的句子" },
     { text: "跑三层自检", sub: "六原则逐段扫 + 六维评分 ≥105 + 一票否决" },
-    { text: "长文 2000-3000 字,慢一点,质量优先", sub: "Opus 本地 proxy · 通常 30-60s" },
+    { text: "长文 2000-3000 字,慢一点,质量优先", sub: "通常 30-60s" },
   ];
 
   const [editing, setEditing] = React.useState(article?.content || "");
@@ -853,7 +853,7 @@ function WxStepWrite({ article, loading, onPrev, onNext, onRewrite, onRewriteSel
       <div style={{ marginBottom: 16, display: "flex", alignItems: "flex-start", gap: 16 }}>
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 6 }}>{article.title}</div>
-          <div style={{ fontSize: 12, color: T.muted }}>{article.word_count} 字 · write {article.tokens?.write} tok · check {article.tokens?.check} tok</div>
+          <div style={{ fontSize: 12, color: T.muted }}>{article.word_count} 字 · 三层自检已完成</div>
         </div>
         <div style={{ padding: 12, background: sc.pass ? T.brandSoft : T.redSoft, border: `1px solid ${sc.pass ? T.brand + "44" : T.red + "44"}`, borderRadius: 10, fontSize: 12, color: sc.pass ? T.brand : T.red, minWidth: 240 }}>
           <div style={{ fontWeight: 700, marginBottom: 4 }}>📋 三层自检 {sc.pass ? "✅" : "❌"}</div>
@@ -964,7 +964,7 @@ function WxStepWrite({ article, loading, onPrev, onNext, onRewrite, onRewriteSel
                 : "💡 选中正文一段 (≥ 10 字) 再点 → 只带选段 · 不选则带全文(切 1200 字)"}
             </span>
             <div style={{ flex: 1 }} />
-            <span style={{ fontSize: 11, color: T.muted2 }}>📮 推送草稿箱 → 走完段间配图 + HTML 后即推</span>
+            <span style={{ fontSize: 11, color: T.muted2 }}>📮 推送草稿箱 → 走完段间配图 + 排版后即推</span>
           </div>
         </div>
       )}
@@ -1224,35 +1224,36 @@ function WxStepImages({ plans, setPlans, onGen, loading, onPrev, onNext, onRegen
           {runningCount > 0
             ? `还有 ${runningCount} 张在生成中, 等完成再拼`
             : doneCount === 0
-              ? "至少 1 张完成才能拼 HTML, 不然文章没插图"
+              ? "至少 1 张完成才能拼排版, 不然文章没插图"
               : doneCount < plans.length
                 ? `已 ${doneCount}/${plans.length} 张, 没生成的段不配图`
-                : "全部完成, 拼 HTML 会插入 4 张图"}
+                : "全部完成, 排版会插入 4 张图"}
         </div>
-        <Btn variant="primary" onClick={onNext} disabled={runningCount > 0 || doneCount === 0}>拼 HTML →</Btn>
+        <Btn variant="primary" onClick={onNext} disabled={runningCount > 0 || doneCount === 0}>拼排版 →</Btn>
       </div>
     </div>
   );
 }
 
-// ─── Step 6 · HTML ─────────────────────────────────────────
+// ─── Step 6 · 排版 ─────────────────────────────────────────
 // D-034 ② HTML 模板可切换
 const HTML_TEMPLATES = [
-  { id: "v3-clean",    label: "V3 Clean",    sub: "干净有呼吸 · 默认" },
-  { id: "v2-magazine", label: "V2 Magazine", sub: "杂志感 · 适合长文方法论" },
-  { id: "v1-dark",     label: "V1 Dark",     sub: "深色高对比 · 适合犀利观点" },
+  { id: "v3-clean",    label: "清爽默认",    sub: "干净有呼吸 · 默认" },
+  { id: "v2-magazine", label: "杂志长文",    sub: "杂志感 · 适合长文方法论" },
+  { id: "v1-dark",     label: "深色观点",    sub: "深色高对比 · 适合犀利观点" },
 ];
 
 function WxStepHtml({ result, loading, onPrev, onNext, onSwitchTemplate }) {
   if (loading || !result) return <Spinning icon="🧩" phases={[
     { text: "读模板", sub: "排版样式 + 视觉规范" },
-    { text: "Markdown 转 HTML", sub: "H2 标题 + 段间配图" },
+    { text: "整理标题和段落", sub: "标题层级 + 段间配图" },
     { text: "注入头部正文尾部", sub: "保留作者头像和文末作者区" },
-    { text: "样式内联", sub: "微信只认 inline style, class 都展平" },
-    { text: "转微信内部格式", sub: "适配微信编辑器 markup" },
+    { text: "适配微信编辑器", sub: "把样式处理成草稿箱能识别的样子" },
+    { text: "生成可推送版本", sub: "一会儿可以继续生成封面" },
   ]} />;
   if (!result) return null;
   const currentTpl = result.template || "v3-clean";
+  const fileName = (p) => String(p || "").split("/").filter(Boolean).pop() || "";
   return (
     <div style={{ padding: "32px 40px 120px", maxWidth: 1080, margin: "0 auto" }}>
       <div style={{ marginBottom: 16, display: "flex", alignItems: "flex-start", gap: 16 }}>
@@ -1284,11 +1285,12 @@ function WxStepHtml({ result, loading, onPrev, onNext, onSwitchTemplate }) {
       <div style={{ background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 12, padding: 2, marginBottom: 14, height: 640, overflow: "hidden" }}>
         <iframe srcDoc={result.raw_html || result.wechat_html} style={{ width: "100%", height: "100%", border: "none", borderRadius: 10, background: "#fff" }} title="wechat preview" />
       </div>
-      <div style={{ padding: 12, background: T.bg2, borderRadius: 8, fontSize: 12, color: T.muted, lineHeight: 1.7 }}>
-        <div>原 HTML: <code style={{ fontSize: 11 }}>{result.raw_html_path}</code></div>
-        <div>微信 markup: <code style={{ fontSize: 11 }}>{result.wechat_html_path}</code></div>
+      <details style={{ padding: 12, background: T.bg2, borderRadius: 8, fontSize: 12, color: T.muted, lineHeight: 1.7 }}>
+        <summary style={{ cursor: "pointer", fontWeight: 600, color: T.text }}>排版文件详情</summary>
+        <div style={{ marginTop: 8 }}>预览文件: <code style={{ fontSize: 11 }}>{fileName(result.raw_html_path)}</code></div>
+        <div>推送文件: <code style={{ fontSize: 11 }}>{fileName(result.wechat_html_path)}</code></div>
         <div>摘要: {result.digest}</div>
-      </div>
+      </details>
       <div style={{ display: "flex", gap: 10, marginTop: 18, alignItems: "center" }}>
         <Btn variant="outline" onClick={onPrev}>← 回配图</Btn>
         <div style={{ flex: 1 }} />
@@ -1301,12 +1303,12 @@ function WxStepHtml({ result, loading, onPrev, onNext, onSwitchTemplate }) {
 // ─── Step 7 · 封面 ───────────────────────────────────────────
 function WxStepCover({ cover, title, loading, onPrev, onNext, onRegen, onSelect, imgChip }) {
   if (loading || !cover) return <Spinning icon="🖼️" phases={[
-    { text: "构造 4 个不同风格的 prompt", sub: "现代简约 / 暖色暖光 / 深色冲击 / 复古胶片" },
-    { text: "调 apimart GPT-Image-2 生第 1 张", sub: "16:9 横版 · 30-60s/张" },
+    { text: "构造 4 个不同风格的封面方向", sub: "现代简约 / 暖色暖光 / 深色冲击 / 复古胶片" },
+    { text: "生成第 1 张", sub: "16:9 横版 · 30-60s/张" },
     { text: "生第 2 张", sub: "" },
     { text: "生第 3 张", sub: "" },
     { text: "生第 4 张 · 4 张完成", sub: "" },
-    { text: "下载到本地 · 复制到 /media", sub: "" },
+    { text: "整理封面文件", sub: "" },
   ]} />;
   if (!cover) return null;
 
@@ -1326,7 +1328,7 @@ function WxStepCover({ cover, title, loading, onPrev, onNext, onRegen, onSelect,
           <div style={{ fontSize: 13, color: T.muted }}>
             {isBatch ? "点选一张作为正式封面 · 不满意整批重来" : "旧版单张 · 文件可能已丢失,建议重生"}
             {cover.total_elapsed_sec && ` · 总耗时 ${cover.total_elapsed_sec}s`}
-            {cover.engine && ` · ${cover.engine}`}
+            {cover.engine && " · 图片服务"}
           </div>
         </div>
         {imgChip && <ImageEngineChip {...imgChip} />}
@@ -1335,7 +1337,7 @@ function WxStepCover({ cover, title, loading, onPrev, onNext, onRegen, onSelect,
 
       {!isBatch && (
         <div style={{ padding: 12, background: T.amberSoft, color: "#92400e", borderRadius: 10, fontSize: 13, marginBottom: 14, lineHeight: 1.6 }}>
-          ⚠️ 检测到旧版数据(单张 Chrome 模板封面)· 文件路径可能已失效,推送很可能 422.
+          ⚠️ 检测到旧版封面 · 文件可能已失效,推送可能失败。
           建议点上方 <b>🔄 升级到 4 选 1</b> 重新生 4 张候选封面,再选一张推送.
         </div>
       )}
@@ -1383,7 +1385,7 @@ function WxStepCover({ cover, title, loading, onPrev, onNext, onRegen, onSelect,
       </div>
 
       <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-        <Btn variant="outline" onClick={onPrev}>← 回 HTML</Btn>
+        <Btn variant="outline" onClick={onPrev}>← 回排版</Btn>
         {isBatch && <Btn onClick={onRegen}>🔄 再来 4 张</Btn>}
         <div style={{ flex: 1 }} />
         <Btn variant="primary" onClick={onNext} disabled={successCount === 0}>
@@ -1397,9 +1399,9 @@ function WxStepCover({ cover, title, loading, onPrev, onNext, onRegen, onSelect,
 // ─── Step 8 · 推送 ───────────────────────────────────────────
 function WxStepPush({ result, loading, onPrev, onReset, onNav }) {
   if (loading || !result) return <Spinning icon="🚀" phases={[
-    { text: "读 ~/.wechat-article-config", sub: "wechat_appid + wechat_appsecret" },
-    { text: "刷新 access_token", sub: "mp.weixin.qq.com API" },
-    { text: "上传封面到素材库", sub: "cdb_add_material · 获取 media_id" },
+    { text: "读取公众号配置", sub: "准备推送所需账号信息" },
+    { text: "连接公众号", sub: "确认草稿箱可用" },
+    { text: "上传封面到素材库", sub: "让草稿箱能直接使用" },
     { text: "创建草稿 · 去重检查", sub: "同标题+同摘要+同正文会复用已有草稿" },
     { text: "落地到公众号后台", sub: "去草稿箱点「发布」就能推" },
   ]} />;

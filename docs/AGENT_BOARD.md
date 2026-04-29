@@ -8,10 +8,10 @@
 
 | 角色 | 状态 | 工作区 | 当前任务 |
 |---|---|---|---|
-| 总控 Agent | 自动派工已接入 | `~/Desktop/neironggongchang` | T-065 已入队; 等 QA 独立复测 |
+| 总控 Agent | 自动派工已接入 | `~/Desktop/neironggongchang` | T-048/T-065 已返修; 准备 T-066 QA |
 | 内容开发 Agent | 空闲 | `~/Desktop/nrg-worktrees/content-dev` | T-021/T-022 已合入 main; 等新内容任务 |
 | 媒体开发 Agent | 空闲 | `~/Desktop/nrg-worktrees/media-dev` | T-047 已完成并合入 main; 等新媒体任务 |
-| QA 测试 Agent | 待领取 | `~/Desktop/nrg-worktrees/qa`, `~/Desktop/nrg-worktrees/qa-1`, `~/Desktop/nrg-worktrees/qa-2` | T-065 T-063/T-064 返修后独立复测 |
+| QA 测试 Agent | 待领取 | `~/Desktop/nrg-worktrees/qa`, `~/Desktop/nrg-worktrees/qa-1`, `~/Desktop/nrg-worktrees/qa-2` | T-066 全站 frame-aware 返修复测 |
 | 审查 Agent | 待领取 | `~/Desktop/nrg-worktrees/review` | T-064 已完成, 等后续返修审查任务 |
 
 ---
@@ -57,7 +57,7 @@
 | T-043 | D-125 素材库改动只读审查 | 审查 Agent / 总控返修 | 已完成 | 只读审查 + 总控修复 | 审查无 P0; 总控已修 P1/P2: missing_at 过滤、featured 降级、limit 校验、空态引导、补 featured 测试 |
 | T-044 | 全站内容链路低风险页面巡检 | QA 测试 Agent / 总控返修 | 已完成 | 只读 QA + 总控修复 | 投流失败恢复态不再露 `没匹配到已知模式/原始 message`; 显示友好失败卡; T-055 再做独立回归 |
 | T-045 | 全站媒体链路低风险页面巡检 | QA 测试 Agent / 总控返修 | 已完成 | 只读 QA + 总控修复 | 直接出图/作品库去技术词, 作品库绝对路径过滤, 数字人 picker 只列视频并隐藏本机路径; T-055 再做独立回归 |
-| T-046~T-053 | 全站优化自动补任务窗口 | 自动创建 | 进行中 | content/media/qa/review 分批 | T-046/T-047 已完成; 工作台空闲时继续自动派开发修复、QA 回归、Review 审查 |
+| T-046~T-053 | 全站优化自动补任务窗口 | 自动创建 | 进行中 | content/media/qa/review 分批 | T-046/T-047 已完成; T-048/T-049 已产出阻塞/审查报告并由总控返修; 工作台空闲时继续自动派开发修复、QA 回归、Review 审查 |
 | T-047 | 全站媒体与资产区体验优化第一轮 | 媒体开发 Agent / 总控合入 | 已完成 | `backend/api.py`, `web/factory-dhv5-v2.jsx`, `web/factory-dreamina-v2.jsx`, `web/factory-image-gen.jsx`, `web/factory-image.jsx`, `web/factory-materials-v2.jsx`, `web/factory-shell.jsx`, `web/factory-works.jsx` | 媒体/资产区去技术词与内部词, 素材源显示“临时素材源”; pytest/curl/Playwright 通过, 未烧媒体生成 credits |
 | T-054 | 投流恢复后录音改写 + 热点改写真链路复测 | QA 测试 Agent | blocked | 只读 QA 报告; 不改功能代码 | QA 结论: 录音改写真链路通过; 热点改写 4 版 task `673043b93c2f40338e1bb00fa314ad91` 因 Opus/OpenClaw timeout 失败, 未重复提交 |
 | T-055 | T-042/T-044/T-045 返修后综合回归 | QA 测试 Agent | 已完成 | 只读 QA | QA 通过: 战略部/投流失败恢复/直接出图/作品库/数字人 picker console/pageerror/requestfailed/http error=0, 不烧 credits, 禁止词与本机路径不外露 |
@@ -70,7 +70,8 @@
 | T-062 | 全站可见工程词二轮清理 | 总控 Agent | 已完成 | `web/factory-home.jsx`, `web/factory-write.jsx` | 21 个路由页面工程词/本机路径/接口词扫描命中 0, console/pageerror/requestfailed/http error=0 |
 | T-063 | T-062 全站文案清理独立只读复测 | QA 测试 Agent / 总控返修 | blocked -> 已返修 | 只读 QA; 禁止停启端口; 不烧 credits | QA 找到知识库 `persona-prompt` 外露; 总控已修知识库展示脱敏与全站方法徽章; 等 T-065 独立复测 |
 | T-064 | D-126/T-062 只读审查 | 审查 Agent / 总控返修 | 已完成 -> 已返修 | 只读审查; 不改代码 | Review 无 P0; P1 即梦失败任务卡 `id/watcher` 外露已修; P2 命名/默认探活测试已补 |
-| T-065 | T-063/T-064 返修后全站只读复测 | QA 测试 Agent | queued | 只读 QA; 禁止停启 8000/8001; 不调用 `/api/health` 当门禁; 不烧 credits | 按 T-063 21 页扫描口径复测; 额外用假数据覆盖即梦失败任务卡, 确认不露 `id/submit_id/watcher/status=` |
+| T-065 | T-063/T-064 返修后全站只读复测 | QA 测试 Agent | blocked -> 已返修 | 只读 QA; 禁止停启 8000/8001; 不调用 `/api/health` 当门禁; 不烧 credits | QA 主页面通过但 frame-aware 扫描发现 `beta` iframe 外露本机路径/工程词; 总控已移除 iframe 并自验通过 |
+| T-066 | T-048/T-065 返修后 frame-aware 全站复测 | QA 测试 Agent | queued | 只读 QA; 禁止停启 8000/8001; 不调用 `/api/health` 当门禁; 不烧 credits | 21 页 + 所有 frame 禁止词 0; `wechat/voicerewrite/beta` 重点复测; Dreamina 失败任务假数据仍不露 `id/submit_id/watcher/status=` |
 
 ---
 
@@ -98,6 +99,7 @@
 - T-063 QA blocked: 报告 `docs/agent-handoff/QA_T063_SITE_COPY_READONLY_20260430.md`; 21 页中仅知识库 `persona-prompt` 命中 `prompt`, 其余错误为 0。
 - T-064 Review done: 报告 `docs/agent-handoff/REVIEW_T064_D126_T062_20260430.md`; 无 P0, P1 为即梦失败任务卡仍露 `id/watcher`。
 - T-063/T-064 总控返修: 报告 `docs/agent-handoff/CONTROLLER_T063_T064_COPY_REPAIR_20260430.md`; full pytest 通过, 21 页严格扫描 21/21 OK, 禁止词/console/pageerror/requestfailed/http/提交请求均 0, 即梦失败任务卡假数据复核通过。
+- T-048/T-065 总控返修: 报告 `docs/agent-handoff/CONTROLLER_T048_T065_COPY_IFRAME_REPAIR_20260430.md`; 公众号/录音改写技术词已清理; `beta` 移除内部工作台 iframe; frame-aware 21 页扫描 21/21 OK, 禁止词/console/pageerror/requestfailed/http/nonGET 均 0; beta 靶向 frames=1。
 - D-124 素材库总控交接: `docs/agent-handoff/CONTROLLER_MATERIALS_T026_MAIN_20260429.md`.
 - D-124 验证: `python3 -m pytest -q` -> 通过; `git diff --check` -> clean; 临时 API `:18000` curl `/categories`、`/match`、`/classify-batch?limit=100` 通过; Playwright 截图 `/tmp/_ui_shots/t026_materials_desktop_home.png`, `/tmp/_ui_shots/t026_materials_desktop_category.png`, `/tmp/_ui_shots/t026_materials_desktop_match.png`, `/tmp/_ui_shots/t026_materials_mobile_home.png`, console error/pageerror/requestfailed/http error=0.
 - 总控本轮交接: `docs/agent-handoff/CONTROLLER_T013_T017_20260429_2011.md`.

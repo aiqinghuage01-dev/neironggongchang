@@ -61,7 +61,7 @@ const ERROR_PATTERNS = [
     suggestion: "快速出图当前慢, 等 30 秒重试, 或把画面描述写短一点" },
   { match: /convert_to_wechat_markup|bs4|premailer|No module named|ModuleNotFoundError|公众号排版工具|脚本失败 rc=.*wechat_article_raw_push/i,
     icon: "🧩", title: "公众号排版环境没接上",
-    suggestion: "这是后台排版工具的运行环境问题, 修好后重新点一次「拼 HTML」即可" },
+    suggestion: "这是排版工具的运行环境问题, 修好后重新点一次「拼排版」即可" },
 
   // ─── HTTP / 上游 AI ────────────────────────────────────────
   { match: /timed?out|timeout|超时/i,
@@ -122,7 +122,7 @@ function humanizeError(rawMsg) {
 
 // normalizeErrorMessage(e) → 用户可见 string
 // - Error 对象 / 字符串 / null 都接受
-// - 短中文用户提示 (e.g. "HTML 还没生成, 先回去拼一下") 原样返, 不当"出错"
+// - 短中文用户提示 (e.g. "排版还没生成, 先回去拼一下") 原样返, 不当"出错"
 // - 技术错误 → humanizeError 转友好 title
 function normalizeErrorMessage(e) {
   if (e == null) return "未知错误";

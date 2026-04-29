@@ -90,18 +90,19 @@ function PagePlanner({ onNav }) {
     if (s.step) setStep(s.step);
   };
   const wf = useWorkflowPersist({ ns: "planner", state: wfState, onRestore: wfRestore });
+  const showInlineError = err && !(step === "plan" && (poller.isFailed || poller.isCancelled));
 
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", background: T.bg, position: "relative", overflow: "hidden" }}>
       <StepHeader icon="🗓️" title="内容策划 · 3 步"
         steps={PLANNER_STEPS} currentStep={step}
-        skillInfo={skillInfo} onBack={() => onNav("home")} />
+        skillInfo={null} onBack={() => onNav("home")} />
       <div style={{ flex: 1, overflow: "auto" }}>
         <WfRestoreBanner show={wf.hasSnapshot} onDismiss={wf.dismissSnapshot}
           onClear={() => { reset(); wf.dismissSnapshot(); }}
           label="内容策划工作流" />
-        {/* D-086: 走全站 InlineError */}
-        {err && <InlineError err={err} />}
+        {/* D-086: 走全站 InlineError；任务失败时只保留 FailedRetry 友好卡片。 */}
+        {showInlineError && <InlineError err={err} />}
         {step === "input"  && <PStepInput brief={brief} setBrief={setBrief} onGo={doAnalyze} loading={loading} />}
         {step === "levels" && <PStepLevels analysis={analysis} loading={loading} onPick={pickLevel} onPrev={() => setStep("input")} onRegen={doAnalyze} />}
         {step === "plan"   && (

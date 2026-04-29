@@ -12,6 +12,7 @@ function PageMoments({ onNav }) {
   const [step, setStep] = React.useState("topic");
   const [topic, setTopic] = React.useState("");
   const [loading, setLoading] = React.useState(false);
+  const [err, setErr] = React.useState("");
   const [items, setItems] = React.useState([]);
   const [kbUsed, setKbUsed] = React.useState([]);
   const [coversMap, setCoversMap] = React.useState({});   // itemIdx → [cover...]
@@ -19,17 +20,18 @@ function PageMoments({ onNav }) {
 
   async function derive() {
     if (!topic.trim()) return;
-    setLoading(true); setItems([]);
+    setLoading(true); setItems([]); setErr("");
     setStep("derive");
     try {
       const r = await api.post("/api/moments/derive", { topic: topic.trim(), n: 5, use_kb: true, deep: getDeep() });
       setItems(r.items || []);
       setKbUsed(r.kb_used || []);
-    } catch (e) { alert(e.message); setStep("topic"); }
+    } catch (e) { setErr(e.message || "朋友圈没生成出来"); setStep("topic"); }
     setLoading(false);
   }
 
   async function genCoverFor(idx) {
+    setErr("");
     const it = items[idx];
     const slogan = (it?.text || "").split(/[\n。!?!?]/).filter(s => s.trim().length >= 4)[0]?.slice(0, 14) || "今日一句";
     try {
@@ -42,7 +44,7 @@ function PageMoments({ onNav }) {
         setCoversMap(prev => ({ ...prev, [idx]: q }));
         if (q.status === "succeed" || q.status === "failed") return;
       }
-    } catch (e) { alert(e.message); }
+    } catch (e) { setErr(e.message || "配图没生成出来"); }
   }
 
   const CHAT = {
@@ -61,6 +63,7 @@ function PageMoments({ onNav }) {
           <FromMakeBanner fromMake={fm.fromMake} dismiss={fm.dismiss}
             label="衍生几条 → 挑最炸的, 点'做视频'自动带回" />
         </div>
+        {err && <InlineError err={err} />}
         {step === "topic" && <MStepTopic topic={topic} setTopic={setTopic} onGo={derive} loading={loading} />}
         {step === "derive" && <MStepDeriving topic={topic} items={items} loading={loading} onPrev={() => setStep("topic")} onNext={() => setStep("cover")} />}
         {step === "cover" && <MStepCover items={items} coversMap={coversMap} onGenCover={genCoverFor} onPrev={() => setStep("derive")} onNext={() => setStep("copy")}

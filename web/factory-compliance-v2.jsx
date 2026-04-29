@@ -14,7 +14,7 @@ const COMPLIANCE_INDUSTRIES = [
   { id: "美业",   label: "美容/美业",   hint: "+ 化妆品虚假宣传" },
   { id: "教育",   label: "教育/培训",   hint: "+ 教育承诺" },
   { id: "金融",   label: "金融/知识付费", hint: "+ 收益承诺" },
-  { id: "医美",   label: "医美/整形",   hint: "+ 医美超高危 §1+§2+§5" },
+  { id: "医美",   label: "医美/整形",   hint: "+ 医美重点条款" },
 ];
 
 function PageCompliance({ onNav }) {
@@ -73,7 +73,7 @@ function PageCompliance({ onNav }) {
     <div style={{ flex: 1, display: "flex", flexDirection: "column", background: T.bg, position: "relative", overflow: "hidden" }}>
       <StepHeader icon="🛡️" title="违规审查 · 2 步"
         steps={COMPLIANCE_STEPS} currentStep={step}
-        skillInfo={skillInfo} onBack={() => onNav("home")} />
+        skillInfo={null} onBack={() => onNav("home")} />
       <div style={{ flex: 1, overflow: "auto" }}>
         <WfRestoreBanner show={wf.hasSnapshot} onDismiss={wf.dismissSnapshot}
           onClear={() => { reset(); wf.dismissSnapshot(); }}

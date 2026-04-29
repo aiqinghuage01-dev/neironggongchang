@@ -186,6 +186,7 @@ function PageVoicerewrite({ onNav }) {
     if (s.step) setStep(s.step);
   };
   const wf = useWorkflowPersist({ ns: "voicerewrite", state: wfState, onRestore: wfRestore });
+  const showInlineError = err && !(step === "write" && (poller.isFailed || poller.isCancelled) && versions.length === 0);
 
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", background: T.bg, position: "relative", overflow: "hidden" }}>
@@ -198,8 +199,8 @@ function PageVoicerewrite({ onNav }) {
         <WfRestoreBanner show={wf.hasSnapshot} onDismiss={wf.dismissSnapshot}
           onClear={() => { reset(); wf.dismissSnapshot(); }}
           label="录音改写工作流" />
-        {/* D-086: 走全站 InlineError */}
-        {err && <InlineError err={err} />}
+        {/* D-086: 走全站 InlineError；首版改写失败时只保留 FailedRetry 友好卡片。 */}
+        {showInlineError && <InlineError err={err} />}
         {step === "input"  && <VStepInput transcript={transcript} setTranscript={setTranscript} onGo={doAnalyze} loading={loading} skillInfo={skillInfo} />}
         {step === "angles" && <VStepAngles analyze={analyze} loading={loading} onPick={pickAngle} onPrev={() => setStep("input")} onRegen={doAnalyze}
           withBiz={withBiz} setWithBiz={setWithBiz} pureRewrite={pureRewrite} setPureRewrite={setPureRewrite} />}
@@ -282,7 +283,7 @@ function VoiceHeader({ current, onBack, skillInfo }) {
 function VStepInput({ transcript, setTranscript, onGo, loading, skillInfo }) {
   const ready = !!transcript.trim() && !loading;
   const len = transcript.length;
-  // D-062bb: 短视频 URL → 自动转写 (走 /api/transcribe/submit, 轻抖)
+  // D-062bb: 短视频链接 → 自动转写 (走 /api/transcribe/submit, 轻抖)
   const [url, setUrl] = React.useState("");
   const [transcribing, setTranscribing] = React.useState(false);
   const [transcribeMsg, setTranscribeMsg] = React.useState("");
@@ -307,14 +308,14 @@ function VStepInput({ transcript, setTranscript, onGo, loading, skillInfo }) {
             return;
           }
           if (q.status === "failed") {
-            setTranscribeMsg(`转写失败: ${q.error || "(无 detail)"}`);
+            setTranscribeMsg(`转写失败: ${normalizeErrorMessage(q.error || "没有返回失败原因")}`);
             return;
           }
-          setTranscribeMsg(`等转写... ${q.status} (${(i + 1) * 5}s)`);
+          setTranscribeMsg(`等转写... ${(i + 1) * 5}s`);
         } catch (_) {}
       }
-      setTranscribeMsg("等了 5 分钟还没出 · 短视频较长? 去 ⚙️ 设置看 transcribe 历史");
-    } catch (e) { setTranscribeMsg(`提交失败: ${e.message}`); }
+      setTranscribeMsg("等了 5 分钟还没出 · 短视频较长? 去 ⚙️ 设置看转写记录");
+    } catch (e) { setTranscribeMsg(`提交失败: ${normalizeErrorMessage(e)}`); }
     finally { setTranscribing(false); }
   }
 
@@ -325,12 +326,12 @@ function VStepInput({ transcript, setTranscript, onGo, loading, skillInfo }) {
         <div style={{ fontSize: 14, color: T.muted, lineHeight: 1.6 }}>观点不变 · 口吻不丢 · 经历保留 · 改写出口播文案</div>
       </div>
 
-      {/* D-062bb: URL 自动转写 (短视频链接) */}
+      {/* D-062bb: 短视频链接自动转写 */}
       <div style={{ background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 12, padding: 14, marginBottom: 14 }}>
         <div style={{ fontSize: 12.5, fontWeight: 600, color: T.text, marginBottom: 6 }}>🔗 有短视频链接? 一键自动转写</div>
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
           <input value={url} onChange={e => setUrl(e.target.value)}
-            placeholder="抖音 / 视频号 / 小红书 等短视频 URL"
+            placeholder="抖音 / 视频号 / 小红书等短视频链接"
             disabled={transcribing}
             onKeyDown={e => { if (e.key === "Enter") transcribeUrl(); }}
             style={{ flex: 1, minWidth: 240, padding: "8px 12px", border: `1px solid ${T.borderSoft}`, borderRadius: 8, fontSize: 13, fontFamily: "inherit", outline: "none" }} />
@@ -344,7 +345,7 @@ function VStepInput({ transcript, setTranscript, onGo, loading, skillInfo }) {
           </div>
         )}
         <div style={{ marginTop: 6, fontSize: 10.5, color: T.muted2 }}>
-          💡 走轻抖 ASR · 通常 1-3 分钟 · 上传本地 m4a/mp3 文件功能 待后端 ASR 接入 (D-062bb-ext)
+          💡 通常 1-3 分钟 · 本地音频上传稍后接上
         </div>
       </div>
 

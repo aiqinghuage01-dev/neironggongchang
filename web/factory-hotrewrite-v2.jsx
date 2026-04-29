@@ -221,6 +221,7 @@ function PageHotrewrite({ onNav }) {
     if (s.step) setStep(s.step);
   };
   const wf = useWorkflowPersist({ ns: "hotrewrite", state: wfState, onRestore: wfRestore });
+  const showInlineError = err && !(step === "write" && (poller.isFailed || poller.isCancelled) && versions.length === 0);
 
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", background: T.bg, position: "relative", overflow: "hidden" }}>
@@ -233,8 +234,8 @@ function PageHotrewrite({ onNav }) {
         <WfRestoreBanner show={wf.hasSnapshot} onDismiss={wf.dismissSnapshot}
           onClear={() => { reset(); wf.dismissSnapshot(); }}
           label="热点改写工作流" />
-        {/* D-086: 走全站 InlineError */}
-        {err && <InlineError err={err} />}
+        {/* D-086: 走全站 InlineError；首版写作失败时只保留 FailedRetry 友好卡片。 */}
+        {showInlineError && <InlineError err={err} />}
         {step === "input"  && <HotStepInput hotspot={hotspot} setHotspot={setHotspot} onGo={doAnalyze} loading={loading} skillInfo={skillInfo} />}
         {step === "angles" && <HotStepAngles analyze={analyze} loading={loading} onPick={pickAngle} onPrev={() => setStep("input")} onRegen={doAnalyze}
           withBiz={withBiz} setWithBiz={setWithBiz} pureRewrite={pureRewrite} setPureRewrite={setPureRewrite} />}
