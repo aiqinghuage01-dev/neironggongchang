@@ -8,11 +8,11 @@
 
 | 角色 | 状态 | 工作区 | 当前任务 |
 |---|---|---|---|
-| 总控 Agent | 自动派工已接入 | `~/Desktop/neironggongchang` | 已确认素材库 D-124 精品原片库方向; 已启动素材库定时巡检 + 自动返工循环 |
+| 总控 Agent | 自动派工已接入 | `~/Desktop/neironggongchang` | 已接管并完成 T-026 素材库精品原片库主线验证; 素材库自动返工循环已停止 |
 | 内容开发 Agent | 空闲 | `~/Desktop/nrg-worktrees/content-dev` | T-021 已 done; 等新内容任务 |
-| 媒体开发 Agent | 进行中 | `~/Desktop/nrg-worktrees/media-dev` | T-035 claimed: 素材库第 3 轮继续接管 T-026 半成品 |
-| QA 测试 Agent | 空闲/待依赖 | `~/Desktop/nrg-worktrees/qa`, `~/Desktop/nrg-worktrees/qa-1`, `~/Desktop/nrg-worktrees/qa-2` | T-030/T-031 已 done; T-028 queued 等 T-026/T-027 |
-| 审查 Agent | 空闲/待依赖 | `~/Desktop/nrg-worktrees/review` | T-029 已 done; T-027 queued 等 T-026 |
+| 媒体开发 Agent | 空闲 | `~/Desktop/nrg-worktrees/media-dev` | T-035 重复 worker 已由总控停止并 block |
+| QA 测试 Agent | 空闲 | `~/Desktop/nrg-worktrees/qa`, `~/Desktop/nrg-worktrees/qa-1`, `~/Desktop/nrg-worktrees/qa-2` | T-030/T-031 已 done; T-028 由总控真实浏览器闭环关闭 |
+| 审查 Agent | 空闲 | `~/Desktop/nrg-worktrees/review` | T-029 已 done; T-027 由总控结合 T-029 风险清单关闭 |
 
 ---
 
@@ -42,20 +42,22 @@
 | T-023 | 素材库精品原片库 MVP: Downloads 演示源 + 8 业务大类 + 虚拟归类 | 媒体开发 Agent | blocked | 同 T-026 范围子集 | 媒体开发自动 Agent 启动后命中 chatgpt.com websocket 证书错误, 未进入实现; 需求升级为 T-026 |
 | T-024 | 已废弃: T-023 代码审查 | 审查 Agent | cancelled | 无 | T-023 已废弃, 改由 T-027 审查 T-026 |
 | T-025 | 已废弃: T-023 QA | QA 测试 Agent | cancelled | 无 | T-023 已废弃, 改由 T-028 QA T-026 |
-| T-026 | 素材库精品原片库完整页: 业务大类 + 结构化画像 + 剪辑检索 | 媒体开发 Agent | claimed | `backend/services/materials_service.py`, `backend/services/materials_pipeline.py`, `backend/services/migrations.py`, `backend/api.py` 的 `/api/material-lib/*`, `backend/services/settings.py`, `web/factory-materials-v2.jsx`, `tests/test_materials_*` | 用 Downloads 演示源跑通完整页; 首页 8 业务大类; `materials_root` 可保存; 结构化画像字段落库; 分类批处理限量; `/api/material-lib/match` 可按文案找素材; pytest materials 通过 |
-| T-027 | T-026 代码审查: 产品方向/安全/漏测 | 审查 Agent | queued(等 T-026 done) | 只读 T-026 diff、设计文档、报告 | 找 P0/P1/P2; 重点审“是否还是文件浏览器”、credits 风险、D-087 数据隔离、剪辑检索可用性 |
-| T-028 | T-026 修后素材库完整真实 QA | QA 测试 Agent | queued(等 T-026 done + T-027 done) | 不改功能代码; 只提交报告/必要测试脚本需总控确认 | 真实浏览器闭环: 首页/大类/搜索/预览/待整理/匹配接口; 截图已读; console/pageerror/requestfailed=0; curl + pytest 证据齐 |
+| T-026 | 素材库精品原片库完整页: 业务大类 + 结构化画像 + 剪辑检索 | 媒体开发 Agent / 总控接管 | 已完成 | `backend/services/materials_service.py`, `backend/services/materials_pipeline.py`, `backend/services/migrations.py`, `backend/api.py` 的 `/api/material-lib/*`, `backend/services/settings.py`, `web/factory-materials-v2.jsx`, `tests/test_materials_*` | main 已验证: Downloads 演示源完整页; 首页 8 业务大类; `materials_root` 可保存; V5 画像字段落库; 分类批处理限量; `/api/material-lib/match` 可按文案找素材; 全量 pytest + 浏览器闭环通过 |
+| T-027 | T-026 代码审查: 产品方向/安全/漏测 | 审查 Agent / 总控接管 | 已完成 | 只读 T-026 diff、设计文档、报告 | T-029 风险清单逐条对照: 旧分类/设置白名单/业务大类首页/剪辑检索/credits 风险/识别来源均已处理; 剩余视觉识别为后续增强 |
+| T-028 | T-026 修后素材库完整真实 QA | QA 测试 Agent / 总控接管 | 已完成 | 不改功能代码; 只提交报告/必要测试脚本需总控确认 | Playwright 已真点真填: 首页/上课教学大类/剪辑检索/移动端; console error/pageerror/requestfailed/http error=0; curl + pytest 证据齐 |
 | T-029 | 素材库完整页前置审查: 产品方向与架构风险 | 审查 Agent | done | 只读 D-124 设计和当前实现 | T-026 前置风险清单已交付, 不等开发完成 |
 | T-030 | 素材库当前版本基线 QA 与测试脚本准备 | QA 测试 Agent | done | 不改功能代码 | 当前页面截图/console/差距清单已交付, 不烧 credits |
 | T-031 | 素材库接口基线 curl/pytest 准备 | QA 测试 Agent | done | 不改功能代码 | 当前 `/api/material-lib/*` 返回形状和复测清单已交付 |
 | T-032 | 素材库返修第 2 轮 | 媒体开发 Agent | blocked | 同 T-026 | worker 技术退出, 已由定时巡检推进到 T-035 |
-| T-035 | 素材库返修第 3 轮 | 媒体开发 Agent | claimed | 同 T-026 | 接管 media-dev 半成品继续实现; 定时巡检会重试技术掉线, 不直接耗尽后续轮次 |
-| T-036~T-040 | 素材库后续审查/QA/返工循环 | 自动创建 | pending | 同 T-026/T-027/T-028 | 若 Review/QA blocked, `bash scripts/start_materials_loop.sh` 启动的守夜进程自动派下一轮媒体返修、审查、QA |
+| T-035 | 素材库返修第 3 轮 | 媒体开发 Agent | blocked | 同 T-026 | 重复 worker 已停止; 总控已在 main 完成同范围实现与验证, 避免旧 worktree 覆盖主线 |
+| T-036~T-040 | 素材库后续审查/QA/返工循环 | 自动创建 | 停止 | 同 T-026/T-027/T-028 | D-124 本轮已由总控收束; 如后续要做视觉识别/物理整理, 另起新任务 |
 
 ---
 
 ## 最近证据
 
+- D-124 素材库总控交接: `docs/agent-handoff/CONTROLLER_MATERIALS_T026_MAIN_20260429.md`.
+- D-124 验证: `python3 -m pytest -q` -> 通过; `git diff --check` -> clean; 临时 API `:18000` curl `/categories`、`/match`、`/classify-batch?limit=100` 通过; Playwright 截图 `/tmp/_ui_shots/t026_materials_desktop_home.png`, `/tmp/_ui_shots/t026_materials_desktop_category.png`, `/tmp/_ui_shots/t026_materials_desktop_match.png`, `/tmp/_ui_shots/t026_materials_mobile_home.png`, console error/pageerror/requestfailed/http error=0.
 - 总控本轮交接: `docs/agent-handoff/CONTROLLER_T013_T017_20260429_2011.md`.
 - T-013 已安全 cherry-pick 到 main: `6e05558` + `ff221fc`; 未整支 merge `codex/media-dev`.
 - T-013 主线验证: `.venv/bin/pytest -q tests/test_apimart_service.py tests/test_remote_jobs.py` -> 21 passed; `.venv/bin/pytest -q -x` -> passed; `git diff --check HEAD~2..HEAD` -> clean.

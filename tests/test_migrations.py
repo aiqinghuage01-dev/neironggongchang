@@ -32,8 +32,8 @@ EXPECTED_TABLES = {
 
 # 跟 backend.services.migrations._MIGRATIONS 同步:
 # v1 = D-084 baseline, v2 = D-087 素材库 5 表, v3 = B'-3 pending_moves 加 confidence/no_move/version/reviewed,
-# v4 = B'-4 material_assets 加 content_hash/last_seen_at/missing_at
-EXPECTED_VERSION = 4
+# v4 = B'-4 material_assets 加 content_hash/last_seen_at/missing_at, v5 = D-124 结构化画像字段
+EXPECTED_VERSION = 5
 
 
 @pytest.fixture
@@ -93,6 +93,23 @@ def test_apply_migrations_creates_works_indexes(tmp_db):
     indexes = {r[0] for r in rows}
     expected = {"idx_works_created_at", "idx_works_status", "idx_works_type", "idx_works_source_skill"}
     assert expected <= indexes, f"works 缺索引: {expected - indexes}"
+
+
+def test_apply_migrations_creates_material_profile_columns(tmp_db):
+    """D-124: material_assets 应有精品原片库结构化画像字段."""
+    from backend.services import migrations
+    migrations.apply_migrations()
+
+    with sqlite3.connect(str(tmp_db)) as con:
+        cols = {r[1] for r in con.execute("PRAGMA table_info(material_assets)").fetchall()}
+        idx = {r[1] for r in con.execute("PRAGMA index_list(material_assets)").fetchall()}
+    expected_cols = {
+        "category", "visual_summary", "shot_type", "orientation",
+        "quality_score", "usage_hint", "relevance_score",
+        "recognition_source", "profile_updated_at",
+    }
+    assert expected_cols <= cols, f"material_assets 缺画像字段: {expected_cols - cols}"
+    assert "idx_material_assets_category" in idx
 
 
 # ─── legacy fixups 双覆盖 (P2-2) ──────────────────────────────

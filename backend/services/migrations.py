@@ -391,12 +391,42 @@ def _v4_asset_identity(con: sqlite3.Connection) -> None:
     con.execute("CREATE INDEX IF NOT EXISTS idx_material_assets_content_hash ON material_assets(content_hash)")
 
 
+# ──────────────────────────────────────────
+# V5: D-124 — 精品原片库结构化画像
+# category 等字段只挂在 material_assets, 不新增非 material_* 表, 保持 D-087 隔离.
+# 第一版 recognition_source='metadata', 后续图片视觉识别/视频关键帧识别可覆盖同一批字段.
+# ──────────────────────────────────────────
+
+
+def _v5_material_asset_profiles(con: sqlite3.Connection) -> None:
+    rows = con.execute("PRAGMA table_info(material_assets)").fetchall()
+    existing = {r[1] for r in rows}
+    new_cols = [
+        ("category", "TEXT DEFAULT '00 待整理'"),
+        ("visual_summary", "TEXT"),
+        ("shot_type", "TEXT"),
+        ("orientation", "TEXT"),
+        ("quality_score", "INTEGER"),
+        ("usage_hint", "TEXT"),
+        ("relevance_score", "INTEGER"),
+        ("recognition_source", "TEXT"),
+        ("profile_updated_at", "INTEGER"),
+    ]
+    for col, typ in new_cols:
+        if col not in existing:
+            con.execute(f"ALTER TABLE material_assets ADD COLUMN {col} {typ}")
+    con.execute("CREATE INDEX IF NOT EXISTS idx_material_assets_category ON material_assets(category)")
+    con.execute("CREATE INDEX IF NOT EXISTS idx_material_assets_profile_updated ON material_assets(profile_updated_at)")
+    con.execute("CREATE INDEX IF NOT EXISTS idx_material_assets_quality ON material_assets(quality_score)")
+
+
 # 每条 migration: (version, note, sql_or_callable)
 # 类型为 str 时走 executescript; 为 callable 时调用 fn(conn) 执行 (适合幂等 ALTER 等情况).
 _MIGRATIONS: list[tuple[int, str, str | "callable"]] = [
     (2, "D-087 素材库 5 表 (material_assets/tags/asset_tags/usage_log/pending_moves)", _V2_MATERIALS_LIB),
     (3, "B'-3 pending_moves 加 confidence/no_move/suggestion_version/reviewed_at, 旧条目标 stale", _v3_pending_moves_review),
     (4, "B'-4 material_assets 加 content_hash/last_seen_at/missing_at + index", _v4_asset_identity),
+    (5, "D-124 material_assets 加精品原片库结构化画像字段 + index", _v5_material_asset_profiles),
 ]
 
 

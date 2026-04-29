@@ -14,6 +14,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import sqlite3
 import subprocess
 import time
@@ -37,6 +38,245 @@ ASSET_EXTS = IMAGE_EXTS | VIDEO_EXTS
 THUMB_DIR = shortvideo.config.DATA_DIR / "material_thumbs"
 THUMB_DIR.mkdir(parents=True, exist_ok=True)
 THUMB_SIZE = (320, 180)
+
+
+# ─── D-124 精品原片库业务大类 ─────────────────────────────
+
+MATERIAL_CATEGORIES: list[dict[str, Any]] = [
+    {
+        "key": "00 待整理",
+        "label": "待整理",
+        "icon": "□",
+        "description": "新素材、暂时识别不准的素材, 等清华哥确认",
+        "usage": "先审核再进剪辑",
+        "keywords": ["待整理", "未分类", "unknown", "img_", "dsc", "wechat", "download"],
+    },
+    {
+        "key": "01 演讲舞台",
+        "label": "演讲舞台",
+        "icon": "■",
+        "description": "上台、观众、掌声、会场、合影、舞台空镜",
+        "usage": "适合做权威背书、现场证明、开场和结尾",
+        "keywords": ["演讲", "舞台", "讲台", "会场", "观众", "掌声", "上台", "主持", "合影", "speech", "stage", "podium", "talk"],
+    },
+    {
+        "key": "02 上课教学",
+        "label": "上课教学",
+        "icon": "▣",
+        "description": "课堂、板书、课件、学员互动、讲课片段",
+        "usage": "适合讲知识点、证明教学现场、穿插课堂片段",
+        "keywords": ["上课", "教学", "课堂", "讲课", "学员", "学生", "板书", "课件", "提问", "互动", "lecture", "class", "courseware"],
+    },
+    {
+        "key": "03 研发产品",
+        "label": "研发产品",
+        "icon": "▤",
+        "description": "研发现场、电脑、工具、产品演示、团队讨论",
+        "usage": "适合展示产品、团队、方法论和操作过程",
+        "keywords": ["研发", "产品", "电脑", "工具", "代码", "演示", "团队", "讨论", "后台", "软件", "demo", "screen", "录屏"],
+    },
+    {
+        "key": "04 出差商务",
+        "label": "出差商务",
+        "icon": "▥",
+        "description": "机场、高铁、酒店、城市、客户现场、商务会面",
+        "usage": "适合转场、行程记录、商务信任和现场感",
+        "keywords": ["出差", "机场", "高铁", "酒店", "城市", "客户", "商务", "会议", "会面", "差旅", "travel", "trip", "hotel", "airport"],
+    },
+    {
+        "key": "05 做课素材",
+        "label": "做课素材",
+        "icon": "▦",
+        "description": "录课、课程封面、PPT、讲义截图、课程花絮",
+        "usage": "适合课程预告、知识产品说明、封面和课件补画面",
+        "keywords": ["做课", "录课", "课程", "ppt", "讲义", "课纲", "大纲", "封面", "花絮", "训练营", "lesson", "slides"],
+    },
+    {
+        "key": "06 空镜补画面",
+        "label": "空镜补画面",
+        "icon": "▧",
+        "description": "办公室、手部、键盘、书、咖啡、街景、转场镜头",
+        "usage": "适合转场、铺底、情绪缓冲和口播补画面",
+        "keywords": ["空镜", "补画面", "办公室", "手部", "键盘", "书", "咖啡", "街景", "转场", "走位", "broll", "b-roll", "cutaway"],
+    },
+    {
+        "key": "07 品牌资产",
+        "label": "品牌资产",
+        "icon": "▨",
+        "description": "logo、海报、封面、固定视觉物料",
+        "usage": "适合封面、片尾、品牌露出和固定视觉资产",
+        "keywords": ["品牌", "logo", "海报", "封面", "poster", "cover", "banner", "头像", "二维码", "视觉", "物料"],
+    },
+]
+
+VALID_CATEGORIES = {c["key"] for c in MATERIAL_CATEGORIES}
+DEFAULT_CATEGORY = "00 待整理"
+
+
+def _category_meta(category: str | None) -> dict[str, Any]:
+    key = category if category in VALID_CATEGORIES else DEFAULT_CATEGORY
+    return next(c for c in MATERIAL_CATEGORIES if c["key"] == key)
+
+
+def _asset_text(asset: dict[str, Any]) -> str:
+    tag_text = " ".join(
+        str(t.get("name") or "")
+        for t in (asset.get("tags") or [])
+        if isinstance(t, dict)
+    )
+    return " ".join(
+        str(asset.get(k) or "") for k in ("filename", "rel_folder", "ext")
+    ).lower() + " " + tag_text.lower()
+
+
+def _media_kind(asset: dict[str, Any]) -> str:
+    return "视频" if (asset.get("ext") or "").lower() in VIDEO_EXTS else "图片"
+
+
+def infer_orientation(width: Any, height: Any) -> str:
+    try:
+        w = float(width or 0)
+        h = float(height or 0)
+    except (TypeError, ValueError):
+        return "未知"
+    if w <= 0 or h <= 0:
+        return "未知"
+    ratio = w / h
+    if ratio >= 1.15:
+        return "横屏"
+    if ratio <= 0.85:
+        return "竖屏"
+    return "方图"
+
+
+def build_metadata_profile(asset: dict[str, Any]) -> dict[str, Any]:
+    """基于文件名/路径/尺寸/时长推断第一版结构化画像.
+
+    这是 D-124 的快速层, 不烧 credits. 后续图片视觉识别/视频关键帧识别可复用
+    update_asset_profile() 覆盖同一批字段, recognition_source 改为 image_vision/video_frames.
+    """
+    text = _asset_text(asset)
+    category_scores: dict[str, int] = {c["key"]: 0 for c in MATERIAL_CATEGORIES}
+    matched_terms: list[str] = []
+    for c in MATERIAL_CATEGORIES:
+        for kw in c["keywords"]:
+            if kw.lower() in text:
+                category_scores[c["key"]] += 2 if c["key"] != DEFAULT_CATEGORY else 1
+                if kw not in matched_terms and c["key"] != DEFAULT_CATEGORY:
+                    matched_terms.append(kw)
+
+    # 老 D-087 文件夹名兼容: 只影响虚拟分类, 不移动真实文件.
+    old_folder = str(asset.get("rel_folder") or "")
+    legacy_map = {
+        "00 讲台高光": "01 演讲舞台",
+        "01 板书课件": "02 上课教学",
+        "02 学员互动": "02 上课教学",
+        "03 走位空镜": "06 空镜补画面",
+        "04 海报封面": "07 品牌资产",
+        "05 BGM 音效": "06 空镜补画面",
+        "06 金句库": "05 做课素材",
+        "07 爆款档案": "05 做课素材",
+    }
+    for prefix, mapped in legacy_map.items():
+        if old_folder.startswith(prefix):
+            category_scores[mapped] += 4
+
+    best_category, best_score = max(category_scores.items(), key=lambda kv: kv[1])
+    if best_score <= 0:
+        best_category = DEFAULT_CATEGORY
+
+    orientation = infer_orientation(asset.get("width"), asset.get("height"))
+    kind = _media_kind(asset)
+    duration = float(asset.get("duration_sec") or 0)
+    width = int(asset.get("width") or 0)
+    height = int(asset.get("height") or 0)
+    has_thumb = bool(asset.get("thumb_path"))
+
+    shot_type = "现场照片" if kind == "图片" else "视频片段"
+    if any(k in text for k in ("录屏", "screen", "screenshot", "截图")):
+        shot_type = "屏幕录制"
+    elif any(k in text for k in ("合影", "group")):
+        shot_type = "合影"
+    elif any(k in text for k in ("手", "键盘", "咖啡", "书")):
+        shot_type = "手部特写"
+    elif best_category == "01 演讲舞台":
+        shot_type = "演讲现场"
+    elif best_category == "02 上课教学":
+        shot_type = "教学现场"
+    elif best_category == "04 出差商务":
+        shot_type = "出差记录"
+    elif best_category == "06 空镜补画面":
+        shot_type = "环境空镜"
+    elif best_category == "07 品牌资产":
+        shot_type = "品牌物料"
+    elif kind == "视频" and duration >= 600:
+        shot_type = "长课片段"
+
+    category_info = _category_meta(best_category)
+    visual_summary = f"按文件信息判断: 可能是{category_info['label']}素材"
+    if matched_terms:
+        visual_summary += f" ({'、'.join(matched_terms[:3])})"
+    elif orientation != "未知":
+        visual_summary += f" ({orientation}{kind})"
+
+    quality = 48
+    if has_thumb:
+        quality += 18
+    if width and height:
+        longest = max(width, height)
+        shortest = min(width, height)
+        if longest >= 1920 or shortest >= 1080:
+            quality += 14
+        elif longest >= 1280 or shortest >= 720:
+            quality += 9
+        elif longest < 640 or shortest < 360:
+            quality -= 12
+    else:
+        quality -= 8
+    if kind == "视频":
+        if 5 <= duration <= 180:
+            quality += 10
+        elif duration > 1200:
+            quality -= 6
+    quality = max(0, min(100, int(quality)))
+
+    relevance = 25 if best_category == DEFAULT_CATEGORY else 55 + min(35, best_score * 6)
+    if best_category in {"01 演讲舞台", "02 上课教学", "05 做课素材"}:
+        relevance += 8
+    relevance = max(0, min(100, int(relevance)))
+
+    tags = [category_info["label"], orientation, shot_type]
+    tags.extend(matched_terms[:8])
+    tags = [t for i, t in enumerate(tags) if t and t != "未知" and t not in tags[:i]][:12]
+
+    return {
+        "category": best_category,
+        "visual_summary": visual_summary,
+        "shot_type": shot_type,
+        "orientation": orientation,
+        "quality_score": quality,
+        "usage_hint": category_info["usage"],
+        "relevance_score": relevance,
+        "recognition_source": "metadata",
+        "profile_updated_at": int(time.time()),
+        "tags": tags,
+    }
+
+
+def _with_profile_defaults(asset: dict[str, Any]) -> dict[str, Any]:
+    """给旧 row 补响应层默认画像, 不写库. 真落库由 classify_asset 完成."""
+    if asset.get("profile_updated_at") and asset.get("category"):
+        if asset.get("category") not in VALID_CATEGORIES:
+            asset["category"] = DEFAULT_CATEGORY
+        return asset
+    inferred = build_metadata_profile(asset)
+    for k in (
+        "category", "visual_summary", "shot_type", "orientation", "quality_score",
+        "usage_hint", "relevance_score", "recognition_source",
+    ):
+        if asset.get(k) in (None, ""):
+            asset[k] = inferred[k]
+    return asset
 
 
 def _ensure_schema() -> None:
@@ -302,9 +542,14 @@ def scan_root(
     root = get_materials_root()
     if not root.exists():
         return {"error": f"素材根目录不存在: {root}", "scanned": 0, "added": 0, "errors": 0, "root": str(root)}
-    files = list(_walk_root(root))
     if max_files:
-        files = files[:max_files]
+        files = []
+        for p in _walk_root(root):
+            files.append(p)
+            if len(files) >= max_files:
+                break
+    else:
+        files = list(_walk_root(root))
     total = len(files)
     added = 0
     errors = 0
@@ -351,6 +596,9 @@ def get_stats() -> dict[str, Any]:
         ai_tagged = con.execute(
             "SELECT COUNT(DISTINCT asset_id) FROM material_asset_tags"
         ).fetchone()[0]
+        profiled = con.execute(
+            "SELECT COUNT(*) FROM material_assets WHERE profile_updated_at IS NOT NULL"
+        ).fetchone()[0]
         usage_month = con.execute(
             "SELECT COUNT(*) FROM material_usage_log WHERE used_at >= ?",
             (month_start,),
@@ -364,11 +612,173 @@ def get_stats() -> dict[str, Any]:
         "pending_review": pending,
         "ai_tagged": ai_tagged,
         "ai_coverage": round(ai_tagged / max(1, total) * 100, 1),
+        "profiled": profiled,
+        "profile_coverage": round(profiled / max(1, total) * 100, 1),
         "usage_this_month": usage_month,
         "hit_rate": round(usage_month / max(1, total) * 100, 1) if total else 0,
         "week_added": week_added,
         "root": str(get_materials_root()),
     }
+
+
+def update_asset_profile(asset_id: str, profile: dict[str, Any]) -> dict[str, Any] | None:
+    """写结构化画像到 material_assets."""
+    _ensure_schema()
+    category = profile.get("category") if profile.get("category") in VALID_CATEGORIES else DEFAULT_CATEGORY
+    with closing(get_connection()) as con:
+        cur = con.execute(
+            """
+            UPDATE material_assets
+            SET category=?, visual_summary=?, shot_type=?, orientation=?,
+                quality_score=?, usage_hint=?, relevance_score=?,
+                recognition_source=?, profile_updated_at=?
+            WHERE id=?
+            """,
+            (
+                category,
+                (profile.get("visual_summary") or "")[:500],
+                (profile.get("shot_type") or "")[:80],
+                (profile.get("orientation") or "")[:20],
+                int(profile.get("quality_score") or 0),
+                (profile.get("usage_hint") or "")[:300],
+                int(profile.get("relevance_score") or 0),
+                (profile.get("recognition_source") or "metadata")[:40],
+                int(profile.get("profile_updated_at") or time.time()),
+                asset_id,
+            ),
+        )
+        con.commit()
+        if cur.rowcount == 0:
+            return None
+    return get_asset(asset_id)
+
+
+def list_categories() -> list[dict[str, Any]]:
+    """按 D-124 8 个业务大类聚合素材.
+
+    首页必须展示固定 8 类, 即使当前演示源还没素材也返回 0.
+    """
+    _ensure_schema()
+    week_start = int(time.time()) - 7 * 86400
+    out = {c["key"]: {**c, "total": 0, "usable": 0, "week_new": 0, "profiled": 0,
+                      "latest_imported_at": None, "avg_quality": 0, "avg_relevance": 0}
+           for c in MATERIAL_CATEGORIES}
+    with closing(get_connection()) as con:
+        rows = con.execute(
+            """
+            SELECT COALESCE(category, ?) AS cat,
+                   COUNT(*) AS total,
+                   SUM(CASE WHEN COALESCE(quality_score, 0) >= 60 THEN 1 ELSE 0 END) AS usable,
+                   SUM(CASE WHEN imported_at >= ? THEN 1 ELSE 0 END) AS week_new,
+                   SUM(CASE WHEN profile_updated_at IS NOT NULL THEN 1 ELSE 0 END) AS profiled,
+                   MAX(imported_at) AS latest_imported_at,
+                   AVG(COALESCE(quality_score, 0)) AS avg_quality,
+                   AVG(COALESCE(relevance_score, 0)) AS avg_relevance
+            FROM material_assets
+            GROUP BY cat
+            """,
+            (DEFAULT_CATEGORY, week_start),
+        ).fetchall()
+    for r in rows:
+        cat = r[0] if r[0] in VALID_CATEGORIES else DEFAULT_CATEGORY
+        item = out[cat]
+        item["total"] += int(r[1] or 0)
+        item["usable"] += int(r[2] or 0)
+        item["week_new"] += int(r[3] or 0)
+        item["profiled"] += int(r[4] or 0)
+        item["latest_imported_at"] = max(
+            item["latest_imported_at"] or 0,
+            int(r[5] or 0),
+        ) or None
+        item["avg_quality"] = round(float(r[6] or 0), 1)
+        item["avg_relevance"] = round(float(r[7] or 0), 1)
+    return [out[c["key"]] for c in MATERIAL_CATEGORIES]
+
+
+def _tokenize_match_text(text: str) -> list[str]:
+    raw = (text or "").lower()
+    tokens = [t for t in re.split(r"[\s,，。/|;；:：、()（）【】\\-]+", raw) if t]
+    for c in MATERIAL_CATEGORIES:
+        for kw in c["keywords"]:
+            if kw.lower() in raw and kw not in tokens:
+                tokens.append(kw.lower())
+    return tokens[:40]
+
+
+def match_assets(
+    text: str,
+    *,
+    category: str | None = None,
+    orientation: str | None = None,
+    asset_type: str | None = None,
+    limit: int = 12,
+) -> list[dict[str, Any]]:
+    """按文案/镜头描述检索本地素材候选, 给剪辑链路优先找真实画面."""
+    _ensure_schema()
+    q = (text or "").strip()
+    if not q:
+        return []
+    tokens = _tokenize_match_text(q)
+    items = list_assets(category=category, limit=500, sort="quality")
+    kind_filter = (asset_type or "").strip()
+    orientation_filter = (orientation or "").strip()
+
+    scored: list[dict[str, Any]] = []
+    for a in items:
+        if kind_filter:
+            want_video = kind_filter in ("视频", "video", "空镜")
+            want_image = kind_filter in ("图片", "image", "photo")
+            if want_video and a.get("ext") not in VIDEO_EXTS:
+                continue
+            if want_image and a.get("ext") not in IMAGE_EXTS:
+                continue
+        if orientation_filter and orientation_filter not in ("不限", "任意"):
+            if (a.get("orientation") or "") != orientation_filter:
+                continue
+
+        fields = " ".join([
+            str(a.get("filename") or ""),
+            str(a.get("rel_folder") or ""),
+            str(a.get("category") or ""),
+            str(a.get("visual_summary") or ""),
+            str(a.get("shot_type") or ""),
+            str(a.get("usage_hint") or ""),
+            " ".join(t.get("name", "") for t in (a.get("tags") or [])),
+        ]).lower()
+        hits: list[str] = []
+        score = 0.0
+        for tok in tokens:
+            if tok and tok in fields:
+                hits.append(tok)
+                score += 12
+        cat = str(a.get("category") or "")
+        if cat and any(tok in cat.lower() for tok in tokens):
+            score += 18
+        if a.get("thumb_path"):
+            score += 6
+        score += float(a.get("quality_score") or 0) * 0.23
+        score += float(a.get("relevance_score") or 0) * 0.20
+        if not a.get("profile_updated_at"):
+            score -= 10
+        if not a.get("thumb_path"):
+            score -= 8
+        score = max(0, min(100, round(score, 1)))
+        if score <= 0 and not hits:
+            continue
+        reason_bits = []
+        if hits:
+            reason_bits.append(f"命中 {'、'.join(hits[:4])}")
+        if a.get("usage_hint"):
+            reason_bits.append(a["usage_hint"])
+        reason_bits.append(f"质量 {a.get('quality_score', 0)}")
+        candidate = dict(a)
+        candidate["match_score"] = score
+        candidate["match_reason"] = "；".join(reason_bits)
+        candidate["auto_usable"] = bool(a.get("thumb_path")) and int(a.get("quality_score") or 0) >= 50 and bool(a.get("profile_updated_at"))
+        scored.append(candidate)
+
+    scored.sort(key=lambda x: (x["match_score"], x.get("quality_score") or 0, x.get("imported_at") or 0), reverse=True)
+    return scored[:max(1, min(limit, 50))]
 
 
 def list_top_folders(limit: int = 12) -> list[dict[str, Any]]:
@@ -437,18 +847,23 @@ def list_subfolders(top_folder: str, limit: int = 32) -> list[dict[str, Any]]:
 
 def list_assets(
     folder: str | None = None,
+    category: str | None = None,
     limit: int = 100,
     offset: int = 0,
     tag_ids: list[int] | None = None,
     sort: str = "imported",
 ) -> list[dict[str, Any]]:
-    """L3 用: 按文件夹列素材."""
+    """L3 用: 按文件夹或业务大类列素材."""
     _ensure_schema()
     where: list[str] = []
     args: list[Any] = []
     if folder:
         where.append("(rel_folder = ? OR rel_folder LIKE ?)")
         args.extend([folder, f"{folder}/%"])
+    if category:
+        cat = category if category in VALID_CATEGORIES else DEFAULT_CATEGORY
+        where.append("COALESCE(category, ?) = ?")
+        args.extend([DEFAULT_CATEGORY, cat])
     if tag_ids:
         ph = ",".join(["?"] * len(tag_ids))
         where.append(
@@ -463,6 +878,7 @@ def list_assets(
             "(SELECT COUNT(*) FROM material_usage_log "
             "WHERE asset_id = material_assets.id) DESC, imported_at DESC"
         ),
+        "quality": "COALESCE(quality_score, 0) DESC, imported_at DESC",
     }.get(sort, "imported_at DESC")
     args.extend([limit, offset])
     out: list[dict[str, Any]] = []
@@ -474,13 +890,14 @@ def list_assets(
         ).fetchall()
         for r in rows:
             d = dict(r)
+            d = _with_profile_defaults(d)
             tag_rows = con.execute(
-                """SELECT t.id, t.name, t.source FROM material_tags t
+                """SELECT t.id, t.name, t.source, at.confidence FROM material_tags t
                    JOIN material_asset_tags at ON at.tag_id = t.id
                    WHERE at.asset_id = ?""",
                 (d["id"],),
             ).fetchall()
-            d["tags"] = [{"id": t[0], "name": t[1], "source": t[2]} for t in tag_rows]
+            d["tags"] = [{"id": t[0], "name": t[1], "source": t[2], "confidence": t[3]} for t in tag_rows]
             d["hits"] = con.execute(
                 "SELECT COUNT(*) FROM material_usage_log WHERE asset_id = ?",
                 (d["id"],),
@@ -500,13 +917,14 @@ def get_asset(asset_id: str) -> dict[str, Any] | None:
         if not r:
             return None
         d = dict(r)
+        d = _with_profile_defaults(d)
         tag_rows = con.execute(
-            """SELECT t.id, t.name, t.source FROM material_tags t
+            """SELECT t.id, t.name, t.source, at.confidence FROM material_tags t
                JOIN material_asset_tags at ON at.tag_id = t.id
                WHERE at.asset_id = ?""",
             (asset_id,),
         ).fetchall()
-        d["tags"] = [{"id": t[0], "name": t[1], "source": t[2]} for t in tag_rows]
+        d["tags"] = [{"id": t[0], "name": t[1], "source": t[2], "confidence": t[3]} for t in tag_rows]
         usage = con.execute(
             "SELECT used_in, used_at, position_sec FROM material_usage_log "
             "WHERE asset_id = ? ORDER BY used_at DESC LIMIT 10",
@@ -614,7 +1032,7 @@ def list_recent_activity(limit: int = 10) -> list[dict[str, Any]]:
 
 
 def search_assets(query: str, limit: int = 30) -> list[dict[str, Any]]:
-    """全库搜索: 模糊匹配 filename / rel_folder / tag name (D-087 整改 follow-up).
+    """全库搜索: 模糊匹配 filename / rel_folder / tag / 结构化画像字段.
 
     返回与 list_assets 相同结构 (含 tags + hits).
     query 空 / 全空白 → 返 [].
@@ -661,12 +1079,19 @@ def search_assets(query: str, limit: int = 30) -> list[dict[str, Any]]:
                 out.append(dict(r))
                 if len(out) >= limit:
                     break
-        # rel_folder 命中 (兜底)
+        # 结构化画像 + rel_folder 命中 (兜底)
         if len(out) < limit:
             folder_rows = con.execute(
-                "SELECT * FROM material_assets WHERE rel_folder LIKE ? COLLATE NOCASE "
+                """
+                SELECT * FROM material_assets
+                WHERE rel_folder LIKE ? COLLATE NOCASE
+                   OR category LIKE ? COLLATE NOCASE
+                   OR visual_summary LIKE ? COLLATE NOCASE
+                   OR shot_type LIKE ? COLLATE NOCASE
+                   OR usage_hint LIKE ? COLLATE NOCASE
+                """
                 "ORDER BY imported_at DESC LIMIT ?",
-                (pat, limit),
+                (pat, pat, pat, pat, pat, limit),
             ).fetchall()
             for r in folder_rows:
                 if r["id"] in seen:
@@ -677,13 +1102,14 @@ def search_assets(query: str, limit: int = 30) -> list[dict[str, Any]]:
                     break
         # 给每条加 tags + hits
         for d in out[:limit]:
+            d = _with_profile_defaults(d)
             tag_rows = con.execute(
-                """SELECT t.id, t.name, t.source FROM material_tags t
+                """SELECT t.id, t.name, t.source, at.confidence FROM material_tags t
                    JOIN material_asset_tags at ON at.tag_id = t.id
                    WHERE at.asset_id = ?""",
                 (d["id"],),
             ).fetchall()
-            d["tags"] = [{"id": t[0], "name": t[1], "source": t[2]} for t in tag_rows]
+            d["tags"] = [{"id": t[0], "name": t[1], "source": t[2], "confidence": t[3]} for t in tag_rows]
             d["hits"] = con.execute(
                 "SELECT COUNT(*) FROM material_usage_log WHERE asset_id = ?",
                 (d["id"],),
@@ -692,13 +1118,13 @@ def search_assets(query: str, limit: int = 30) -> list[dict[str, Any]]:
 
 
 def list_top_used(limit: int = 5) -> list[dict[str, Any]]:
-    """L1 右栏 🏆 最常用 Top 5. SQL JOIN hits DESC."""
+    """L1 右栏最常用素材. 返回可直接复用的素材卡字段."""
     _ensure_schema()
+    out: list[dict[str, Any]] = []
     with closing(get_connection()) as con:
         con.row_factory = sqlite3.Row
         rows = con.execute(
-            """SELECT a.id, a.filename, a.thumb_path, a.rel_folder,
-                      COUNT(u.id) AS hits
+            """SELECT a.*, COUNT(u.id) AS hits
                FROM material_assets a
                JOIN material_usage_log u ON u.asset_id = a.id
                GROUP BY a.id
@@ -706,16 +1132,17 @@ def list_top_used(limit: int = 5) -> list[dict[str, Any]]:
                LIMIT ?""",
             (limit,),
         ).fetchall()
-    return [
-        {
-            "id": r["id"],
-            "filename": r["filename"],
-            "thumb_path": r["thumb_path"],
-            "rel_folder": r["rel_folder"],
-            "hits": r["hits"],
-        }
-        for r in rows
-    ]
+        for r in rows:
+            d = _with_profile_defaults(dict(r))
+            tag_rows = con.execute(
+                """SELECT t.id, t.name, t.source, at.confidence FROM material_tags t
+                   JOIN material_asset_tags at ON at.tag_id = t.id
+                   WHERE at.asset_id = ?""",
+                (d["id"],),
+            ).fetchall()
+            d["tags"] = [{"id": t[0], "name": t[1], "source": t[2], "confidence": t[3]} for t in tag_rows]
+            out.append(d)
+    return out
 
 
 def log_usage(asset_id: str, used_in: str, position_sec: float | None = None) -> None:
@@ -759,13 +1186,14 @@ def list_pending_review(limit: int = 100, *, include_legacy: bool = False) -> li
         ).fetchall()
         for r in rows:
             d = dict(r)
+            d = _with_profile_defaults(d)
             tag_rows = con.execute(
-                """SELECT t.id, t.name, t.source FROM material_tags t
+                """SELECT t.id, t.name, t.source, at.confidence FROM material_tags t
                    JOIN material_asset_tags at ON at.tag_id = t.id
                    WHERE at.asset_id = ?""",
                 (d["id"],),
             ).fetchall()
-            d["tags"] = [{"id": t[0], "name": t[1], "source": t[2]} for t in tag_rows]
+            d["tags"] = [{"id": t[0], "name": t[1], "source": t[2], "confidence": t[3]} for t in tag_rows]
             out.append(d)
     return out
 

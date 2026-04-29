@@ -84,6 +84,66 @@ function MV2FolderCard({ folder, onClick }) {
 }
 
 
+function MV2CategoryCard({ category, onClick }) {
+  const accentMap = {
+    "00 待整理": T.amber,
+    "01 演讲舞台": T.brand,
+    "02 上课教学": T.blue,
+    "03 研发产品": T.purple,
+    "04 出差商务": "#8a6b2e",
+    "05 做课素材": T.pink,
+    "06 空镜补画面": "#4a7a8c",
+    "07 品牌资产": "#6b6b48",
+  };
+  const accent = accentMap[category.key] || T.brand;
+  const total = category.total || 0;
+  const usable = category.usable || 0;
+  return (
+    <div
+      data-testid="mv2-category-card"
+      onClick={onClick}
+      style={{
+        background: "#fff", border: `1px solid ${T.border}`, borderRadius: 8,
+        padding: "14px 15px", cursor: "pointer", minHeight: 132,
+        display: "flex", flexDirection: "column", gap: 10,
+        transition: "box-shadow 0.12s, transform 0.12s",
+      }}
+      onMouseEnter={e => { e.currentTarget.style.boxShadow = "0 6px 18px rgba(0,0,0,0.07)"; e.currentTarget.style.transform = "translateY(-1px)"; }}
+      onMouseLeave={e => { e.currentTarget.style.boxShadow = ""; e.currentTarget.style.transform = ""; }}
+    >
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+        <div style={{
+          width: 34, height: 34, borderRadius: 7, background: accent + "18",
+          color: accent, display: "flex", alignItems: "center", justifyContent: "center",
+          fontSize: 15, fontWeight: 800, flexShrink: 0,
+        }}>{category.key.slice(0, 2)}</div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: T.text }}>{category.label || category.key}</div>
+          <div style={{ fontSize: 11.5, color: T.muted2, marginTop: 3, lineHeight: 1.45 }}>{category.description}</div>
+        </div>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8, marginTop: "auto" }}>
+        <div>
+          <div style={{ fontSize: 20, fontWeight: 800, color: accent, lineHeight: 1 }}>{total}</div>
+          <div style={{ fontSize: 10.5, color: T.muted2, marginTop: 3 }}>素材</div>
+        </div>
+        <div>
+          <div style={{ fontSize: 20, fontWeight: 800, color: T.text, lineHeight: 1 }}>{usable}</div>
+          <div style={{ fontSize: 10.5, color: T.muted2, marginTop: 3 }}>可用</div>
+        </div>
+        <div>
+          <div style={{ fontSize: 20, fontWeight: 800, color: T.text, lineHeight: 1 }}>{category.profiled || 0}</div>
+          <div style={{ fontSize: 10.5, color: T.muted2, marginTop: 3 }}>已识别</div>
+        </div>
+      </div>
+      {category.week_new > 0 && (
+        <Tag size="xs" color="green" style={{ alignSelf: "flex-start" }}>本周 +{category.week_new}</Tag>
+      )}
+    </div>
+  );
+}
+
+
 function _hashStr(s) {
   let h = 0;
   for (let i = 0; i < (s || "").length; i++) h = ((h << 5) - h + s.charCodeAt(i)) | 0;
@@ -159,23 +219,177 @@ function MV2TopUsed({ items, loading, onPickAsset }) {
 }
 
 
-function MV2L1Home({ stats, folders, loading, err, onPickFolder, onScan, scanning, onBatchTag, batchTagging, onAudit,
-                    activity, topUsed, sideLoading, search, onSearch, searchResults, searching, onPickAsset }) {
+const MV2_SOURCE_LABELS = {
+  metadata: "按文件信息判断",
+  image_vision: "看图识别",
+  video_keyframes: "看关键帧识别",
+  llm: "文字判断",
+  heuristic: "按文件名判断",
+};
+
+function mv2SourceLabel(src) {
+  return MV2_SOURCE_LABELS[src] || "未识别画面";
+}
+
+
+function MV2RootSetting({ root, onSaved }) {
+  const [value, setValue] = React.useState(root || "");
+  const [saving, setSaving] = React.useState(false);
+  const [saved, setSaved] = React.useState(false);
+  const [err, setErr] = React.useState("");
+  React.useEffect(() => setValue(root || ""), [root]);
+
+  async function save() {
+    setSaving(true); setErr(""); setSaved(false);
+    try {
+      await api.post("/api/settings", { materials_root: value });
+      setSaved(true);
+      if (onSaved) await onSaved();
+      setTimeout(() => setSaved(false), 1400);
+    } catch (e) {
+      setErr(e.message);
+    }
+    setSaving(false);
+  }
+
+  const isDownloads = (value || "").endsWith("/Downloads") || (value || "").endsWith("\\Downloads");
+  return (
+    <div style={{ background: "#fff", border: `1px solid ${T.border}`, borderRadius: 8, padding: 12, marginBottom: 12 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+        <div style={{ fontSize: 12.5, fontWeight: 700, color: T.text }}>当前素材源</div>
+        <Tag size="xs" color={isDownloads ? "amber" : "green"}>{isDownloads ? "Downloads 演示源" : "专用目录"}</Tag>
+        {saved && <Tag size="xs" color="green">已保存</Tag>}
+      </div>
+      <div style={{ display: "flex", gap: 6 }}>
+        <input
+          value={value}
+          onChange={e => setValue(e.target.value)}
+          data-testid="mv2-materials-root-input"
+          style={{
+            flex: 1, minWidth: 0, border: `1px solid ${T.border}`, borderRadius: 6,
+            padding: "7px 9px", fontSize: 11.5, fontFamily: "Menlo, monospace",
+            color: T.text, background: T.bg2,
+          }}
+        />
+        <Btn size="sm" variant="outline" onClick={save} disabled={saving || !value}>
+          {saving ? "保存中" : "保存"}
+        </Btn>
+      </div>
+      <div style={{ fontSize: 10.5, color: T.muted2, marginTop: 6, lineHeight: 1.5 }}>
+        现在先用 Downloads 跑演示, 以后换专用素材库只改这里。
+      </div>
+      {err && <InlineError err={err} />}
+    </div>
+  );
+}
+
+
+function MV2MatchBox({ categories, onPickAsset, compact }) {
+  const [text, setText] = React.useState("");
+  const [category, setCategory] = React.useState("");
+  const [orientation, setOrientation] = React.useState("不限");
+  const [loading, setLoading] = React.useState(false);
+  const [items, setItems] = React.useState([]);
+  const [err, setErr] = React.useState("");
+
+  async function run() {
+    if (!text.trim()) return;
+    setLoading(true); setErr("");
+    try {
+      const r = await api.post("/api/material-lib/match", {
+        text: text.trim(),
+        category: category || null,
+        orientation,
+        limit: 8,
+      });
+      setItems(r.items || []);
+    } catch (e) {
+      setErr(e.message);
+    }
+    setLoading(false);
+  }
+
+  return (
+    <div data-testid="mv2-match-box" style={{ background: "#fff", border: `1px solid ${T.border}`, borderRadius: 8, padding: 12, marginTop: 16 }}>
+      <div style={{
+        display: "flex", alignItems: compact ? "stretch" : "center",
+        justifyContent: "space-between", marginBottom: 8,
+        flexDirection: compact ? "column" : "row", gap: compact ? 8 : 0,
+      }}>
+        <div>
+          <div style={{ fontSize: 13, fontWeight: 700 }}>剪辑检索</div>
+          <div style={{ fontSize: 11, color: T.muted2, marginTop: 2 }}>输入文案或镜头描述, 从本地原片里找候选</div>
+        </div>
+        <Btn size="sm" variant="primary" onClick={run} disabled={loading || !text.trim()}>
+          {loading ? "查找中" : "查找"}
+        </Btn>
+      </div>
+      <textarea
+        value={text}
+        onChange={e => setText(e.target.value)}
+        data-testid="mv2-match-input"
+        placeholder="例: 开头需要一个演讲舞台现场, 证明清华哥在给学员讲私域课"
+        style={{
+          width: "100%", minHeight: 66, resize: "vertical", boxSizing: "border-box",
+          border: `1px solid ${T.border}`, borderRadius: 6, padding: 9,
+          fontSize: 12.5, fontFamily: "inherit", outline: "none",
+        }}
+      />
+      <div style={{ display: "flex", flexDirection: compact ? "column" : "row", gap: 8, marginTop: 8 }}>
+        <select value={category} onChange={e => setCategory(e.target.value)}
+          style={{ flex: 1, border: `1px solid ${T.border}`, borderRadius: 6, padding: "6px 8px", fontSize: 12, background: "#fff" }}>
+          <option value="">全部大类</option>
+          {(categories || []).map(c => <option key={c.key} value={c.key}>{c.key} {c.label}</option>)}
+        </select>
+        <select value={orientation} onChange={e => setOrientation(e.target.value)}
+          style={{ width: compact ? "100%" : 110, border: `1px solid ${T.border}`, borderRadius: 6, padding: "6px 8px", fontSize: 12, background: "#fff" }}>
+          <option>不限</option>
+          <option>竖屏</option>
+          <option>横屏</option>
+          <option>方图</option>
+        </select>
+      </div>
+      {err && <InlineError err={err} />}
+      {items.length > 0 && (
+        <div style={{ display: "grid", gridTemplateColumns: compact ? "repeat(2, minmax(0, 1fr))" : "repeat(4, 1fr)", gap: 8, marginTop: 10 }}>
+          {items.map(a => (
+            <div key={a.id} style={{ position: "relative" }}>
+              <MV2AssetCard asset={a} onClick={() => onPickAsset && onPickAsset(a)} />
+              <div style={{ fontSize: 10.5, color: T.muted, marginTop: 4, lineHeight: 1.45 }}>
+                <b style={{ color: T.brand }}>{a.match_score}</b> · {a.match_reason}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+function MV2L1Home({ stats, categories, root, loading, err, onPickCategory, onScan, scanning, onClassify, classifying,
+                    onAudit, activity, topUsed, sideLoading, search, onSearch, searchResults, searching, onPickAsset,
+                    onRootSaved, compact }) {
   if (loading) return <div style={{ padding: 60, textAlign: "center", color: T.muted }}>加载中...</div>;
-  const remainTag = stats ? Math.max(0, stats.total - stats.ai_tagged) : 0;
+  const remainProfile = stats ? Math.max(0, stats.total - (stats.profiled || 0)) : 0;
+  const usable = (categories || []).reduce((n, c) => n + (c.usable || 0), 0);
+  const pendingCount = (categories || []).find(c => c.key === "00 待整理")?.total || 0;
   return (
     <div>
       {/* Header (顶部 全宽 含搜索框) */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16, gap: 16 }}>
+      <div style={{
+        display: "flex", justifyContent: "space-between", alignItems: compact ? "stretch" : "flex-start",
+        marginBottom: 16, gap: 16, flexDirection: compact ? "column" : "row",
+      }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <h1 style={{ fontSize: 22, fontWeight: 700, margin: 0 }}>📥 素材库 · 总览</h1>
-            <Tag color="green" size="sm">已连接本地</Tag>
+          <div style={{ display: "flex", alignItems: compact ? "flex-start" : "center", gap: 10, flexDirection: compact ? "column" : "row" }}>
+            <h1 style={{ fontSize: 22, fontWeight: 700, margin: 0, lineHeight: 1.2 }}>素材库 · 精品原片</h1>
+            <Tag color="green" size="sm">本地素材优先</Tag>
           </div>
-          <div style={{ fontSize: 12, color: T.muted2, marginTop: 6 }}>
-            {stats?.root || "—"}
+          <div style={{ fontSize: 12, color: T.muted2, marginTop: 6, lineHeight: 1.5, wordBreak: "break-word" }}>
+            当前演示源: {root || stats?.root || "—"}
             {stats != null && (
-              <span style={{ marginLeft: 12 }}>
+              <span style={{ marginLeft: compact ? 0 : 12, display: compact ? "block" : "inline" }}>
                 · 总 {stats.total} 条
                 {stats.week_added > 0 && <span> · 本周 +{stats.week_added}</span>}
               </span>
@@ -186,10 +400,10 @@ function MV2L1Home({ stats, folders, loading, err, onPickFolder, onScan, scannin
         <input
           type="text" value={search || ""}
           onChange={e => onSearch && onSearch(e.target.value)}
-          placeholder="🔍 全库搜索 · 标签 / 文件名"
+          placeholder="🔍 搜画面摘要 / 用途 / 标签 / 文件名"
           data-testid="mv2-l1-search"
           style={{
-            width: 320, padding: "9px 12px",
+            width: compact ? "100%" : 320, boxSizing: "border-box", padding: "9px 12px",
             border: `1px solid ${T.border}`, borderRadius: 100,
             fontSize: 13, fontFamily: "inherit", background: "#fff",
             outline: "none",
@@ -202,7 +416,7 @@ function MV2L1Home({ stats, folders, loading, err, onPickFolder, onScan, scannin
       {err && <InlineError err={err} />}
 
       {/* 4 KPI 横条 (全宽) */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 16 }}>
+      <div style={{ display: "grid", gridTemplateColumns: compact ? "1fr" : "repeat(4, 1fr)", gap: 12, marginBottom: 16 }}>
         <MV2KpiCard
           icon="📦" label="总素材"
           value={stats?.total ?? 0}
@@ -211,49 +425,42 @@ function MV2L1Home({ stats, folders, loading, err, onPickFolder, onScan, scannin
         <MV2KpiCard
           icon="⚠" label="待整理"
           testid="mv2-l1-pending-kpi"
-          value={stats?.pending_review ?? 0}
-          sub={stats?.pending_review > 0 ? "点这里 → 一键归档 →" : "暂无待办"}
+          value={pendingCount}
+          sub={stats?.pending_review > 0 ? `${stats.pending_review} 条建议待确认` : "新素材先放这里"}
           accent="amber"
-          onClick={stats?.pending_review > 0 ? onAudit : undefined}
+          onClick={stats?.pending_review > 0 ? onAudit : () => onPickCategory("00 待整理")}
         />
         <MV2KpiCard
-          icon="✨" label="已 AI 打标"
-          value={stats?.ai_tagged ?? 0}
-          sub={`覆盖率 ${stats?.ai_coverage ?? 0}%`}
+          icon="✓" label="已识别"
+          value={stats?.profiled ?? 0}
+          sub={`覆盖率 ${stats?.profile_coverage ?? 0}%`}
         />
         <MV2KpiCard
-          icon="🎯" label="本月使用"
-          value={`${stats?.usage_this_month ?? 0} 次`}
-          sub={`命中率 ${stats?.hit_rate ?? 0}%`}
+          icon="◎" label="可用素材"
+          value={usable}
+          sub={`本月用过 ${stats?.usage_this_month ?? 0} 次`}
         />
       </div>
 
       {/* 主分区操作条 (搜索时隐藏) */}
       {!(search && search.trim()) && (
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+        <div style={{
+          display: "flex", justifyContent: "space-between", alignItems: compact ? "stretch" : "center",
+          marginBottom: 10, flexDirection: compact ? "column" : "row", gap: compact ? 8 : 0,
+        }}>
           <div style={{ fontSize: 13, color: T.muted, fontWeight: 500 }}>
-            主分区 · {folders.length} 个 · <span style={{ color: T.muted2 }}>点击进入</span>
+            业务大类 · 8 个 · <span style={{ color: T.muted2 }}>点击进入素材货架</span>
           </div>
-          <div style={{ display: "flex", gap: 6 }}>
-            {remainTag > 0 && (
-              <>
-                <Btn
-                  variant="outline" size="sm"
-                  data-testid="mv2-l1-batch-tag-btn"
-                  onClick={() => onBatchTag(false)} disabled={batchTagging}
-                  style={{ borderColor: T_GREEN, color: T_GREEN }}
-                >
-                  {batchTagging ? "AI 打标中..." : `✨ AI 打 10 条 (剩 ${remainTag})`}
-                </Btn>
-                <Btn
-                  variant="primary" size="sm"
-                  data-testid="mv2-l1-batch-tag-full-btn"
-                  onClick={() => onBatchTag(true)} disabled={batchTagging}
-                  style={{ background: T_GREEN, borderColor: T_GREEN }}
-                >
-                  {batchTagging ? "..." : `✨ 全量 (${remainTag})`}
-                </Btn>
-              </>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {remainProfile > 0 && (
+              <Btn
+                variant="outline" size="sm"
+                data-testid="mv2-l1-classify-btn"
+                onClick={() => onClassify(20)} disabled={classifying}
+                style={{ borderColor: T_GREEN, color: T_GREEN }}
+              >
+                {classifying ? "识别中..." : `识别 20 条 (剩 ${remainProfile})`}
+              </Btn>
             )}
             <Btn variant="outline" size="sm" onClick={onScan} disabled={scanning}>
               {scanning ? "扫描中..." : "🔄 重新扫描"}
@@ -263,9 +470,9 @@ function MV2L1Home({ stats, folders, loading, err, onPickFolder, onScan, scannin
       )}
 
       {/* 主区 (左) + 右栏 (右栏一直可见) */}
-      <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 280px", gap: 16 }}>
+      <div style={{ display: "grid", gridTemplateColumns: compact ? "1fr" : "minmax(0,1fr) 280px", gap: 16 }}>
         <div>
-          {/* 搜索状态: 主区显示搜索结果. 否则: 文件夹大卡片 */}
+          {/* 搜索状态: 主区显示搜索结果. 否则: 业务大类卡片 */}
           {search && search.trim() ? (
             <div data-testid="mv2-l1-search-results">
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
@@ -284,10 +491,10 @@ function MV2L1Home({ stats, folders, loading, err, onPickFolder, onScan, scannin
                 <div style={{ padding: 40, textAlign: "center", color: T.muted }}>搜索中...</div>
               ) : searchResults.length === 0 ? (
                 <div style={{ padding: 40, textAlign: "center", color: T.muted, background: "#fff", borderRadius: 10 }}>
-                  没匹配到. 试试别的关键词 (能搜文件名 / 标签 / 文件夹路径)
+                  没匹配到. 试试别的关键词 (能搜画面摘要 / 标签 / 用途 / 文件名)
                 </div>
               ) : (
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
+                <div style={{ display: "grid", gridTemplateColumns: compact ? "repeat(2, minmax(0, 1fr))" : "repeat(3, 1fr)", gap: 8 }}>
                   {searchResults.map(a => (
                     <MV2AssetCard key={a.id} asset={a} onClick={() => onPickAsset(a)} />
                   ))}
@@ -295,28 +502,32 @@ function MV2L1Home({ stats, folders, loading, err, onPickFolder, onScan, scannin
               )}
             </div>
           ) : (
-            folders.length === 0 ? (
+            categories.length === 0 ? (
               <div style={{ padding: 60, background: "#fff", borderRadius: 10, border: `1px solid ${T.border}`, textAlign: "center", color: T.muted }}>
                 <div style={{ fontSize: 28, marginBottom: 8 }}>📂</div>
                 <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>素材库还是空的</div>
                 <div style={{ fontSize: 12, color: T.muted2, marginBottom: 14 }}>
-                  把素材放到 {stats?.root || "~/Downloads/"}, 然后点 "🔄 重新扫描" 入库
+                  把素材放到 {root || stats?.root || "~/Downloads/"}, 然后点 "重新扫描" 入库
                 </div>
                 <Btn variant="primary" size="md" onClick={onScan} disabled={scanning}>
                   {scanning ? "扫描中..." : "▶ 立即扫描"}
                 </Btn>
               </div>
             ) : (
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 10 }}>
-                {folders.slice(0, 8).map(f => (
-                  <MV2FolderCard key={f.folder} folder={f} onClick={() => onPickFolder(f.folder)} />
-                ))}
-              </div>
+              <>
+                <div style={{ display: "grid", gridTemplateColumns: compact ? "1fr" : "repeat(2, minmax(0, 1fr))", gap: 10 }}>
+                  {categories.map(c => (
+                    <MV2CategoryCard key={c.key} category={c} onClick={() => onPickCategory(c.key)} />
+                  ))}
+                </div>
+                <MV2MatchBox categories={categories} onPickAsset={onPickAsset} compact={compact} />
+              </>
             )
           )}
         </div>
         {/* 右栏 (一直可见) */}
         <div>
+          <MV2RootSetting root={root || stats?.root || ""} onSaved={onRootSaved} />
           <MV2RecentActivity events={activity || []} loading={sideLoading} />
           <MV2TopUsed items={topUsed || []} loading={sideLoading} onPickAsset={onPickAsset} />
         </div>
@@ -327,7 +538,7 @@ function MV2L1Home({ stats, folders, loading, err, onPickFolder, onScan, scannin
 
 
 // ─── 待整理审核页 (D-087 C, PRD §3.3) ─────────────────────
-// 左 list (含 thumb + filename + 标签预览), 右大预览 + AI 建议 + 通过/跳过
+// 左 list (含 thumb + filename + 标签预览), 右大预览 + 归档建议 + 通过/跳过
 
 function MV2Audit({ onBack }) {
   const [items, setItems] = React.useState([]);
@@ -407,7 +618,7 @@ function MV2Audit({ onBack }) {
             清空了!
           </div>
           <div style={{ fontSize: 12, color: T.muted2 }}>
-            所有 AI 归档建议都已处理. 后续 AI 打标会再产生新的待整理.
+            所有归档建议都已处理. 后续识别会再产生新的待整理.
           </div>
         </div>
       ) : (
@@ -472,13 +683,13 @@ function MV2Audit({ onBack }) {
                 当前位置: <span style={{ fontFamily: "monospace" }}>{cur.rel_folder || "/"}</span>
               </div>
 
-              {/* AI 建议 */}
+              {/* 归档建议 */}
               <div style={{
                 padding: "12px 14px", background: "#fff7e6",
                 border: `1px solid ${T_AMBER}55`, borderRadius: 8, marginBottom: 14,
               }}>
                 <div style={{ fontSize: 11, color: T_AMBER, fontWeight: 600, marginBottom: 6 }}>
-                  ✨ AI 归档建议
+                  识别归档建议
                 </div>
                 <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>
                   {cur.is_new_folder ? "🆕 新建" : "→ 移到"} {cur.suggested_folder}
@@ -498,9 +709,9 @@ function MV2Audit({ onBack }) {
                     {cur.tags.map(t => (
                       <span key={t.id} style={{
                         fontSize: 10.5, padding: "1px 6px", borderRadius: 3,
-                        background: t.source === "ai" ? "#e8f4ec" : "#f0f0f0",
-                        color: t.source === "ai" ? T_GREEN : T.muted,
-                      }}>{t.source === "ai" ? "✨" : ""}{t.name}</span>
+                        background: t.source === "metadata" || t.source === "llm" ? "#e8f4ec" : "#f0f0f0",
+                        color: t.source === "metadata" || t.source === "llm" ? T_GREEN : T.muted,
+                      }}>{t.name}</span>
                     ))}
                   </div>
                 </div>
@@ -532,6 +743,88 @@ function MV2Audit({ onBack }) {
               </div>
             </div>
           )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+// ─── D-124 大类货架: 左素材卡 + 右侧预览 ───────────────────
+
+function MV2CategoryView({ category, onBack, onPickAsset, compact }) {
+  const [items, setItems] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+  const [err, setErr] = React.useState("");
+  const [sort, setSort] = React.useState("quality");
+  const [selected, setSelected] = React.useState(null);
+
+  async function load() {
+    setLoading(true); setErr("");
+    try {
+      const r = await api.get(`/api/material-lib/list?category=${encodeURIComponent(category.key)}&sort=${sort}&limit=120`);
+      setItems(r.items || []);
+      setSelected((r.items || [])[0] || null);
+    } catch (e) {
+      setErr(e.message);
+    }
+    setLoading(false);
+  }
+  React.useEffect(() => { load(); }, [category.key, sort]);
+
+  return (
+    <div data-testid="mv2-category-view">
+      <div style={{
+        display: "flex", alignItems: compact ? "stretch" : "center",
+        justifyContent: "space-between", marginBottom: 14,
+        flexDirection: compact ? "column" : "row", gap: compact ? 10 : 0,
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, flexWrap: "wrap" }}>
+          <span style={{ cursor: "pointer", color: T_GREEN }} onClick={onBack}>素材库</span>
+          <span style={{ color: T.muted3 }}>/</span>
+          <span style={{ fontWeight: 700 }}>{category.key} {category.label}</span>
+          <Tag size="sm" color={category.key === "00 待整理" ? "amber" : "green"}>{items.length} 条</Tag>
+        </div>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <span style={{ fontSize: 11.5, color: T.muted2 }}>排序</span>
+          <select value={sort} onChange={e => setSort(e.target.value)}
+            style={{ fontSize: 12, padding: "5px 8px", border: `1px solid ${T.border}`, borderRadius: 6, background: "#fff" }}>
+            <option value="quality">质量优先</option>
+            <option value="imported">最新入库</option>
+            <option value="hits">命中最多</option>
+            <option value="name">文件名</option>
+          </select>
+          <Btn variant="outline" size="sm" onClick={onBack}>← 返回</Btn>
+        </div>
+      </div>
+      <div style={{ fontSize: 12, color: T.muted2, marginBottom: 12, lineHeight: 1.6 }}>
+        {category.description} · {category.usage}
+      </div>
+      {err && <InlineError err={err} />}
+      {loading ? (
+        <div style={{ padding: 60, textAlign: "center", color: T.muted }}>加载中...</div>
+      ) : (
+        <div style={{ display: "grid", gridTemplateColumns: compact ? "1fr" : "minmax(0,1fr) 320px", gap: 16 }}>
+          <div>
+            {items.length === 0 ? (
+              <div style={{ padding: 42, background: "#fff", border: `1px solid ${T.border}`, borderRadius: 8, textAlign: "center", color: T.muted }}>
+                这个大类还没有素材
+              </div>
+            ) : (
+              <div style={{ display: "grid", gridTemplateColumns: compact ? "repeat(2, minmax(0,1fr))" : "repeat(4, minmax(0,1fr))", gap: 8 }}>
+                {items.map(a => (
+                  <MV2AssetCard
+                    key={a.id}
+                    asset={a}
+                    selected={selected && selected.id === a.id}
+                    onClick={() => setSelected(a)}
+                    onDoubleClick={() => onPickAsset(a)}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+          <MV2L3SidePreview asset={selected} onPickAsset={onPickAsset} onTagged={load} />
         </div>
       )}
     </div>
@@ -666,7 +959,7 @@ function MV2L3SidePreview({ asset: assetMini, onPickAsset, onNav, onTagged }) {
     if (!asset) return;
     setTagging(true); setErr("");
     try {
-      await api.post(`/api/material-lib/tag/${asset.id}${force ? "?force=true" : ""}`);
+      await api.post(`/api/material-lib/classify/${asset.id}${force ? "?force=true" : ""}`);
       await load();
       if (onTagged) onTagged();
     } catch (e) {
@@ -755,20 +1048,28 @@ function MV2L3SidePreview({ asset: assetMini, onPickAsset, onNav, onTagged }) {
                     color: T_GREEN, cursor: tagging ? "wait" : "pointer", fontFamily: "inherit",
                   }}
                 >
-                  {tagging ? "..." : asset.tags.length > 0 ? "✨ 重打" : "✨ AI 打标"}
+                  {tagging ? "..." : asset.profile_updated_at ? "重新识别" : "识别"}
                 </button>
               </div>
+              {asset.visual_summary && (
+                <div style={{ fontSize: 10.8, color: T.text2, lineHeight: 1.5, padding: "7px 8px", background: T.bg2, borderRadius: 5, marginBottom: 6 }}>
+                  {asset.visual_summary}
+                  <div style={{ color: T.muted2, marginTop: 3 }}>
+                    {mv2SourceLabel(asset.recognition_source)} · {asset.orientation || "未知"} · 质量 {asset.quality_score ?? "—"}
+                  </div>
+                </div>
+              )}
               {asset.tags.length === 0 ? (
-                <div style={{ fontSize: 10.5, color: T_AMBER }}>⚠ 待标</div>
+                <div style={{ fontSize: 10.5, color: T_AMBER }}>待识别</div>
               ) : (
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>
                   {asset.tags.slice(0, 8).map(t => (
                     <span key={t.id} style={{
                       fontSize: 10, padding: "1px 5px", borderRadius: 3,
-                      background: t.source === "ai" ? "#e8f5e9" : "#e3f2fd",
-                      color: t.source === "ai" ? "#2e7d32" : "#1565c0",
-                      border: t.source === "ai" ? "1px dashed #81c784" : "none",
-                    }}>{t.source === "ai" ? "✨" : ""}{t.name}</span>
+                      background: t.source === "metadata" || t.source === "llm" ? "#e8f5e9" : "#e3f2fd",
+                      color: t.source === "metadata" || t.source === "llm" ? "#2e7d32" : "#1565c0",
+                      border: t.source === "metadata" ? "1px dashed #81c784" : "none",
+                    }}>{t.name}</span>
                   ))}
                 </div>
               )}
@@ -781,7 +1082,7 @@ function MV2L3SidePreview({ asset: assetMini, onPickAsset, onNav, onTagged }) {
             </div>
             {err && <InlineError err={err} />}
             <Btn variant="primary" size="md" onClick={handleUseInVideo} style={{ width: "100%" }}>
-              ✨ 用它做视频
+              用它做视频
             </Btn>
           </div>
         </>
@@ -881,6 +1182,7 @@ function MV2AssetCard({ asset, onClick, onDoubleClick, selected }) {
   const dur = asset.duration_sec ? _fmtDur(asset.duration_sec) : null;
   const tags = asset.tags || [];
   const hits = asset.hits || 0;
+  const quality = asset.quality_score;
   const thumb = asset.thumb_path
     ? `${api.base}/api/material-lib/thumb/${asset.id}`
     : null;
@@ -910,6 +1212,17 @@ function MV2AssetCard({ asset, onClick, onDoubleClick, selected }) {
             fontSize: 10, padding: "1px 5px", borderRadius: 3,
           }}>▶ {dur}</span>
         )}
+        {quality != null && (
+          <span style={{
+            position: "absolute", top: 4, left: 4,
+            background: quality >= 70 ? "rgba(42,111,74,0.86)" : "rgba(0,0,0,0.55)",
+            color: "#fff", fontSize: 10, padding: "1px 5px", borderRadius: 3,
+          }}>{quality}</span>
+        )}
+      </div>
+      <div style={{ padding: "6px 7px 0", fontSize: 10.5, color: T.text, minHeight: 30, lineHeight: 1.35 }}>
+        <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{asset.visual_summary || asset.filename}</div>
+        <div style={{ color: T.muted2, marginTop: 2 }}>{mv2SourceLabel(asset.recognition_source)} · {asset.orientation || "未知"}</div>
       </div>
       <div style={{
         padding: "5px 7px", display: "flex", alignItems: "center",
@@ -918,12 +1231,12 @@ function MV2AssetCard({ asset, onClick, onDoubleClick, selected }) {
       }}>
         <div style={{ flex: 1, minWidth: 0, display: "flex", gap: 3, alignItems: "center" }}>
           {tags.length === 0 ? (
-            <span style={{ color: T_AMBER, fontSize: 10 }}>⚠ 待标</span>
+            <span style={{ color: T_AMBER, fontSize: 10 }}>待识别</span>
           ) : tags.slice(0, 2).map(t => (
             <span key={t.id} style={{
               fontSize: 9.5, color: T.muted, background: "#f0f0f0",
               padding: "1px 4px", borderRadius: 2, whiteSpace: "nowrap",
-            }}>{t.source === "ai" ? "✨" : ""}{t.name}</span>
+            }}>{t.name}</span>
           ))}
         </div>
         {hits > 0 && (
@@ -967,7 +1280,7 @@ function MV2L4Preview({ asset: assetMini, onClose, onNav }) {
   async function handleTag(force) {
     setTagging(true); setErr(""); setTagResult(null);
     try {
-      const r = await api.post(`/api/material-lib/tag/${asset.id}${force ? "?force=true" : ""}`);
+      const r = await api.post(`/api/material-lib/classify/${asset.id}${force ? "?force=true" : ""}`);
       setTagResult(r);
       await load();  // 刷新 asset.tags
     } catch (e) {
@@ -1059,21 +1372,32 @@ function MV2L4Preview({ asset: assetMini, onClose, onNav }) {
                       cursor: tagging ? "wait" : "pointer", fontFamily: "inherit",
                     }}
                   >
-                    {tagging ? "AI 打标中..." : asset.tags.length > 0 ? "✨ 重新打标" : "✨ AI 打标"}
+                    {tagging ? "识别中..." : asset.profile_updated_at ? "重新识别" : "识别画面"}
                   </button>
                 )}
               </div>
+              {asset.visual_summary && (
+                <div style={{ fontSize: 12, color: T.text2, lineHeight: 1.6, padding: "9px 10px", background: T.bg2, borderRadius: 6, marginBottom: 8 }}>
+                  {asset.visual_summary}
+                  <div style={{ color: T.muted2, fontSize: 11, marginTop: 4 }}>
+                    {asset.category || "00 待整理"} · {asset.shot_type || "未判断"} · {mv2SourceLabel(asset.recognition_source)}
+                  </div>
+                  <div style={{ color: T.muted2, fontSize: 11, marginTop: 2 }}>
+                    质量 {asset.quality_score ?? "—"} · 贴合 {asset.relevance_score ?? "—"} · {asset.usage_hint || "用途待判断"}
+                  </div>
+                </div>
+              )}
               {asset.tags.length === 0 ? (
-                <div style={{ fontSize: 11.5, color: T_AMBER }}>⚠ 还没打标 · 点上面"✨ AI 打标"</div>
+                <div style={{ fontSize: 11.5, color: T_AMBER }}>还没识别 · 点上面识别画面</div>
               ) : (
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
                   {asset.tags.map(t => (
                     <span key={t.id} style={{
                       fontSize: 11, padding: "2px 7px", borderRadius: 4,
-                      background: t.source === "ai" ? "#e8f5e9" : "#e3f2fd",
-                      color: t.source === "ai" ? "#2e7d32" : "#1565c0",
-                      border: t.source === "ai" ? "1px dashed #81c784" : "none",
-                    }}>{t.source === "ai" ? "✨" : ""}{t.name}</span>
+                      background: t.source === "metadata" || t.source === "llm" ? "#e8f5e9" : "#e3f2fd",
+                      color: t.source === "metadata" || t.source === "llm" ? "#2e7d32" : "#1565c0",
+                      border: t.source === "metadata" ? "1px dashed #81c784" : "none",
+                    }}>{t.name}</span>
                   ))}
                 </div>
               )}
@@ -1104,7 +1428,7 @@ function MV2L4Preview({ asset: assetMini, onClose, onNav }) {
             </div>
 
             <Btn variant="primary" size="lg" onClick={handleUseInVideo} style={{ marginTop: 8 }}>
-              ✨ 用它做视频
+              用它做视频
             </Btn>
           </>
         )}
@@ -1117,15 +1441,17 @@ function MV2L4Preview({ asset: assetMini, onClose, onNav }) {
 // ─── 主组件 (4 层 state machine) ─────────────────────────
 
 function PageMaterialsV2({ onNav }) {
-  const [view, setView] = React.useState("home");  // home | folder | grid | audit | (preview 是叠加 modal)
+  const [view, setView] = React.useState("home");  // home | category | folder | grid | audit | (preview 是叠加 modal)
   const [topFolder, setTopFolder] = React.useState("");
+  const [currentCategory, setCurrentCategory] = React.useState(null);
   const [subFolder, setSubFolder] = React.useState("");
   const [previewAsset, setPreviewAsset] = React.useState(null);
   const [mode, setMode] = React.useState("grouped");  // grouped (C) | list (A)
 
   // 大屏数据
   const [stats, setStats] = React.useState(null);
-  const [folders, setFolders] = React.useState([]);
+  const [categories, setCategories] = React.useState([]);
+  const [root, setRoot] = React.useState("");
   const [activity, setActivity] = React.useState([]);
   const [topUsed, setTopUsed] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
@@ -1137,6 +1463,13 @@ function PageMaterialsV2({ onNav }) {
   const [search, setSearch] = React.useState("");
   const [searchResults, setSearchResults] = React.useState([]);
   const [searching, setSearching] = React.useState(false);
+  const [isNarrow, setIsNarrow] = React.useState(() => window.innerWidth < 760);
+
+  React.useEffect(() => {
+    const onResize = () => setIsNarrow(window.innerWidth < 760);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
 
   // debounce 300ms 触发搜索 (search 状态变后)
   React.useEffect(() => {
@@ -1161,12 +1494,13 @@ function PageMaterialsV2({ onNav }) {
     try {
       const [s, f, a, t] = await Promise.all([
         api.get("/api/material-lib/stats"),
-        api.get("/api/material-lib/folders"),
+        api.get("/api/material-lib/categories"),
         api.get("/api/material-lib/recent-activity?limit=6"),
         api.get("/api/material-lib/top-used?limit=5"),
       ]);
       setStats(s);
-      setFolders(f.folders || []);
+      setCategories(f.categories || []);
+      setRoot(f.root || s.root || "");
       setActivity(a.events || []);
       setTopUsed(t.items || []);
     } catch (e) {
@@ -1204,32 +1538,18 @@ function PageMaterialsV2({ onNav }) {
     setScanning(false);
   }
 
-  async function handleBatchTag(full) {
-    // full=true 全量打 (剩余所有未打标的) · full=false 打 10 条
-    const remain = stats ? Math.max(0, stats.total - stats.ai_tagged) : 0;
-    const limit = full ? Math.max(10, remain + 5) : 10;
-    if (full) {
-      const ok = window.confirm(
-        `即将给 ${remain} 条未打标素材全量 AI 打标. \n` +
-        `\n` +
-        `· 预计耗时 ~${Math.max(1, Math.round(remain * 3 / 60))} 分钟\n` +
-        `· 烧 credits ~$${(remain * 0.0015).toFixed(2)}\n` +
-        `\n` +
-        `任务后台跑, 跑完自动刷新. 确定吗?`
-      );
-      if (!ok) return;
-    }
+  async function handleClassify(limit) {
     setBatchTagging(true); setErr("");
     try {
-      const r = await api.post(`/api/material-lib/tag-batch?limit=${limit}`);
+      const safeLimit = Math.max(1, Math.min(limit || 20, 100));
+      const r = await api.post(`/api/material-lib/classify-batch?limit=${safeLimit}`);
       const taskId = r.task_id;
       const estSec = r.estimated_seconds || 60;
-      // 轮询: 全量给 ~2 倍预估时间, 小批 3 分钟
-      const maxWait = full ? estSec * 2 * 1000 : 180000;
+      const maxWait = Math.max(90000, estSec * 2000);
       let waited = 0;
       while (waited < maxWait) {
-        await new Promise(res => setTimeout(res, full ? 5000 : 3000));
-        waited += full ? 5000 : 3000;
+        await new Promise(res => setTimeout(res, 2000));
+        waited += 2000;
         try {
           const t = await api.get(`/api/tasks/${taskId}`);
           if (t.status === "ok") {
@@ -1237,12 +1557,8 @@ function PageMaterialsV2({ onNav }) {
             break;
           }
           if (t.status === "failed") {
-            setErr(t.error || "批量打标失败");
+            setErr(t.error || "分类失败");
             break;
-          }
-          // 全量时, 中途 reload stats 让 KPI 看到进度
-          if (full && waited % 30000 === 0) {
-            try { await loadHome(); } catch {}
           }
         } catch {}
       }
@@ -1256,6 +1572,11 @@ function PageMaterialsV2({ onNav }) {
     setTopFolder(folder);
     setMode("grouped");
     setView("folder");
+  }
+  function handlePickCategory(categoryKey) {
+    const cat = categories.find(c => c.key === categoryKey) || { key: categoryKey, label: categoryKey, description: "", usage: "" };
+    setCurrentCategory(cat);
+    setView("category");
   }
   function handlePickSubfolder(folder) {
     setSubFolder(folder);
@@ -1279,18 +1600,20 @@ function PageMaterialsV2({ onNav }) {
   }
 
   return (
-    <div style={{ padding: "20px 24px" }}>
+    <div style={{ padding: isNarrow ? "14px 12px 20px" : "20px 24px" }}>
       {view === "home" && (
         <MV2L1Home
-          stats={stats} folders={folders} loading={loading} err={err}
-          onPickFolder={handlePickFolder}
+          stats={stats} categories={categories} root={root} loading={loading} err={err}
+          onPickCategory={handlePickCategory}
           onScan={handleScan} scanning={scanning}
-          onBatchTag={handleBatchTag} batchTagging={batchTagging}
+          onClassify={handleClassify} classifying={batchTagging}
           onAudit={handleAudit}
           activity={activity} topUsed={topUsed} sideLoading={sideLoading}
           search={search} onSearch={setSearch}
           searchResults={searchResults} searching={searching}
           onPickAsset={(a) => setPreviewAsset(a)}
+          onRootSaved={loadHome}
+          compact={isNarrow}
         />
       )}
       {view === "audit" && (
@@ -1303,6 +1626,14 @@ function PageMaterialsV2({ onNav }) {
           onBack={handleBackHome}
           onPickAsset={handlePickAsset}
           onPickSubfolder={handlePickSubfolder}
+        />
+      )}
+      {view === "category" && currentCategory && (
+        <MV2CategoryView
+          category={currentCategory}
+          onBack={handleBackHome}
+          onPickAsset={handlePickAsset}
+          compact={isNarrow}
         />
       )}
       {view === "grid" && (

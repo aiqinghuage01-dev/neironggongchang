@@ -4,13 +4,13 @@
 
 ---
 
-## 当前状态 (2026-04-29 · 科技与狠活嵌入研发部状态面板)
+## 当前状态 (2026-04-29 · D-124 素材库精品原片库主线完成)
 
-**版本**: v0.7.6-agent27 — 生产部原「黑科技」占位页已替换为「科技与狠活」, 直接嵌入 `http://127.0.0.1:8765/` 研发部状态面板; 老板既可以双击桌面工作台启动研发部, 也可以在内容工厂网页里点「科技与狠活」查看状态。状态面板补 CORS, 支持从 `:8001` 页面读取 `:8765` 状态。
+**版本**: v0.7.7-materials — 素材库已从 Downloads 文件浏览器升级为「精品原片库」主心智: 首页固定 8 个业务大类, 支持素材源目录保存、metadata 结构化画像、限量分类批处理、按文案/镜头描述检索本地素材, 并完成桌面/移动浏览器闭环验证。当前仍用 `~/Downloads/` 做演示源, 后续可切到专用素材目录。
 
 ### 当前进行
-- 素材库 D-124 已启用定时巡检闭环: `bash scripts/start_materials_loop.sh` 后台守素材库返工轮次, `bash scripts/start_agent_dispatcher.sh --allow-dirty-slot media-dev` 后台派工并允许 media-dev 接管上一轮半成品; worker 技术掉线时优先重试当前轮, Review/QA blocked 时才进入下一轮, 最多到 T-040.
-- 我要做素材库精品原片库完整长任务: 已确认 D-124 方向, 当前先用 `~/Downloads/` 做演示源跑通完整页面, 未来切到 `~/Desktop/清华哥素材库/` 只改设置; T-023 因媒体开发自动 Agent 网络证书错误阻断, 旧 T-024/T-025 已废弃, 改派 T-026/T-027/T-028.
+- D-124 素材库长任务已由总控接管收束: T-026 媒体自动 Agent 卡在未提交 patch 输出, 总控停止进程后将已通过测试的 patch 合入 main, 并补右栏画像字段、旧标签参与分类、移动端响应式; T-035 自动返工重复 worker 已停止并标 blocked.
+- 素材库真实演示源仍是 `~/Downloads/`: 已 metadata 分类 120 条, 分类结果包含演讲舞台/上课教学/研发产品/空镜补画面/品牌资产; 未调用 LLM, 未烧 credits. 大量泛文件名素材仍在 `00 待整理`, 符合当前演示源质量.
 - T-017: 已入共享队列并被 `NRG 内容开发` 领取; 目标是继续返修 T-015 暴露的投流 `n=1` 页面真实链路 724s timeout。
 - T-018: 已入共享队列, 依赖 T-017; 只允许 T-017 done 后做一次投流 `n=1` 页面最小真烧复测。
 - T-019: 已入共享队列并被 `NRG QA 自动` 领取; 目标是主线合入 T-013 后复测 apimart 下载失败保护, 不真烧 credits。
@@ -34,6 +34,10 @@
 - 额外 QA cmux 脚本已改为 socket 不可用时只准备 worktree, 不再强行 fallback 打开多个空白窗口。
 
 ### 总控审查证据
+- D-124 素材库总控交接: `docs/agent-handoff/CONTROLLER_MATERIALS_T026_MAIN_20260429.md`.
+- D-124 主线验证: `python3 -m pytest -q tests/test_materials_service.py tests/test_materials_pipeline.py tests/test_materials_lib_api.py tests/test_migrations.py` -> 通过; `python3 -m pytest -q` -> 通过, 仅 dhv5 skill 缺失用例跳过; `git diff --check` -> clean.
+- D-124 真实 API: 临时后端 `:18000`, `/api/material-lib/categories` 返回固定 8 类; `/api/material-lib/match` 输入演讲/出差文案返回带分数和理由的候选; `/api/material-lib/classify-batch?limit=100` task `64e1eaa9abaf47fbad12864d685c07c2` -> `ok`, `scanned=100`, `failed=0`, `source=metadata`.
+- D-124 浏览器闭环: 临时前端 `:18001`, 首页/大类/剪辑检索/移动端截图已读: `/tmp/_ui_shots/t026_materials_desktop_home.png`, `/tmp/_ui_shots/t026_materials_desktop_category.png`, `/tmp/_ui_shots/t026_materials_desktop_match.png`, `/tmp/_ui_shots/t026_materials_mobile_home.png`; console error/pageerror/requestfailed/http error 均 0, 仅 Babel 开发 warning.
 - 总控本轮交接: `docs/agent-handoff/CONTROLLER_T013_T017_20260429_2011.md`.
 - 总控启动巡检: `docs/agent-handoff/CONTROLLER_STARTUP_20260429_1852.md`.
 - 收件箱: `python3 scripts/agent_inbox.py --hours 24` -> 53 reports.

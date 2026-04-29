@@ -46,7 +46,7 @@ import uuid
 from pathlib import Path
 from typing import Any, Optional
 
-from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -1952,6 +1952,16 @@ def material_lib_folders(limit: int = 12):
     return {"folders": ms.list_top_folders(limit=limit)}
 
 
+@app.get("/api/material-lib/categories", tags=["档案部"], summary="(D-124) 素材库 8 个业务大类聚合")
+def material_lib_categories():
+    from backend.services import materials_service as ms
+    return {
+        "categories": ms.list_categories(),
+        "root": str(ms.get_materials_root()),
+        "source_label": "Downloads 演示源" if ms.get_materials_root().name == "Downloads" else "素材库目录",
+    }
+
+
 @app.get("/api/material-lib/subfolders", tags=["档案部"], summary="(D-087) 二级子文件夹 (L2)")
 def material_lib_subfolders(top: str, limit: int = 32):
     from backend.services import materials_service as ms
@@ -1961,6 +1971,7 @@ def material_lib_subfolders(top: str, limit: int = 32):
 @app.get("/api/material-lib/list", tags=["档案部"], summary="(D-087) 素材列表 (L3 网格)")
 def material_lib_list(
     folder: str | None = None,
+    category: str | None = None,
     limit: int = 100,
     offset: int = 0,
     sort: str = "imported",
@@ -1973,8 +1984,8 @@ def material_lib_list(
             tids = [int(x) for x in tag_ids.split(",") if x.strip()]
         except ValueError:
             tids = None
-    items = ms.list_assets(folder=folder, limit=limit, offset=offset, tag_ids=tids, sort=sort)
-    return {"items": items, "count": len(items), "folder": folder}
+    items = ms.list_assets(folder=folder, category=category, limit=limit, offset=offset, tag_ids=tids, sort=sort)
+    return {"items": items, "count": len(items), "folder": folder, "category": category}
 
 
 @app.get("/api/material-lib/asset/{asset_id}", tags=["档案部"], summary="(D-087) 单条素材详情 (L4 大预览)")
@@ -2065,6 +2076,27 @@ def material_lib_search(q: str = "", limit: int = 30):
     return {"q": q, "count": len(items), "items": items}
 
 
+class MaterialMatchReq(BaseModel):
+    text: str = Field(..., min_length=1, max_length=2000, description="文案片段或镜头描述")
+    category: str | None = Field(None, description="可选业务大类")
+    orientation: str | None = Field(None, description="竖屏 / 横屏 / 方图 / 不限")
+    asset_type: str | None = Field(None, description="图片 / 视频 / 空镜")
+    limit: int = Field(12, ge=1, le=50)
+
+
+@app.post("/api/material-lib/match", tags=["档案部"], summary="(D-124) 按文案/镜头描述匹配本地素材")
+def material_lib_match(req: MaterialMatchReq):
+    from backend.services import materials_service as ms
+    items = ms.match_assets(
+        req.text,
+        category=req.category,
+        orientation=req.orientation,
+        asset_type=req.asset_type,
+        limit=req.limit,
+    )
+    return {"items": items, "count": len(items)}
+
+
 # ─── D-087 Day 2: AI 打标 ───────────────────────────────
 
 
@@ -2078,8 +2110,51 @@ def material_lib_tag(asset_id: str, force: bool = False):
         raise HTTPException(status_code=404, detail=str(e))
 
 
+@app.post("/api/material-lib/classify/{asset_id}", tags=["档案部"], summary="(D-124) 单条素材结构化画像分类 (metadata 快速层)")
+def material_lib_classify(asset_id: str, force: bool = False):
+    from backend.services import materials_pipeline as mp
+    try:
+        return mp.classify_asset(asset_id, force=force)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@app.post("/api/material-lib/classify-batch", tags=["档案部"], summary="(D-124) 限量结构化分类批处理 (默认未识别)")
+def material_lib_classify_batch(
+    limit: int = Query(..., ge=1, le=500),
+    force: bool = False,
+):
+    """metadata 快速分类, 不烧 credits. limit 必填, 防 Downloads 上万素材误全量处理."""
+    from backend.services import materials_pipeline as mp
+    from backend.services import tasks as tasks_service
+
+    est = max(10, min(600, limit))
+
+    def _do_with_ctx(ctx):
+        def progress_cb(i, total, aid):
+            if total > 0:
+                try:
+                    ctx.update_progress(f"分类中 {i}/{total}", pct=int(i * 100 / total))
+                except Exception:
+                    pass
+        return mp.classify_batch(limit=limit, force=force, on_progress=progress_cb)
+
+    task_id = tasks_service.run_async(
+        kind="materials.classify_batch",
+        label=f"素材分类 (限 {limit})",
+        ns="materials",
+        page_id="materials",
+        step="classify_batch",
+        payload={"limit": limit, "force": force, "source": "metadata"},
+        estimated_seconds=est,
+        progress_text=f"按文件信息给 {limit} 条素材分类...",
+        sync_fn_with_ctx=_do_with_ctx,
+    )
+    return {"task_id": task_id, "status": "running", "estimated_seconds": est, "source": "metadata"}
+
+
 @app.post("/api/material-lib/tag-batch", tags=["档案部"], summary="(D-087) 批量打标 (异步, 走 tasks.run_async)")
-def material_lib_tag_batch(limit: int = 10, force: bool = False):
+def material_lib_tag_batch(limit: int = 10, force: bool = False, confirm_large: bool = False):
     """异步批量打 N 条 (默认 10, 全量打标传大 limit 如 5000).
 
     全量打标 (~1600 条) 需要 ~1 小时 + ~$2-3 credits. 真烧前确认.
@@ -2088,6 +2163,9 @@ def material_lib_tag_batch(limit: int = 10, force: bool = False):
     """
     from backend.services import materials_pipeline as mp
     from backend.services import tasks as tasks_service
+
+    if limit > 100 and not confirm_large:
+        raise HTTPException(status_code=422, detail="批量打标一次最多 100 条; 大批量请明确确认")
 
     # estimated 按 5s/条算 (LLM 平均响应 ~3s + DB 写入 buffer)
     est = max(60, limit * 5)

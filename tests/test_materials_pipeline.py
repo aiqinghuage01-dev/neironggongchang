@@ -98,7 +98,7 @@ def test_heuristic_matches_keywords():
     r = _filename_heuristic(asset)
     assert "提问" in r["tags"]
     assert "讲台" in r["tags"]
-    assert r["folder"] == "00 讲台高光"
+    assert r["folder"] in ("01 演讲舞台", "02 上课教学")
     assert r["is_new"] is False
 
 
@@ -147,8 +147,8 @@ def test_heuristic_folder_voting():
         "ext": ".png",
     }
     r = _filename_heuristic(asset)
-    # 板书/课件/ppt 都投 01 板书课件 → 应该胜过 提问 投的 00 讲台高光
-    assert r["folder"] in ("01 板书课件", "00 讲台高光")  # 任一都接受 (具体看映射)
+    # 板书/课件/ppt 命中上课/做课, 提问命中上课
+    assert r["folder"] in ("02 上课教学", "05 做课素材")
 
 
 # ─── _build_prompt ────────────────────────────────────────
@@ -194,10 +194,10 @@ def test_build_prompt_strict_json_instruction():
 
 def test_parse_clean_json():
     from backend.services.materials_pipeline import _parse_llm_json
-    text = '{"tags": ["a", "b"], "folder": "00 讲台高光", "is_new": false}'
+    text = '{"tags": ["a", "b"], "folder": "01 演讲舞台", "is_new": false}'
     r = _parse_llm_json(text)
     assert r["tags"] == ["a", "b"]
-    assert r["folder"] == "00 讲台高光"
+    assert r["folder"] == "01 演讲舞台"
 
 
 def test_parse_json_with_markdown_fence():
@@ -307,7 +307,7 @@ def test_tag_asset_uses_llm_when_returns_valid_json(tmp_db, tmp_thumb_dir, tmp_r
     from backend.services.materials_pipeline import tag_asset
     scan_root()
     aid = list_assets()[0]["id"]
-    fake = mock_ai('{"tags": ["讲台", "提问"], "folder": "00 讲台高光", "is_new": false, "reason": "看起来像讲课"}')
+    fake = mock_ai('{"tags": ["讲台", "提问"], "folder": "01 演讲舞台", "is_new": false, "reason": "看起来像讲课"}')
     monkeypatch.setattr("shortvideo.ai.get_ai_client", lambda **kw: fake)
     r = tag_asset(aid)
     assert r["source"] == "llm"
@@ -394,7 +394,7 @@ def test_tag_asset_records_pending_move(tmp_db, tmp_thumb_dir, tmp_root, monkeyp
     scan_root()
     # 取根目录的 outside.jpg (rel_folder = ".")
     aid = next(a["id"] for a in list_assets() if a["filename"] == "outside.jpg")
-    fake = mock_ai('{"tags": ["其他"], "folder": "04 海报封面", "is_new": false, '
+    fake = mock_ai('{"tags": ["其他"], "folder": "07 品牌资产", "is_new": false, '
                    '"no_move": false, "confidence": 0.85, "reason": "看起来是海报"}')
     monkeypatch.setattr("shortvideo.ai.get_ai_client", lambda **kw: fake)
     tag_asset(aid)
@@ -404,7 +404,7 @@ def test_tag_asset_records_pending_move(tmp_db, tmp_thumb_dir, tmp_root, monkeyp
             (aid,),
         ).fetchone()
     assert row is not None
-    assert row[0] == "04 海报封面"
+    assert row[0] == "07 品牌资产"
     assert row[1] == "pending"
 
 
@@ -782,6 +782,38 @@ def test_tag_asset_llm_no_move_skips_pending(tmp_db, tmp_thumb_dir, tmp_root, mo
             "SELECT * FROM material_pending_moves WHERE asset_id=?", (aid,)
         ).fetchone()
     assert row is None
+
+
+def test_classify_asset_writes_structured_profile_without_llm(tmp_db, tmp_thumb_dir, tmp_root, monkeypatch):
+    """D-124 metadata 分类不调用 LLM, 写 category/summary/quality/source."""
+    from backend.services.materials_service import scan_root, list_assets, get_asset
+    from backend.services.materials_pipeline import classify_asset
+    scan_root()
+    aid = next(a["id"] for a in list_assets() if a["filename"] == "raise_hand.jpg")
+
+    def should_not_call(**kw):
+        raise AssertionError("metadata 分类不应调用 LLM")
+    monkeypatch.setattr("shortvideo.ai.get_ai_client", should_not_call)
+
+    r = classify_asset(aid)
+    assert r["source"] == "metadata"
+    assert r["recognition_source"] == "metadata"
+    assert r["category"] in ("01 演讲舞台", "02 上课教学")
+    a = get_asset(aid)
+    assert a["profile_updated_at"] is not None
+    assert a["visual_summary"]
+
+
+def test_classify_batch_defaults_to_unprofiled(tmp_db, tmp_thumb_dir, tmp_root):
+    from backend.services.materials_service import scan_root, list_assets
+    from backend.services.materials_pipeline import classify_asset, classify_batch
+    scan_root()
+    first = list_assets()[0]["id"]
+    classify_asset(first)
+    r = classify_batch(limit=10)
+    assert r["scanned"] == 2  # fixture 3 张, 已识别 1 张
+    assert r["ok"] == 2
+    assert r["source"] == "metadata"
 
 
 def test_list_pending_review_default_excludes_legacy(tmp_db, tmp_thumb_dir, tmp_root):

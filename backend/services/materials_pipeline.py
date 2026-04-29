@@ -31,18 +31,9 @@ from shortvideo.db import get_connection
 log = logging.getLogger("materials_pipeline")
 
 
-# ─── 业务分类候选 (PRD §2.1) ─────────────────────────────
+# ─── 业务分类候选 (D-124 精品原片库) ─────────────────────
 
-KNOWN_FOLDERS = [
-    "00 讲台高光",
-    "01 板书课件",
-    "02 学员互动",
-    "03 走位空镜",
-    "04 海报封面",
-    "05 BGM 音效",
-    "06 金句库",
-    "07 爆款档案",
-]
+KNOWN_FOLDERS = [c["key"] for c in ms.MATERIAL_CATEGORIES]
 
 
 # ─── 启发式 (兜底, 不烧 credits) ────────────────────────
@@ -80,20 +71,30 @@ _HEURISTIC_KEYWORDS: dict[str, list[str]] = {
 
 # 关键词 → 文件夹建议
 _HEURISTIC_FOLDER: dict[str, str] = {
-    "讲台": "00 讲台高光",
-    "提问": "00 讲台高光",
-    "笑": "00 讲台高光",
-    "致谢": "00 讲台高光",
-    "板书": "01 板书课件",
-    "ppt": "01 板书课件",
-    "课件": "01 板书课件",
-    "学员": "02 学员互动",
-    "互动": "02 学员互动",
-    "走位": "03 走位空镜",
-    "海报": "04 海报封面",
-    "封面": "04 海报封面",
-    "金句": "06 金句库",
-    "logo": "04 海报封面",
+    "讲台": "01 演讲舞台",
+    "演讲": "01 演讲舞台",
+    "舞台": "01 演讲舞台",
+    "会场": "01 演讲舞台",
+    "提问": "02 上课教学",
+    "笑": "01 演讲舞台",
+    "致谢": "01 演讲舞台",
+    "板书": "02 上课教学",
+    "ppt": "05 做课素材",
+    "课件": "02 上课教学",
+    "学员": "02 上课教学",
+    "互动": "02 上课教学",
+    "走位": "06 空镜补画面",
+    "空镜": "06 空镜补画面",
+    "键盘": "06 空镜补画面",
+    "出差": "04 出差商务",
+    "机场": "04 出差商务",
+    "高铁": "04 出差商务",
+    "课程": "05 做课素材",
+    "录课": "05 做课素材",
+    "海报": "07 品牌资产",
+    "封面": "07 品牌资产",
+    "金句": "05 做课素材",
+    "logo": "07 品牌资产",
 }
 
 
@@ -389,6 +390,105 @@ def tag_asset(asset_id: str, *, force: bool = False) -> dict[str, Any]:
             no_move=bool(result.get("no_move", False)),
         )
     return {**result, "source": source, "tags_written": n_tags}
+
+
+# ─── D-124 结构化画像: metadata 快速分类 ──────────────────
+
+
+def classify_asset(asset_id: str, *, force: bool = False) -> dict[str, Any]:
+    """给单条素材写入结构化画像.
+
+    第一版只用 metadata, 不烧 credits. 视觉识别扩展点:
+    - 图片: 后续可接 image vision 后把 recognition_source 改成 image_vision
+    - 视频: 后续可抽 3-5 张关键帧识别, 改成 video_keyframes
+    """
+    apply_migrations()
+    asset = ms.get_asset(asset_id)
+    if not asset:
+        raise ValueError(f"素材 {asset_id} 不存在")
+    if not force and asset.get("profile_updated_at"):
+        return {
+            "asset_id": asset_id,
+            "category": asset.get("category") or ms.DEFAULT_CATEGORY,
+            "recognition_source": asset.get("recognition_source") or "metadata",
+            "quality_score": asset.get("quality_score"),
+            "relevance_score": asset.get("relevance_score"),
+            "visual_summary": asset.get("visual_summary"),
+            "source": "cached",
+        }
+    profile = ms.build_metadata_profile(asset)
+    updated = ms.update_asset_profile(asset_id, profile)
+    if updated is None:
+        raise ValueError(f"素材 {asset_id} 不存在")
+    tags = profile.get("tags") or []
+    tags_written = _write_tags(asset_id, tags, source="metadata", confidence=0.55)
+    return {
+        "asset_id": asset_id,
+        "category": profile["category"],
+        "visual_summary": profile["visual_summary"],
+        "shot_type": profile["shot_type"],
+        "orientation": profile["orientation"],
+        "quality_score": profile["quality_score"],
+        "usage_hint": profile["usage_hint"],
+        "relevance_score": profile["relevance_score"],
+        "recognition_source": profile["recognition_source"],
+        "profile_updated_at": profile["profile_updated_at"],
+        "tags": tags,
+        "tags_written": tags_written,
+        "source": "metadata",
+    }
+
+
+def classify_batch(
+    *,
+    limit: int,
+    force: bool = False,
+    on_progress: Any = None,
+) -> dict[str, Any]:
+    """限量结构化分类. 默认只选未识别素材, 严格要求调用方传 limit."""
+    apply_migrations()
+    limit = max(1, min(int(limit or 1), 500))
+    with closing(get_connection()) as con:
+        if force:
+            rows = con.execute(
+                "SELECT id FROM material_assets ORDER BY imported_at DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+        else:
+            rows = con.execute(
+                """SELECT id FROM material_assets
+                   WHERE profile_updated_at IS NULL
+                      OR recognition_source IS NULL
+                      OR category IS NULL
+                   ORDER BY imported_at DESC LIMIT ?""",
+                (limit,),
+            ).fetchall()
+    asset_ids = [r[0] for r in rows]
+    total = len(asset_ids)
+    ok = 0
+    failed = 0
+    categories: dict[str, int] = {}
+    for i, aid in enumerate(asset_ids):
+        try:
+            res = classify_asset(aid, force=force)
+            cat = res.get("category") or ms.DEFAULT_CATEGORY
+            categories[cat] = categories.get(cat, 0) + 1
+            ok += 1
+        except Exception as e:
+            log.warning(f"classify_batch 单条失败 {aid}: {e}")
+            failed += 1
+        if on_progress:
+            try:
+                on_progress(i + 1, total, aid)
+            except Exception:
+                pass
+    return {
+        "scanned": total,
+        "ok": ok,
+        "failed": failed,
+        "categories": categories,
+        "source": "metadata",
+    }
 
 
 # ─── 批量 (异步, 限并发) ─────────────────────────────────

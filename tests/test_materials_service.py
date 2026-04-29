@@ -530,6 +530,26 @@ def test_scan_root_max_files_limit(tmp_db, tmp_thumb_dir, tmp_root):
     assert r["added"] == 2
 
 
+def test_scan_root_max_files_stops_walking_early(tmp_db, tmp_thumb_dir, tmp_root, monkeypatch):
+    """限量扫描必须边走边停, 不能先遍历完整 Downloads 再截断."""
+    from backend.services import materials_service as ms
+    yielded = []
+
+    def fake_walk(root):
+        for i in range(100):
+            yielded.append(i)
+            yield tmp_root / f"fake_{i}.jpg"
+
+    def fake_upsert(con, abs_path, root):
+        return (f"id_{len(yielded)}", True)
+
+    monkeypatch.setattr(ms, "_walk_root", fake_walk)
+    monkeypatch.setattr(ms, "_upsert_asset", fake_upsert)
+    r = ms.scan_root(max_files=3)
+    assert r["scanned"] == 3
+    assert len(yielded) == 3
+
+
 def test_scan_root_progress_callback(tmp_db, tmp_thumb_dir, tmp_root):
     """on_progress 被调."""
     from backend.services.materials_service import scan_root
@@ -714,6 +734,65 @@ def test_get_materials_root_default():
     assert "Downloads" in str(p) or p.exists()
 
 
+def test_settings_defaults_include_materials_root():
+    """D-124: settings.materials_root 有默认值且 update 可保存."""
+    from backend.services import settings
+    assert "materials_root" in settings.DEFAULTS
+    assert "Downloads" in settings.DEFAULTS["materials_root"]
+
+
+def test_settings_materials_root_can_be_saved(monkeypatch, tmp_path):
+    from backend.services import settings
+    fake_settings = tmp_path / "settings.json"
+    monkeypatch.setattr(settings, "SETTINGS_FILE", fake_settings)
+    saved = settings.update({"materials_root": str(tmp_path / "curated")})
+    assert saved["materials_root"].endswith("curated")
+    loaded = settings.get_all()
+    assert loaded["materials_root"].endswith("curated")
+
+
+def test_build_metadata_profile_has_structured_fields(tmp_db, tmp_thumb_dir, tmp_root):
+    from backend.services.materials_service import scan_root, list_assets, build_metadata_profile
+    scan_root()
+    asset = next(a for a in list_assets() if a["filename"] == "raise_hand.jpg")
+    profile = build_metadata_profile(asset)
+    assert profile["category"] in {
+        "00 待整理", "01 演讲舞台", "02 上课教学", "03 研发产品",
+        "04 出差商务", "05 做课素材", "06 空镜补画面", "07 品牌资产",
+    }
+    assert profile["visual_summary"]
+    assert profile["shot_type"]
+    assert profile["orientation"] in ("横屏", "竖屏", "方图", "未知")
+    assert 0 <= profile["quality_score"] <= 100
+    assert profile["recognition_source"] == "metadata"
+
+
+def test_build_metadata_profile_uses_existing_tags(tmp_db, tmp_thumb_dir, tmp_root):
+    """D-124: 旧 AI 标签也参与新业务大类判断, 方便迁移老素材."""
+    from backend.services.materials_service import scan_root, list_assets, get_asset, build_metadata_profile
+    from backend.services.materials_pipeline import _write_tags
+    scan_root()
+    aid = next(a["id"] for a in list_assets() if a["filename"] == "root_level.jpg")
+    _write_tags(aid, ["机场", "出差", "客户现场"], source="llm")
+    asset = get_asset(aid)
+    profile = build_metadata_profile(asset)
+    assert profile["category"] == "04 出差商务"
+    assert "机场" in profile["visual_summary"]
+
+
+def test_list_categories_returns_fixed_8_business_categories(tmp_db, tmp_thumb_dir, tmp_root):
+    from backend.services.materials_service import scan_root, list_categories
+    scan_root()
+    cats = list_categories()
+    assert len(cats) == 8
+    names = [c["key"] for c in cats]
+    assert names == [
+        "00 待整理", "01 演讲舞台", "02 上课教学", "03 研发产品",
+        "04 出差商务", "05 做课素材", "06 空镜补画面", "07 品牌资产",
+    ]
+    assert cats[0]["total"] == 5  # 未识别素材默认聚到待整理
+
+
 # ─── L1 右栏 endpoint (D-087 整改) ────────────────────────
 
 
@@ -765,6 +844,10 @@ def test_top_used_sorted_by_hits(tmp_db, tmp_thumb_dir, tmp_root):
     assert len(top) == 2
     assert top[0]["id"] == items[0]["id"]
     assert top[0]["hits"] == 2
+    assert "category" in top[0]
+    assert "visual_summary" in top[0]
+    assert "quality_score" in top[0]
+    assert "tags" in top[0]
     assert top[1]["hits"] == 1
 
 
@@ -866,6 +949,53 @@ def test_search_dedupes_when_filename_and_tag_both_match(tmp_db, tmp_thumb_dir, 
     # 不应该出现两次
     ids = [a["id"] for a in r]
     assert ids.count(target["id"]) == 1
+
+
+def test_update_profile_enables_category_filter_and_search(tmp_db, tmp_thumb_dir, tmp_root):
+    from backend.services.materials_service import (
+        scan_root, list_assets, update_asset_profile, search_assets,
+    )
+    scan_root()
+    aid = next(a["id"] for a in list_assets() if a["filename"] == "root_level.jpg")
+    update_asset_profile(aid, {
+        "category": "04 出差商务",
+        "visual_summary": "机场高铁出差转场画面",
+        "shot_type": "出差记录",
+        "orientation": "横屏",
+        "quality_score": 88,
+        "usage_hint": "适合转场和商务现场感",
+        "relevance_score": 76,
+        "recognition_source": "metadata",
+        "profile_updated_at": int(time.time()),
+    })
+    by_cat = list_assets(category="04 出差商务")
+    assert [a["id"] for a in by_cat] == [aid]
+    by_summary = search_assets("高铁")
+    assert any(a["id"] == aid for a in by_summary)
+
+
+def test_match_assets_uses_profile_tags_and_scores(tmp_db, tmp_thumb_dir, tmp_root):
+    from backend.services.materials_service import (
+        scan_root, list_assets, update_asset_profile, match_assets,
+    )
+    scan_root()
+    aid = next(a["id"] for a in list_assets() if a["filename"] == "podium.jpg")
+    update_asset_profile(aid, {
+        "category": "01 演讲舞台",
+        "visual_summary": "清华哥在会场舞台演讲",
+        "shot_type": "演讲现场",
+        "orientation": "横屏",
+        "quality_score": 92,
+        "usage_hint": "适合做权威背书和开场",
+        "relevance_score": 90,
+        "recognition_source": "metadata",
+        "profile_updated_at": int(time.time()),
+    })
+    matches = match_assets("开场需要演讲舞台权威背书", category="01 演讲舞台", limit=3)
+    assert matches
+    assert matches[0]["id"] == aid
+    assert matches[0]["match_score"] > 0
+    assert "推荐" not in matches[0]["match_reason"]  # reason 是业务依据, 不塞空泛词
 
 
 # ─── 待整理工作流 (D-087 C, PRD §3.3) ────────────────────

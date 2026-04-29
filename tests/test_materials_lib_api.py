@@ -119,6 +119,16 @@ def test_folders_limit(populated_client):
     assert len(folders) == 1
 
 
+def test_categories_returns_fixed_8_business_categories(populated_client):
+    r = populated_client.get("/api/material-lib/categories")
+    assert r.status_code == 200
+    d = r.json()
+    assert "Downloads" not in [c["key"] for c in d["categories"]]
+    assert len(d["categories"]) == 8
+    assert d["categories"][0]["key"] == "00 待整理"
+    assert d["categories"][0]["total"] == 3
+
+
 def test_subfolders_top_level(populated_client):
     r = populated_client.get("/api/material-lib/subfolders?top=00 讲台高光")
     assert r.status_code == 200
@@ -200,6 +210,16 @@ def test_list_with_invalid_tag_ids_falls_back(populated_client):
     r = populated_client.get("/api/material-lib/list?tag_ids=abc,xyz")
     assert r.status_code == 200
     assert r.json()["count"] == 3  # ignored, 全 list
+
+
+def test_list_by_category_after_classify(populated_client):
+    from backend.services.materials_service import list_assets
+    from backend.services.materials_pipeline import classify_asset
+    aid = next(a["id"] for a in list_assets() if a["filename"] == "raise_hand.jpg")
+    classify_asset(aid)
+    r = populated_client.get("/api/material-lib/list?category=01 演讲舞台")
+    assert r.status_code == 200
+    assert any(a["id"] == aid for a in r.json()["items"])
 
 
 # ─── asset/{id} ───────────────────────────────────────
@@ -325,6 +345,53 @@ def test_scan_with_max_files(client, tmp_root, monkeypatch):
     assert t["result"]["scanned"] == 2
 
 
+def test_classify_endpoint_writes_profile(populated_client):
+    from backend.services.materials_service import list_assets, get_asset
+    aid = list_assets()[0]["id"]
+    r = populated_client.post(f"/api/material-lib/classify/{aid}")
+    assert r.status_code == 200
+    d = r.json()
+    assert d["recognition_source"] == "metadata"
+    a = get_asset(aid)
+    assert a["category"]
+    assert a["visual_summary"]
+
+
+def test_classify_batch_requires_limit(client):
+    r = client.post("/api/material-lib/classify-batch")
+    assert r.status_code == 422
+
+
+def test_classify_batch_returns_task_id(populated_client, monkeypatch):
+    from backend.services import tasks as tasks_service
+    real_create = tasks_service.create_task
+    real_finish = tasks_service.finish_task
+
+    def sync_run(*, kind, label=None, ns=None, page_id=None, step=None,
+                 payload=None, estimated_seconds=None, progress_text=None,
+                 sync_fn=None, sync_fn_with_ctx=None):
+        tid = real_create(kind=kind, label=label, ns=ns, page_id=page_id,
+                          step=step, payload=payload, estimated_seconds=estimated_seconds)
+        try:
+            if sync_fn_with_ctx is not None:
+                res = sync_fn_with_ctx(tasks_service.TaskContext(tid))
+            else:
+                res = sync_fn()
+            real_finish(tid, result=res, status="ok")
+        except Exception as e:
+            real_finish(tid, error=str(e), status="failed")
+        return tid
+
+    monkeypatch.setattr("backend.services.tasks.run_async", sync_run)
+    r = populated_client.post("/api/material-lib/classify-batch?limit=2")
+    assert r.status_code == 200
+    d = r.json()
+    assert d["source"] == "metadata"
+    t = tasks_service.get_task(d["task_id"])
+    assert t["status"] == "ok"
+    assert t["result"]["scanned"] == 2
+
+
 # ─── usage 记录 ───────────────────────────────────────
 
 
@@ -355,6 +422,21 @@ def test_usage_minimal_payload(populated_client):
     aid = items[0]["id"]
     r = populated_client.post("/api/material-lib/usage", json={"asset_id": aid})
     assert r.status_code == 200
+
+
+def test_top_used_includes_profile_fields(populated_client):
+    items = populated_client.get("/api/material-lib/list").json()["items"]
+    aid = items[0]["id"]
+    populated_client.post("/api/material-lib/usage", json={"asset_id": aid, "used_in": "测试视频"})
+    r = populated_client.get("/api/material-lib/top-used?limit=1")
+    assert r.status_code == 200
+    item = r.json()["items"][0]
+    assert item["id"] == aid
+    assert item["hits"] == 1
+    assert "category" in item
+    assert "visual_summary" in item
+    assert "quality_score" in item
+    assert "tags" in item
 
 
 # ─── 全库搜索 (D-087 整改 follow-up) ────────────────────
@@ -402,6 +484,52 @@ def test_search_returns_q_in_response(populated_client):
     """响应应该 echo 原 query (前端展示用)."""
     r = populated_client.get("/api/material-lib/search?q=raise")
     assert r.json()["q"] == "raise"
+
+
+def test_search_matches_visual_summary(populated_client):
+    from backend.services.materials_service import list_assets, update_asset_profile
+    aid = list_assets()[0]["id"]
+    update_asset_profile(aid, {
+        "category": "04 出差商务",
+        "visual_summary": "机场客户现场商务画面",
+        "shot_type": "出差记录",
+        "orientation": "横屏",
+        "quality_score": 82,
+        "usage_hint": "适合商务转场",
+        "relevance_score": 72,
+        "recognition_source": "metadata",
+        "profile_updated_at": int(time.time()),
+    })
+    r = populated_client.get("/api/material-lib/search?q=客户现场")
+    assert r.status_code == 200
+    assert any(a["id"] == aid for a in r.json()["items"])
+
+
+def test_match_endpoint_returns_reason_and_scores(populated_client):
+    from backend.services.materials_service import list_assets, update_asset_profile
+    aid = next(a["id"] for a in list_assets() if a["filename"] == "podium.jpg")
+    update_asset_profile(aid, {
+        "category": "01 演讲舞台",
+        "visual_summary": "清华哥在舞台演讲",
+        "shot_type": "演讲现场",
+        "orientation": "横屏",
+        "quality_score": 90,
+        "usage_hint": "适合做开场和权威背书",
+        "relevance_score": 88,
+        "recognition_source": "metadata",
+        "profile_updated_at": int(time.time()),
+    })
+    r = populated_client.post("/api/material-lib/match", json={
+        "text": "需要演讲舞台开场素材",
+        "category": "01 演讲舞台",
+        "limit": 5,
+    })
+    assert r.status_code == 200
+    items = r.json()["items"]
+    assert items
+    assert items[0]["id"] == aid
+    assert items[0]["match_score"] > 0
+    assert items[0]["match_reason"]
 
 
 # ─── 待整理工作流 (D-087 C, PRD §3.3) ──────────────────
