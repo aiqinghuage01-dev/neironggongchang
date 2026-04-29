@@ -96,9 +96,68 @@ def analyze_hotspot(hotspot: str) -> dict[str, Any]:
 
 # ─── Step 2-5 · 写正文 1800-2600 字 + 六维自检 ────────────
 
-def write_script(hotspot: str, breakdown: dict[str, Any], angle: dict[str, Any]) -> dict[str, Any]:
+_VARIANT_SPECS = {
+    "pure_v1": {
+        "mode_label": "纯改写 V1 · 换皮版",
+        "instruction": (
+            "纯改写 V1: 保留热点原始冲突和信息顺序, 换成清华哥口播表达. "
+            "不植入业务, 只做观点改写、节奏增强和金句收口."
+        ),
+    },
+    "pure_v2": {
+        "mode_label": "纯改写 V2 · 狠劲版",
+        "instruction": (
+            "纯改写 V2: 观点更锋利, 开头更有态度, 反差更强. "
+            "不植入业务, 重点让老板看完觉得'这话说透了'."
+        ),
+    },
+    "biz_v3": {
+        "mode_label": "结合业务 V3 · 翻转版",
+        "instruction": (
+            "结合业务 V3: 80% 讲热点背后的经营规律, 20% 自然植入 AI+短视频获客方案. "
+            "结构上做一次关键翻转: 表面是热点, 本质是实体老板获客/信任/效率问题."
+        ),
+    },
+    "biz_v4": {
+        "mode_label": "结合业务 V4 · 圈人版",
+        "instruction": (
+            "结合业务 V4: 更强调'哪些老板和我同频', 语气更像筛选同路人. "
+            "业务植入放在第三条建议和低压 CTA, 不能硬卖."
+        ),
+    },
+}
+
+
+def build_write_variants(modes: dict[str, Any] | None = None) -> list[dict[str, str]]:
+    """前端勾选模式 → 实际要生成的版本列表.
+
+    D-101: UI 一直写"每勾一项加 2 篇",后端必须真按这个契约生成.
+    """
+    m = modes or {}
+    with_biz = bool(m.get("with_biz", True))
+    pure_rewrite = bool(m.get("pure_rewrite", False))
+    if not with_biz and not pure_rewrite:
+        with_biz = True
+
+    keys: list[str] = []
+    if pure_rewrite:
+        keys.extend(["pure_v1", "pure_v2"])
+    if with_biz:
+        keys.extend(["biz_v3", "biz_v4"])
+    return [{"variant_id": k, **_VARIANT_SPECS[k]} for k in keys]
+
+
+def write_script(
+    hotspot: str,
+    breakdown: dict[str, Any],
+    angle: dict[str, Any],
+    *,
+    variant: dict[str, str] | None = None,
+) -> dict[str, Any]:
     """基于拆解和选定角度,写 1800-2600 字口播正文 + 六维自检。"""
     skill = skill_loader.load_skill(SKILL_SLUG)
+    variant = variant or {"variant_id": "single", "mode_label": "", "instruction": ""}
+    variant_instruction = (variant.get("instruction") or "").strip()
     system = f"""你在执行《热点文案改写V2》skill 的 Step 2-4 · 撰写正文。
 身份/语气/业务植入/人设约束全部按下面 skill 方法论严格执行。
 
@@ -112,6 +171,7 @@ def write_script(hotspot: str, breakdown: dict[str, Any], angle: dict[str, Any])
 - 人设名"清华哥"(不能写成青蛙哥/清哥等变体)
 - 禁用 markdown 符号 / emoji 作段首(留给后续排版)
 - 输出纯文本正文,不要标题/前言/说明
+{f"- 本版写法: {variant_instruction}" if variant_instruction else ""}
 """
 
     write_prompt = f"""【热点】
@@ -129,6 +189,7 @@ def write_script(hotspot: str, breakdown: dict[str, Any], angle: dict[str, Any])
 
 按 Step 2 流量结构骨架(3秒判词 → 30秒画面 → 底层机制 → 连续反转 → 三条建议(第3条接业务) → 金句收口)写 1800-2600 字口播正文。
 人设植入 + 80/20 业务植入严格按 Step 3 执行。
+{f"本次只写这一版: {variant.get('mode_label')}。{variant_instruction}" if variant_instruction else ""}
 
 直接输出正文,不要任何前言:"""
 
@@ -190,6 +251,8 @@ def write_script(hotspot: str, breakdown: dict[str, Any], angle: dict[str, Any])
         "content": content,
         "word_count": word_count,
         "self_check": self_check,
+        "variant_id": variant.get("variant_id"),
+        "mode_label": variant.get("mode_label") or "",
         "tokens": {
             "write": write_r.total_tokens,
             "check": check_r.total_tokens,
@@ -197,19 +260,51 @@ def write_script(hotspot: str, breakdown: dict[str, Any], angle: dict[str, Any])
     }
 
 
+def write_script_batch(
+    hotspot: str,
+    breakdown: dict[str, Any],
+    angle: dict[str, Any],
+    modes: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """按前端勾选模式一次任务生成 2/4 个版本, 返回 versions[]."""
+    variants = build_write_variants(modes)
+    versions: list[dict[str, Any]] = []
+    for spec in variants:
+        versions.append(write_script(hotspot, breakdown, angle, variant=spec))
+    first = versions[0] if versions else write_script(hotspot, breakdown, angle)
+    return {
+        "content": first.get("content", ""),
+        "word_count": first.get("word_count", 0),
+        "self_check": first.get("self_check", {}),
+        "tokens": {
+            "write": sum((v.get("tokens") or {}).get("write", 0) for v in versions),
+            "check": sum((v.get("tokens") or {}).get("check", 0) for v in versions),
+        },
+        "versions": versions,
+        "version_count": len(versions),
+    }
+
+
 # ─── 异步 (D-037b5) ─────────────────────────────────────
 
-def write_script_async(hotspot: str, breakdown: dict[str, Any], angle: dict[str, Any], **kwargs) -> str:
-    """异步触发 write_script, 立即返 task_id. 真跑 30-60s (write + self-check 两次 AI)."""
+def write_script_async(
+    hotspot: str,
+    breakdown: dict[str, Any],
+    angle: dict[str, Any],
+    modes: dict[str, Any] | None = None,
+    **kwargs,
+) -> str:
+    """异步触发 write_script_batch, 立即返 task_id. 真跑 2/4 版 (write + self-check 多次 AI)."""
     angle_label = (angle or {}).get("label") or (angle or {}).get("angle_id") or ""
+    version_count = len(build_write_variants(modes))
     return tasks_service.run_async(
         kind="hotrewrite.write",
         label=f"热点改写 · {angle_label}" if angle_label else "热点改写",
         ns="hotrewrite",
         page_id="hotrewrite",
         step="write",
-        payload={"hotspot_preview": hotspot[:100], "angle_label": angle_label},
-        estimated_seconds=50,
-        progress_text="AI 写口播文案 + 自检 (1800-2600 字)...",
-        sync_fn=lambda: write_script(hotspot, breakdown, angle),
+        payload={"hotspot_preview": hotspot[:100], "angle_label": angle_label, "version_count": version_count},
+        estimated_seconds=max(60, 45 * version_count),
+        progress_text=f"小华写 {version_count} 版口播文案 + 自检...",
+        sync_fn=lambda: write_script_batch(hotspot, breakdown, angle, modes),
     )

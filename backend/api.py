@@ -2809,6 +2809,7 @@ class HotrewriteWriteReq(BaseModel):
     hotspot: str = Field(..., description="热点事件描述")
     breakdown: dict[str, Any] = Field(default_factory=dict, description="Step 1 输出的拆解 JSON")
     angle: dict[str, Any] = Field(default_factory=dict, description="挑定的切入角度 JSON")
+    modes: dict[str, Any] = Field(default_factory=dict, description="改写模式: with_biz / pure_rewrite")
 
 
 @app.post("/api/hotrewrite/write", tags=["热点改写"], summary="Step 2 写口播文案 (异步, 立即返 task_id)")
@@ -2816,10 +2817,17 @@ def hotrewrite_write(req: HotrewriteWriteReq):
     """D-037b5 异步化: 立即返 task_id, daemon thread 跑 30-60s.
 
     走 opus 出长口播 + 六维自检 (开头钩子/数据/反差/金句/Call to action/字数).
-    完成后 task.result = {content, word_count, self_check, tokens}.
+    完成后 task.result = {content, word_count, self_check, tokens, versions[]}.
     """
-    task_id = hotrewrite_pipeline.write_script_async(req.hotspot, req.breakdown, req.angle)
-    return {"task_id": task_id, "status": "running", "estimated_seconds": 50, "page_id": "hotrewrite"}
+    task_id = hotrewrite_pipeline.write_script_async(req.hotspot, req.breakdown, req.angle, req.modes)
+    version_count = len(hotrewrite_pipeline.build_write_variants(req.modes))
+    return {
+        "task_id": task_id,
+        "status": "running",
+        "estimated_seconds": max(60, 45 * version_count),
+        "page_id": "hotrewrite",
+        "version_count": version_count,
+    }
 
 
 # ═══════════════════════════════════════════════════════════════════

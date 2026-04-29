@@ -54,9 +54,9 @@ function PageHotrewrite({ onNav }) {
   const [activeVersionIdx, setActiveVersionIdx] = React.useState(0);
   const [appendingVersion, setAppendingVersion] = React.useState(false);
 
-  // D-062nn-C3: 改写模式 (checkbox 制, 默认 ☑ 业务)
+  // D-101: 改写模式默认两种都勾, 直接生成 V1-V4 四版.
   const [withBiz, setWithBiz] = React.useState(true);
-  const [pureRewrite, setPureRewrite] = React.useState(false);
+  const [pureRewrite, setPureRewrite] = React.useState(true);
 
   const [skillInfo, setSkillInfo] = React.useState(null);
   React.useEffect(() => { api.get("/api/hotrewrite/skill-info").then(setSkillInfo).catch(() => {}); }, []);
@@ -67,13 +67,22 @@ function PageHotrewrite({ onNav }) {
   const poller = useTaskPoller(taskId, {
     onComplete: (r) => {
       const meta = taskMetaRef.current;
-      const v = { ...r, angle: meta.angle, mode_label: meta.modeLabel, ts: Date.now() };
+      const now = Date.now();
+      const incoming = Array.isArray(r?.versions) && r.versions.length
+        ? r.versions.map((v, idx) => ({
+          ...v,
+          angle: meta.angle,
+          mode_label: v.mode_label || meta.modeLabel,
+          ts: now + idx,
+        }))
+        : [{ ...r, angle: meta.angle, mode_label: meta.modeLabel, ts: now }];
       setVersions((vs) => {
-        const next = [...vs, v];
-        setActiveVersionIdx(next.length - 1);
+        const startIdx = vs.length;
+        const next = [...vs, ...incoming];
+        setActiveVersionIdx(startIdx);
+        setScript(next[startIdx]);
         return next;
       });
-      setScript(v);
       setTaskId(null);
     },
     onError: (e) => { setErr(e || "改写失败"); /* 留 taskId 让 FailedRetry 渲染 */ },
@@ -444,7 +453,7 @@ function HotStepAngles({ analyze, loading, onPick, onPrev, onRegen, withBiz, set
         </div>
       </div>
 
-      {/* D-062nn-C3: 改写模式 checkbox 卡 (默认 ☑ 业务 · 至少保留 1 个) */}
+      {/* D-101: 默认两种都勾, 直接出 V1-V4 四版; 至少保留 1 个 */}
       <div style={{ marginBottom: 16, padding: 14, background: T.brandSoft, borderRadius: 10, border: `1px solid ${T.brand}33` }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
           <span style={{ fontSize: 13, fontWeight: 600, color: T.text }}>改写模式</span>
@@ -468,7 +477,7 @@ function HotStepAngles({ analyze, loading, onPick, onPrev, onRegen, withBiz, set
             desc="不带业务植入 · V1 换皮版 + V2 狠劲版" />
         </div>
         <div style={{ marginTop: 8, fontSize: 10.5, color: T.muted2, lineHeight: 1.5 }}>
-          💡 默认勾"结合业务"出 2 篇 · 都勾出 4 篇对比 · 至少保留 1 个
+          💡 默认出 4 篇对比 · 想省时间可取消一种模式, 只出 2 篇 · 至少保留 1 个
         </div>
       </div>
 
@@ -541,22 +550,8 @@ function HotStepWrite({ script, hotspot, angle, loading, onPrev, onRewrite, onRe
     <div style={{ padding: "32px 40px 120px", maxWidth: 1080, margin: "0 auto" }}>
       {/* D-062nn-C4: 多版 tab 切换 (versions 数组 > 1 时显) */}
       {versions && versions.length > 1 && (
-        <div style={{ marginBottom: 14, padding: 10, background: T.bg2, borderRadius: 10, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-          <span style={{ fontSize: 12, fontWeight: 600, color: T.text }}>📚 共 {versions.length} 版:</span>
-          {versions.map((v, i) => (
-            <button key={i} onClick={() => onSwitchVersion(i)}
-              title={`角度: ${v.angle?.label || ""} · ${new Date(v.ts).toLocaleTimeString().slice(0, 5)}`}
-              style={{
-                padding: "4px 12px", fontSize: 11.5, fontFamily: "inherit",
-                background: i === activeVersionIdx ? T.brand : "#fff",
-                color: i === activeVersionIdx ? "#fff" : T.muted,
-                border: `1px solid ${i === activeVersionIdx ? T.brand : T.borderSoft}`,
-                borderRadius: 100, cursor: "pointer", fontWeight: i === activeVersionIdx ? 600 : 500,
-              }}>
-              第 {i + 1} 版 · {v.mode_label}
-            </button>
-          ))}
-        </div>
+        <HotVersionSwitcher versions={versions} activeVersionIdx={activeVersionIdx}
+          onSwitchVersion={onSwitchVersion} compact />
       )}
 
       {/* Hero (1 行 + 自检 chip 右挂, 替代 240px 抢戏卡) */}
@@ -576,11 +571,16 @@ function HotStepWrite({ script, hotspot, angle, loading, onPrev, onRewrite, onRe
           style={{ width: "100%", border: "none", outline: "none", background: "transparent", fontSize: 14.5, fontFamily: "inherit", resize: "vertical", lineHeight: 1.9, color: T.text, minHeight: 460 }} />
       </div>
 
+      {versions && versions.length > 1 && (
+        <HotVersionSwitcher versions={versions} activeVersionIdx={activeVersionIdx}
+          onSwitchVersion={onSwitchVersion} />
+      )}
+
       {/* D-062nn-C4: 操作行 — 多版累积 + 切角度 + 复制 */}
       <div style={{ display: "flex", gap: 10, marginTop: 18, alignItems: "center", flexWrap: "wrap", position: "relative" }}>
         <Btn variant="outline" onClick={onPrev}>← 改角度选择</Btn>
         <Btn onClick={onAddSameAngle || onRewrite} disabled={appendingVersion}>
-          {appendingVersion ? "AI 写中..." : "🔄 再来一版 (同角度)"}
+          {appendingVersion ? "小华写中..." : "🔄 再出一组 (同角度)"}
         </Btn>
         {otherAngles.length > 0 && (
           <div style={{ position: "relative" }}>
@@ -639,6 +639,56 @@ function HotStepWrite({ script, hotspot, angle, loading, onPrev, onRewrite, onRe
           }}>🎬 做成数字人视频 →</Btn>
         </div>
       )}
+    </div>
+  );
+}
+
+function HotVersionSwitcher({ versions, activeVersionIdx, onSwitchVersion, compact }) {
+  if (!versions || versions.length <= 1) return null;
+  const active = versions[activeVersionIdx] || versions[0];
+  return (
+    <div style={{
+      margin: compact ? "0 0 14px" : "14px 0 0",
+      padding: compact ? 10 : 12,
+      background: compact ? T.bg2 : "linear-gradient(135deg, #f6fbf7, #fff)",
+      border: compact ? "none" : `1px solid ${T.brand}33`,
+      borderRadius: 12,
+      display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap",
+    }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: compact ? 110 : 150 }}>
+        <span style={{ fontSize: 12, fontWeight: 700, color: T.text }}>
+          📚 {versions.length} 版文案
+        </span>
+        {!compact && (
+          <span style={{ fontSize: 10.5, color: T.muted2 }}>
+            当前: 第 {activeVersionIdx + 1} 版 · {active?.mode_label || "未命名"}
+          </span>
+        )}
+      </div>
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", flex: 1 }}>
+        {versions.map((v, i) => {
+          const on = i === activeVersionIdx;
+          const label = (v.mode_label || `第 ${i + 1} 版`).replace(/^结合业务\s*/, "").replace(/^纯改写\s*/, "");
+          return (
+            <button key={i} onClick={() => onSwitchVersion(i)}
+              title={`角度: ${v.angle?.label || ""} · ${new Date(v.ts || Date.now()).toLocaleTimeString().slice(0, 5)}`}
+              style={{
+                padding: compact ? "5px 10px" : "7px 12px",
+                fontSize: compact ? 11.5 : 12,
+                fontFamily: "inherit",
+                background: on ? T.brand : "#fff",
+                color: on ? "#fff" : T.muted,
+                border: `1px solid ${on ? T.brand : T.borderSoft}`,
+                borderRadius: 100,
+                cursor: "pointer",
+                fontWeight: on ? 700 : 600,
+                boxShadow: on && !compact ? `0 0 0 3px ${T.brandSoft}` : "none",
+              }}>
+              第 {i + 1} 版 · {label}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }

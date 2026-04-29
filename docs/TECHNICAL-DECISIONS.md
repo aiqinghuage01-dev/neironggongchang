@@ -4,6 +4,30 @@
 
 ---
 
+## D-101 - 热点改写模式勾选必须成为后端生成契约（2026-04-29）
+
+**背景**：热点改写 Step 2 的 UI 从 D-062nn 起写着“结合业务 +2 篇 / 纯改写 +2 篇”,
+但 `/api/hotrewrite/write` 后端一直忽略模式,只跑一次 `write_script`,导致老板看到
+“本次会出 4 篇”最后只有 1 篇.
+
+**结论**：
+- `/api/hotrewrite/write` 请求体新增 `modes: {with_biz, pure_rewrite}`.
+- 后端用 `build_write_variants(modes)` 把勾选模式映射成固定版本:
+  `pure_v1/pure_v2/biz_v3/biz_v4`,每个版本单独走 `write_script + self_check`.
+- task.result 保留老字段 `content/word_count/self_check/tokens` 指向第一版,避免旧前端或作品
+  入库逻辑断; 新字段 `versions[]` 承载全部版本.
+- API 立即返回 `version_count`,前端可据此展示预计耗时; 实际任务 payload 也记录
+  `version_count` 方便任务列表恢复和诊断.
+- 前端默认两种模式都勾,默认直接出 V1-V4 四版; 取消任一模式则只出 2 版.
+
+**代价**：默认一次热点改写会从 1 次长文写作变成 4 次长文写作 + 4 次自检,耗时和成本都上升.
+这是刻意选择: 当前产品更需要老板拿到可对比版本,后续若成本压力明显,再把默认改回 2 版.
+
+**测试要求**：单测必须覆盖模式 → 版本映射、batch 聚合、API 传参; UI 闭环必须真点模式勾选,
+确认 `/api/hotrewrite/write` body 带 modes,返回 `versions[]` 后页面显示 4 个切换按钮并能切正文.
+
+---
+
 ## D-100 - 做视频 Step 1 默认页优先给热点排行, 不再铺多技能入口（2026-04-29）
 
 **背景**：老板标注 `?page=make` Step 1 默认页: “复用最近做过的”应改为热点排行,

@@ -4,7 +4,34 @@
 
 ---
 
-## 当前状态 (2026-04-29 · D-100 做视频 Step 1 热点排行入口优化)
+## 当前状态 (2026-04-29 · D-101 热点改写多版本生成)
+
+**版本**: v0.7.6 — 热点改写“本次会出 2/4 篇”现在后端真生成多版本, 前端可切换对比.
+
+### D-101 修复
+- `POST /api/hotrewrite/write`: 请求体新增 `modes.with_biz / modes.pure_rewrite`;
+  返回新增 `version_count`, 预计耗时按 2/4 版调整.
+- `backend/services/hotrewrite_pipeline.py`: 新增 `build_write_variants` 和
+  `write_script_batch`, 每个勾选模式真生成 2 版; task.result 保留兼容字段
+  `content/word_count/self_check/tokens`, 同时新增 `versions[]`.
+- `web/factory-hotrewrite-v2.jsx`: 改写模式默认两种都勾, 默认出 V1-V4 四版;
+  任务完成后一次 append 多版, 正文顶部和底部都有版本切换.
+- `scripts/e2e_hotrewrite_versions.js` + `tests/test_hotrewrite_versions.py`: 覆盖
+  默认 4 篇、取消/恢复模式、modes 传参、返回 4 版后切换正文.
+
+### 验证
+- `pytest -q tests/test_hotrewrite_versions.py` ✅
+- `pytest -q -x` ✅ (全量通过; dhv5 本机缺 skill 的 skip 仍为预期)
+- `curl POST /api/hotrewrite/write` 临时替换后台写作函数避免烧 credits: 返回
+  `version_count=4`, `estimated_seconds=180` ✅
+- Playwright :8001 `?page=hotrewrite` 真点模式勾选 + 选角度 + 切第 2 版:
+  `/api/hotrewrite/write` body 含 `modes.with_biz=true/pure_rewrite=true`,
+  页面显示 `4 版文案`, textarea 从第一版切到第二版, console/pageerror=0 ✅
+- 截图已读: `/tmp/_ui_shots/d101_hotrewrite_versions.png`.
+
+---
+
+## 上一里程碑 (2026-04-29 · D-100 做视频 Step 1 热点排行入口优化)
 
 **版本**: v0.7.5 — 做视频默认页底部从复用作品改为热点排行, 直连热点改写.
 
