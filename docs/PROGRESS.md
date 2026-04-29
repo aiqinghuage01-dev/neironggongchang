@@ -4,12 +4,12 @@
 
 ---
 
-## 当前状态 (2026-04-29 · Works T-009/T-010/T-011 已修待 QA)
+## 当前状态 (2026-04-29 · T-007/T-008 合入通过)
 
-**版本**: v0.7.6-agent11 — 作品库 QA 发现的 T-009/T-010/T-011 已由总控单线修复并自验; 真实公众号草稿推送复测、直接出图结果区和作品库独立回归仍待处理。
+**版本**: v0.7.6-agent12 — 直接出图 apimart 单图结果区问题已修并通过最小真烧 QA; 作品库 T-009/T-010/T-011 已修待独立 QA; 真实公众号草稿推送复测仍待处理。
 
 ### 当前进行
-- T-009/T-010/T-011 修复提交: `9b36bd5`; 下一步分配 T-012 作品库全链路 QA 复跑.
+- 下一步优先分配 T-012 作品库全链路 QA 复跑; T-006 公众号真实草稿推送复测仍待跑; T-013 直接出图 download 失败路径待补 fault injection.
 
 ### QA 证据 · 公众号
 - QA 报告已合入主线: `docs/agent-handoff/QA_WECHAT_20260429.md`
@@ -28,6 +28,25 @@
 - console error: 0; pageerror: 0.
 - 截图已核: `/tmp/_ui_shots/qa2_imagegen_04_final.png` 显示 `出图完成 · 0/0 成功`; `/tmp/_ui_shots/qa2_imagegen_05_works.png` 显示作品库已有该图.
 - pytest 未跑; 本轮未改业务代码, 仅做最小 credits 真链路和浏览器闭环.
+
+### 已合入 · T-007/T-008
+- T-007 代码提交: `e7c4508 fix: show apimart single image result`
+- T-007 开发交接: `f477319 docs: add media dev t007 handoff`
+- T-008 QA 复测报告: `6b34637 qa: report imagegen t008 retest`
+  - QA 原提交: `e50666c`
+  - 报告: `docs/agent-handoff/QA2_T008_IMAGEGEN_20260429.md`
+- QA 真烧证据:
+  - apimart 1 张最低规格, `size=1:1`, `n=1`.
+  - app task `92be92e626bc4f909dec80259fe4ed50` -> `status=ok`.
+  - apimart task `task_01KQBXJF52DFAVW2QHSCHC4VSM`.
+  - remote job `a2e6fd9e87ac4c76885eb45827b7f6b0` -> done, `poll_count=1`.
+  - 页面显示 `出图完成 · 1/1 成功`, 未出现 `0/0 成功`.
+  - 图片实际加载 `naturalWidth=1254`; 作品库同图 `works id=4`.
+  - console error 0; pageerror 0; 截图已读 `/tmp/_ui_shots/t008_imagegen_04_final.png`.
+  - 横向抽样 dreamina/shiliu 结果区无渲染错误.
+- 主线验证:
+  - `.venv/bin/pytest -q tests/test_apimart_service.py tests/test_remote_jobs.py` -> 20 passed.
+- 风险登记: QA 未做 download 失败 fault injection; 已新增 T-013 单独处理.
 
 ### 已合入 · T-004/T-005
 - 代码提交: `2c9778e fix: preserve wechat edits and section images`
@@ -64,22 +83,40 @@
 
 ### 剩余阻塞
 1. T-006: 公众号 8 步真实草稿推送复测未跑, 需要最小真烧闭环确认 `last_push_request` 和真实草稿一致.
-2. T-007: 直接出图 apimart 单图 watcher 后端链路成功, 但前端结果区按 `result.images` 展示, task.result 只有 raw `url/task_id`, 最终显示 `0/0 成功`.
-3. T-008: T-007 修后直接出图最小真烧复测未跑.
-4. T-012: 作品库修复后的独立 QA 复跑未跑; T-009/T-010/T-011 还不能算 QA 通过.
+2. T-012: 作品库修复后的独立 QA 复跑未跑; T-009/T-010/T-011 还不能算 QA 通过.
+3. T-013: 直接出图 apimart download 失败路径未做 fault injection, 仍有假成功/坏记录风险需要单独修测.
 
 ### 下一步
 - `docs/AGENT_BOARD.md` 已登记:
   - `T-004`: 已完成.
   - `T-005`: 已完成.
   - `T-006`: 修后公众号 8 步链路复测.
-  - `T-007`: 修直接出图结果区不展示 apimart 单图产物.
-  - `T-008`: 修后直接出图最小真烧复测.
+  - `T-007`: 已完成, 修直接出图结果区不展示 apimart 单图产物.
+  - `T-008`: 已完成, 修后直接出图最小真烧复测.
   - `T-009`: 待 QA, 修作品库看板打开历史作品 + 搜索老作品.
   - `T-010`: 待 QA, 修作品库留/删 UI 状态 + 完播率输入.
   - `T-011`: 待 QA, 处理图片占位卡.
   - `T-012`: 修后作品库全链路回归.
-- T-006/T-007/T-008/T-012 完成并由 QA 真测通过前, 不能说对应链路完成; T-009/T-010/T-011 需等 T-012 背书后才能说作品库通过.
+  - `T-013`: 补直接出图 download 失败路径 fault injection.
+- T-006/T-012/T-013 完成并由 QA 真测通过前, 不能说项目整体完成; T-009/T-010/T-011 需等 T-012 背书后才能说作品库通过.
+
+---
+
+## 上一里程碑 (2026-04-29 · D-113 ImageGen T-007/T-008 合入)
+
+**版本**: v0.7.6-agent12 — apimart 单图结果区从 `0/0 成功` 修到真实 `1/1 成功`, 并通过 QA 最小真烧。
+
+### D-113 修复
+- `backend/services/apimart_service.py`: watcher `on_done` 下载入库后补齐 `images[] / media_url / engine / size / elapsed_sec`.
+- `web/factory-image-gen.jsx`: 结果区兼容旧 raw 单图任务结果.
+- `tests/test_apimart_service.py`: 覆盖 apimart 单图结果契约和作品入库.
+- 合入开发交接 `docs/agent-handoff/MEDIA_DEV_T007_IMAGEGEN_20260429.md`.
+- 合入 QA 报告 `docs/agent-handoff/QA2_T008_IMAGEGEN_20260429.md`.
+
+### 验证
+- QA 真烧 apimart 1 张最低规格: 页面 `出图完成 · 1/1 成功`, 图片加载 `naturalWidth=1254`, 作品库同图 `works id=4`, console/pageerror 均 0.
+- 主线 `.venv/bin/pytest -q tests/test_apimart_service.py tests/test_remote_jobs.py` -> 20 passed.
+- 未覆盖: download 失败 fault injection; 已登记 T-013.
 
 ---
 

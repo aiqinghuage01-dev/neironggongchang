@@ -8,10 +8,10 @@
 
 | 角色 | 状态 | 工作区 | 当前任务 |
 |---|---|---|---|
-| 总控 Agent | 进行中 | `~/Desktop/neironggongchang` | T-009/T-010/T-011 已修待 QA; 协调 T-006/T-007/T-008/T-012 |
+| 总控 Agent | 进行中 | `~/Desktop/neironggongchang` | T-007/T-008 已合入; 协调 T-006/T-012/T-013 |
 | 内容开发 Agent | 已完成 | `~/Desktop/nrg-worktrees/content-dev` | T-004 / T-005 已合入主线 |
-| 媒体开发 Agent | 待启动 | `~/Desktop/nrg-worktrees/media-dev` | 待领 T-007 |
-| QA 测试 Agent | 已完成 | `~/Desktop/nrg-worktrees/qa`, `~/Desktop/nrg-worktrees/qa-2` | WeChat / ImageGen / Works QA 报告已提交 |
+| 媒体开发 Agent | 已完成 | `~/Desktop/nrg-worktrees/media-dev` | T-007 已合入主线; T-013 待分配 |
+| QA 测试 Agent | 待启动 | `~/Desktop/nrg-worktrees/qa`, `~/Desktop/nrg-worktrees/qa-2` | 待领 T-006 / T-012 |
 | 审查 Agent | 待启动 | `~/Desktop/nrg-worktrees/review` | 待分配 |
 
 ---
@@ -23,12 +23,13 @@
 | T-004 | 修公众号 Step 4 手动编辑正文没有进入后续配图/HTML/草稿的问题 | 内容开发 Agent | 已完成 | `web/factory-wechat-v2.jsx`; `scripts/e2e_wechat_edit_propagation.js` | 主线已验证: `plan-images` 请求、HTML 预览、curl `/api/wechat/html` 都包含编辑标记 |
 | T-005 | 修公众号推送前 sanitize 把真实段间图和头像全部剥掉的问题 | 内容开发 Agent | 已完成 | `backend/services/wechat_scripts.py`, `tests/test_wechat_sanitize.py`, `docs/WECHAT-SKILL-LESSONS.md` | 主线已验证: 4 张本次段间图保留; `from=appmsg` 和内部标记清掉; 历史 appmsg 图仍剥除 |
 | T-006 | T-004/T-005 修后公众号 8 步链路复测 | QA 测试 Agent | 待分配 | 不改功能代码; 只提交报告/必要测试脚本需总控确认 | Playwright 真点真填 + console/pageerror=0 + 截图 + curl/pytest + 最小真烧; 草稿推送前 `img_count_sanitized >= 4` |
-| T-007 | 修直接出图 apimart 单图成功后结果区显示 `0/0 成功`、不展示图片的问题 | 媒体开发 Agent | 待分配 | `backend/services/apimart_service.py`, `web/factory-image-gen.jsx`, 对应 tests/e2e; 避免改 `backend/api.py` 除非总控确认 | apimart watcher 单图 task.result 对齐 `{images:[...]}` 契约或前端兼容 raw 结果; 结果页展示生成图; 作品库仍正常入库 |
-| T-008 | T-007 修后直接出图最小真烧复测 | QA 测试 Agent | 待分配 | 不改功能代码; 只提交报告/必要测试脚本需总控确认 | 1 张最低规格真烧; console/pageerror=0; 结果区显示 1/1 且有图; 作品库同图可见 |
+| T-007 | 修直接出图 apimart 单图成功后结果区显示 `0/0 成功`、不展示图片的问题 | 媒体开发 Agent | 已完成 | `backend/services/apimart_service.py`, `web/factory-image-gen.jsx`, 对应 tests/e2e; 避免改 `backend/api.py` 除非总控确认 | 主线已验证: apimart 单图 task.result 补齐 `images[]`; 结果页展示 1 张图; 作品库仍正常入库 |
+| T-008 | T-007 修后直接出图最小真烧复测 | QA 测试 Agent | 已完成 | 不改功能代码; 只提交报告/必要测试脚本需总控确认 | QA 真烧通过: 1 张最低规格, console/pageerror=0, 结果区 `1/1 成功`, 作品库同图可见 |
 | T-009 | 修作品库数据看板 TOP「看」打不开历史作品 + 搜索只搜前 300 条的问题 | 总控/平台开发 | 待 QA | `web/factory-works.jsx`, `backend/api.py`, `shortvideo/works.py`/tests; `backend/api.py` 单线改 | 主线自验已过: 看板按 id 打开历史作品; 搜索在 SQL 过滤后再 limit; 有 API/前端回归 |
 | T-010 | 修作品库「留这版 / 删这版」写入成功但 UI 不变 + 完播率百分比输入误导 | 总控/平台开发 | 待 QA | `web/factory-works.jsx`, 必要时 `backend/api.py`, tests | 主线自验已过: 点击后按钮立即显示 `✓`; 完播率填 80 存 0.8; 回归覆盖 |
 | T-011 | 处理作品库图片占位卡: 无预览/无下载的图片作品要可解释或可恢复 | 总控/平台开发 | 待 QA | `backend/api.py`, `web/factory-works.jsx`, 可能涉及数据修复脚本; 先读 QA 报告现场数据 | 主线自验已过: 文件缺失/仅记录图片显示明确状态; 可预览/下载能力由 API 返回 |
 | T-012 | T-009/T-010/T-011 修后作品库全链路回归 | QA 测试 Agent | 待分配 | 不改功能代码; 只提交报告/必要测试脚本需总控确认 | 复跑 QA_WORKS 覆盖的点击/截图/curl/pytest; 5 个问题均有 pass 证据 |
+| T-013 | 补直接出图 apimart 下载失败路径保护和 fault injection 回归 | 媒体开发 Agent | 待分配 | `backend/services/apimart_service.py`, `tests/test_apimart_service.py`, 必要时前端结果错误展示 | 模拟远端 done 但下载失败时, task 不假成功、不写坏作品记录、用户看到可理解失败/重试信息; 回归覆盖 |
 
 ---
 
@@ -42,6 +43,12 @@
 - QA2 原提交: `4f44f7a`
 - 主线证据提交: `6f9fc3f`
 - 结论: 不通过, 后端生图/入库成功, 但直接出图结果区显示 `0/0 成功` 且不展示图片.
+- T-007 代码提交: `e7c4508`
+- T-007 开发交接: `f477319`
+- T-008 QA 复测报告: `6b34637`
+- T-008 QA 原提交: `e50666c`
+- 主线验证: `.venv/bin/pytest -q tests/test_apimart_service.py tests/test_remote_jobs.py` -> 20 passed.
+- 结论: T-007/T-008 已合入并通过; download 失败 fault injection 未测, 新增 T-013 单独处理.
 - T-004/T-005 代码提交: `2c9778e`
 - T-004/T-005 开发交接: `99ff4c9`
 - T-004/T-005 QA 复测报告: `49dabaa`
