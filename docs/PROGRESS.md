@@ -4,7 +4,21 @@
 
 ---
 
-## 当前状态 (2026-04-29 · D-110 Agent Full Access + 最小真烧测试)
+## 当前状态 (2026-04-29 · D-111 多 QA 一键启动)
+
+**版本**: v0.7.6-agent10 — 支持临时打开 2-3 个并行 QA workspace.
+
+### D-111 修复
+- 新增 `scripts/start_extra_qa_cmux.sh`: 默认打开 `qa-1 / qa-2 / qa-3`,
+  每个都有独立 worktree、独立 branch、独立 `开工` 启动口令.
+- `docs/MULTI_AGENT_WORKFLOW.md`: 补多 QA 并行规则和推荐分工.
+
+### 验证
+- `bash -n scripts/start_extra_qa_cmux.sh` ✅
+
+---
+
+## 上一里程碑 (2026-04-29 · D-110 Agent Full Access + 最小真烧测试)
 
 **版本**: v0.7.6-agent9 — Codex Agent 默认 Full Access; QA 默认允许最小真烧 credits.
 
