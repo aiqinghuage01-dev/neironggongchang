@@ -4,12 +4,16 @@
 
 ---
 
-## 当前状态 (2026-04-29 · 多 Agent 收件箱监控)
+## 当前状态 (2026-04-29 · Copyflows QA 不通过)
 
-**版本**: v0.7.6-agent15 — 多 Agent 协作改为共享收件箱 + 自动监控提醒; 作品库 T-009/T-010/T-011 已经 T-012 独立 QA 回归通过; 公众号真实草稿推送 T-006 已通过; 直接出图 apimart 单图 T-007/T-008 已通过。
+**版本**: v0.7.6-agent16 — Copyflows 复测不通过: 投流文案 `n=1` 最小真链路 591 秒后失败, 错误为 LLM 输出非 JSON; 多 Agent 收件箱监控已上线; 作品库/公众号/直接出图前序任务仍保持通过。
 
 ### 当前进行
-- 仅剩 T-013: 直接出图 apimart download 失败路径待补 fault injection; T-012 通过不代表项目整体通过。
+- 剩余阻塞不止 T-013: 新增 T-014/T-015/T-016 处理 Copyflows 真实链路.
+- T-014: 内容开发修投流 `n=1` 真链路 10 分钟失败 + LLM 非 JSON; 暂不合入失败代码 `2670a5a`.
+- T-015: T-014 修后 QA 做投流 `n=1` 最小真烧复测.
+- T-016: 投流通过后, 再由 QA 控制 credits 复测录音改写真实 LLM 和热点改写 4 版真实链路.
+- T-013: 直接出图 apimart download 失败路径待补 fault injection.
 - 多 Agent 协作流程已调整: Agent 自己写 `docs/agent-handoff/` 报告并 commit, 总控用收件箱脚本主动扫描, 老板不再做人肉复制粘贴中转。
 - 额外 QA cmux 脚本已改为 socket 不可用时只准备 worktree, 不再强行 fallback 打开多个空白窗口。
 
@@ -114,6 +118,9 @@
 
 ### 剩余阻塞
 1. T-013: 直接出图 apimart download 失败路径未做 fault injection, 仍有假成功/坏记录风险需要单独修测.
+2. T-014: 投流文案 `n=1` 最小真链路 591 秒后失败, 错误为 LLM 输出非 JSON.
+3. T-015: T-014 修后投流 `n=1` 最小真烧复测未跑.
+4. T-016: 录音改写真实 LLM 和热点改写 4 版真实链路未复测; QA 因 T-014 P1 停止继续烧 credits.
 
 ### 下一步
 - `docs/AGENT_BOARD.md` 已登记:
@@ -127,7 +134,39 @@
   - `T-011`: 已完成, 处理图片占位卡.
   - `T-012`: 已完成, 修后作品库全链路回归.
   - `T-013`: 补直接出图 download 失败路径 fault injection.
-- T-013 完成并由 QA 真测通过前, 不能说项目整体完成.
+  - `T-014`: 修投流 `n=1` 最小真链路 10 分钟失败 + LLM 非 JSON.
+  - `T-015`: T-014 修后投流 `n=1` 最小真烧复测.
+  - `T-016`: 投流通过后复测录音改写真实 LLM + 热点改写 4 版真实链路.
+- T-013/T-014/T-015/T-016 完成并由 QA 真测通过前, 不能说项目整体完成.
+
+---
+
+## 上一里程碑 (2026-04-29 · D-117 Copyflows 复测不通过)
+
+**版本**: v0.7.6-agent16 — 投流/录音/热点 copyflows 复测发现投流 P1, 失败代码未合入主线。
+
+### D-117 QA 证据
+- QA 报告合入: `docs/agent-handoff/QA_CONTENT_COPYFLOWS_20260429.md`.
+- 被测分支: `codex/content-dev`.
+- 被测代码: `2670a5a fix: harden copywriting pipelines`.
+- 开发交接: `886552b docs: add copyflows dev handoff`.
+- QA 报告提交: `a756f8f qa: report copyflows retest` (原提交 `7e6f5f8`).
+- 页面烟测: 投流/热点/录音三个页面 console/pageerror 均干净.
+- 单测: 53 passed; 104 passed; `pytest -q -x` 仍停在既有环境问题 `SHILIU_API_KEY not loaded`.
+
+### 失败结论
+- 投流 `n=1` 最小真烧 task `cf04ad56b1b34b3c87fcda8b5821f319`.
+- 181 秒时仍 `running`, `progress_pct=15`.
+- 591 秒最终 `failed`.
+- 错误: `投流文案 LLM 输出非 JSON`.
+- AI usage: `touliu.generate` 耗时 `591473ms`, `total_tokens=6051`.
+- 初始 API 返回 `estimated_seconds=150`, task 行为 `60`, 估时口径不一致.
+- 录音改写真实 LLM、热点改写 4 版真实链路未继续真烧, 避免在 P1 下扩大 credits 消耗.
+
+### 后续任务
+- T-014: 内容开发修投流真实链路和估时口径.
+- T-015: QA 最小真烧复测投流 `n=1`.
+- T-016: T-015 通过后再复测录音/热点真实链路.
 
 ---
 

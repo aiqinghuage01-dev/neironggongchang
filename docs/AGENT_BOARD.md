@@ -8,10 +8,10 @@
 
 | 角色 | 状态 | 工作区 | 当前任务 |
 |---|---|---|---|
-| 总控 Agent | 进行中 | `~/Desktop/neironggongchang` | T-006/T-007/T-008/T-012 已合入; 协调 T-013 |
-| 内容开发 Agent | 已完成 | `~/Desktop/nrg-worktrees/content-dev` | T-004 / T-005 已合入主线 |
+| 总控 Agent | 进行中 | `~/Desktop/neironggongchang` | Copyflows QA 不通过; 协调 T-013/T-014/T-015/T-016 |
+| 内容开发 Agent | 待返工 | `~/Desktop/nrg-worktrees/content-dev` | T-014 待领: 投流 n=1 真链路 10 分钟失败 |
 | 媒体开发 Agent | 已完成 | `~/Desktop/nrg-worktrees/media-dev` | T-007 已合入主线; T-013 待分配 |
-| QA 测试 Agent | 已完成 | `~/Desktop/nrg-worktrees/qa`, `~/Desktop/nrg-worktrees/qa-2` | T-006/T-008/T-012 报告已合入 |
+| QA 测试 Agent | 已完成 | `~/Desktop/nrg-worktrees/qa`, `~/Desktop/nrg-worktrees/qa-2` | T-006/T-008/T-012/Copyflows 报告已合入; 待 T-015/T-016 |
 | 审查 Agent | 待启动 | `~/Desktop/nrg-worktrees/review` | 待分配 |
 
 ---
@@ -30,6 +30,9 @@
 | T-011 | 处理作品库图片占位卡: 无预览/无下载的图片作品要可解释或可恢复 | 总控/平台开发 | 已完成 | `backend/api.py`, `web/factory-works.jsx`, 可能涉及数据修复脚本; 先读 QA 报告现场数据 | T-012 已验证: 文件缺失图片显示明确状态; API 状态字段正确 |
 | T-012 | T-009/T-010/T-011 修后作品库全链路回归 | QA 测试 Agent | 已完成 | 不改功能代码; 只提交报告/必要测试脚本需总控确认 | QA 通过: pytest/e2e/真实 UI/curl/截图均通过, 未发现新 P0/P1/P2 |
 | T-013 | 补直接出图 apimart 下载失败路径保护和 fault injection 回归 | 媒体开发 Agent | 待分配 | `backend/services/apimart_service.py`, `tests/test_apimart_service.py`, 必要时前端结果错误展示 | 模拟远端 done 但下载失败时, task 不假成功、不写坏作品记录、用户看到可理解失败/重试信息; 回归覆盖 |
+| T-014 | 修投流文案 `n=1` 最小真链路 10 分钟失败 + LLM 非 JSON | 内容开发 Agent | 待分配 | `backend/services/touliu_pipeline.py`, 投流 endpoint 估时返回处, `tests/test_pipelines.py`/相关 tests; 暂不合入失败的 `2670a5a` | `n=1` 使用真实 LLM 能稳定返回 JSON 作品; 不再 181 秒仍 running; 初始 `estimated_seconds` 与 task 行一致; 解析 fenced JSON/前缀或给明确截断错误 |
+| T-015 | T-014 修后投流 `n=1` 最小真烧复测 | QA 测试 Agent | 待分配 | 不改功能代码; 只提交报告/必要测试脚本需总控确认 | 只提交 1 次投流 `n=1`; task `ok`; 页面/接口有结果; console/pageerror=0; 记录耗时和 AI usage; 不通过则不继续烧录音/热点 |
+| T-016 | 投流通过后复测录音改写真实 LLM + 热点改写 4 版真实链路 | QA 测试 Agent | 待分配 | 不改功能代码; 只提交报告/必要测试脚本需总控确认 | 在 T-015 通过后再跑; 录音改写返回非空正文或明确重试后失败; 热点 4 版返回 4 个版本且进度可见; 控制 credits, 不重复提交 |
 
 ---
 
@@ -79,6 +82,10 @@
   - 真实 UI 非 mock 浏览器闭环: 32 个 API 请求, console/pageerror/API requestfailed 均 0.
   - curl 复核旧作品搜索、按 id 打开、留这版写入、`completion_rate=80` 落库 0.8、缺图状态字段.
 - 结论: T-009/T-010/T-011/T-012 通过; 项目整体仍需 T-013.
+- Copyflows QA 报告: `a756f8f`
+- Copyflows QA 原提交: `7e6f5f8`
+- 被测失败代码: `2670a5a` + 开发交接 `886552b` (均只在 `codex/content-dev`, 未合入 main)
+- 结论: 不通过. 投流 `n=1` 最小真烧 task `cf04ad56b1b34b3c87fcda8b5821f319` 181 秒仍 running, 591 秒 failed, 错误为 `投流文案 LLM 输出非 JSON`; 录音/热点未继续真烧.
 
 ---
 
