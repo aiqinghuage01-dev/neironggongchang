@@ -4,7 +4,32 @@
 
 ---
 
-## 当前状态 (2026-04-29 · D-101 热点改写多版本生成)
+## 当前状态 (2026-04-29 · D-102 一键启动 5-Agent 工作台)
+
+**版本**: v0.7.6-agent — 多 Agent 操作从"手动开 5 个窗口"升级为 cmux/tmux 一键准备.
+
+### D-102 修复
+- `scripts/start_multi_agents_cmux.sh`: 走 `/Applications/cmux.app/Contents/Resources/bin/cmux`
+  一键创建 `NRG 总控 / 内容开发 / 媒体开发 / QA / Claude 审查` 5 个 workspace.
+- `scripts/start_multi_agents_tmux.sh`: 一键准备 `controller/content-dev/media-dev/qa/review`
+  5 个 tmux 窗口, 自动进入各自 worktree.
+- 每个 worktree 自动生成本地 `.agent-role.md` 和 `.agent-start.sh`, 并写入本地
+  git exclude, 不进仓库.
+- 默认只展示角色说明, 不启动模型; 需要并发启动时加 `--launch`.
+- 启动前会在工作区干净时 fast-forward 到 `main`, 避免副 Agent 从旧代码开工.
+- `docs/MULTI_AGENT_WORKFLOW.md`: 补一键启动命令.
+
+### 验证
+- `bash -n scripts/start_multi_agents_cmux.sh` ✅
+- `bash scripts/start_multi_agents_cmux.sh --help` ✅
+- `bash scripts/start_multi_agents_cmux.sh --dry-run` ✅
+- `bash -n scripts/start_multi_agents_tmux.sh` ✅
+- `bash scripts/start_multi_agents_tmux.sh --help` ✅
+- `bash scripts/start_multi_agents_tmux.sh --dry-run` ✅
+
+---
+
+## 上一里程碑 (2026-04-29 · D-101 热点改写多版本生成)
 
 **版本**: v0.7.6 — 热点改写“本次会出 2/4 篇”现在后端真生成多版本, 前端可切换对比.
 

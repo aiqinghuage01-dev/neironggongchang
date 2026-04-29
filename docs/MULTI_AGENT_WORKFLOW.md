@@ -135,6 +135,36 @@
 
 ## 7. Git worktree 操作
 
+一键准备 5 个 cmux workspace:
+
+```bash
+bash scripts/start_multi_agents_cmux.sh
+```
+
+默认只打开 workspace 并展示本地角色说明, 不直接启动模型. 要同时启动 Codex/Claude:
+
+```bash
+bash scripts/start_multi_agents_cmux.sh --launch
+```
+
+如果 cmux CLI 不可用, 可用 tmux 备用:
+
+```bash
+bash scripts/start_multi_agents_tmux.sh
+```
+
+tmux 版本同样默认只打开窗口并展示本地角色说明. 要同时启动 Codex/Claude:
+
+```bash
+bash scripts/start_multi_agents_tmux.sh --launch
+```
+
+进入总控 tmux:
+
+```bash
+tmux -S "${TMPDIR:-/tmp}/nrg-agents.sock" attach -t nrg-agents
+```
+
 创建工作区:
 
 ```bash
