@@ -4,9 +4,9 @@
 
 ---
 
-## 当前状态 (2026-04-29 · 自动派工器接入)
+## 当前状态 (2026-04-29 · 一键工作台)
 
-**版本**: v0.7.6-agent21 — 接入本机自动派工器, 老板只需和总控窗口聊天; 总控写入共享队列后, content/media/qa/review worker 自动领取。T-015 QA 真烧不通过, 已从 `done` 纠正为 `blocked`; T-016 已 blocked, 不再在投流失败后继续烧下游 credits。
+**版本**: v0.7.6-agent22 — 新增桌面一键工作台 `打开内容工厂工作台.app`, 一次启动 Agent 监控、自动派工和 5 个 cmux 工作区; 三个独立按钮保留为备用。T-015/T-016 仍 blocked, 不继续烧下游 credits。
 
 ### 当前进行
 - T-014: 内容开发提交 `5d4fc59`, 隔离端口真实 curl `n=1` 53 秒 `ok`; 但 T-015 独立 QA 真烧仍 timeout, 需继续返修投流真实链路.
@@ -17,6 +17,7 @@
 - 多 Agent 协作流程已调整: Agent 自己写 `docs/agent-handoff/` 报告并 commit, 总控用收件箱脚本主动扫描, 老板不再做人肉复制粘贴中转。
 - 自动任务队列已启用: `python3 ~/Desktop/neironggongchang/scripts/agent_queue.py list` 可看队列; `done` 只表示验收通过, 验证不通过必须 `block`.
 - 自动派工器已启用: `bash scripts/start_agent_dispatcher.sh --status` 显示 LaunchAgent running; 现在无 runnable task, 会待命.
+- 一键工作台已安装: 桌面 `打开内容工厂工作台.app` 会依次启动 Agent 监控器、自动派工器和 5 个 Agent 工作区.
 - 5-Agent 启动器已恢复: worktree 有本地改动或不能 fast-forward 时只跳过同步, 不再中断整个启动流程.
 - Agent 监控器已恢复: LaunchAgent 优先使用非系统 Python, 避免 `/usr/bin/python3` 读取 Desktop 脚本被 macOS 拦截.
 - 额外 QA cmux 脚本已改为 socket 不可用时只准备 worktree, 不再强行 fallback 打开多个空白窗口。
@@ -31,6 +32,7 @@
 - 合并风险: `git diff main..codex/media-dev` 显示该分支会删除 `scripts/agent_inbox.py`, `scripts/start_agent_monitor.sh` 和多份主线报告/角色文档; 不允许整分支 merge.
 - 任务队列: `~/Desktop/nrg-agent-queue/tasks.json` 已有 T-015 / T-016, 当前均 blocked.
 - 自动派工器: `scripts/agent_dispatcher.py`, `scripts/start_agent_dispatcher.sh`, 桌面入口 `打开内容工厂自动派工.app`.
+- 一键工作台: 桌面入口 `打开内容工厂工作台.app`, 日常只需要点这个; 其他 3 个按钮仅备用.
 - 派工器验证: `bash scripts/start_agent_dispatcher.sh --dry-run` -> 无 runnable task; `--status` -> LaunchAgent running, 6 个槽位 idle; `/tmp/nrg-agent-dispatcher.log` 只显示当前待命状态.
 - 启动器验证: `bash scripts/start_multi_agents_cmux.sh` 已成功打开 5 个 cmux tab: main/content-dev/media-dev/qa/review.
 
@@ -154,6 +156,26 @@
   - `T-015`: blocked, QA 真烧 timeout.
   - `T-016`: blocked, 依赖 T-015 真正通过.
 - T-013/T-014/T-015/T-016 完成并由 QA 真测通过前, 不能说项目整体完成.
+
+---
+
+## 上一里程碑 (2026-04-29 · D-121 一键工作台)
+
+**版本**: v0.7.6-agent22 — 把 5-Agent 工作区、Agent 监控、自动派工收成一个日常入口。
+
+### D-121 修复
+- `scripts/install_agent_desktop_launcher.sh`: 新增桌面应用 `打开内容工厂工作台.app`.
+- 一键工作台会启动:
+  - `scripts/start_agent_monitor.sh`
+  - `scripts/start_agent_dispatcher.sh`
+  - `scripts/start_multi_agents_cmux.sh`
+- 保留 3 个独立按钮作为调试/单独重启入口.
+- `docs/MULTI_AGENT_WORKFLOW.md`: 更新每日开工流程为“只双击工作台, 然后只找总控”.
+
+### D-121 验证
+- `bash -n scripts/install_agent_desktop_launcher.sh`.
+- `bash scripts/install_agent_desktop_launcher.sh` -> 生成 4 个桌面 app.
+- `bash scripts/start_agent_dispatcher.sh --status` -> LaunchAgent running.
 
 ---
 

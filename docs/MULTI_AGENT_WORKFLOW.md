@@ -153,6 +153,24 @@ bash scripts/start_agent_monitor.sh
 bash scripts/start_agent_monitor.sh --stop
 ```
 
+### 一键工作台
+
+日常不用分开点 3 个按钮. 双击桌面这个就够:
+
+```text
+打开内容工厂工作台.app
+```
+
+它会依次做:
+- 启动 Agent 监控器.
+- 启动自动派工器.
+- 打开 5 个 cmux Agent 工作区.
+
+另外 3 个桌面按钮只是备用:
+- `打开内容工厂5个Agent.app`: 只打开工作区.
+- `打开内容工厂Agent监控.app`: 只重启报告通知.
+- `打开内容工厂自动派工.app`: 只重启自动派工.
+
 ---
 
 ## 3.4 自动任务队列
@@ -304,6 +322,14 @@ bash scripts/start_agent_dispatcher.sh --stop
 ---
 
 ## 5. 每日开工流程
+
+老板每天只需要双击:
+
+```text
+打开内容工厂工作台.app
+```
+
+然后只在总控窗口说业务目标.
 
 总控 Agent 先做 5 件事:
 

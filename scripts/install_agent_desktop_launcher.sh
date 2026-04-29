@@ -2,19 +2,38 @@
 set -euo pipefail
 
 repo_root="$(git rev-parse --show-toplevel)"
+all_launcher="${HOME}/Desktop/打开内容工厂工作台.app"
 launcher="${HOME}/Desktop/打开内容工厂5个Agent.app"
 monitor_launcher="${HOME}/Desktop/打开内容工厂Agent监控.app"
 dispatcher_launcher="${HOME}/Desktop/打开内容工厂自动派工.app"
+all_script_file="$(mktemp)"
 script_file="$(mktemp)"
 monitor_script_file="$(mktemp)"
 dispatcher_script_file="$(mktemp)"
 
 cleanup() {
+  rm -f "$all_script_file"
   rm -f "$script_file"
   rm -f "$monitor_script_file"
   rm -f "$dispatcher_script_file"
 }
 trap cleanup EXIT
+
+cat > "$all_script_file" <<EOF
+set repoPath to "${repo_root}"
+set logPath to "/tmp/nrg-agent-workbench.log"
+
+do shell script "cd " & quoted form of repoPath & " && /bin/bash scripts/start_agent_monitor.sh >> " & quoted form of logPath & " 2>&1 && /bin/bash scripts/start_agent_dispatcher.sh >> " & quoted form of logPath & " 2>&1 && /bin/bash scripts/start_multi_agents_cmux.sh >> " & quoted form of logPath & " 2>&1 &"
+
+tell application "cmux"
+  activate
+end tell
+
+display notification "工作台已启动：监控、自动派工、5 个 Agent 工作区。" with title "内容工厂 Agent"
+EOF
+
+rm -rf "$all_launcher"
+osacompile -o "$all_launcher" "$all_script_file"
 
 cat > "$script_file" <<EOF
 set repoPath to "${repo_root}"
@@ -57,10 +76,10 @@ rm -rf "$dispatcher_launcher"
 osacompile -o "$dispatcher_launcher" "$dispatcher_script_file"
 
 echo "Desktop launcher installed:"
+echo "  $all_launcher"
 echo "  $launcher"
 echo "  $monitor_launcher"
 echo "  $dispatcher_launcher"
 echo
-echo "Double-click it to open the 5 Agent workspaces."
-echo "Double-click the monitor launcher to get notifications when reports change."
-echo "Double-click the dispatcher launcher to auto-assign queued tasks."
+echo "Daily use: double-click the workbench launcher."
+echo "The other launchers are kept for debugging or separate restarts."
