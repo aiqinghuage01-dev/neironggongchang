@@ -8,10 +8,10 @@
 
 | 角色 | 状态 | 工作区 | 当前任务 |
 |---|---|---|---|
-| 总控 Agent | 进行中 | `~/Desktop/neironggongchang` | Copyflows QA 不通过; 协调 T-013/T-014/T-015/T-016 |
-| 内容开发 Agent | 待返工 | `~/Desktop/nrg-worktrees/content-dev` | T-014 待领: 投流 n=1 真链路 10 分钟失败 |
-| 媒体开发 Agent | 已完成 | `~/Desktop/nrg-worktrees/media-dev` | T-007 已合入主线; T-013 待分配 |
-| QA 测试 Agent | 已完成 | `~/Desktop/nrg-worktrees/qa`, `~/Desktop/nrg-worktrees/qa-2` | T-006/T-008/T-012/Copyflows 报告已合入; 待 T-015/T-016 |
+| 总控 Agent | 进行中 | `~/Desktop/neironggongchang` | 审查 T-013/T-014 交接; 安排 T-015/T-016 收口 |
+| 内容开发 Agent | 已提交待 QA | `~/Desktop/nrg-worktrees/content-dev` | T-014 提交 `5d4fc59` + 交接 `1eb78aa`; 等 T-015 |
+| 媒体开发 Agent | 已提交待 QA | `~/Desktop/nrg-worktrees/media-dev` | T-013 提交 `99f1fb3` + 交接 `a700c0f`; 分支落后主线, 不可整分支合并 |
+| QA 测试 Agent | 待分配 | `~/Desktop/nrg-worktrees/qa`, `~/Desktop/nrg-worktrees/qa-1`, `~/Desktop/nrg-worktrees/qa-2` | QA-1 已就绪; 优先 T-015, T-013 可并行 fault injection 复核 |
 | 审查 Agent | 待启动 | `~/Desktop/nrg-worktrees/review` | 待分配 |
 
 ---
@@ -29,10 +29,10 @@
 | T-010 | 修作品库「留这版 / 删这版」写入成功但 UI 不变 + 完播率百分比输入误导 | 总控/平台开发 | 已完成 | `web/factory-works.jsx`, 必要时 `backend/api.py`, tests | T-012 已验证: 点击后按钮显示 `✓`; 完播率填 80 落库 0.8; 回归覆盖 |
 | T-011 | 处理作品库图片占位卡: 无预览/无下载的图片作品要可解释或可恢复 | 总控/平台开发 | 已完成 | `backend/api.py`, `web/factory-works.jsx`, 可能涉及数据修复脚本; 先读 QA 报告现场数据 | T-012 已验证: 文件缺失图片显示明确状态; API 状态字段正确 |
 | T-012 | T-009/T-010/T-011 修后作品库全链路回归 | QA 测试 Agent | 已完成 | 不改功能代码; 只提交报告/必要测试脚本需总控确认 | QA 通过: pytest/e2e/真实 UI/curl/截图均通过, 未发现新 P0/P1/P2 |
-| T-013 | 补直接出图 apimart 下载失败路径保护和 fault injection 回归 | 媒体开发 Agent | 待分配 | `backend/services/apimart_service.py`, `tests/test_apimart_service.py`, 必要时前端结果错误展示 | 模拟远端 done 但下载失败时, task 不假成功、不写坏作品记录、用户看到可理解失败/重试信息; 回归覆盖 |
-| T-014 | 修投流文案 `n=1` 最小真链路 10 分钟失败 + LLM 非 JSON | 内容开发 Agent | 待分配 | `backend/services/touliu_pipeline.py`, 投流 endpoint 估时返回处, `tests/test_pipelines.py`/相关 tests; 暂不合入失败的 `2670a5a` | `n=1` 使用真实 LLM 能稳定返回 JSON 作品; 不再 181 秒仍 running; 初始 `estimated_seconds` 与 task 行一致; 解析 fenced JSON/前缀或给明确截断错误 |
+| T-013 | 补直接出图 apimart 下载失败路径保护和 fault injection 回归 | 媒体开发 Agent | 待 QA | `backend/services/apimart_service.py`, `tests/test_apimart_service.py`, 必要时前端结果错误展示 | 模拟远端 done 但下载失败时, task 不假成功、不写坏作品记录、用户看到可理解失败/重试信息; 回归覆盖 |
+| T-014 | 修投流文案 `n=1` 最小真链路 10 分钟失败 + LLM 非 JSON | 内容开发 Agent | 待 QA | `backend/services/touliu_pipeline.py`, 投流 endpoint 估时返回处, `tests/test_pipelines.py`/相关 tests; 暂不合入失败的 `2670a5a` | `n=1` 使用真实 LLM 能稳定返回 JSON 作品; 不再 181 秒仍 running; 初始 `estimated_seconds` 与 task 行一致; 解析 fenced JSON/前缀或给明确截断错误 |
 | T-015 | T-014 修后投流 `n=1` 最小真烧复测 | QA 测试 Agent | 待分配 | 不改功能代码; 只提交报告/必要测试脚本需总控确认 | 只提交 1 次投流 `n=1`; task `ok`; 页面/接口有结果; console/pageerror=0; 记录耗时和 AI usage; 不通过则不继续烧录音/热点 |
-| T-016 | 投流通过后复测录音改写真实 LLM + 热点改写 4 版真实链路 | QA 测试 Agent | 待分配 | 不改功能代码; 只提交报告/必要测试脚本需总控确认 | 在 T-015 通过后再跑; 录音改写返回非空正文或明确重试后失败; 热点 4 版返回 4 个版本且进度可见; 控制 credits, 不重复提交 |
+| T-016 | 投流通过后复测录音改写真实 LLM + 热点改写 4 版真实链路 | QA 测试 Agent | 阻塞 | 不改功能代码; 只提交报告/必要测试脚本需总控确认 | 在 T-015 通过后再跑; 录音改写返回非空正文或明确重试后失败; 热点 4 版返回 4 个版本且进度可见; 控制 credits, 不重复提交 |
 
 ---
 
@@ -86,6 +86,15 @@
 - Copyflows QA 原提交: `7e6f5f8`
 - 被测失败代码: `2670a5a` + 开发交接 `886552b` (均只在 `codex/content-dev`, 未合入 main)
 - 结论: 不通过. 投流 `n=1` 最小真烧 task `cf04ad56b1b34b3c87fcda8b5821f319` 181 秒仍 running, 591 秒 failed, 错误为 `投流文案 LLM 输出非 JSON`; 录音/热点未继续真烧.
+- T-014 修复提交: `5d4fc59`
+- T-014 开发交接: `1eb78aa`
+- T-014 自验证: `tests/test_pipelines.py` 34 passed; 相关 88 passed; 隔离端口真实 curl `n=1` task `732094744e9e4dd09997d5a9576ecf3c` 53 秒 `ok`; 全量 `pytest -x` 仍停在本机 `SHILIU_API_KEY not loaded`.
+- 结论: T-014 只能说开发自验通过, 必须做 T-015 页面真烧复测后才能合并.
+- T-013 修复提交: `99f1fb3`
+- T-013 开发交接: `a700c0f`
+- T-013 自验证: `tests/test_apimart_service.py tests/test_remote_jobs.py` 21 passed; Playwright mock 下载失败路径 console/pageerror=0; `pytest -q -x --ignore=tests/test_integration.py` passed.
+- 合并风险: `codex/media-dev` 落后主线, `git diff main..codex/media-dev` 会删除 `scripts/agent_inbox.py`、`scripts/start_agent_monitor.sh` 和多份主线报告/角色文档; 不可整分支合并, 只能同步主线后再合或 cherry-pick `99f1fb3`.
+- 总控审查报告: `docs/agent-handoff/CONTROLLER_AUDIT_20260429.md`.
 
 ---
 

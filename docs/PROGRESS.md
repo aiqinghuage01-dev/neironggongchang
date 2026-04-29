@@ -4,18 +4,25 @@
 
 ---
 
-## 当前状态 (2026-04-29 · Copyflows QA 不通过)
+## 当前状态 (2026-04-29 · 总控审查: T-013/T-014 待 QA)
 
-**版本**: v0.7.6-agent16 — Copyflows 复测不通过: 投流文案 `n=1` 最小真链路 591 秒后失败, 错误为 LLM 输出非 JSON; 多 Agent 收件箱监控已上线; 作品库/公众号/直接出图前序任务仍保持通过。
+**版本**: v0.7.6-agent17 — 总控审查完成: T-013/T-014 均有开发自验证据, 但还没有独立 QA 通过; T-015/T-016 仍是最终收口阻塞. 作品库/公众号/直接出图前序任务仍保持通过。
 
 ### 当前进行
-- 剩余阻塞不止 T-013: 新增 T-014/T-015/T-016 处理 Copyflows 真实链路.
-- T-014: 内容开发修投流 `n=1` 真链路 10 分钟失败 + LLM 非 JSON; 暂不合入失败代码 `2670a5a`.
-- T-015: T-014 修后 QA 做投流 `n=1` 最小真烧复测.
-- T-016: 投流通过后, 再由 QA 控制 credits 复测录音改写真实 LLM 和热点改写 4 版真实链路.
-- T-013: 直接出图 apimart download 失败路径待补 fault injection.
+- T-014: 内容开发提交 `5d4fc59`, 隔离端口真实 curl `n=1` 53 秒 `ok`; 只能算开发自验通过, 等 T-015 独立 QA 页面真烧.
+- T-015: 下一步优先分配 QA-1, 只提交 1 次投流 `n=1`, 必须交截图/console/pageerror/task/AI usage 证据.
+- T-016: 仍阻塞在 T-015 之后; 投流通过后再复测录音改写真实 LLM 和热点改写 4 版真实链路.
+- T-013: 媒体开发提交 `99f1fb3`, fault injection 自验通过; `codex/media-dev` 落后主线, 不可整分支合并, 只能同步主线后再合或 cherry-pick 单提交.
 - 多 Agent 协作流程已调整: Agent 自己写 `docs/agent-handoff/` 报告并 commit, 总控用收件箱脚本主动扫描, 老板不再做人肉复制粘贴中转。
 - 额外 QA cmux 脚本已改为 socket 不可用时只准备 worktree, 不再强行 fallback 打开多个空白窗口。
+
+### 总控审查证据
+- 收件箱: `python3 scripts/agent_inbox.py --hours 24` -> 49 reports.
+- T-014 开发交接: `docs/agent-handoff/DEV_CONTENT_T014_TOULIU_20260429.md` (worktree: `content-dev`).
+- T-013 开发交接: `docs/agent-handoff/MEDIA_DEV_T013_APIMART_DOWNLOAD_20260429.md` (worktree: `media-dev`).
+- QA-1 待命报告: `docs/agent-handoff/QA1_READY_20260429.md` (worktree: `qa-1`).
+- 总控审查报告: `docs/agent-handoff/CONTROLLER_AUDIT_20260429.md`.
+- 合并风险: `git diff main..codex/media-dev` 显示该分支会删除 `scripts/agent_inbox.py`, `scripts/start_agent_monitor.sh` 和多份主线报告/角色文档; 不允许整分支 merge.
 
 ### QA 证据 · 公众号
 - QA 报告已合入主线: `docs/agent-handoff/QA_WECHAT_20260429.md`
@@ -117,10 +124,10 @@
 - 结论: T-012 通过, 未发现新的 P0/P1/P2; 作品库 T-009/T-010/T-011 可标记完成.
 
 ### 剩余阻塞
-1. T-013: 直接出图 apimart download 失败路径未做 fault injection, 仍有假成功/坏记录风险需要单独修测.
-2. T-014: 投流文案 `n=1` 最小真链路 591 秒后失败, 错误为 LLM 输出非 JSON.
+1. T-013: 开发自验完成但未独立 QA; media 分支落后主线, 不可整分支合并.
+2. T-014: 开发自验完成但未独立 QA; T-015 页面真烧未跑.
 3. T-015: T-014 修后投流 `n=1` 最小真烧复测未跑.
-4. T-016: 录音改写真实 LLM 和热点改写 4 版真实链路未复测; QA 因 T-014 P1 停止继续烧 credits.
+4. T-016: 录音改写真实 LLM 和热点改写 4 版真实链路未复测; 必须等 T-015 通过后再烧 credits.
 
 ### 下一步
 - `docs/AGENT_BOARD.md` 已登记:
@@ -133,10 +140,10 @@
   - `T-010`: 已完成, 修作品库留/删 UI 状态 + 完播率输入.
   - `T-011`: 已完成, 处理图片占位卡.
   - `T-012`: 已完成, 修后作品库全链路回归.
-  - `T-013`: 补直接出图 download 失败路径 fault injection.
-  - `T-014`: 修投流 `n=1` 最小真链路 10 分钟失败 + LLM 非 JSON.
-  - `T-015`: T-014 修后投流 `n=1` 最小真烧复测.
-  - `T-016`: 投流通过后复测录音改写真实 LLM + 热点改写 4 版真实链路.
+  - `T-013`: 待 QA, 但先处理 media 分支合并风险.
+  - `T-014`: 待 QA.
+  - `T-015`: 下一步优先分配 QA-1.
+  - `T-016`: 等 T-015 通过后再启动.
 - T-013/T-014/T-015/T-016 完成并由 QA 真测通过前, 不能说项目整体完成.
 
 ---
