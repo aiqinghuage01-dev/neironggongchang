@@ -4,7 +4,30 @@
 
 ---
 
-## 当前状态 (2026-04-29 · D-106 cmux 只保留 5 个 Agent 工作区)
+## 当前状态 (2026-04-29 · D-107 Agent 启动短口令)
+
+**版本**: v0.7.6-agent6 — 进入 Agent workspace 后输入 `开工` 即可启动.
+
+### D-107 修复
+- `scripts/start_multi_agents_cmux.sh`: 每个 workspace 自动生成 `start` 和 `开工`
+  两个本地启动短口令, 继续保留 `.agent-start.sh` 作为底层实现.
+- 自动安装全局 `~/.local/bin/开工`; 在 Agent workspace 里直接输入 `开工`
+  就会调用当前 workspace 的 `.agent-start.sh`.
+- cmux fallback 确认 5 个目标 workspace 都存在后, 自动关闭多余 cmux 窗口壳.
+- `docs/MULTI_AGENT_WORKFLOW.md`: 启动说明从 `./.agent-start.sh` 改成 `开工`.
+
+### 验证
+- `bash -n scripts/start_multi_agents_cmux.sh` ✅
+- `bash scripts/start_multi_agents_cmux.sh --dry-run` ✅
+- `bash scripts/start_multi_agents_cmux.sh` 真实运行: 已生成短口令, 已跳过重复 workspace ✅
+- 5 个 workspace 均存在可执行 `start` 和 `开工` ✅
+- `command -v 开工` -> `~/.local/bin/开工`; `bash -n ~/.local/bin/开工` ✅
+- 已用 System Events 清理残留 cmux 外壳, 当前 `AX windows=1` ✅
+- AppleScript 实测 cmux: `windows=1`, `tabs=5` ✅
+
+---
+
+## 上一里程碑 (2026-04-29 · D-106 cmux 只保留 5 个 Agent 工作区)
 
 **版本**: v0.7.6-agent5 — cmux fallback 打开后自动清理默认空 Home 工作区.
 

@@ -196,11 +196,39 @@ add_local_exclude() {
   exclude_file="$(git -C "$dir" rev-parse --git-path info/exclude)"
   mkdir -p "$(dirname "$exclude_file")"
   touch "$exclude_file"
-  for pattern in ".agent-role.md" ".agent-start.sh"; do
+  for pattern in ".agent-role.md" ".agent-start.sh" "start" "开工"; do
     if ! grep -qxF "$pattern" "$exclude_file"; then
       printf '\n%s\n' "$pattern" >> "$exclude_file"
     fi
   done
+}
+
+install_global_shortcut() {
+  local bin_dir="${HOME}/.local/bin"
+  local shortcut="${bin_dir}/开工"
+
+  if [[ "$dry_run" -eq 1 ]]; then
+    echo "Would install global shortcut: ${shortcut}"
+    return 0
+  fi
+
+  mkdir -p "$bin_dir"
+  cat > "$shortcut" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ -x "./.agent-start.sh" ]]; then
+  exec "./.agent-start.sh"
+fi
+
+if [[ -x "./start" ]]; then
+  exec "./start"
+fi
+
+echo "这里不是 Agent 工作区。请先点 cmux 左侧的某个 Agent 工作区, 再输入: 开工" >&2
+exit 1
+EOF
+  chmod +x "$shortcut"
 }
 
 write_role_files() {
@@ -266,6 +294,22 @@ exec codex --cd "\$PWD" --model "${codex_model}" -c "model_reasoning_effort=\"${
 EOF
   fi
   chmod +x "${dir}/.agent-start.sh"
+
+  cat > "${dir}/start" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")"
+exec ./.agent-start.sh
+EOF
+  chmod +x "${dir}/start"
+
+  cat > "${dir}/开工" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")"
+exec ./.agent-start.sh
+EOF
+  chmod +x "${dir}/开工"
 }
 
 fallback_open_path() {
@@ -295,9 +339,9 @@ fallback_open_path() {
 
 workspace_command() {
   if [[ "$launch" -eq 1 ]]; then
-    printf './.agent-start.sh'
+    printf '开工'
   else
-    printf 'clear; cat .agent-role.md; echo; echo "本 cmux workspace 已准备好。启动本角色: ./.agent-start.sh"'
+    printf 'clear; cat .agent-role.md; echo; echo "本 cmux workspace 已准备好。启动本角色: 开工"; echo "备用: ./start 或 ./开工"'
   fi
 }
 
@@ -387,6 +431,59 @@ end run
 OSA
 }
 
+cmux_has_all_target_workspaces() {
+  local dirs=()
+  local role
+  for role in "${roles[@]}"; do
+    dirs+=("$(role_dir "$role")")
+  done
+
+  osascript - "${dirs[@]}" <<'OSA' >/dev/null 2>&1
+on run argv
+  tell application "cmux"
+    if (count of windows) is 0 then error "no windows"
+    set matched to 0
+    repeat with t in tabs of front window
+      set wd to ""
+      try
+        set wd to working directory of focused terminal of t as text
+      end try
+      repeat with targetDir in argv
+        if wd is (targetDir as text) then
+          set matched to matched + 1
+          exit repeat
+        end if
+      end repeat
+    end repeat
+    if matched < 5 then error "missing target workspaces"
+  end tell
+end run
+OSA
+}
+
+cleanup_cmux_extra_app_windows() {
+  [[ "$dry_run" -eq 1 ]] && return 0
+  cmux_has_all_target_workspaces || return 0
+
+  osascript <<'OSA' >/dev/null 2>&1 || true
+tell application "System Events"
+  if not (exists process "cmux") then return
+  tell process "cmux"
+    repeat while (count of windows) > 1
+      try
+        perform action "AXClose" of window 2
+      on error
+        try
+          click button 1 of window 2
+        end try
+      end try
+      delay 0.2
+    end repeat
+  end tell
+end tell
+OSA
+}
+
 roles=(controller content media qa review)
 
 echo "Repo:   ${repo_root}"
@@ -395,6 +492,8 @@ echo "Launch: ${launch}"
 echo "Codex:  ${codex_model} / effort=${codex_effort}"
 echo "Claude: ${claude_model} / effort=${claude_effort}"
 echo
+
+install_global_shortcut
 
 for role in "${roles[@]}"; do
   ensure_worktree "$role"
@@ -454,13 +553,15 @@ fi
 
 sleep 0.5
 cleanup_cmux_default_home_workspace
+cleanup_cmux_extra_app_windows
 
 cat <<EOF
 
 Done. 5 个 cmux workspace 已创建或已请求打开。
 
 默认模式只展示角色说明:
-  在某个 workspace 里输入 ./.agent-start.sh 启动该 Agent.
+  在某个 workspace 里输入 开工 启动该 Agent.
+  备用命令: ./start 或 ./开工
 
 下次要直接启动模型:
   bash scripts/start_multi_agents_cmux.sh --launch

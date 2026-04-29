@@ -160,6 +160,7 @@ CODEX_MODEL=gpt-5.5 CODEX_REASONING_EFFORT=xhigh CLAUDE_MODEL=opus4.7 CLAUDE_EFF
 
 cmux CLI socket 如果暂时不可用, 脚本会自动降级为 `open -a cmux <worktree>`.
 降级模式会先检查 cmux 左侧是否已有对应目录, 已有就跳过, 避免重复越开越多.
+如果 cmux 留下多个窗口壳, 脚本会在确认 5 个 workspace 都存在后自动关闭多余窗口.
 如果 cmux 左侧仍显示路径名, 手工改成下面 5 个中文名即可:
 
 ```text
@@ -170,11 +171,13 @@ NRG QA 测试
 NRG Claude 审查
 ```
 
-降级模式不会自动输入启动命令; 进入对应 workspace 后手动运行:
+降级模式不会自动输入启动命令; 进入对应 workspace 后输入短口令:
 
 ```bash
-./.agent-start.sh
+开工
 ```
+
+备用命令: `./start` 或 `./开工`.
 
 如果 cmux CLI 不可用, 可用 tmux 备用:
 
