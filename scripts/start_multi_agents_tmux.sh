@@ -129,6 +129,17 @@ role_tool() {
   esac
 }
 
+agent_display_name() {
+  case "$1" in
+    controller) printf '%s\n' "NRG 总控" ;;
+    content) printf '%s\n' "NRG 内容开发" ;;
+    media) printf '%s\n' "NRG 媒体开发" ;;
+    qa) printf '%s\n' "NRG QA 测试" ;;
+    review) printf '%s\n' "NRG Claude 审查" ;;
+    *) return 1 ;;
+  esac
+}
+
 ensure_worktree() {
   local role="$1"
   local dir
@@ -183,12 +194,13 @@ add_local_exclude() {
 
 write_role_files() {
   local role="$1"
-  local dir title doc branch tool
+  local dir title doc branch tool display_name
   dir="$(role_dir "$role")"
   title="$(role_title "$role")"
   doc="$(role_doc "$role")"
   branch="$(role_branch "$role")"
   tool="$(role_tool "$role")"
+  display_name="$(agent_display_name "$role")"
 
   if [[ "$dry_run" -eq 1 ]]; then
     echo "Would write ${dir}/.agent-role.md and .agent-start.sh"
@@ -230,6 +242,7 @@ EOF
 #!/usr/bin/env bash
 set -euo pipefail
 cd "\$(dirname "\$0")"
+printf '\033]0;%s\007' "${display_name}"
 exec claude --model "${claude_model}" --effort "${claude_effort}" "\$(cat .agent-role.md)"
 EOF
   else
@@ -237,6 +250,7 @@ EOF
 #!/usr/bin/env bash
 set -euo pipefail
 cd "\$(dirname "\$0")"
+printf '\033]0;%s\007' "${display_name}"
 exec codex --cd "\$PWD" --model "${codex_model}" -c "model_reasoning_effort=\"${codex_effort}\"" "\$(cat .agent-role.md)"
 EOF
   fi

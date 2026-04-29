@@ -11,6 +11,9 @@ Options:
                     Default only opens workspaces and shows role files.
   --no-sync         Do not fast-forward agent worktrees to main.
   --dry-run         Print planned actions without creating cmux workspaces.
+  --no-open-fallback
+                    If cmux CLI socket is unavailable, fail instead of using
+                    macOS 'open -a cmux <dir>' fallback.
   --cmux <path>     cmux CLI path. Default: app bundled CLI.
   -h, --help        Show this help.
 
@@ -24,6 +27,7 @@ USAGE
 launch=0
 sync_worktrees=1
 dry_run=0
+open_fallback=1
 cmux_cli="/Applications/cmux.app/Contents/Resources/bin/cmux"
 codex_model="${CODEX_MODEL:-gpt-5.5}"
 codex_effort="${CODEX_REASONING_EFFORT:-xhigh}"
@@ -42,6 +46,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --dry-run)
       dry_run=1
+      shift
+      ;;
+    --no-open-fallback)
+      open_fallback=0
       shift
       ;;
     --cmux)
@@ -130,7 +138,7 @@ role_tool() {
   esac
 }
 
-workspace_name() {
+agent_display_name() {
   case "$1" in
     controller) printf '%s\n' "NRG 总控" ;;
     content) printf '%s\n' "NRG 内容开发" ;;
@@ -139,6 +147,10 @@ workspace_name() {
     review) printf '%s\n' "NRG Claude 审查" ;;
     *) return 1 ;;
   esac
+}
+
+workspace_name() {
+  agent_display_name "$1"
 }
 
 ensure_worktree() {
@@ -193,12 +205,13 @@ add_local_exclude() {
 
 write_role_files() {
   local role="$1"
-  local dir title doc branch tool
+  local dir title doc branch tool display_name
   dir="$(role_dir "$role")"
   title="$(role_title "$role")"
   doc="$(role_doc "$role")"
   branch="$(role_branch "$role")"
   tool="$(role_tool "$role")"
+  display_name="$(agent_display_name "$role")"
 
   if [[ "$dry_run" -eq 1 ]]; then
     echo "Would write ${dir}/.agent-role.md and .agent-start.sh"
@@ -240,6 +253,7 @@ EOF
 #!/usr/bin/env bash
 set -euo pipefail
 cd "\$(dirname "\$0")"
+printf '\033]0;%s\007' "${display_name}"
 exec claude --model "${claude_model}" --effort "${claude_effort}" "\$(cat .agent-role.md)"
 EOF
   else
@@ -247,10 +261,36 @@ EOF
 #!/usr/bin/env bash
 set -euo pipefail
 cd "\$(dirname "\$0")"
+printf '\033]0;%s\007' "${display_name}"
 exec codex --cd "\$PWD" --model "${codex_model}" -c "model_reasoning_effort=\"${codex_effort}\"" "\$(cat .agent-role.md)"
 EOF
   fi
   chmod +x "${dir}/.agent-start.sh"
+}
+
+fallback_open_path() {
+  local role="$1"
+  local dir display_name alias_root alias_path
+  dir="$(role_dir "$role")"
+  display_name="$(agent_display_name "$role")"
+  alias_root="${HOME}/Desktop/nrg-agent-workspaces"
+  alias_path="${alias_root}/${display_name}"
+
+  if [[ "$dry_run" -eq 1 ]]; then
+    echo "$alias_path"
+    return 0
+  fi
+
+  mkdir -p "$alias_root"
+  if [[ -L "$alias_path" ]]; then
+    rm "$alias_path"
+  elif [[ -e "$alias_path" ]]; then
+    echo "Fallback alias path exists and is not a symlink: ${alias_path}" >&2
+    echo "$dir"
+    return 0
+  fi
+  ln -s "$dir" "$alias_path"
+  echo "$alias_path"
 }
 
 workspace_command() {
@@ -277,9 +317,25 @@ ensure_cmux_ready() {
     sleep 0.5
   done
 
-  echo "cmux CLI did not become ready. Open cmux manually, then rerun this script." >&2
-  echo "CLI path: ${cmux_cli}" >&2
-  exit 1
+  return 1
+}
+
+cmux_has_workspace_for_dir() {
+  local dir="$1"
+  osascript - "$dir" <<'OSA' >/dev/null 2>&1
+on run argv
+  set targetDir to item 1 of argv
+  tell application "cmux"
+    repeat with t in tabs of front window
+      try
+        set wd to working directory of focused terminal of t as text
+        if wd is targetDir then return "yes"
+      end try
+    end repeat
+  end tell
+  error "not found"
+end run
+OSA
 }
 
 roles=(controller content media qa review)
@@ -297,7 +353,19 @@ for role in "${roles[@]}"; do
   write_role_files "$role"
 done
 
-ensure_cmux_ready
+cmux_ready=0
+if ensure_cmux_ready; then
+  cmux_ready=1
+elif [[ "$open_fallback" -eq 1 ]]; then
+  echo "cmux CLI socket is unavailable; falling back to: open -a cmux <worktree>" >&2
+  if [[ "$launch" -eq 1 ]]; then
+    echo "--launch requires the cmux CLI socket. Fallback will only open workspaces." >&2
+  fi
+else
+  echo "cmux CLI did not become ready. Open cmux manually, then rerun this script." >&2
+  echo "CLI path: ${cmux_cli}" >&2
+  exit 1
+fi
 
 for role in "${roles[@]}"; do
   dir="$(role_dir "$role")"
@@ -308,14 +376,25 @@ for role in "${roles[@]}"; do
     echo "Would create cmux workspace: ${name}"
     echo "  cwd:     ${dir}"
     echo "  command: ${command}"
+    echo "  fallback: open -a cmux '$(fallback_open_path "$role")'"
     continue
   fi
 
-  "$cmux_cli" new-workspace \
-    --name "$name" \
-    --description "$(role_title "$role") · $(role_branch "$role")" \
-    --cwd "$dir" \
-    --command "$command" >/dev/null
+  if cmux_has_workspace_for_dir "$dir"; then
+    echo "Skip existing cmux workspace: ${name} (${dir})"
+    continue
+  fi
+
+  if [[ "$cmux_ready" -eq 1 ]]; then
+    "$cmux_cli" new-workspace \
+      --name "$name" \
+      --description "$(role_title "$role") · $(role_branch "$role")" \
+      --cwd "$dir" \
+      --command "$command" >/dev/null
+  else
+    open -a cmux "$(fallback_open_path "$role")"
+    sleep 0.2
+  fi
 done
 
 if [[ "$dry_run" -eq 1 ]]; then
@@ -326,7 +405,7 @@ fi
 
 cat <<EOF
 
-Done. 5 个 cmux workspace 已创建。
+Done. 5 个 cmux workspace 已创建或已请求打开。
 
 默认模式只展示角色说明:
   在某个 workspace 里输入 ./.agent-start.sh 启动该 Agent.

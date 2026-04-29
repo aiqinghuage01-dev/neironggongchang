@@ -158,6 +158,24 @@ CODEX_MODEL=gpt-5.5 CODEX_REASONING_EFFORT=xhigh CLAUDE_MODEL=opus4.7 CLAUDE_EFF
   bash scripts/start_multi_agents_cmux.sh --launch
 ```
 
+cmux CLI socket 如果暂时不可用, 脚本会自动降级为 `open -a cmux <worktree>`.
+降级模式会先检查 cmux 左侧是否已有对应目录, 已有就跳过, 避免重复越开越多.
+如果 cmux 左侧仍显示路径名, 手工改成下面 5 个中文名即可:
+
+```text
+NRG 总控
+NRG 内容开发
+NRG 媒体开发
+NRG QA 测试
+NRG Claude 审查
+```
+
+降级模式不会自动输入启动命令; 进入对应 workspace 后手动运行:
+
+```bash
+./.agent-start.sh
+```
+
 如果 cmux CLI 不可用, 可用 tmux 备用:
 
 ```bash

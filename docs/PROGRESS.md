@@ -4,7 +4,48 @@
 
 ---
 
-## 当前状态 (2026-04-29 · D-103 5-Agent 默认模型参数固定)
+## 当前状态 (2026-04-29 · D-105 cmux fallback 防重复打开)
+
+**版本**: v0.7.6-agent4 — cmux fallback 不再重复打开同一个 Agent workspace.
+
+### D-105 修复
+- `scripts/start_multi_agents_cmux.sh`: fallback 打开前用 AppleScript 检查 cmux 左侧
+  是否已有相同工作目录; 已存在则跳过, 避免重复开很多个.
+- `docs/MULTI_AGENT_WORKFLOW.md`: 补 fallback 下中文命名的手工规则.
+- 说明: cmux AppleScript 的 `tab.name` 是只读, 当前 socket 又返回 `Broken pipe`;
+  所以自动中文命名只有 cmux CLI socket 正常时可用, fallback 模式以不重复为优先.
+
+### 验证
+- 已用 AppleScript 清理本次测试重复 workspace, 保留一套
+  `Factory/content-dev/media-dev/qa/review` ✅
+- `bash -n scripts/start_multi_agents_cmux.sh` ✅
+- `bash scripts/start_multi_agents_cmux.sh --dry-run` ✅
+
+---
+
+## 上一里程碑 (2026-04-29 · D-104 cmux 左侧 workspace 降级打开)
+
+**版本**: v0.7.6-agent3 — cmux CLI socket 不通时也能一键打开 5 个 Agent workspace.
+
+### D-104 修复
+- `scripts/start_multi_agents_cmux.sh`: cmux CLI `Broken pipe` / socket 不可用时,
+  自动降级到 `open -a cmux <worktree>`.
+- 降级模式会在 cmux 左侧打开主控、内容开发、媒体开发、QA、审查 5 个 workspace;
+  需要进入各 workspace 手动运行 `./.agent-start.sh`.
+- 降级模式通过 `~/Desktop/nrg-agent-workspaces/NRG ...` 中文名符号链接打开,
+  尽量让 cmux 左侧直接显示中文角色名.
+- `.agent-start.sh` 启动时设置终端标题为中文角色名.
+- `docs/MULTI_AGENT_WORKFLOW.md`: 补 cmux fallback 说明.
+
+### 验证
+- `open -a cmux` 已实际打开:
+  `content-dev / media-dev / qa / review` worktree workspace ✅
+- `bash -n scripts/start_multi_agents_cmux.sh` ✅
+- `bash scripts/start_multi_agents_cmux.sh --dry-run` ✅
+
+---
+
+## 上一里程碑 (2026-04-29 · D-103 5-Agent 默认模型参数固定)
 
 **版本**: v0.7.6-agent2 — Codex/Claude 多 Agent 启动默认模型显式固定.
 
