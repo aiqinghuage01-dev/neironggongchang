@@ -22,6 +22,7 @@
 - T-060 已由总控 block: QA worker 在环境确认阶段误停 8000/8001 并前台启动 uvicorn 卡住, 未产出 QA 报告; 这不是产品功能不通过。
 - D-126 已完成: `/api/health` 改用 `timeout=3.0` + `llm_max_retries=0` 的短 AI 探活, 5 秒内返回 200; 完整 AI 重探仍走 `/api/ai/health?fresh=1`。
 - 总控已补 T-047 主线 no-credit 复测: `image/imagegen/dreamina/dhv5/works/materials` 禁止词命中 0, console/pageerror/requestfailed/http error 全 0; 全站 16 页 smoke 通过。
+- T-061 已派 QA 做 D-126 后严格只读复测: 禁止停启 8000/8001, 不调用 `/api/health` 做门禁, 端口异常只 block 交给总控。
 - 全站优化 8 小时定时巡检已启动: `bash scripts/start_site_optimization_watch.sh` 运行 LaunchAgent `com.neironggongchang.site-optimization-watch`, 窗口 2026-04-30 00:11~08:11, 每 2 小时检查一次工作台. 若没有 claimed/queued 任务, 自动补下一批全站优化任务; 当前首轮发现 T-041/T-042/T-043/T-044 正在跑、T-045 queued, 因此没有重复塞任务.
 - D-125 素材库验收补强已由总控在 main 实装: 新增 `/api/material-lib/featured`, 首页先展示可直接预览的业务素材卡片, 主分类只显示 7 个业务大类, `00 待整理` 单独降级为整理入口; 解决「网页显示全是 0 / 看不到业务分类 / 没有素材预览」的验收体感问题。
 - 正式端口已重启并验证: `http://127.0.0.1:8000/api/material-lib/featured?limit=18` 返回 18 条非待整理、带缩略图、已画像素材; `/categories` 返回业务素材 55 条、可直接预览 42 条、待整理 1563 条。
