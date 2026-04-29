@@ -8,10 +8,10 @@
 
 | 角色 | 状态 | 工作区 | 当前任务 |
 |---|---|---|---|
-| 总控 Agent | 待启动 | `~/Desktop/neironggongchang` | 拆任务、合并、最终验证 |
-| 内容开发 Agent | 待启动 | `~/Desktop/nrg-worktrees/content-dev` | 待分配 |
+| 总控 Agent | 进行中 | `~/Desktop/neironggongchang` | 核验 QA 报告、登记 P1 修复任务 |
+| 内容开发 Agent | 待启动 | `~/Desktop/nrg-worktrees/content-dev` | 待领 T-004 / T-005 |
 | 媒体开发 Agent | 待启动 | `~/Desktop/nrg-worktrees/media-dev` | 待分配 |
-| QA 测试 Agent | 待启动 | `~/Desktop/nrg-worktrees/qa` | 待分配 |
+| QA 测试 Agent | 已完成 | `~/Desktop/nrg-worktrees/qa` | QA-WECHAT-20260429 真测不通过报告已提交 |
 | 审查 Agent | 待启动 | `~/Desktop/nrg-worktrees/review` | 待分配 |
 
 ---
@@ -20,9 +20,18 @@
 
 | ID | 业务目标 | 负责人 | 状态 | 文件范围 | 验收标准 |
 |---|---|---|---|---|---|
-| T-001 | 示例: 公众号链路问题 | 内容开发 Agent | 待分配 | 由总控填写 | QA 真测 + 审查通过 |
-| T-002 | 示例: 数字人/生图作品展示问题 | 媒体开发 Agent | 待分配 | 由总控填写 | QA 真测 + 审查通过 |
-| T-003 | 示例: 昨日功能回归测试 | QA 测试 Agent | 待分配 | 不改功能代码 | 截图 + console + pytest/curl |
+| T-004 | 修公众号 Step 4 手动编辑正文没有进入后续配图/HTML/草稿的问题 | 内容开发 Agent | 待分配 | `web/factory-wechat-v2.jsx`; 必要 e2e 回归脚本 | QA 加标记后, `plan-images` 请求、HTML、草稿推送前 HTML 都包含编辑标记 |
+| T-005 | 修公众号推送前 sanitize 把真实段间图和头像全部剥掉的问题 | 内容开发 Agent | 待分配 | `backend/services/wechat_scripts.py`, `tests/test_wechat_sanitize.py`; 如沉淀新坑同步 `docs/WECHAT-SKILL-LESSONS.md` | 真实 `mmbiz_url` 带 `?from=appmsg` 的本次上传图不被误剥; 非己方历史图仍安全处理; 回归测试覆盖 |
+| T-006 | T-004/T-005 修后公众号 8 步链路复测 | QA 测试 Agent | 待分配 | 不改功能代码; 只提交报告/必要测试脚本需总控确认 | Playwright 真点真填 + console/pageerror=0 + 截图 + curl/pytest + 最小真烧; 草稿推送前 `img_count_sanitized >= 4` |
+
+---
+
+## 最近证据
+
+- QA 报告: `docs/agent-handoff/QA_WECHAT_20260429.md`
+- QA 原提交: `cb3454c`
+- 主线证据提交: `9031337`
+- 结论: 不通过, 主链路能创建草稿, 但有 2 个 P1 阻塞真实验收.
 
 ---
 

@@ -4,7 +4,33 @@
 
 ---
 
-## 当前状态 (2026-04-29 · D-111 多 QA 一键启动)
+## 当前状态 (2026-04-29 · QA-WECHAT-20260429 公众号真测不通过待修)
+
+**版本**: v0.7.6-agent10 — 多 QA 启动能力已在 D-111 落地; 公众号 8 步真测跑到草稿箱, 但发现 2 个 P1, 暂不算公众号链路验收通过。
+
+### QA 证据
+- QA 报告已合入主线: `docs/agent-handoff/QA_WECHAT_20260429.md`
+  - QA 原提交: `cb3454c`
+  - 主线证据提交: `9031337`
+- 真实草稿 ID: `QbCZvI0l3BDFBWrSXSwYcRbJ2XeHnl-4hcFvroxpXMXTi4YPr860yIsWB9mQgvb1`
+- console error: 0; pageerror: 0.
+- WeChat 相关 pytest 通过; `node scripts/e2e_wechat_d096_flow.js` 通过.
+- QA 额外发现: `node scripts/e2e_wechat_write_recover.js` 因本地任务库缺脚本预期历史任务超时, 不作为本轮链路结论依据.
+
+### 阻塞 P1
+1. Step 4 手动编辑后的长文只停在 `WxStepWrite` 局部 state, 后续 `plan-images` / HTML / 草稿仍用旧 `article.content`.
+2. 推送草稿前 `sanitize_for_push` 把真实生成的 4 张段间图和头像全部剥掉: 原 HTML `img=5`, 推送前 HTML `img=0`.
+
+### 下一步
+- `docs/AGENT_BOARD.md` 已登记:
+  - `T-004`: 修手动编辑正文未进入后续流程.
+  - `T-005`: 修 sanitize 误剥真实段间图/头像.
+  - `T-006`: 修后公众号 8 步链路复测.
+- 两个 P1 修完并由 QA 真测通过前, 不能说公众号链路完成.
+
+---
+
+## 上一里程碑 (2026-04-29 · D-111 多 QA 一键启动)
 
 **版本**: v0.7.6-agent10 — 支持临时打开 2-3 个并行 QA workspace.
 
