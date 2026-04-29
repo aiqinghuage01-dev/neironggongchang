@@ -1,7 +1,8 @@
 """sanitize_for_push 测试 (D-042 → D-043 → D-045).
 
 D-045 复活 D-042 的 "?from=appmsg 整剥" 策略 (D-043 改"清 URL 留 img"被实测打脸):
-  ?from=appmsg / &from=appmsg     → 整剥 (是"非己公众号资源"天然标记)
+  非本次段间图的 ?from=appmsg / &from=appmsg → 整剥 (是"非己公众号资源"天然标记)
+  本次段间图带 data-nrg-section-image="1" → 保留图片, 清理 URL 和标记属性
   http://mmbiz/qlogo → https://    (干净 URL 才规整保留)
   域名外链 (apimart 等)             → 整剥 (推不上)
 
@@ -78,6 +79,36 @@ def test_section_image_no_appmsg_kept():
     r = sanitize_for_push(html)
     assert "<img" in r["clean"]
     assert "section1" in r["clean"]
+
+
+def test_current_section_image_with_appmsg_marker_kept_and_cleaned():
+    """D-111: 真实 gen_section_image 返回的本次上传图也可能带 ?from=appmsg.
+
+    这些图由 _md_to_wechat_html 标记为 data-nrg-section-image="1"; sanitize 只能清 URL
+    和内部标记, 不能整张剥掉, 否则草稿正文图全丢.
+    """
+    html = (
+        '<p><img data-nrg-section-image="1" '
+        'src="http://mmbiz.qpic.cn/sz_mmbiz_jpg/current/0?from=appmsg" '
+        'style="width:100%"/></p>'
+    )
+    r = sanitize_for_push(html)
+    assert "<img" in r["clean"]
+    assert "current/0" in r["clean"]
+    assert "https://mmbiz.qpic.cn/sz_mmbiz_jpg/current/0" in r["clean"]
+    assert "from=appmsg" not in r["clean"]
+    assert "data-nrg-section-image" not in r["clean"]
+    assert r["removed"].get("img_from_appmsg", 0) == 0
+    assert r["rewritten"].get("trusted appmsg kept", 0) == 1
+    assert r["rewritten"].get("strip ?from=appmsg", 0) == 1
+
+
+def test_unmarked_history_appmsg_image_still_stripped():
+    """D-111: 没有本次段间图标记的历史 appmsg 图仍按 D-045 整剥."""
+    html = '<p><img src="https://mmbiz.qpic.cn/sz_mmbiz_jpg/history/0?from=appmsg"/></p>'
+    r = sanitize_for_push(html)
+    assert "<img" not in r["clean"]
+    assert r["removed"].get("img_from_appmsg", 0) == 1
 
 
 def test_http_mmbiz_without_appmsg_rewritten_to_https():

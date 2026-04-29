@@ -664,8 +664,9 @@ def _md_to_wechat_html(
         if not url:
             url = (item.get("mmbiz_url") or "").strip()
         if url:
+            marker = ' data-nrg-section-image="1"' if not prefer_media else ""
             imgs_html.append(
-                f'<p><img src="{url}" style="width:100%;border-radius:10px;margin:24px 0" /></p>'
+                f'<p><img{marker} src="{url}" style="width:100%;border-radius:10px;margin:24px 0" /></p>'
             )
 
     total = len(paragraphs)
@@ -935,6 +936,12 @@ _ALLOWED_LINK_PREFIXES = (
 )
 # 允许的 <img src> scheme + host
 _ALLOWED_IMG_RE = re.compile(r'^https?://(?:[a-z0-9-]+\.)*(mmbiz\.qpic\.cn|wx\.qlogo\.cn)/', re.IGNORECASE)
+_TRUSTED_SECTION_IMG_ATTR_RE = re.compile(r'\sdata-nrg-section-image=(["\'])1\1', re.IGNORECASE)
+
+
+def _strip_internal_img_attrs(tag: str) -> str:
+    """移除工厂内部标记属性, 不把 data-nrg-* 带进最终草稿 HTML."""
+    return _TRUSTED_SECTION_IMG_ATTR_RE.sub("", tag)
 
 
 def _clean_img_url(url: str) -> tuple[str, list[str]]:
@@ -1001,7 +1008,10 @@ def sanitize_for_push(html: str) -> dict[str, Any]:
     #    硬编码的头像必带, 这次 push 的段间图通过 uploadimg 上传不带). 即便把
     #    URL 清成 https 没 ?from=appmsg, mmbiz 资源 ID 不变 — WeChat draft/add
     #    仍按"非己 add_material 上传"拒收 (errcode 45166).
-    #    所以 ?from=appmsg 必须整剥, 不能只清 URL.
+    #    所以无内部标记的 ?from=appmsg 必须整剥, 不能只清 URL.
+    #    D-111: 真实 gen_section_image 上传后的本次段间图也可能带 ?from=appmsg.
+    #    _md_to_wechat_html 会给这些图加 data-nrg-section-image="1"; 这类图保留,
+    #    但仍清掉 from=appmsg 和内部标记属性.
     img_re = re.compile(r"<img\b[^>]*?/?>", re.IGNORECASE)
     def _img_sub(m: re.Match) -> str:
         full = m.group(0)
@@ -1010,21 +1020,26 @@ def sanitize_for_push(html: str) -> dict[str, Any]:
             removed["img_no_src"] = removed.get("img_no_src", 0) + 1
             return ""
         url = src_m.group(2)
+        is_trusted_section_image = bool(_TRUSTED_SECTION_IMG_ATTR_RE.search(full))
+        has_appmsg = "?from=appmsg" in url or "&from=appmsg" in url
         # 别家公众号 msg 资源 — 整剥 (D-042 原策略, D-045 复活)
-        if "?from=appmsg" in url or "&from=appmsg" in url:
+        if has_appmsg and not is_trusted_section_image:
             removed["img_from_appmsg"] = removed.get("img_from_appmsg", 0) + 1
             return ""
         probe = "https://" + url[len("http://"):] if url.startswith("http://") else url
         if not _ALLOWED_IMG_RE.match(probe):
             removed["img_external"] = removed.get("img_external", 0) + 1
             return ""
-        # 域名 OK, 干净 mmbiz URL — 仅 http→https 规整 (D-043 仍有用)
+        clean_full = _strip_internal_img_attrs(full)
+        if is_trusted_section_image and has_appmsg:
+            rewritten["trusted appmsg kept"] = rewritten.get("trusted appmsg kept", 0) + 1
+        # 域名 OK, 合法 mmbiz URL — http→https / from=appmsg 规整后保留 img
         new_url, changes = _clean_img_url(url)
         if changes:
             for c in changes:
                 rewritten[c] = rewritten.get(c, 0) + 1
-            return full.replace(src_m.group(0), f'src={src_m.group(1)}{new_url}{src_m.group(1)}', 1)
-        return full
+            return clean_full.replace(src_m.group(0), f'src={src_m.group(1)}{new_url}{src_m.group(1)}', 1)
+        return clean_full
     out = img_re.sub(_img_sub, out)
 
     # 1b) <img> 整段被外链规则剥之后, <a><img></a> 里的 <a> 空了, 清掉

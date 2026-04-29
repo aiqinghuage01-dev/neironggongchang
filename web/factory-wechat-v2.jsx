@@ -222,17 +222,24 @@ function PageWechat({ onNav }) {
     });
   }
 
+  function updateArticleContent(content) {
+    const next = String(content || "");
+    setArticle(prev => prev ? { ...prev, content: next, word_count: next.length } : prev);
+    return next;
+  }
+
   // D-036 ③ 局部重写 · selected 段调 AI 重写,只换那段
-  async function rewriteSelection(selected, instruction) {
+  async function rewriteSelection(selected, instruction, fullArticle) {
     if (!article || !selected) return null;
+    const sourceArticle = typeof fullArticle === "string" ? fullArticle : article.content;
     setErr("");
     try {
       const r = await api.post("/api/wechat/rewrite-section", {
-        full_article: article.content,
+        full_article: sourceArticle,
         selected, instruction: instruction || "",
       });
       if (r.new_full) {
-        setArticle({ ...article, content: r.new_full, word_count: r.new_full.length });
+        setArticle(prev => ({ ...(prev || article), content: r.new_full, word_count: r.new_full.length }));
       }
       return r;
     } catch (e) {
@@ -241,11 +248,18 @@ function PageWechat({ onNav }) {
     }
   }
 
-  function planImages() {
+  function planImages(contentOverride) {
+    if (!article) return;
+    const content = typeof contentOverride === "string" ? updateArticleContent(contentOverride) : article.content;
     return runStep({
-      nextStep: "images", rollbackStep: "write", clearSetter: () => setImagePlans([]),
+      nextStep: "images", rollbackStep: "write", clearSetter: () => {
+        setImagePlans([]);
+        setHtmlResult(null);
+        setCoverResult(null);
+        setPushResult(null);
+      },
       apiCall: async () => {
-        const r = await api.post("/api/wechat/plan-images", { content: article.content, title: pickedTitle, n: 4 });
+        const r = await api.post("/api/wechat/plan-images", { content, title: pickedTitle, n: 4 });
         setImagePlans((r.plans || []).map(p => ({ ...p, status: "pending", mmbiz_url: null })));
       },
     });
@@ -405,7 +419,7 @@ function PageWechat({ onNav }) {
         {step === "topic"   && <WxStepTopic topic={topic} setTopic={setTopic} onGo={genTitles} onAuto={startAuto} loading={loading} skillInfo={skillInfo} skipImages={skipImages} setSkipImages={setSkipImages} />}
         {step === "titles"  && <WxStepTitles titles={titles} loading={loading} onPick={genOutline} onPrev={() => setStep("topic")} onRegen={() => genTitles({ regen: true })} autoMode={autoMode} />}
         {step === "outline" && <WxStepOutline outline={outline} setOutline={setOutline} title={pickedTitle} topic={topic} loading={loading} onPrev={() => setStep("titles")} onNext={writeArticle} onRegen={() => genOutline(pickedTitle)} />}
-        {step === "write"   && <WxStepWrite article={article} loading={loading} onPrev={() => setStep("outline")} onNext={planImages} onRewrite={writeArticle} onRewriteSelection={rewriteSelection} onRecovered={setArticle} onNav={onNav} pickedTitle={pickedTitle} topic={topic} outline={outline} />}
+        {step === "write"   && <WxStepWrite article={article} loading={loading} onPrev={() => setStep("outline")} onNext={planImages} onRewrite={writeArticle} onRewriteSelection={rewriteSelection} onRecovered={setArticle} onArticleChange={updateArticleContent} onNav={onNav} pickedTitle={pickedTitle} topic={topic} outline={outline} />}
         {step === "images"  && <WxStepImages plans={imagePlans} setPlans={setImagePlans} onGen={generateOneImage} loading={loading} onPrev={() => setStep("write")} onNext={() => assembleHtml()} onRegen={planImages}
           imgChip={{ engine: imgEngine, onChange: setImgEngine, defaultEngine: defaultImgEngine, isOverride: isImgOverride }} />}
         {step === "html"    && <WxStepHtml result={htmlResult} loading={loading} onPrev={() => setStep("images")} onNext={genCover} onSwitchTemplate={assembleHtml} />}
@@ -762,7 +776,7 @@ function WxStepWriteRecover({ topic, pickedTitle, outline, onRecovered, onPrev, 
   );
 }
 
-function WxStepWrite({ article, loading, onPrev, onNext, onRewrite, onRewriteSelection, onRecovered, onNav, pickedTitle, topic, outline }) {
+function WxStepWrite({ article, loading, onPrev, onNext, onRewrite, onRewriteSelection, onRecovered, onArticleChange, onNav, pickedTitle, topic, outline }) {
   const writePhases = [
     { text: "读完整人设 + 方法论 + 风格圣经", sub: "who-is-qinghuage + writing-methodology + style-bible · ~7200 token" },
     { text: "铺开场判断", sub: "原则① 先定性再解释 · 避免「不此地无银」" },
@@ -795,12 +809,13 @@ function WxStepWrite({ article, loading, onPrev, onNext, onRewrite, onRewriteSel
   async function doRewriteSel() {
     if (!hasSel || rewriting) return;
     setRewriting(true);
-    const r = await onRewriteSelection?.(selectedText, instruction);
+    const r = await onRewriteSelection?.(selectedText, instruction, editing);
     setRewriting(false);
     if (r?.new_section) {
       // 替换 editing 中的选中段(用 selRange 而非 indexOf,避免重复字符串误替换)
       const newEdit = editing.slice(0, selRange.start) + r.new_section + editing.slice(selRange.end);
       setEditing(newEdit);
+      onArticleChange?.(newEdit);
       setSelRange({ start: selRange.start, end: selRange.start + r.new_section.length });
       setInstruction("");
     }
@@ -903,7 +918,11 @@ function WxStepWrite({ article, loading, onPrev, onNext, onRewrite, onRewriteSel
       )}
       <div style={{ background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 12, padding: 20 }}>
         <textarea ref={taRef} value={editing}
-          onChange={e => setEditing(e.target.value)}
+          onChange={e => {
+            const next = e.target.value;
+            setEditing(next);
+            onArticleChange?.(next);
+          }}
           onSelect={captureSel} onKeyUp={captureSel} onMouseUp={captureSel}
           style={{ width: "100%", border: "none", outline: "none", background: "transparent", fontSize: 14.5, fontFamily: "inherit", resize: "vertical", lineHeight: 1.9, color: T.text, minHeight: 420 }} />
       </div>
@@ -913,7 +932,7 @@ function WxStepWrite({ article, loading, onPrev, onNext, onRewrite, onRewriteSel
         <Btn variant="outline" onClick={onPrev}>← 改大纲</Btn>
         <Btn onClick={onRewrite}>🔄 重写一版</Btn>
         <div style={{ flex: 1 }} />
-        <Btn variant="primary" onClick={onNext}>下一步 · 段间配图 →</Btn>
+        <Btn variant="primary" onClick={() => onNext?.(editing)}>下一步 · 段间配图 →</Btn>
       </div>
 
       {/* D-062f 双 CTA: 摘金句段做视频 / 推送草稿(下一步即推送) */}

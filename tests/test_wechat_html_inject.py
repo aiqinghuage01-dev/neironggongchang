@@ -197,3 +197,17 @@ def test_md_to_wechat_html_push_uses_mmbiz_not_media():
     # 推送 HTML 里不能含本地 /media/ 路径 (微信加载不到 + 暴露本地 ip)
     assert "/media/wechat-images" not in out
     assert "127.0.0.1:8000" not in out
+    # D-111: 本次生成的段间图带内部标记, sanitize 用它区分历史 appmsg 外链.
+    assert 'data-nrg-section-image="1"' in out
+
+
+def test_md_to_wechat_html_preview_does_not_mark_local_proxy_images():
+    """preview raw_html 走本地 media_url, 不需要 push 专用的内部信任标记."""
+    md = "# 标题\n\n段 1\n\n段 2\n\n段 3\n\n段 4"
+    section_images = [
+        {"mmbiz_url": "http://mmbiz.qpic.cn/sz_mmbiz_jpg/aaa/0?from=appmsg",
+         "media_url": "/media/wechat-images/abc.jpg"},
+    ]
+    out = wechat_scripts._md_to_wechat_html(md, section_images, prefer_media=True)
+    assert "http://127.0.0.1:8000/media/wechat-images/abc.jpg" in out
+    assert "data-nrg-section-image" not in out

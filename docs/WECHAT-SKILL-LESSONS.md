@@ -407,4 +407,28 @@ useEffect(() => {
 
 ---
 
+## 14. 本次上传段间图也可能带 `?from=appmsg` (D-111)
+
+**症状**: Step 5 页面 4 张段间图生成成功, Step 6 预览也正常; 但 Step 8 推送前
+`last_push_request.json` 显示 `img_count_original=5`, `img_count_sanitized=0`,
+`removed.img_from_appmsg=5`. 草稿创建成功, 实际推送 HTML 没有正文配图.
+
+**根因**: D-045 的假设是"本次 uploadimg 上传图不带 `?from=appmsg`, 带这个参数的都是
+历史/别家公众号图". 2026-04-29 真测证明这个假设不成立: `gen_section_image.sh`
+返回的本次上传 `mmbiz_url` 也可能带 `?from=appmsg`.
+
+**修法**:
+- `_md_to_wechat_html(..., prefer_media=False)` 给本次段间图加内部属性
+  `data-nrg-section-image="1"`.
+- `sanitize_for_push` 看到这个内部标记时保留 `<img>`, 只清 `http→https`、
+  `from=appmsg` 和内部标记属性.
+- 没有内部标记的 `?from=appmsg` 图仍按 D-045 整剥, 避免历史外链/模板头像误推.
+
+**测试入口**:
+- `tests/test_wechat_sanitize.py::test_current_section_image_with_appmsg_marker_kept_and_cleaned`
+- `tests/test_wechat_sanitize.py::test_unmarked_history_appmsg_image_still_stripped`
+- `tests/test_wechat_html_inject.py::test_md_to_wechat_html_push_uses_mmbiz_not_media`
+
+---
+
 *记住: 老板看到的"症状"和后端"根因"中间有 5-6 层 (前端 → API → assemble → inject → md_to_html → template 正则), 任何一层静默 fail 都会让症状错位. 修这条 skill 的代码时, 怀疑就 raise, 别静默给"看起来对的残品".*
