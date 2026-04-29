@@ -4,9 +4,9 @@
 
 ---
 
-## 当前状态 (2026-04-29 · T-004/T-005 合入, T-006/T-007 待处理)
+## 当前状态 (2026-04-29 · T-004/T-005 合入, Works QA 不通过)
 
-**版本**: v0.7.6-agent10 — 公众号编辑传播 + 段间图 sanitizer 已修并合入主线; 真实公众号草稿推送复测和直接出图结果区仍待处理。
+**版本**: v0.7.6-agent10 — 公众号编辑传播 + 段间图 sanitizer 已修并合入主线; 作品库全链路 QA 发现 5 个影响使用的问题; 真实公众号草稿推送复测和直接出图结果区仍待处理。
 
 ### QA 证据 · 公众号
 - QA 报告已合入主线: `docs/agent-handoff/QA_WECHAT_20260429.md`
@@ -37,9 +37,22 @@
   - 临时 API `8120` + `curl POST /api/wechat/html` + `sanitize_for_push`: 编辑标记存在; 原 `img=5`, 清洗后 `img=4`; `from=appmsg` 和 `data-nrg-section-image` 均清空.
 - 范围说明: T-004/T-005 scoped 通过; 没有执行真实公众号草稿推送.
 
+### QA 证据 · 作品库
+- QA 报告已合入主线: `docs/agent-handoff/QA_WORKS_20260429.md`
+  - QA 原提交: `eed2d29`
+  - 主线证据提交: `bcad1e6`
+- 隔离服务 `18000/18001` 跑完整浏览器闭环; 临时数据已清理, 服务已关闭.
+- pytest: `tests/test_works_crud_integration.py tests/test_autoinsert_text_work.py tests/test_migrations.py::test_apply_migrations_creates_works_indexes tests/test_migrations.py::test_legacy_fixup_works_old_db_missing_4_columns` -> 11 passed.
+- 正常路径 smoke: pageerror 0; console 仅 Babel 开发 warning.
+- 负向复核: `completion_rate=80` -> 422; `completion_rate=0.8` -> 200.
+- 现场只读快照: `8000` 有 342 条作品; 第 301 条搜索在 `limit=300` 下查不到, `limit=1000` 下能查到; 前 300 条图片里 59 个缺预览 URL.
+
 ### 剩余阻塞
 1. T-006: 公众号 8 步真实草稿推送复测未跑, 需要最小真烧闭环确认 `last_push_request` 和真实草稿一致.
 2. T-007: 直接出图 apimart 单图 watcher 后端链路成功, 但前端结果区按 `result.images` 展示, task.result 只有 raw `url/task_id`, 最终显示 `0/0 成功`.
+3. T-009: 作品库数据看板 TOP「看」打不开不在当前列表里的历史作品; 搜索只在前 300 条中过滤.
+4. T-010: 作品库「留这版 / 删这版」后端写成功但 UI 不更新; 完播率 UI 写 `%` 但后端只接受 0-1.
+5. T-011: 作品库图片作品存在大量无预览/无下载的占位卡.
 
 ### 下一步
 - `docs/AGENT_BOARD.md` 已登记:
@@ -48,7 +61,11 @@
   - `T-006`: 修后公众号 8 步链路复测.
   - `T-007`: 修直接出图结果区不展示 apimart 单图产物.
   - `T-008`: 修后直接出图最小真烧复测.
-- T-006/T-007/T-008 完成并由 QA 真测通过前, 不能说对应链路完成.
+  - `T-009`: 修作品库看板打开历史作品 + 搜索老作品.
+  - `T-010`: 修作品库留/删 UI 状态 + 完播率输入.
+  - `T-011`: 处理图片占位卡.
+  - `T-012`: 修后作品库全链路回归.
+- T-006/T-007/T-008/T-009/T-010/T-011/T-012 完成并由 QA 真测通过前, 不能说对应链路完成.
 
 ---
 

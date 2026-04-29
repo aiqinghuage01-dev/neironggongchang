@@ -11,7 +11,7 @@
 | 总控 Agent | 进行中 | `~/Desktop/neironggongchang` | 核验 QA 报告、登记修复任务 |
 | 内容开发 Agent | 已完成 | `~/Desktop/nrg-worktrees/content-dev` | T-004 / T-005 已合入主线 |
 | 媒体开发 Agent | 待启动 | `~/Desktop/nrg-worktrees/media-dev` | 待领 T-007 |
-| QA 测试 Agent | 已完成 | `~/Desktop/nrg-worktrees/qa`, `~/Desktop/nrg-worktrees/qa-2` | QA-WECHAT / QA2-IMAGEGEN 真测不通过报告已提交 |
+| QA 测试 Agent | 已完成 | `~/Desktop/nrg-worktrees/qa`, `~/Desktop/nrg-worktrees/qa-2` | WeChat / ImageGen / Works QA 报告已提交 |
 | 审查 Agent | 待启动 | `~/Desktop/nrg-worktrees/review` | 待分配 |
 
 ---
@@ -25,6 +25,10 @@
 | T-006 | T-004/T-005 修后公众号 8 步链路复测 | QA 测试 Agent | 待分配 | 不改功能代码; 只提交报告/必要测试脚本需总控确认 | Playwright 真点真填 + console/pageerror=0 + 截图 + curl/pytest + 最小真烧; 草稿推送前 `img_count_sanitized >= 4` |
 | T-007 | 修直接出图 apimart 单图成功后结果区显示 `0/0 成功`、不展示图片的问题 | 媒体开发 Agent | 待分配 | `backend/services/apimart_service.py`, `web/factory-image-gen.jsx`, 对应 tests/e2e; 避免改 `backend/api.py` 除非总控确认 | apimart watcher 单图 task.result 对齐 `{images:[...]}` 契约或前端兼容 raw 结果; 结果页展示生成图; 作品库仍正常入库 |
 | T-008 | T-007 修后直接出图最小真烧复测 | QA 测试 Agent | 待分配 | 不改功能代码; 只提交报告/必要测试脚本需总控确认 | 1 张最低规格真烧; console/pageerror=0; 结果区显示 1/1 且有图; 作品库同图可见 |
+| T-009 | 修作品库数据看板 TOP「看」打不开历史作品 + 搜索只搜前 300 条的问题 | 总控/平台开发 | 待分配 | `web/factory-works.jsx`, `backend/api.py`, `shortvideo/works.py`/tests; `backend/api.py` 单线改 | 看板可打开不在当前列表的作品; 搜索命中第 300 条之后的老作品; 有 API/前端回归 |
+| T-010 | 修作品库「留这版 / 删这版」写入成功但 UI 不变 + 完播率百分比输入误导 | 总控/平台开发 | 待分配 | `web/factory-works.jsx`, 必要时 `backend/api.py`, tests | 点击后按钮立即显示/取消 `✓`; 完播率按 UI 文案可填 80 或 UI 改为 0-1 且不误导; 回归覆盖 |
+| T-011 | 处理作品库图片占位卡: 无预览/无下载的图片作品要可解释或可恢复 | 总控/平台开发 | 待分配 | `backend/api.py`, `web/factory-works.jsx`, 可能涉及数据修复脚本; 先读 QA 报告现场数据 | 图片 tab 不再大量无说明占位; 可下载/可预览时正常展示; 文件缺失或 mmbiz-only 时给明确状态和可操作路径 |
+| T-012 | T-009/T-010/T-011 修后作品库全链路回归 | QA 测试 Agent | 待分配 | 不改功能代码; 只提交报告/必要测试脚本需总控确认 | 复跑 QA_WORKS 覆盖的点击/截图/curl/pytest; 5 个问题均有 pass 证据 |
 
 ---
 
@@ -42,6 +46,10 @@
 - T-004/T-005 开发交接: `99ff4c9`
 - T-004/T-005 QA 复测报告: `49dabaa`
 - 结论: T-004/T-005 scoped 通过并已合入主线; 未包含真实公众号草稿推送, T-006 继续待测.
+- Works QA 报告: `docs/agent-handoff/QA_WORKS_20260429.md`
+- Works QA 原提交: `eed2d29`
+- 主线证据提交: `bcad1e6`
+- 结论: 不通过, 作品库有 2 个 P1 + 3 个 P2, 已登记 T-009/T-010/T-011/T-012.
 
 ---
 
