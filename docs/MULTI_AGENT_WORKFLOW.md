@@ -164,7 +164,12 @@ bash scripts/start_agent_monitor.sh --stop
 它会依次做:
 - 启动 Agent 监控器.
 - 启动自动派工器.
-- 打开 5 个 cmux Agent 工作区.
+- 安全激活已有的 5 个 cmux Agent 工作区.
+
+为什么是“安全激活”:
+- 当前 cmux CLI 偶尔会返回 `Broken pipe`.
+- 如果这时用 macOS `open -a cmux <目录>` 兜底, cmux 可能开出一叠重复窗口.
+- 日常按钮默认不走这个兜底; 已有 5 个工作区时只激活, 不重复创建.
 
 稳定性规则:
 - 三个底层脚本仍然保留, 方便总控排查问题.
@@ -173,6 +178,12 @@ bash scripts/start_agent_monitor.sh --stop
 
 ```bash
 bash scripts/install_agent_desktop_launcher.sh --with-debug-launchers
+```
+
+如果 cmux 工作区真的丢了, 总控才做一次性修复:
+
+```bash
+bash scripts/start_agent_workbench.sh --force-open-fallback
 ```
 
 ---

@@ -56,7 +56,7 @@ cat > "$all_script_file" <<EOF
 set repoPath to "${repo_root}"
 set logPath to "/tmp/nrg-agent-workbench.log"
 
-do shell script "cd " & quoted form of repoPath & " && { /bin/bash scripts/start_agent_monitor.sh >> " & quoted form of logPath & " 2>&1 || true; /bin/bash scripts/start_agent_dispatcher.sh >> " & quoted form of logPath & " 2>&1 || true; /bin/bash scripts/start_multi_agents_cmux.sh >> " & quoted form of logPath & " 2>&1 || true; } &"
+do shell script "cd " & quoted form of repoPath & " && /bin/bash scripts/start_agent_workbench.sh >> " & quoted form of logPath & " 2>&1 &"
 
 tell application "cmux"
   activate

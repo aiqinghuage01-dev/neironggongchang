@@ -4,9 +4,9 @@
 
 ---
 
-## 当前状态 (2026-04-29 · 单按钮工作台)
+## 当前状态 (2026-04-29 · cmux 安全启动)
 
-**版本**: v0.7.6-agent23 — 桌面日常入口收敛为单按钮 `打开内容工厂工作台.app`; 其他调试按钮默认不生成。总控角色新增自然语言接单规则: 老板只说业务需求, 总控自行拆任务、写队列、安排 QA/Review。T-015/T-016 仍 blocked, 不继续烧下游 credits。
+**版本**: v0.7.6-agent24 — 修复单按钮工作台在 cmux CLI `Broken pipe` 时走 macOS open fallback 导致重复窗口的问题。日常入口改为安全激活已有 5 个工作区; 只有一次性修复时才允许强制 fallback。T-015/T-016 仍 blocked, 不继续烧下游 credits。
 
 ### 当前进行
 - T-014: 内容开发提交 `5d4fc59`, 隔离端口真实 curl `n=1` 53 秒 `ok`; 但 T-015 独立 QA 真烧仍 timeout, 需继续返修投流真实链路.
@@ -17,7 +17,8 @@
 - 多 Agent 协作流程已调整: Agent 自己写 `docs/agent-handoff/` 报告并 commit, 总控用收件箱脚本主动扫描, 老板不再做人肉复制粘贴中转。
 - 自动任务队列已启用: `python3 ~/Desktop/neironggongchang/scripts/agent_queue.py list` 可看队列; `done` 只表示验收通过, 验证不通过必须 `block`.
 - 自动派工器已启用: `bash scripts/start_agent_dispatcher.sh --status` 显示 LaunchAgent running; 现在无 runnable task, 会待命.
-- 单按钮工作台已安装: 桌面只保留 `打开内容工厂工作台.app`, 会依次启动 Agent 监控器、自动派工器和 5 个 Agent 工作区.
+- 单按钮工作台已安装: 桌面只保留 `打开内容工厂工作台.app`, 会启动 Agent 监控器、自动派工器, 并安全激活已有 5 个 Agent 工作区.
+- cmux 安全启动已加: 日常按钮不再使用 `open -a cmux <worktree>` 兜底, 避免一叠重复窗口.
 - 总控自然语言接单规则已写入 `docs/agents/ROLE_CONTROLLER.md`: 老板不需要指定角色/分支/任务编号/测试命令.
 - 5-Agent 启动器已恢复: worktree 有本地改动或不能 fast-forward 时只跳过同步, 不再中断整个启动流程.
 - Agent 监控器已恢复: LaunchAgent 优先使用非系统 Python, 避免 `/usr/bin/python3` 读取 Desktop 脚本被 macOS 拦截.
@@ -32,8 +33,9 @@
 - 总控审查报告: `docs/agent-handoff/CONTROLLER_AUDIT_20260429.md`.
 - 合并风险: `git diff main..codex/media-dev` 显示该分支会删除 `scripts/agent_inbox.py`, `scripts/start_agent_monitor.sh` 和多份主线报告/角色文档; 不允许整分支 merge.
 - 任务队列: `~/Desktop/nrg-agent-queue/tasks.json` 已有 T-015 / T-016, 当前均 blocked.
-- 自动派工器: `scripts/agent_dispatcher.py`, `scripts/start_agent_dispatcher.sh`, 桌面入口 `打开内容工厂自动派工.app`.
+- 自动派工器: `scripts/agent_dispatcher.py`, `scripts/start_agent_dispatcher.sh`; 日常不单独放桌面入口, 由工作台统一启动.
 - 单按钮工作台: 桌面入口 `打开内容工厂工作台.app`, 日常只需要点这个; 调试按钮默认从桌面移除, 需要时用 `--with-debug-launchers` 重建.
+- cmux workbench wrapper: `scripts/start_agent_workbench.sh`; 若 cmux 工作区真的丢失, 才用 `--force-open-fallback` 做一次性修复.
 - 派工器验证: `bash scripts/start_agent_dispatcher.sh --dry-run` -> 无 runnable task; `--status` -> LaunchAgent running, 6 个槽位 idle; `/tmp/nrg-agent-dispatcher.log` 只显示当前待命状态.
 - 启动器验证: `bash scripts/start_multi_agents_cmux.sh` 已成功打开 5 个 cmux tab: main/content-dev/media-dev/qa/review.
 
@@ -157,6 +159,25 @@
   - `T-015`: blocked, QA 真烧 timeout.
   - `T-016`: blocked, 依赖 T-015 真正通过.
 - T-013/T-014/T-015/T-016 完成并由 QA 真测通过前, 不能说项目整体完成.
+
+---
+
+## 上一里程碑 (2026-04-29 · D-123 cmux 安全启动)
+
+**版本**: v0.7.6-agent24 — 避免单按钮工作台制造重复 cmux 窗口。
+
+### D-123 修复
+- 新增 `scripts/start_agent_workbench.sh`: 统一启动 monitor/dispatcher/cmux, 并加启动锁防止重复点击并发启动.
+- 日常路径先检查 cmux 是否已有 5 个目标工作区; 如果已有, 只激活并清理重复窗口.
+- cmux CLI socket 不可用时, 默认不再走 `open -a cmux <worktree>` 兜底.
+- 一次性修复入口: `bash scripts/start_agent_workbench.sh --force-open-fallback`.
+- `scripts/install_agent_desktop_launcher.sh`: 桌面按钮改为调用 workbench wrapper.
+- `docs/MULTI_AGENT_WORKFLOW.md`: 记录安全启动规则和修复入口.
+
+### D-123 验证
+- `cmux ping` 当前仍会报 `Broken pipe`, 但 `osascript` 能确认 1 个 cmux 窗口、5 个目标 tabs.
+- `bash -n scripts/start_agent_workbench.sh scripts/install_agent_desktop_launcher.sh`.
+- `bash scripts/start_agent_workbench.sh` -> 只激活已有工作区, 不创建新窗口.
 
 ---
 
