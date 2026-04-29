@@ -4,12 +4,12 @@
 
 ---
 
-## 当前状态 (2026-04-29 · T-006/T-007/T-008 通过)
+## 当前状态 (2026-04-29 · T-012 作品库回归通过)
 
-**版本**: v0.7.6-agent13 — 公众号真实草稿推送 T-006 已二次复核通过; 直接出图 apimart 单图 T-007/T-008 已通过; 作品库 T-009/T-010/T-011 已修待独立 QA。
+**版本**: v0.7.6-agent14 — 作品库 T-009/T-010/T-011 已经 T-012 独立 QA 回归通过; 公众号真实草稿推送 T-006 已通过; 直接出图 apimart 单图 T-007/T-008 已通过。
 
 ### 当前进行
-- 下一步优先分配 T-012 作品库全链路 QA 复跑; T-013 直接出图 download 失败路径待补 fault injection.
+- 仅剩 T-013: 直接出图 apimart download 失败路径待补 fault injection; T-012 通过不代表项目整体通过。
 
 ### QA 证据 · 公众号
 - QA 报告已合入主线: `docs/agent-handoff/QA_WECHAT_20260429.md`
@@ -86,7 +86,7 @@
 - 负向复核: `completion_rate=80` -> 422; `completion_rate=0.8` -> 200.
 - 现场只读快照: `8000` 有 342 条作品; 第 301 条搜索在 `limit=300` 下查不到, `limit=1000` 下能查到; 前 300 条图片里 59 个缺预览 URL.
 
-### 已修待 QA · T-009/T-010/T-011
+### 已完成 · T-009/T-010/T-011/T-012
 - 修复提交: `9b36bd5 fix: repair works library qa issues`
 - T-009: `/api/works` 搜索改为 SQL 过滤后再 `LIMIT`; 新增 `/api/works/{id}` 详情接口; 数据看板/发布矩阵打开作品时按 id 拉取, 不再依赖当前列表.
 - T-010: `留这版 / 删这版` action 返回更新后的 work, 前端立即合并状态; 完播率输入可填 `80`, 前后端都归一化保存为 `0.8`.
@@ -97,10 +97,21 @@
   - `.venv/bin/pytest -q -x` -> exit 0.
   - `node scripts/e2e_works_t009_t011.js` -> exit 0; 截图已读 `/tmp/_ui_shots/t009_t011_works_regression.png`.
   - 临时 API `8121` + curl 已验证: 老作品搜索、详情读取、留/删返回新 work、`completion_rate=80` 保存 `0.8`、缺失图片返回 `asset_status=missing_file`.
+- T-012 QA 报告: `53e77d6 qa: report works t012 regression`
+  - QA 原提交: `f42c46e`
+  - 报告: `docs/agent-handoff/QA2_T012_WORKS_20260429.md`
+- T-012 QA 证据:
+  - `.venv/bin/pytest -q -x` -> exit 0.
+  - 作品库相关 pytest -> 16 passed.
+  - `scripts/e2e_works_t009_t011.js` -> exit 0.
+  - 真实 UI 非 mock 浏览器闭环: 32 个 API 请求, console/pageerror/API requestfailed 全部 0.
+  - curl 复核: 旧作品搜索命中、按 id 打开、留这版写入、`completion_rate=80` 落库为 0.8、缺图状态字段正确.
+  - 截图已读 4 张: 旧作品搜索、留这版+指标、数据看板打开、缺图说明.
+  - 临时测试数据已清: 308 条作品 + 2 条指标, 剩余 0.
+- 结论: T-012 通过, 未发现新的 P0/P1/P2; 作品库 T-009/T-010/T-011 可标记完成.
 
 ### 剩余阻塞
-1. T-012: 作品库修复后的独立 QA 复跑未跑; T-009/T-010/T-011 还不能算 QA 通过.
-2. T-013: 直接出图 apimart download 失败路径未做 fault injection, 仍有假成功/坏记录风险需要单独修测.
+1. T-013: 直接出图 apimart download 失败路径未做 fault injection, 仍有假成功/坏记录风险需要单独修测.
 
 ### 下一步
 - `docs/AGENT_BOARD.md` 已登记:
@@ -109,12 +120,31 @@
   - `T-006`: 已完成, 修后公众号 8 步链路复测.
   - `T-007`: 已完成, 修直接出图结果区不展示 apimart 单图产物.
   - `T-008`: 已完成, 修后直接出图最小真烧复测.
-  - `T-009`: 待 QA, 修作品库看板打开历史作品 + 搜索老作品.
-  - `T-010`: 待 QA, 修作品库留/删 UI 状态 + 完播率输入.
-  - `T-011`: 待 QA, 处理图片占位卡.
-  - `T-012`: 修后作品库全链路回归.
+  - `T-009`: 已完成, 修作品库看板打开历史作品 + 搜索老作品.
+  - `T-010`: 已完成, 修作品库留/删 UI 状态 + 完播率输入.
+  - `T-011`: 已完成, 处理图片占位卡.
+  - `T-012`: 已完成, 修后作品库全链路回归.
   - `T-013`: 补直接出图 download 失败路径 fault injection.
-- T-012/T-013 完成并由 QA 真测通过前, 不能说项目整体完成; T-009/T-010/T-011 需等 T-012 背书后才能说作品库通过.
+- T-013 完成并由 QA 真测通过前, 不能说项目整体完成.
+
+---
+
+## 上一里程碑 (2026-04-29 · D-115 Works T-012 回归通过)
+
+**版本**: v0.7.6-agent14 — 作品库 T-009/T-010/T-011 修复经独立 QA 回归通过。
+
+### D-115 验证
+- QA 报告合入: `docs/agent-handoff/QA2_T012_WORKS_20260429.md`.
+- `.venv/bin/pytest -q -x` -> exit 0.
+- 作品库相关 pytest -> 16 passed.
+- `scripts/e2e_works_t009_t011.js` -> exit 0.
+- 真实 UI 非 mock 浏览器闭环: 32 个 API 请求, console/pageerror/API requestfailed 均 0.
+- curl 复核旧作品搜索、按 id 打开、留这版写入、`completion_rate=80` 落库 0.8、缺图状态字段.
+- 临时测试数据已清理: 308 条作品 + 2 条指标, 剩余 0.
+
+### 结论
+- T-012 通过, 作品库 T-009/T-010/T-011 可关闭.
+- 项目整体仍剩 T-013, 不能说整体通过.
 
 ---
 

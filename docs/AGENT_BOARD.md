@@ -8,10 +8,10 @@
 
 | 角色 | 状态 | 工作区 | 当前任务 |
 |---|---|---|---|
-| 总控 Agent | 进行中 | `~/Desktop/neironggongchang` | T-006/T-007/T-008 已合入; 协调 T-012/T-013 |
+| 总控 Agent | 进行中 | `~/Desktop/neironggongchang` | T-006/T-007/T-008/T-012 已合入; 协调 T-013 |
 | 内容开发 Agent | 已完成 | `~/Desktop/nrg-worktrees/content-dev` | T-004 / T-005 已合入主线 |
 | 媒体开发 Agent | 已完成 | `~/Desktop/nrg-worktrees/media-dev` | T-007 已合入主线; T-013 待分配 |
-| QA 测试 Agent | 待启动 | `~/Desktop/nrg-worktrees/qa`, `~/Desktop/nrg-worktrees/qa-2` | 待领 T-012 |
+| QA 测试 Agent | 已完成 | `~/Desktop/nrg-worktrees/qa`, `~/Desktop/nrg-worktrees/qa-2` | T-006/T-008/T-012 报告已合入 |
 | 审查 Agent | 待启动 | `~/Desktop/nrg-worktrees/review` | 待分配 |
 
 ---
@@ -25,10 +25,10 @@
 | T-006 | T-004/T-005 修后公众号 8 步链路复测 | QA 测试 Agent | 已完成 | 不改功能代码; 只提交报告/必要测试脚本需总控确认 | QA 二次真实草稿通过: 推送前 `img_count_sanitized=4`, 远端草稿 `img_count=4`, console/pageerror=0 |
 | T-007 | 修直接出图 apimart 单图成功后结果区显示 `0/0 成功`、不展示图片的问题 | 媒体开发 Agent | 已完成 | `backend/services/apimart_service.py`, `web/factory-image-gen.jsx`, 对应 tests/e2e; 避免改 `backend/api.py` 除非总控确认 | 主线已验证: apimart 单图 task.result 补齐 `images[]`; 结果页展示 1 张图; 作品库仍正常入库 |
 | T-008 | T-007 修后直接出图最小真烧复测 | QA 测试 Agent | 已完成 | 不改功能代码; 只提交报告/必要测试脚本需总控确认 | QA 真烧通过: 1 张最低规格, console/pageerror=0, 结果区 `1/1 成功`, 作品库同图可见 |
-| T-009 | 修作品库数据看板 TOP「看」打不开历史作品 + 搜索只搜前 300 条的问题 | 总控/平台开发 | 待 QA | `web/factory-works.jsx`, `backend/api.py`, `shortvideo/works.py`/tests; `backend/api.py` 单线改 | 主线自验已过: 看板按 id 打开历史作品; 搜索在 SQL 过滤后再 limit; 有 API/前端回归 |
-| T-010 | 修作品库「留这版 / 删这版」写入成功但 UI 不变 + 完播率百分比输入误导 | 总控/平台开发 | 待 QA | `web/factory-works.jsx`, 必要时 `backend/api.py`, tests | 主线自验已过: 点击后按钮立即显示 `✓`; 完播率填 80 存 0.8; 回归覆盖 |
-| T-011 | 处理作品库图片占位卡: 无预览/无下载的图片作品要可解释或可恢复 | 总控/平台开发 | 待 QA | `backend/api.py`, `web/factory-works.jsx`, 可能涉及数据修复脚本; 先读 QA 报告现场数据 | 主线自验已过: 文件缺失/仅记录图片显示明确状态; 可预览/下载能力由 API 返回 |
-| T-012 | T-009/T-010/T-011 修后作品库全链路回归 | QA 测试 Agent | 待分配 | 不改功能代码; 只提交报告/必要测试脚本需总控确认 | 复跑 QA_WORKS 覆盖的点击/截图/curl/pytest; 5 个问题均有 pass 证据 |
+| T-009 | 修作品库数据看板 TOP「看」打不开历史作品 + 搜索只搜前 300 条的问题 | 总控/平台开发 | 已完成 | `web/factory-works.jsx`, `backend/api.py`, `shortvideo/works.py`/tests; `backend/api.py` 单线改 | T-012 已验证: 看板按 id 打开历史作品; 搜索旧作品命中; API/前端回归通过 |
+| T-010 | 修作品库「留这版 / 删这版」写入成功但 UI 不变 + 完播率百分比输入误导 | 总控/平台开发 | 已完成 | `web/factory-works.jsx`, 必要时 `backend/api.py`, tests | T-012 已验证: 点击后按钮显示 `✓`; 完播率填 80 落库 0.8; 回归覆盖 |
+| T-011 | 处理作品库图片占位卡: 无预览/无下载的图片作品要可解释或可恢复 | 总控/平台开发 | 已完成 | `backend/api.py`, `web/factory-works.jsx`, 可能涉及数据修复脚本; 先读 QA 报告现场数据 | T-012 已验证: 文件缺失图片显示明确状态; API 状态字段正确 |
+| T-012 | T-009/T-010/T-011 修后作品库全链路回归 | QA 测试 Agent | 已完成 | 不改功能代码; 只提交报告/必要测试脚本需总控确认 | QA 通过: pytest/e2e/真实 UI/curl/截图均通过, 未发现新 P0/P1/P2 |
 | T-013 | 补直接出图 apimart 下载失败路径保护和 fault injection 回归 | 媒体开发 Agent | 待分配 | `backend/services/apimart_service.py`, `tests/test_apimart_service.py`, 必要时前端结果错误展示 | 模拟远端 done 但下载失败时, task 不假成功、不写坏作品记录、用户看到可理解失败/重试信息; 回归覆盖 |
 
 ---
@@ -70,6 +70,15 @@
   - `node scripts/e2e_works_t009_t011.js` -> exit 0; 截图已读 `/tmp/_ui_shots/t009_t011_works_regression.png`.
   - 临时 API `8121` + curl 已验证: 老作品搜索、按 id 详情、留/删 action 返回新 work、`completion_rate=80` 存 `0.8`、缺失图片返回 `asset_status=missing_file`.
 - 结论: T-009/T-010/T-011 已修并自验通过, 等 T-012 独立 QA 复跑后才能说作品库通过.
+- T-012 QA 报告: `53e77d6`
+- T-012 QA 原提交: `f42c46e`
+- T-012 验证:
+  - `.venv/bin/pytest -q -x` -> exit 0.
+  - 作品库相关 pytest -> 16 passed.
+  - `scripts/e2e_works_t009_t011.js` -> exit 0.
+  - 真实 UI 非 mock 浏览器闭环: 32 个 API 请求, console/pageerror/API requestfailed 均 0.
+  - curl 复核旧作品搜索、按 id 打开、留这版写入、`completion_rate=80` 落库 0.8、缺图状态字段.
+- 结论: T-009/T-010/T-011/T-012 通过; 项目整体仍需 T-013.
 
 ---
 
