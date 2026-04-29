@@ -28,18 +28,75 @@ from shortvideo.ai import get_ai_client
 SKILL_SLUG = "touliu-agent"
 
 
+def _json_search_text(text: str) -> str:
+    raw = (text or "").strip()
+    fenced = re.search(r"```(?:json)?\s*([\s\S]*?)```", raw, re.IGNORECASE)
+    if fenced:
+        return fenced.group(1).strip()
+    open_fence = re.search(r"```(?:json)?\s*([\s\S]*)$", raw, re.IGNORECASE)
+    if open_fence:
+        return open_fence.group(1).strip()
+    return raw
+
+
+def _balanced_json_slice(text: str, wrap: str) -> str | None:
+    open_ch, close_ch = ("[", "]") if wrap == "array" else ("{", "}")
+    start = text.find(open_ch)
+    if start < 0:
+        return None
+
+    depth = 0
+    in_string = False
+    escaped = False
+    for idx in range(start, len(text)):
+        ch = text[idx]
+        if in_string:
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == '"':
+                in_string = False
+            continue
+
+        if ch == '"':
+            in_string = True
+        elif ch == open_ch:
+            depth += 1
+        elif ch == close_ch:
+            depth -= 1
+            if depth == 0:
+                return text[start:idx + 1]
+    return None
+
+
 def _extract_json(text: str, wrap: str = "array") -> Any:
-    pat = r"\[[\s\S]*\]" if wrap == "array" else r"\{[\s\S]*\}"
-    m = re.search(pat, text)
-    if not m:
+    candidate = _balanced_json_slice(_json_search_text(text), wrap)
+    if not candidate:
         return None
     try:
-        return json.loads(m.group(0))
+        return json.loads(candidate)
     except Exception:
         return None
 
 
-def _load_prompt_context() -> str:
+def _json_failure_hint(text: str, wrap: str = "object") -> str:
+    raw = (text or "").strip()
+    if not raw:
+        return "LLM 返回空文本"
+
+    search_text = _json_search_text(raw)
+    open_ch = "[" if wrap == "array" else "{"
+    if search_text.find(open_ch) >= 0:
+        if _balanced_json_slice(search_text, wrap) is None:
+            return "LLM JSON 疑似被截断或未闭合"
+        return "LLM JSON 格式错误"
+    if "```" in raw:
+        return "LLM 返回代码块但里面没有 JSON"
+    return "LLM 输出里没有找到 JSON"
+
+
+def _load_prompt_context(*, compact: bool = False) -> str:
     """拼 skill 的核心指令 + 关键 references。
 
     注入优先级(按重要性):
@@ -50,6 +107,24 @@ def _load_prompt_context() -> str:
     """
     skill = skill_loader.load_skill(SKILL_SLUG)
     refs = skill["references"]
+    if compact:
+        parts = [
+            "===== skill 方法论(SKILL.md 摘要) =====",
+            skill["skill_md"][:3600],
+            "",
+            "===== 风格红线(style_rules 摘要) =====",
+            refs.get("style_rules", "")[:1400],
+            "",
+            "===== 跑量规律(winning_patterns 摘要) =====",
+            refs.get("winning_patterns", "")[:1200],
+            "",
+            "===== 行业模板(industry_templates 摘要) =====",
+            refs.get("industry_templates", "")[:1200],
+            "",
+            "===== 高质量样本锚点(golden_samples 摘要) =====",
+            refs.get("golden_samples", "")[:800],
+        ]
+        return "\n".join(p for p in parts if p)
     parts = [
         "===== skill 方法论(SKILL.md) =====",
         skill["skill_md"],
@@ -67,6 +142,25 @@ def _load_prompt_context() -> str:
         refs.get("golden_samples", "")[:4000],
     ]
     return "\n".join(p for p in parts if p)
+
+
+def _max_tokens_for_batch(n: int) -> int:
+    """按实际条数给输出预算。
+
+    QA 发现 D-014 默认 1 条也用 12000 completion 预算 + 完整长上下文, Opus 真实超时。
+    1/2 条是前端快出主路径, 应该用小预算; 5/10 条仍保留大批量预算。
+    """
+    n = max(1, min(int(n or 1), 15))
+    if n == 1:
+        return 2200
+    if n == 2:
+        return 3400
+    return min(12000, max(5200, 1500 * n + 1200))
+
+
+def _route_key_for_batch(n: int) -> str:
+    n = max(1, min(int(n or 1), 15))
+    return "touliu.generate.quick" if n <= 2 else "touliu.generate"
 
 
 # ─── 批量生成 ────────────────────────────────────────────
@@ -106,10 +200,18 @@ def generate_batch(
     channel: str = "直播间",
 ) -> dict[str, Any]:
     """一次生成 n 条投流文案 + 风格对齐摘要 + lint 结果。"""
-    context = _load_prompt_context()
     # D-068c: 之前 max(3, ...) 让前端 n=1 实际生成 3 条 → 用户被骗。改 max(1, ...)
-    alloc = _alloc_for(max(1, min(n, 15)))
+    n = max(1, min(int(n or 1), 15))
+    quick_mode = n <= 2
+    context = _load_prompt_context(compact=quick_mode)
+    alloc = _alloc_for(n)
     alloc_desc = " + ".join(f"{v}条{k}" for k, v in alloc.items() if v > 0)
+    length_rule = (
+        "1/2 条快出: 正文 220-360 字, 说服链完整但不展开长篇; "
+        "风格摘要每项一句话, correction_patterns 只给 2 个短句, 不写长分析."
+        if quick_mode
+        else "正文长度: 痛点型/对比型 420-650 字 · 步骤型/对话型 320-520 字 · 创新型 350-560 字"
+    )
 
     system = f"""你在执行 touliu-agent skill · Step 2-3 批量生成。
 严格按下面方法论和 references 写,不能放飞。
@@ -118,12 +220,14 @@ def generate_batch(
 
 ===== 额外硬规矩 =====
 - 一次输出 {n} 条,结构分配:{alloc_desc}
-- 正文长度: 痛点型/对比型 420-650 字 · 步骤型/对话型 320-520 字 · 创新型 350-560 字
+- {length_rule}
 - 目标动作: {target_action} → CTA 必须回扣
 - 人群: {industry}
 - 适用渠道: {channel}
 - 不做飞书同步,不做 refresh_runtime
-- 先输出《风格对齐摘要》,然后输出批量文案
+- 输出只能是 JSON 对象本身,第一字符必须是 {{,最后字符必须是 }}
+- 禁止写“已走技能”、Markdown 代码块、```json、前言、解释、总结
+- 如果内容放不下,优先缩短正文,也必须输出完整闭合 JSON
 """
 
     prompt = f"""本批采集:
@@ -137,7 +241,7 @@ def generate_batch(
 每条都要过 Step 3 编号 7 的质量检查清单、编号 8 的编导视角 6 维终检(1-5 分,总 ≥ 24 且单项 ≥ 4)、
 以及编号 9 的坏稿特征(任一命中直接重写)。
 
-严格 JSON 对象,不加前言:
+严格 JSON 对象,不加前言。直接从 `{{` 开始,不要 ```json,不要“已走技能”:
 {{
   "style_summary": {{
     "opening_mode": "本批使用的开场场景/冲突模式",
@@ -168,13 +272,15 @@ def generate_batch(
   ]
 }}"""
 
-    ai = get_ai_client(route_key="touliu.generate")
-    r = ai.chat(prompt, system=system, deep=False, temperature=0.85, max_tokens=12000)
+    route_key = _route_key_for_batch(n)
+    ai = get_ai_client(route_key=route_key)
+    r = ai.chat(prompt, system=system, deep=False, temperature=0.85, max_tokens=_max_tokens_for_batch(n))
     # D-094: 不让 JSON 解析失败 fallback 成 batch=[] 假成功 (前端看 0 条投流文案以为正常).
     obj = _extract_json(r.text, "object")
     if obj is None:
         raise RuntimeError(
-            f"投流文案 LLM 输出非 JSON (tokens={r.total_tokens}). 输出头: {(r.text or '')[:200]!r}"
+            f"投流文案 LLM 输出非 JSON: {_json_failure_hint(r.text, 'object')} "
+            f"(tokens={r.total_tokens}). 输出头: {(r.text or '')[:200]!r}"
         )
     raw_batch = obj.get("batch")
     if not isinstance(raw_batch, list) or not raw_batch:
@@ -210,6 +316,7 @@ def generate_batch(
             "pitch": pitch, "industry": industry,
             "target_action": target_action, "n": n, "channel": channel,
         },
+        "route_key": route_key,
         "tokens": r.total_tokens,
     }
 
@@ -219,7 +326,7 @@ def generate_batch(
 def lint_batch(batch: list[dict[str, Any]], target_action: str = "live") -> dict[str, Any]:
     """调 skill 的 lint_copy_batch.py 做本地质检。
 
-    target_action: live|reserve|private|comment
+    target_action: live|lead|dm|comment
     """
     scripts_dir = skill_loader.load_skill(SKILL_SLUG)["scripts_dir"]
     lint_py = scripts_dir / "lint_copy_batch.py"
@@ -271,9 +378,12 @@ def generate_batch_async(
     pitch: str, industry: str, target_action: str,
     n: int = 5, channel: str = "douyin", run_lint: bool = True,
 ) -> str:
-    """异步触发 generate_batch + 可选 lint, 立即返 task_id. 真跑 2-3 分钟 (Opus 6K system)."""
+    """异步触发 generate_batch + 可选 lint, 立即返 task_id.
+
+    1/2 条走紧凑上下文, 目标是 30-60s; 5/10 条仍按大批量慢任务处理。
+    """
     n = max(1, min(int(n), 15))  # D-068c: 同 generate_batch, 支持 1/2 条快出
-    target_map = {"点头像进直播间": "live", "留资": "reserve", "加私域": "private", "到店": "visit"}
+    target_map = {"点头像进直播间": "live", "留资": "lead", "加私域": "dm", "到店": "lead"}
     ta = target_map.get(target_action, "live")
 
     def _run():
@@ -292,7 +402,7 @@ def generate_batch_async(
         page_id="ad",
         step="generate",
         payload={"pitch_preview": pitch[:200], "industry": industry, "n": n, "channel": channel},
-        estimated_seconds=150,
+        estimated_seconds=60 if n <= 2 else 150,
         progress_text=f"AI 写 {n} 条投流文案 (按结构分配 + 6 维终检)...",
         sync_fn=_run,
     )

@@ -175,7 +175,8 @@ DEFAULT_ENGINE_ROUTES = {
     "baokuan.analyze":       "deepseek",  # 爆款基因 3 句话, 短 JSON
     "baokuan.rewrite":       "opus",      # 多版改写 (V1-V4), 质量优先
     # touliu-agent skill (D-014) 替换旧 ad.generate
-    "touliu.generate":       "opus",      # 10 条 × 400-650 字,一次性大批量,opus 稳
+    "touliu.generate":       "opus",      # 3+ 条批量 × 400-650 字,质量优先
+    "touliu.generate.quick": "deepseek",  # 1/2 条快出,短 JSON,避开 Opus/OpenClaw 长超时
     # 短视频 / 改写
     "rewrite":            "opus",       # 短视频口播文案,风格决定
     # 批量生成类

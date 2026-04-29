@@ -29,6 +29,7 @@ def test_resolve_engine_uses_default_routes(monkeypatch):
     assert _resolve_engine("wechat.titles") == "deepseek"
     assert _resolve_engine("wechat.write") == "opus"
     assert _resolve_engine("touliu.generate") == "opus"
+    assert _resolve_engine("touliu.generate.quick") == "deepseek"
 
 
 def test_resolve_engine_user_override_wins(monkeypatch):
