@@ -8,10 +8,10 @@
 
 | 角色 | 状态 | 工作区 | 当前任务 |
 |---|---|---|---|
-| 总控 Agent | 自动派工已接入 | `~/Desktop/neironggongchang` | T-013 已 cherry-pick 到 main; 已派 T-017/T-018/T-019 |
-| 内容开发 Agent | 进行中 | `~/Desktop/nrg-worktrees/content-dev` | T-017 已领取: 返修投流 `n=1` 真实页面链路 724s timeout |
+| 总控 Agent | 自动派工已接入 | `~/Desktop/neironggongchang` | T-019 UI 阻塞已修; T-020 因 DeepSeek 认证失败 blocked; 已派 T-021/T-022 |
+| 内容开发 Agent | 待领取 | `~/Desktop/nrg-worktrees/content-dev` | T-021 queued: 返修投流快出 DeepSeek 认证失败和超时兜底 |
 | 媒体开发 Agent | 已提交待 QA | `~/Desktop/nrg-worktrees/media-dev` | T-013 已由总控 cherry-pick; `codex/media-dev` 仍落后主线, 不可整分支合并 |
-| QA 测试 Agent | 进行中 | `~/Desktop/nrg-worktrees/qa`, `~/Desktop/nrg-worktrees/qa-1`, `~/Desktop/nrg-worktrees/qa-2` | T-019 已领取; T-018 queued 等 T-017 done; T-015/T-016 blocked |
+| QA 测试 Agent | 空闲/待依赖 | `~/Desktop/nrg-worktrees/qa`, `~/Desktop/nrg-worktrees/qa-1`, `~/Desktop/nrg-worktrees/qa-2` | T-022 queued 等 T-021; T-018/T-020/T-015/T-016 blocked |
 | 审查 Agent | 空闲 | `~/Desktop/nrg-worktrees/review` | T-013 审查已完成; 等新任务 |
 
 ---
@@ -33,9 +33,12 @@
 | T-014 | 修投流文案 `n=1` 最小真链路 10 分钟失败 + LLM 非 JSON | 内容开发 Agent | 需返修 | `backend/services/touliu_pipeline.py`, 投流 endpoint 估时返回处, `tests/test_pipelines.py`/相关 tests; 暂不合入失败的 `2670a5a` | T-015 真实 QA 仍 timeout, 需继续定位 OpenClaw/Claude timeout 与 task 失败态 |
 | T-015 | T-014 修后投流 `n=1` 最小真烧复测 | QA 测试 Agent | blocked | 不改功能代码; 只提交报告/必要测试脚本需总控确认 | QA 不通过: 真烧 task `5984e0bcdb754ad994d4b65415bd901e` 724s timeout; console/pageerror=0; pytest touliu 17 passed |
 | T-016 | 投流通过后复测录音改写真实 LLM + 热点改写 4 版真实链路 | QA 测试 Agent | blocked(等 T-015 通过) | 不改功能代码; 只提交报告/必要测试脚本需总控确认 | 暂停执行; 投流未通过前不继续烧录音/热点 credits |
-| T-017 | 返修投流 `n=1` 页面真实链路 724s timeout | 内容开发 Agent | 进行中 | `backend/services/touliu_pipeline.py`, `backend/api.py`, `tests/test_pipelines.py` 或投流直接相关文件; 不改 `docs/PROGRESS.md` | 定位 T-014 curl 53s ok 但 T-015 页面 724s timeout; 投流相关 pytest 通过; 至少一次隔离端口真实 curl `n=1` ok; 报告和 commit |
-| T-018 | T-017 修后投流 `n=1` 页面最小真烧复测 | QA 测试 Agent | queued(等 T-017 done) | 不改功能代码; 只提交报告/必要测试脚本需总控确认 | 只提交 1 次; 页面展示 1 条投流文案; task ok; console/pageerror=0; 截图和 curl/usage 证据齐全 |
-| T-019 | T-013 主线合入后 apimart 下载失败路径复测 | QA 测试 Agent | 进行中 | 不改功能代码; mock/fault injection; 不真烧 credits | pytest 通过; 下载失败 task failed; 不写 ready 坏作品; 页面失败态可理解; console/pageerror=0 |
+| T-017 | 返修投流 `n=1` 页面真实链路 724s timeout | 内容开发 Agent | 已完成(开发自验) | `backend/services/touliu_pipeline.py`, `backend/api.py`, `tests/test_pipelines.py` 或投流直接相关文件; 不改 `docs/PROGRESS.md` | 提交 `3e12f20`, 改走 `touliu.generate.quick/deepseek`; 自测 curl 11 秒 ok, 但 T-020 证明当前 DeepSeek 认证失败, 需 T-021 继续返修 |
+| T-018 | T-017 修后投流 `n=1` 页面最小真烧复测 | QA 测试 Agent | blocked | 不改功能代码; 只提交报告/必要测试脚本需总控确认 | 已停止: QA-1 worktree 未包含 T-017 commit, 避免测错 commit |
+| T-019 | T-013 主线合入后 apimart 下载失败路径复测 | QA/总控 | 已完成 | `web/factory-works.jsx`, QA fault injection | QA 后端保护通过但 UI 解释不达标; 总控已修 `failed-task` 展示并 Playwright 复测通过 |
+| T-020 | T-017 修后投流 `n=1` 正确 commit 页面真烧复测 | 总控 | blocked | `content-dev@3e12f20`, 页面真烧一次 | 命中 `touliu.generate.quick/deepseek`, 但 DeepSeek 返回 Authentication Fails; 未重复提交 |
+| T-021 | 返修投流快出 DeepSeek 认证失败和超时兜底 | 内容开发 Agent | queued | `shortvideo/ai.py`, `shortvideo/claude_opus.py`, `shortvideo/deepseek.py`, `backend/services/touliu_pipeline.py`, 相关 tests | 不依赖不可用 DeepSeek; 处理 Opus/OpenClaw 叠加重试或可靠 fallback; 真实 curl `n=1` ok |
+| T-022 | T-021 修后投流 `n=1` 正确路由页面真烧复测 | QA 测试 Agent | queued(等 T-021 done) | 不改功能代码; 只提交报告/必要测试脚本需总控确认 | 只提交 1 次; task ok; 页面 1 条文案; route_key/engine 符合 T-021; console/pageerror=0 |
 
 ---
 
@@ -44,7 +47,10 @@
 - 总控本轮交接: `docs/agent-handoff/CONTROLLER_T013_T017_20260429_2011.md`.
 - T-013 已安全 cherry-pick 到 main: `6e05558` + `ff221fc`; 未整支 merge `codex/media-dev`.
 - T-013 主线验证: `.venv/bin/pytest -q tests/test_apimart_service.py tests/test_remote_jobs.py` -> 21 passed; `.venv/bin/pytest -q -x` -> passed; `git diff --check HEAD~2..HEAD` -> clean.
-- 队列状态: T-017 `claimed` by `NRG 内容开发`; T-018 `queued` depends T-017; T-019 `claimed` by `NRG QA 自动`; T-015/T-016 继续 blocked.
+- 队列状态: T-017 done; T-018/T-020/T-015/T-016 blocked; T-021 queued; T-022 queued depends T-021.
+- T-019 QA 报告: `docs/agent-handoff/QA_T019_APIMART_DOWNLOAD_FAILURE_20260429.md`; 后端保护通过, UI 解释不达标.
+- T-019 总控修复: `web/factory-works.jsx` 把 `failed-task` 显示为 `⚠️ 生成失败`, 图片失败详情说明保存到本机失败; Playwright 复测 `/tmp/_ui_shots/t019_works_failed_placeholder_fixed.png`, console/pageerror/requestfailed 均 0.
+- T-020 总控真烧: task `bfdfb2f4fc484c249bf22a62e14e5b32`, `route_key=touliu.generate.quick`, AI usage `engine=deepseek`, `ok=0`, `duration_ms=202`, `error=Authentication Fails (governor)`, 页面失败态截图 `/tmp/_ui_shots/t020_touliu_failed_auth.png`; 已派 T-021/T-022.
 - 总控启动巡检: `docs/agent-handoff/CONTROLLER_STARTUP_20260429_1852.md`.
 - 队列状态: T-015 `blocked` by `NRG QA 测试`; T-016 `blocked` by `NRG 总控`, 等 T-015 真正通过后再恢复.
 - 收件箱: `python3 scripts/agent_inbox.py --hours 24` -> 53 reports; 未发现新的 T-015/T-016 通过报告.

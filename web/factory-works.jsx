@@ -20,6 +20,7 @@ const SOURCE_LABELS = {
   "planner": "🗓️ 内容策划",
   "compliance": "🛡️ 违规审查",
   "moments": "🌟 朋友圈",
+  "failed-task": "⚠️ 生成失败",
 };
 
 function sourceLabel(k) { return SOURCE_LABELS[k] || k || "未知来源"; }
@@ -564,8 +565,13 @@ function ImageInfoPanel({ work, onDel }) {
   try { meta = work.metadata ? JSON.parse(work.metadata) : {}; } catch (_) {}
   const sizeKB = meta.size_bytes ? Math.round(meta.size_bytes / 1024) : null;
   const sizeText = sizeKB ? (sizeKB > 1024 ? `${(sizeKB / 1024).toFixed(1)} MB` : `${sizeKB} KB`) : "--";
-  const noPreviewTitle = work.asset_status === "missing_file" ? "原图文件不在本机" : "这条作品只有记录";
-  const noPreviewHint = work.asset_status === "missing_file"
+  const isFailedWork = work.source_skill === "failed-task" || work.status === "failed";
+  const noPreviewTitle = isFailedWork
+    ? "这次没生成出来"
+    : work.asset_status === "missing_file" ? "原图文件不在本机" : "这条作品只有记录";
+  const noPreviewHint = isFailedWork
+    ? "图片已经生成, 但保存到本机时失败了。本次没有可预览图片, 可以回到原页面再试一次。"
+    : work.asset_status === "missing_file"
     ? "作品记录还在, 但原图文件可能被移动或清理了, 暂时不能预览和下载。"
     : "这条图片记录没有本地原图, 可能只保存了外部图床地址。";
   // ESC 关 lightbox
