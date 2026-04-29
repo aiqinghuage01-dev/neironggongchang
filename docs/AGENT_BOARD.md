@@ -8,10 +8,10 @@
 
 | 角色 | 状态 | 工作区 | 当前任务 |
 |---|---|---|---|
-| 总控 Agent | 自动派工已接入 | `~/Desktop/neironggongchang` | T-063/T-064 已返修; 准备派 T-065 |
+| 总控 Agent | 自动派工已接入 | `~/Desktop/neironggongchang` | T-065 已入队; 等 QA 独立复测 |
 | 内容开发 Agent | 空闲 | `~/Desktop/nrg-worktrees/content-dev` | T-021/T-022 已合入 main; 等新内容任务 |
 | 媒体开发 Agent | 空闲 | `~/Desktop/nrg-worktrees/media-dev` | T-047 已完成并合入 main; 等新媒体任务 |
-| QA 测试 Agent | 待领取 | `~/Desktop/nrg-worktrees/qa`, `~/Desktop/nrg-worktrees/qa-1`, `~/Desktop/nrg-worktrees/qa-2` | T-065 待派: T-063/T-064 返修后独立复测 |
+| QA 测试 Agent | 待领取 | `~/Desktop/nrg-worktrees/qa`, `~/Desktop/nrg-worktrees/qa-1`, `~/Desktop/nrg-worktrees/qa-2` | T-065 T-063/T-064 返修后独立复测 |
 | 审查 Agent | 待领取 | `~/Desktop/nrg-worktrees/review` | T-064 已完成, 等后续返修审查任务 |
 
 ---
@@ -70,7 +70,7 @@
 | T-062 | 全站可见工程词二轮清理 | 总控 Agent | 已完成 | `web/factory-home.jsx`, `web/factory-write.jsx` | 21 个路由页面工程词/本机路径/接口词扫描命中 0, console/pageerror/requestfailed/http error=0 |
 | T-063 | T-062 全站文案清理独立只读复测 | QA 测试 Agent / 总控返修 | blocked -> 已返修 | 只读 QA; 禁止停启端口; 不烧 credits | QA 找到知识库 `persona-prompt` 外露; 总控已修知识库展示脱敏与全站方法徽章; 等 T-065 独立复测 |
 | T-064 | D-126/T-062 只读审查 | 审查 Agent / 总控返修 | 已完成 -> 已返修 | 只读审查; 不改代码 | Review 无 P0; P1 即梦失败任务卡 `id/watcher` 外露已修; P2 命名/默认探活测试已补 |
-| T-065 | T-063/T-064 返修后全站只读复测 | QA 测试 Agent | 待派 | 只读 QA; 禁止停启 8000/8001; 不调用 `/api/health` 当门禁; 不烧 credits | 按 T-063 21 页扫描口径复测; 额外用假数据覆盖即梦失败任务卡, 确认不露 `id/submit_id/watcher/status=` |
+| T-065 | T-063/T-064 返修后全站只读复测 | QA 测试 Agent | queued | 只读 QA; 禁止停启 8000/8001; 不调用 `/api/health` 当门禁; 不烧 credits | 按 T-063 21 页扫描口径复测; 额外用假数据覆盖即梦失败任务卡, 确认不露 `id/submit_id/watcher/status=` |
 
 ---
 
