@@ -110,7 +110,10 @@ sync_to_main_if_clean() {
     echo "Skip sync, worktree has local changes: ${dir}" >&2
     return 0
   fi
-  git -C "$dir" merge --ff-only main >/dev/null
+  if ! git -C "$dir" merge --ff-only main >/dev/null 2>&1; then
+    echo "Skip sync, worktree cannot fast-forward from main: ${dir}" >&2
+    return 0
+  fi
 }
 
 write_role_files() {

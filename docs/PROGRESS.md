@@ -4,9 +4,9 @@
 
 ---
 
-## 当前状态 (2026-04-29 · 自动任务队列已启用)
+## 当前状态 (2026-04-29 · Agent 启动器恢复)
 
-**版本**: v0.7.6-agent18 — 多 Agent 协作新增共享任务队列; 总控把任务写入 `~/Desktop/nrg-agent-queue/`, QA/开发/Review 启动后自己领取, 老板不再做人肉传话筒。T-013/T-014 均有开发自验证据, 但还没有独立 QA 通过; T-015/T-016 仍是最终收口阻塞。
+**版本**: v0.7.6-agent19 — 修复 5-Agent 桌面启动器因 worktree 无法 fast-forward 中途退出的问题; 多 Agent 共享任务队列继续可用。T-013/T-014 均有开发自验证据, 但还没有独立 QA 通过; T-015/T-016 仍是最终收口阻塞。
 
 ### 当前进行
 - T-014: 内容开发提交 `5d4fc59`, 隔离端口真实 curl `n=1` 53 秒 `ok`; 只能算开发自验通过, 等 T-015 独立 QA 页面真烧.
@@ -15,6 +15,8 @@
 - T-013: 媒体开发提交 `99f1fb3`, fault injection 自验通过; `codex/media-dev` 落后主线, 不可整分支合并, 只能同步主线后再合或 cherry-pick 单提交.
 - 多 Agent 协作流程已调整: Agent 自己写 `docs/agent-handoff/` 报告并 commit, 总控用收件箱脚本主动扫描, 老板不再做人肉复制粘贴中转。
 - 自动任务队列已启用: `python3 ~/Desktop/neironggongchang/scripts/agent_queue.py list` 可看队列; `claim` / `done` / `block --owner-decision` 分别用于领任务、完成、需要老板选择时阻塞.
+- 5-Agent 启动器已恢复: worktree 有本地改动或不能 fast-forward 时只跳过同步, 不再中断整个启动流程.
+- Agent 监控器已恢复: LaunchAgent 优先使用非系统 Python, 避免 `/usr/bin/python3` 读取 Desktop 脚本被 macOS 拦截.
 - 额外 QA cmux 脚本已改为 socket 不可用时只准备 worktree, 不再强行 fallback 打开多个空白窗口。
 
 ### 总控审查证据
@@ -25,6 +27,7 @@
 - 总控审查报告: `docs/agent-handoff/CONTROLLER_AUDIT_20260429.md`.
 - 合并风险: `git diff main..codex/media-dev` 显示该分支会删除 `scripts/agent_inbox.py`, `scripts/start_agent_monitor.sh` 和多份主线报告/角色文档; 不允许整分支 merge.
 - 任务队列: `~/Desktop/nrg-agent-queue/tasks.json` 已有 T-015 / T-016.
+- 启动器验证: `bash scripts/start_multi_agents_cmux.sh` 已成功打开 5 个 cmux tab: main/content-dev/media-dev/qa/review.
 
 ### QA 证据 · 公众号
 - QA 报告已合入主线: `docs/agent-handoff/QA_WECHAT_20260429.md`
@@ -147,6 +150,24 @@
   - `T-015`: 已进入共享任务队列, QA Agent 自动领取.
   - `T-016`: 已进入共享任务队列, 依赖 T-015 done.
 - T-013/T-014/T-015/T-016 完成并由 QA 真测通过前, 不能说项目整体完成.
+
+---
+
+## 上一里程碑 (2026-04-29 · D-119 Agent 启动器恢复)
+
+**版本**: v0.7.6-agent19 — 修复桌面 5-Agent 启动器双击后只打开空 cmux 首页的问题。
+
+### D-119 修复
+- `scripts/start_multi_agents_cmux.sh`: worktree clean 但不能 fast-forward 主线时, 只打印 `Skip sync` 并继续打开 workspace, 不再 `fatal` 中断.
+- `scripts/start_extra_qa_cmux.sh`: 同步逻辑同样改为不能 fast-forward 时跳过.
+- `scripts/start_agent_monitor.sh`: LaunchAgent 优先使用 `/Library/Frameworks/.../python3` 等非系统 Python, 避免 `/usr/bin/python3` 被 macOS 权限拦截读取 Desktop 脚本.
+- 重新安装桌面按钮: `打开内容工厂5个Agent.app` / `打开内容工厂Agent监控.app`.
+
+### D-119 验证
+- `bash -n scripts/start_multi_agents_cmux.sh scripts/start_extra_qa_cmux.sh scripts/start_agent_monitor.sh scripts/install_agent_desktop_launcher.sh`.
+- `python3 -m py_compile scripts/agent_queue.py scripts/agent_inbox.py`.
+- `bash scripts/start_agent_monitor.sh --status` -> LaunchAgent `state = running`, 使用非系统 Python.
+- `bash scripts/start_multi_agents_cmux.sh` -> 成功打开 5 个 cmux tab: main/content-dev/media-dev/qa/review.
 
 ---
 

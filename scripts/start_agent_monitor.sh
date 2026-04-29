@@ -6,7 +6,21 @@ repo_root="$(git rev-parse --show-toplevel)"
 plist="${HOME}/Library/LaunchAgents/${label}.plist"
 log_file="/tmp/nrg-agent-monitor.log"
 uid="$(id -u)"
-python_bin="$(command -v python3)"
+python_bin=""
+for candidate in \
+  "/Library/Frameworks/Python.framework/Versions/Current/bin/python3" \
+  "/Library/Frameworks/Python.framework/Versions/3.14/bin/python3" \
+  "/opt/homebrew/bin/python3" \
+  "$(command -v python3)"
+do
+  if [[ -n "$candidate" && -x "$candidate" && "$candidate" != "/usr/bin/python3" ]]; then
+    python_bin="$candidate"
+    break
+  fi
+done
+if [[ -z "$python_bin" ]]; then
+  python_bin="$(command -v python3)"
+fi
 
 usage() {
   cat <<'USAGE'
@@ -50,7 +64,7 @@ done
 
 if [[ "$mode" == "foreground" ]]; then
   cd "$repo_root"
-  exec python3 scripts/agent_inbox.py --watch --notify --hours 48 --interval 10
+  exec "$python_bin" scripts/agent_inbox.py --watch --notify --hours 48 --interval 10
 fi
 
 if [[ "$mode" == "stop" ]]; then
