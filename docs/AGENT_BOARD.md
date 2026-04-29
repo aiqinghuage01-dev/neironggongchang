@@ -9,7 +9,7 @@
 | 角色 | 状态 | 工作区 | 当前任务 |
 |---|---|---|---|
 | 总控 Agent | 自动派工已接入 | `~/Desktop/neironggongchang` | 已启动 8 小时全站优化定时巡检: 每 2 小时检查一次, 空闲则自动补下一批任务 |
-| 内容开发 Agent | 空闲 | `~/Desktop/nrg-worktrees/content-dev` | T-021 已 done; 等新内容任务 |
+| 内容开发 Agent | 空闲 | `~/Desktop/nrg-worktrees/content-dev` | T-021/T-022 已合入 main; 等新内容任务 |
 | 媒体开发 Agent | 空闲 | `~/Desktop/nrg-worktrees/media-dev` | T-035/T-038 重复 worker 已由总控停止并 block |
 | QA 测试 Agent | 进行中 | `~/Desktop/nrg-worktrees/qa`, `~/Desktop/nrg-worktrees/qa-1`, `~/Desktop/nrg-worktrees/qa-2` | T-041/T-042/T-044 running; T-045 queued |
 | 审查 Agent | 进行中 | `~/Desktop/nrg-worktrees/review` | T-043 running |
@@ -37,8 +37,8 @@
 | T-018 | T-017 修后投流 `n=1` 页面最小真烧复测 | QA 测试 Agent | blocked | 不改功能代码; 只提交报告/必要测试脚本需总控确认 | 已停止: QA-1 worktree 未包含 T-017 commit, 避免测错 commit |
 | T-019 | T-013 主线合入后 apimart 下载失败路径复测 | QA/总控 | 已完成 | `web/factory-works.jsx`, QA fault injection | QA 后端保护通过但 UI 解释不达标; 总控已修 `failed-task` 展示并 Playwright 复测通过 |
 | T-020 | T-017 修后投流 `n=1` 正确 commit 页面真烧复测 | 总控 | blocked | `content-dev@3e12f20`, 页面真烧一次 | 命中 `touliu.generate.quick/deepseek`, 但 DeepSeek 返回 Authentication Fails; 未重复提交 |
-| T-021 | 返修投流快出 DeepSeek 认证失败和超时兜底 | 内容开发 Agent | queued | `shortvideo/ai.py`, `shortvideo/claude_opus.py`, `shortvideo/deepseek.py`, `backend/services/touliu_pipeline.py`, 相关 tests | 不依赖不可用 DeepSeek; 处理 Opus/OpenClaw 叠加重试或可靠 fallback; 真实 curl `n=1` ok |
-| T-022 | T-021 修后投流 `n=1` 正确路由页面真烧复测 | QA 测试 Agent | queued(等 T-021 done) | 不改功能代码; 只提交报告/必要测试脚本需总控确认 | 只提交 1 次; task ok; 页面 1 条文案; route_key/engine 符合 T-021; console/pageerror=0 |
+| T-021 | 返修投流快出 DeepSeek 认证失败和超时兜底 | 内容开发 Agent / 总控合入 | 已完成 | `shortvideo/ai.py`, `shortvideo/claude_opus.py`, `shortvideo/deepseek.py`, `backend/services/touliu_pipeline.py`, 相关 tests | 已合入 main: `3ba6254` + `1384513` + `205d109`; quick route 回 Opus, SDK retry 关闭, `n<=2` 60 秒估时 |
+| T-022 | T-021 修后投流 `n=1` 正确路由页面真烧复测 | QA 测试 Agent | 已完成 | 不改功能代码; 只提交报告/必要测试脚本需总控确认 | QA 通过: 只提交 1 次, task `2ca3ceaff54e481c8045573afc7cd50b` ok, 页面 1 条文案, `route_key=touliu.generate.quick`, `engine=opus`, console/pageerror=0 |
 | T-023 | 素材库精品原片库 MVP: Downloads 演示源 + 8 业务大类 + 虚拟归类 | 媒体开发 Agent | blocked | 同 T-026 范围子集 | 媒体开发自动 Agent 启动后命中 chatgpt.com websocket 证书错误, 未进入实现; 需求升级为 T-026 |
 | T-024 | 已废弃: T-023 代码审查 | 审查 Agent | cancelled | 无 | T-023 已废弃, 改由 T-027 审查 T-026 |
 | T-025 | 已废弃: T-023 QA | QA 测试 Agent | cancelled | 无 | T-023 已废弃, 改由 T-028 QA T-026 |
@@ -58,6 +58,7 @@
 | T-044 | 全站内容链路低风险页面巡检 | QA 测试 Agent | claimed | 只读 QA | 公众号/投流/热点/录音/朋友圈/策划/合规页面巡检, 不重复烧 credits |
 | T-045 | 全站媒体链路低风险页面巡检 | QA 测试 Agent | queued | 只读 QA | 素材库/作品库/直接出图/即梦/数字人/声音视频入口巡检 |
 | T-046~T-053 | 全站优化自动补任务窗口 | 自动创建 | pending | content/media/qa/review 分批 | `scripts/start_site_optimization_watch.sh` 未来 8 小时每 2 小时检查; 工作台空闲时自动派开发修复、QA 回归、Review 审查 |
+| T-054 | 投流恢复后录音改写 + 热点改写真链路复测 | QA 测试 Agent | queued | 只读 QA 报告; 不改功能代码 | 最小真实 LLM 复测: 录音改写 analyze/write + 热点改写 4 版; 每条链路只提交一次, 记录 task/usage/截图 |
 
 ---
 
@@ -67,6 +68,7 @@
 - 全站优化定时巡检已启动: `bash scripts/start_site_optimization_watch.sh`; 当前窗口 2026-04-30 00:11~08:11, 每 2 小时检查一次. 首轮识别 T-041/T-042/T-043/T-044 running、T-045 queued, 未重复补任务.
 - D-125 验证: `git diff --check` -> clean; `.venv/bin/pytest -q tests/test_materials_lib_api.py tests/test_materials_service.py tests/test_materials_pipeline.py` -> 172 passed; `.venv/bin/pytest -q -x` -> 通过; 正式 `8000/8001` curl + Playwright 首页/预览/分类/剪辑检索/移动视口通过, console/pageerror/requestfailed/http error=0.
 - D-125 报告: `docs/agent-handoff/CONTROLLER_MATERIALS_D125_QA_20260429.md`.
+- 投流 T-021/T-022 已合入 main: `3ba6254`, `1384513`, `205d109`; QA 真烧 task `2ca3ceaff54e481c8045573afc7cd50b` -> `ok`, `route_key=touliu.generate.quick`, `engine=opus`, 页面展示 1 条; main 投流相关测试 34 passed, 全量 pytest 通过; 已新增 T-054 恢复下游录音/热点真链路。
 - D-124 素材库总控交接: `docs/agent-handoff/CONTROLLER_MATERIALS_T026_MAIN_20260429.md`.
 - D-124 验证: `python3 -m pytest -q` -> 通过; `git diff --check` -> clean; 临时 API `:18000` curl `/categories`、`/match`、`/classify-batch?limit=100` 通过; Playwright 截图 `/tmp/_ui_shots/t026_materials_desktop_home.png`, `/tmp/_ui_shots/t026_materials_desktop_category.png`, `/tmp/_ui_shots/t026_materials_desktop_match.png`, `/tmp/_ui_shots/t026_materials_mobile_home.png`, console error/pageerror/requestfailed/http error=0.
 - 总控本轮交接: `docs/agent-handoff/CONTROLLER_T013_T017_20260429_2011.md`.
