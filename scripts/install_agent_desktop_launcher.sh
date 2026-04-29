@@ -10,6 +10,39 @@ all_script_file="$(mktemp)"
 script_file="$(mktemp)"
 monitor_script_file="$(mktemp)"
 dispatcher_script_file="$(mktemp)"
+debug_launchers=0
+
+usage() {
+  cat <<'USAGE'
+Usage:
+  bash scripts/install_agent_desktop_launcher.sh [options]
+
+Options:
+  --with-debug-launchers   Also create separate 5-Agent / monitor / dispatcher apps.
+  -h, --help               Show this help.
+
+Default creates only one daily-use desktop app:
+  打开内容工厂工作台.app
+USAGE
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --with-debug-launchers)
+      debug_launchers=1
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "Unknown option: $1" >&2
+      usage
+      exit 2
+      ;;
+  esac
+done
 
 cleanup() {
   rm -f "$all_script_file"
@@ -23,7 +56,7 @@ cat > "$all_script_file" <<EOF
 set repoPath to "${repo_root}"
 set logPath to "/tmp/nrg-agent-workbench.log"
 
-do shell script "cd " & quoted form of repoPath & " && /bin/bash scripts/start_agent_monitor.sh >> " & quoted form of logPath & " 2>&1 && /bin/bash scripts/start_agent_dispatcher.sh >> " & quoted form of logPath & " 2>&1 && /bin/bash scripts/start_multi_agents_cmux.sh >> " & quoted form of logPath & " 2>&1 &"
+do shell script "cd " & quoted form of repoPath & " && { /bin/bash scripts/start_agent_monitor.sh >> " & quoted form of logPath & " 2>&1 || true; /bin/bash scripts/start_agent_dispatcher.sh >> " & quoted form of logPath & " 2>&1 || true; /bin/bash scripts/start_multi_agents_cmux.sh >> " & quoted form of logPath & " 2>&1 || true; } &"
 
 tell application "cmux"
   activate
@@ -34,6 +67,16 @@ EOF
 
 rm -rf "$all_launcher"
 osacompile -o "$all_launcher" "$all_script_file"
+
+if [[ "$debug_launchers" -eq 0 ]]; then
+  rm -rf "$launcher" "$monitor_launcher" "$dispatcher_launcher"
+  echo "Desktop launcher installed:"
+  echo "  $all_launcher"
+  echo
+  echo "Daily use: double-click only the workbench launcher."
+  echo "Debug launchers were removed from Desktop. Recreate them with --with-debug-launchers."
+  exit 0
+fi
 
 cat > "$script_file" <<EOF
 set repoPath to "${repo_root}"

@@ -155,7 +155,7 @@ bash scripts/start_agent_monitor.sh --stop
 
 ### 一键工作台
 
-日常不用分开点 3 个按钮. 双击桌面这个就够:
+日常桌面只保留一个按钮. 双击这个就够:
 
 ```text
 打开内容工厂工作台.app
@@ -166,10 +166,14 @@ bash scripts/start_agent_monitor.sh --stop
 - 启动自动派工器.
 - 打开 5 个 cmux Agent 工作区.
 
-另外 3 个桌面按钮只是备用:
-- `打开内容工厂5个Agent.app`: 只打开工作区.
-- `打开内容工厂Agent监控.app`: 只重启报告通知.
-- `打开内容工厂自动派工.app`: 只重启自动派工.
+稳定性规则:
+- 三个底层脚本仍然保留, 方便总控排查问题.
+- 桌面不放调试按钮, 避免老板每天做选择.
+- 如果总控需要重新生成调试按钮, 才运行:
+
+```bash
+bash scripts/install_agent_desktop_launcher.sh --with-debug-launchers
+```
 
 ---
 
@@ -330,6 +334,14 @@ bash scripts/start_agent_dispatcher.sh --stop
 ```
 
 然后只在总控窗口说业务目标.
+
+老板给总控的输入应该是自然语言, 例如:
+
+```text
+帮我把投流 n=1 timeout 继续修好, 修完自动安排 QA 最小真烧复测。
+```
+
+总控负责自己判断怎么拆任务、派给谁、先测还是先审, 不要求老板说角色名、任务编号、分支名或测试命令.
 
 总控 Agent 先做 5 件事:
 
