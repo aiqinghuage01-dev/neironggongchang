@@ -4,13 +4,15 @@
 
 ---
 
-## 当前状态 (2026-04-30 · 全站 QA 阻塞返修)
+## 当前状态 (2026-04-30 · 全站 QA 回归与体验清理)
 
-**版本**: v0.7.9-site-qa-repair — T-042/T-044/T-045 全站低风险巡检暴露的问题已由总控返修: 战略部任务统计不再 404, 投流失败恢复态不再露内部错误文案, 作品/图片不再把本机绝对路径当 Web URL, 直接出图/作品库/数字人页去掉明显技术词和错误选择器。下一步是让 QA 做不烧 credits 的综合回归。
+**版本**: v0.8.0-site-regression-polish — T-042/T-044/T-045 返修已通过 T-055 独立 QA 回归; 总控继续补了一轮不烧 credits 的全页面扫描, 清掉素材库首页本机路径、战略部观察台工程词、首页 `prompt` 文案残留。T-054 正在由 QA-1 做录音改写 + 热点改写真实链路复测。
 
 ### 当前进行
 - T-042/T-044/T-045 阻塞项已由总控返修并自测通过: 新增 `/api/tasks/counts`; 作品库只暴露 `/media` 可服务文件; 前端 `api.media()` 阻断 `/private`/`/Users`; 投流失败页只显示友好失败卡; 直接出图/作品库/图片预览按钮将 `prompt/apimart/URL` 改成“画面描述/快速出图/链接”; 数字人 picker 只列视频作品并校验 `.mp4`; 页面补内联 favicon 清掉 404 console 噪音。
-- T-055 已被 QA 领取: 不烧 credits 综合回归 T-042/T-044/T-045 返修点, 重点复看战略部 console、投流失败恢复、直接出图/作品库绝对路径、数字人视频 picker。
+- T-055 已由 QA 通过: 正式 `8000/8001` 端口复测战略部、投流失败恢复、直接出图、作品库、数字人 picker; console/pageerror/requestfailed/http error 均 0; 无 `/private` 或 `/Users` 媒体请求; 投流失败恢复禁词不可见; 数字人 picker 只列视频。
+- 总控追加全页面体验清理: 素材库默认只显示“Downloads 演示源 / 专用素材库”, 完整路径只在点击“更换”后编辑; 战略部观察台把 `apimart/watcher/providers/LLM` 改成“快速出图/后台巡检/链路/自动补救”; 首页“出图片”入口改成“一句话出图”。
+- T-054 已重新派给 QA-1: 旧 claimed 无日志状态已 reset 后重新领取; 当前正在做录音改写 + 热点改写真链路复测, 已提交唯一一次录音写作 task 等待结果。
 - 全站优化 8 小时定时巡检已启动: `bash scripts/start_site_optimization_watch.sh` 运行 LaunchAgent `com.neironggongchang.site-optimization-watch`, 窗口 2026-04-30 00:11~08:11, 每 2 小时检查一次工作台. 若没有 claimed/queued 任务, 自动补下一批全站优化任务; 当前首轮发现 T-041/T-042/T-043/T-044 正在跑、T-045 queued, 因此没有重复塞任务.
 - D-125 素材库验收补强已由总控在 main 实装: 新增 `/api/material-lib/featured`, 首页先展示可直接预览的业务素材卡片, 主分类只显示 7 个业务大类, `00 待整理` 单独降级为整理入口; 解决「网页显示全是 0 / 看不到业务分类 / 没有素材预览」的验收体感问题。
 - 正式端口已重启并验证: `http://127.0.0.1:8000/api/material-lib/featured?limit=18` 返回 18 条非待整理、带缩略图、已画像素材; `/categories` 返回业务素材 55 条、可直接预览 42 条、待整理 1563 条。
@@ -42,6 +44,9 @@
 - 额外 QA cmux 脚本已改为 socket 不可用时只准备 worktree, 不再强行 fallback 打开多个空白窗口。
 
 ### 总控审查证据
+- T-055 独立 QA 报告: `/Users/black.chen/Desktop/nrg-worktrees/qa/docs/agent-handoff/QA_T055_REPAIR_REGRESSION_20260430.md`, commit `606aea9`; 结果通过, 不烧 credits。
+- T-056 总控体验清理: 素材库默认页面截图 `/tmp/_ui_shots/materials_root_hidden_before_20260430.png`, 点击“更换”后可编辑 `/tmp/_ui_shots/materials_root_edit_after_20260430.png`, 战略部观察台 `/tmp/_ui_shots/strategy_friendly_observatory_20260430.png`, 首页 `/tmp/_ui_shots/home_prompt_fixed_20260430.png`; 23 个页面可见文案扫描均无 `/Users`、`/private`、`prompt`、`apimart`、`tokens`、`API`、内部错误词命中, console/pageerror/requestfailed/http error=0。
+- T-056 验证: `git diff --check` clean; `.venv/bin/pytest -q tests/test_materials_lib_api.py tests/test_materials_service.py tests/test_materials_pipeline.py` -> 180 passed; `.venv/bin/pytest -q -x` -> 通过, 仅 dhv5 本地 skill 缺失用例跳过。
 - D-125 素材库验收补强报告: `docs/agent-handoff/CONTROLLER_MATERIALS_D125_QA_20260429.md`.
 - D-125 测试: `git diff --check` -> clean; `.venv/bin/pytest -q tests/test_materials_lib_api.py tests/test_materials_service.py tests/test_materials_pipeline.py` -> 172 passed; `.venv/bin/pytest -q -x` -> 通过, 仅 dhv5 本地 skill 缺失用例跳过。
 - D-125 正式端口 API: `/api/material-lib/featured?limit=18` -> `featured_count=18`, 18 条都不是 `00 待整理` 且有 `thumb_path`; `/api/material-lib/categories` -> 7 个业务类 + `00 待整理`, 业务素材 55 条。

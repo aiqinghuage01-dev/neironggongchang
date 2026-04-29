@@ -78,6 +78,12 @@ function SystemObservatory() {
   }, []);
   if (!rj && !retry) return null;
   const stats = rj?.stats || {};
+  const providerLabel = {
+    apimart: "快速出图",
+    dreamina: "即梦",
+    shiliu: "数字人",
+  };
+  const providers = (rj?.providers || []).map(p => providerLabel[p] || p).join(" / ");
   return (
     <div style={{
       maxWidth: 720, margin: "20px auto 60px",
@@ -89,19 +95,19 @@ function SystemObservatory() {
         <span>🛰️</span> 系统观察台
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 16 }}>
-        <Stat label="远程任务总数" value={stats.total ?? "-"} />
+        <Stat label="外部生成总数" value={stats.total ?? "-"} />
         <Stat label="排队中" value={stats.querying ?? 0} accent={stats.querying ? T.amber : T.muted} />
         <Stat label="已完成" value={stats.done ?? 0} accent={T.brand} />
         <Stat label="失败/超时" value={(stats.failed ?? 0) + (stats.timeout ?? 0)} accent={(stats.failed || stats.timeout) ? T.red : T.muted} />
       </div>
       <div style={{ marginTop: 18, paddingTop: 14, borderTop: `1px dashed ${T.borderSoft}`, display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14 }}>
-        <Stat small label="LLM 重试触发" value={retry?.retried ?? 0} />
-        <Stat small label="重试救活" value={retry?.saved_after_retry ?? 0} accent={T.brand} />
-        <Stat small label="救活率" value={`${retry?.save_rate_pct ?? 0}%`} />
+        <Stat small label="自动补救触发" value={retry?.retried ?? 0} />
+        <Stat small label="补救成功" value={retry?.saved_after_retry ?? 0} accent={T.brand} />
+        <Stat small label="成功率" value={`${retry?.save_rate_pct ?? 0}%`} />
       </div>
       <div style={{ marginTop: 14, fontSize: 11.5, color: T.muted2 || T.muted }}>
-        watcher: {rj?.watcher_running ? "✓ 在跑" : "❌ 没起"} · providers: {(rj?.providers || []).join(" / ")}
-        · 任务总数 {taskCounts?.active ?? 0} 进行中
+        后台巡检: {rj?.watcher_running ? "✓ 正常" : "❌ 未启动"} · 链路: {providers || "暂无"}
+        · 当前 {taskCounts?.active ?? 0} 个进行中
       </div>
     </div>
   );

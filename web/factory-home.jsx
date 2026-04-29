@@ -53,7 +53,7 @@ function PageHome({ onNav }) {
               onClick={() => onNav("write")}
             />
             <BigAction
-              icon="🎨" title="出图片" subtitle="直接出图 / 即梦 AIGC · 一句 prompt 出图"
+              icon="🎨" title="出图片" subtitle="直接出图 / 即梦 AIGC · 一句话出图"
               stat="2 个引擎按场景选"
               onClick={() => onNav("image")}
             />

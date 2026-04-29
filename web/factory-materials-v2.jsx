@@ -279,9 +279,21 @@ function mv2SourceLabel(src) {
   return MV2_SOURCE_LABELS[src] || "未识别画面";
 }
 
+function mv2IsDownloadsRoot(root) {
+  const s = root || "";
+  return s.endsWith("/Downloads") || s.endsWith("\\Downloads");
+}
+
+function mv2RootLabel(root) {
+  if (!root) return "未设置";
+  if (mv2IsDownloadsRoot(root)) return "Downloads 演示源";
+  return "专用素材库";
+}
+
 
 function MV2RootSetting({ root, onSaved }) {
   const [value, setValue] = React.useState(root || "");
+  const [editing, setEditing] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
   const [saved, setSaved] = React.useState(false);
   const [err, setErr] = React.useState("");
@@ -292,6 +304,7 @@ function MV2RootSetting({ root, onSaved }) {
     try {
       await api.post("/api/settings", { materials_root: value });
       setSaved(true);
+      setEditing(false);
       if (onSaved) await onSaved();
       setTimeout(() => setSaved(false), 1400);
     } catch (e) {
@@ -300,7 +313,7 @@ function MV2RootSetting({ root, onSaved }) {
     setSaving(false);
   }
 
-  const isDownloads = (value || "").endsWith("/Downloads") || (value || "").endsWith("\\Downloads");
+  const isDownloads = mv2IsDownloadsRoot(root || value);
   return (
     <div style={{ background: "#fff", border: `1px solid ${T.border}`, borderRadius: 8, padding: 12, marginBottom: 12 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
@@ -308,21 +321,32 @@ function MV2RootSetting({ root, onSaved }) {
         <Tag size="xs" color={isDownloads ? "amber" : "green"}>{isDownloads ? "Downloads 演示源" : "专用目录"}</Tag>
         {saved && <Tag size="xs" color="green">已保存</Tag>}
       </div>
-      <div style={{ display: "flex", gap: 6 }}>
-        <input
-          value={value}
-          onChange={e => setValue(e.target.value)}
-          data-testid="mv2-materials-root-input"
-          style={{
-            flex: 1, minWidth: 0, border: `1px solid ${T.border}`, borderRadius: 6,
-            padding: "7px 9px", fontSize: 11.5, fontFamily: "Menlo, monospace",
-            color: T.text, background: T.bg2,
-          }}
-        />
-        <Btn size="sm" variant="outline" onClick={save} disabled={saving || !value}>
-          {saving ? "保存中" : "保存"}
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <div style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: T.text, background: T.bg2, border: `1px solid ${T.border}`, borderRadius: 6, padding: "7px 9px" }}>
+          {mv2RootLabel(root || value)}
+        </div>
+        <Btn size="sm" variant="outline" onClick={() => setEditing(v => !v)}>
+          {editing ? "收起" : "更换"}
         </Btn>
       </div>
+      {editing && (
+        <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+          <input
+            value={value}
+            onChange={e => setValue(e.target.value)}
+            data-testid="mv2-materials-root-input"
+            placeholder="粘贴素材文件夹路径"
+            style={{
+              flex: 1, minWidth: 0, border: `1px solid ${T.border}`, borderRadius: 6,
+              padding: "7px 9px", fontSize: 11.5, fontFamily: "inherit",
+              color: T.text, background: T.bg2,
+            }}
+          />
+          <Btn size="sm" variant="outline" onClick={save} disabled={saving || !value}>
+            {saving ? "保存中" : "保存"}
+          </Btn>
+        </div>
+      )}
       <div style={{ fontSize: 10.5, color: T.muted2, marginTop: 6, lineHeight: 1.5 }}>
         现在先用 Downloads 跑演示, 以后换专用素材库只改这里。
       </div>
@@ -438,7 +462,7 @@ function MV2L1Home({ stats, categories, root, loading, err, onPickCategory, onSc
             <Tag color="green" size="sm">本地素材优先</Tag>
           </div>
           <div style={{ fontSize: 12, color: T.muted2, marginTop: 6, lineHeight: 1.5, wordBreak: "break-word" }}>
-            当前演示源: {root || stats?.root || "—"}
+            当前素材源: {mv2RootLabel(root || stats?.root)}
             {stats != null && (
               <span style={{ marginLeft: compact ? 0 : 12, display: compact ? "block" : "inline" }}>
                 · 总 {stats.total} 条
@@ -558,7 +582,7 @@ function MV2L1Home({ stats, categories, root, loading, err, onPickCategory, onSc
                 <div style={{ fontSize: 28, marginBottom: 8 }}>📂</div>
                 <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>素材库还是空的</div>
                 <div style={{ fontSize: 12, color: T.muted2, marginBottom: 14 }}>
-                  把素材放到 {root || stats?.root || "~/Downloads/"}, 然后点 "重新扫描" 入库
+                  把素材放到当前素材源, 然后点 "重新扫描" 入库
                 </div>
                 <Btn variant="primary" size="md" onClick={onScan} disabled={scanning}>
                   {scanning ? "扫描中..." : "▶ 立即扫描"}
