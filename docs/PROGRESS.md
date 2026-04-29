@@ -4,9 +4,12 @@
 
 ---
 
-## 当前状态 (2026-04-29 · T-004/T-005 合入, Works QA 不通过)
+## 当前状态 (2026-04-29 · Works T-009/T-010/T-011 已修待 QA)
 
-**版本**: v0.7.6-agent10 — 公众号编辑传播 + 段间图 sanitizer 已修并合入主线; 作品库全链路 QA 发现 5 个影响使用的问题; 真实公众号草稿推送复测和直接出图结果区仍待处理。
+**版本**: v0.7.6-agent11 — 作品库 QA 发现的 T-009/T-010/T-011 已由总控单线修复并自验; 真实公众号草稿推送复测、直接出图结果区和作品库独立回归仍待处理。
+
+### 当前进行
+- T-009/T-010/T-011 修复提交: `9b36bd5`; 下一步分配 T-012 作品库全链路 QA 复跑.
 
 ### QA 证据 · 公众号
 - QA 报告已合入主线: `docs/agent-handoff/QA_WECHAT_20260429.md`
@@ -47,12 +50,23 @@
 - 负向复核: `completion_rate=80` -> 422; `completion_rate=0.8` -> 200.
 - 现场只读快照: `8000` 有 342 条作品; 第 301 条搜索在 `limit=300` 下查不到, `limit=1000` 下能查到; 前 300 条图片里 59 个缺预览 URL.
 
+### 已修待 QA · T-009/T-010/T-011
+- 修复提交: `9b36bd5 fix: repair works library qa issues`
+- T-009: `/api/works` 搜索改为 SQL 过滤后再 `LIMIT`; 新增 `/api/works/{id}` 详情接口; 数据看板/发布矩阵打开作品时按 id 拉取, 不再依赖当前列表.
+- T-010: `留这版 / 删这版` action 返回更新后的 work, 前端立即合并状态; 完播率输入可填 `80`, 前后端都归一化保存为 `0.8`.
+- T-011: 作品 API 返回 `asset_status` / `preview_available` / `download_available`; 图片缺本地文件或只有记录时, 卡片和详情给明确说明, 不再静默占位.
+- 自验证据:
+  - `.venv/bin/pytest -q tests/test_works_api.py` -> 5 passed.
+  - `.venv/bin/pytest -q tests/test_works_crud_integration.py tests/test_autoinsert_text_work.py tests/test_migrations.py::test_apply_migrations_creates_works_indexes tests/test_migrations.py::test_legacy_fixup_works_old_db_missing_4_columns` -> 11 passed.
+  - `.venv/bin/pytest -q -x` -> exit 0.
+  - `node scripts/e2e_works_t009_t011.js` -> exit 0; 截图已读 `/tmp/_ui_shots/t009_t011_works_regression.png`.
+  - 临时 API `8121` + curl 已验证: 老作品搜索、详情读取、留/删返回新 work、`completion_rate=80` 保存 `0.8`、缺失图片返回 `asset_status=missing_file`.
+
 ### 剩余阻塞
 1. T-006: 公众号 8 步真实草稿推送复测未跑, 需要最小真烧闭环确认 `last_push_request` 和真实草稿一致.
 2. T-007: 直接出图 apimart 单图 watcher 后端链路成功, 但前端结果区按 `result.images` 展示, task.result 只有 raw `url/task_id`, 最终显示 `0/0 成功`.
-3. T-009: 作品库数据看板 TOP「看」打不开不在当前列表里的历史作品; 搜索只在前 300 条中过滤.
-4. T-010: 作品库「留这版 / 删这版」后端写成功但 UI 不更新; 完播率 UI 写 `%` 但后端只接受 0-1.
-5. T-011: 作品库图片作品存在大量无预览/无下载的占位卡.
+3. T-008: T-007 修后直接出图最小真烧复测未跑.
+4. T-012: 作品库修复后的独立 QA 复跑未跑; T-009/T-010/T-011 还不能算 QA 通过.
 
 ### 下一步
 - `docs/AGENT_BOARD.md` 已登记:
@@ -61,11 +75,30 @@
   - `T-006`: 修后公众号 8 步链路复测.
   - `T-007`: 修直接出图结果区不展示 apimart 单图产物.
   - `T-008`: 修后直接出图最小真烧复测.
-  - `T-009`: 修作品库看板打开历史作品 + 搜索老作品.
-  - `T-010`: 修作品库留/删 UI 状态 + 完播率输入.
-  - `T-011`: 处理图片占位卡.
+  - `T-009`: 待 QA, 修作品库看板打开历史作品 + 搜索老作品.
+  - `T-010`: 待 QA, 修作品库留/删 UI 状态 + 完播率输入.
+  - `T-011`: 待 QA, 处理图片占位卡.
   - `T-012`: 修后作品库全链路回归.
-- T-006/T-007/T-008/T-009/T-010/T-011/T-012 完成并由 QA 真测通过前, 不能说对应链路完成.
+- T-006/T-007/T-008/T-012 完成并由 QA 真测通过前, 不能说对应链路完成; T-009/T-010/T-011 需等 T-012 背书后才能说作品库通过.
+
+---
+
+## 上一里程碑 (2026-04-29 · D-112 Works QA 修复)
+
+**版本**: v0.7.6-agent11 — T-009/T-010/T-011 主线修复完成, 等 T-012 独立 QA。
+
+### D-112 修复
+- `shortvideo/works.py`: `list_works(q=...)` 在 SQL 层过滤, 解决老作品搜索被首屏 `limit` 截断.
+- `backend/api.py`: 新增作品详情序列化和 `/api/works/{id}`; action 返回更新后的 work; analytics 拉取更大作品范围; 完播率支持 `0-100` 输入并保存为比例; 图片资产返回明确状态.
+- `web/factory-works.jsx`: 看板「看」按 id 打开历史作品; 留/删状态立即刷新; 完播率输入按百分数交互; 缺失图片显示可解释状态.
+- `tests/test_works_api.py` + `scripts/e2e_works_t009_t011.js`: 覆盖 QA_WORKS 报告里的 5 个问题.
+
+### 验证
+- `.venv/bin/pytest -q tests/test_works_api.py` -> 5 passed.
+- `.venv/bin/pytest -q tests/test_works_crud_integration.py tests/test_autoinsert_text_work.py tests/test_migrations.py::test_apply_migrations_creates_works_indexes tests/test_migrations.py::test_legacy_fixup_works_old_db_missing_4_columns` -> 11 passed.
+- `.venv/bin/pytest -q -x` -> exit 0.
+- `node scripts/e2e_works_t009_t011.js` -> exit 0; 截图已读 `/tmp/_ui_shots/t009_t011_works_regression.png`.
+- 临时 API `8121` + curl 已验证 5 条关键路径; 服务已停止.
 
 ---
 
