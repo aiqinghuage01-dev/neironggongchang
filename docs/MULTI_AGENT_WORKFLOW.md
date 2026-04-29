@@ -45,6 +45,19 @@
 
 ---
 
+## 3.1 测试 credits 规则
+
+老板默认允许 Agent 做最小真烧测试, 因为不真烧测不出真实外部链路问题.
+
+规则:
+- 默认允许 1 次最小闭环真烧, 不需要额外请示.
+- 数字人只测 3-5 秒; 生图只测 1 张最低规格; 视频只测最短/最低规格.
+- API 有限额参数时, 必须先设置最低限额.
+- 失败后不自动重复提交, 先记录 task id / 错误 / credits 消耗.
+- 超过最小闭环、批量生成、多次重试、公众号草稿/真实外发, 必须先问总控.
+
+---
+
 ## 4. 禁止并行改的高风险文件
 
 这些文件像主水管, 同一时间只允许一个 Agent 改:
@@ -159,6 +172,7 @@ bash scripts/start_multi_agents_cmux.sh --launch
 
 默认模型:
 - Codex: `gpt-5.5` + `model_reasoning_effort="xhigh"` (超高)
+- Codex 权限: Full Access (`--sandbox danger-full-access --ask-for-approval never --search`)
 - Claude: `opus` + `--effort max` (`opus` 是 Claude CLI 的最新 Opus 别名)
 
 如需临时覆盖:

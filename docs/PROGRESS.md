@@ -4,7 +4,30 @@
 
 ---
 
-## 当前状态 (2026-04-29 · D-109 Claude Opus CLI 模型名修复)
+## 当前状态 (2026-04-29 · D-110 Agent Full Access + 最小真烧测试)
+
+**版本**: v0.7.6-agent9 — Codex Agent 默认 Full Access; QA 默认允许最小真烧 credits.
+
+### D-110 修复
+- `scripts/start_multi_agents_cmux.sh` / `scripts/start_multi_agents_tmux.sh`:
+  Codex Agent 启动默认带 `--sandbox danger-full-access --ask-for-approval never --search`.
+- `docs/agents/ROLE_QA.md`: QA 默认允许最小 credits 真烧闭环, 但禁止重复烧/大额度烧.
+- `docs/agents/ROLE_MEDIA_DEV.md` / `docs/agents/ROLE_CONTENT_DEV.md`:
+  开发自测允许 1 次最小真烧闭环, 失败后不自动重复提交.
+- `docs/agent-handoff/TEMPLATE_QA_REPORT.md`: 增加 credits / 外部服务测试记录区.
+- `docs/MULTI_AGENT_WORKFLOW.md` / `docs/SYSTEM-CONSTRAINTS.md`: 同步默认真烧和 Full Access 规则.
+
+### 验证
+- `codex --help` 确认参数支持 `--sandbox danger-full-access`,
+  `--ask-for-approval never`, `--search` ✅
+- `bash -n scripts/start_multi_agents_cmux.sh scripts/start_multi_agents_tmux.sh scripts/install_agent_desktop_launcher.sh` ✅
+- `bash scripts/start_multi_agents_cmux.sh --dry-run` 显示 Full Access 默认参数 ✅
+- 已重新生成 5 个 workspace 的 `.agent-start.sh`; 4 个 Codex Agent 均带 Full Access 参数 ✅
+- AppleScript 实测 cmux 仍为 `windows=1`, `tabs=5` ✅
+
+---
+
+## 上一里程碑 (2026-04-29 · D-109 Claude Opus CLI 模型名修复)
 
 **版本**: v0.7.6-agent8 — 审查 Agent 默认 Claude 模型从 `opus4.7` 改为 CLI 可用别名 `opus`.
 

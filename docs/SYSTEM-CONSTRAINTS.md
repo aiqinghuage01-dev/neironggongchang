@@ -248,7 +248,8 @@ python3 scripts/add_skill.py --slug "X" --key Y --icon Z --label W
 4. 监听 console error / pageerror (任何 React/JS 报错算失败)
 5. 截图保存 `/tmp/_ui_shots/<编号>_<场景>.png`
 6. 用 Read 看截图 (视觉确认, 不能只看脚本没报错)
-7. 真烧 credits 类 (即梦/数字人/出图) 至少跑一次最便宜组合验证 task → 结果 → 入作品库
+7. 真烧 credits 类 (即梦/数字人/出图) 默认允许跑一次最便宜组合验证 task → 结果 → 入作品库.
+   数字人只测 3-5 秒; 生图 1 张最低规格; 失败后不自动重复提交.
 
 **反模式 (禁止)**:
 - 只 curl sanity 就标 completed (D-075 教训: 字段抓错也返 200, sanity 看不出)

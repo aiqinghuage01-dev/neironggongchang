@@ -34,6 +34,9 @@ session="nrg-agents"
 socket="${TMPDIR:-/tmp}/nrg-agents.sock"
 codex_model="${CODEX_MODEL:-gpt-5.5}"
 codex_effort="${CODEX_REASONING_EFFORT:-xhigh}"
+codex_sandbox="${CODEX_SANDBOX:-danger-full-access}"
+codex_approval="${CODEX_APPROVAL_POLICY:-never}"
+codex_search="${CODEX_SEARCH:-1}"
 claude_model="${CLAUDE_MODEL:-opus}"
 claude_effort="${CLAUDE_EFFORT:-max}"
 
@@ -194,13 +197,17 @@ add_local_exclude() {
 
 write_role_files() {
   local role="$1"
-  local dir title doc branch tool display_name
+  local dir title doc branch tool display_name codex_search_arg
   dir="$(role_dir "$role")"
   title="$(role_title "$role")"
   doc="$(role_doc "$role")"
   branch="$(role_branch "$role")"
   tool="$(role_tool "$role")"
   display_name="$(agent_display_name "$role")"
+  codex_search_arg=""
+  if [[ "$codex_search" == "1" || "$codex_search" == "true" || "$codex_search" == "yes" ]]; then
+    codex_search_arg="--search"
+  fi
 
   if [[ "$dry_run" -eq 1 ]]; then
     echo "Would write ${dir}/.agent-role.md and .agent-start.sh"
@@ -251,7 +258,7 @@ EOF
 set -euo pipefail
 cd "\$(dirname "\$0")"
 printf '\033]0;%s\007' "${display_name}"
-exec codex --cd "\$PWD" --model "${codex_model}" -c "model_reasoning_effort=\"${codex_effort}\"" "\$(cat .agent-role.md)"
+exec codex --cd "\$PWD" --model "${codex_model}" --sandbox "${codex_sandbox}" --ask-for-approval "${codex_approval}" ${codex_search_arg} -c "model_reasoning_effort=\"${codex_effort}\"" "\$(cat .agent-role.md)"
 EOF
   fi
   chmod +x "${dir}/.agent-start.sh"
@@ -291,6 +298,7 @@ echo "Session: ${session}"
 echo "Socket:  ${socket}"
 echo "Launch:  ${launch}"
 echo "Codex:   ${codex_model} / effort=${codex_effort}"
+echo "Access:  sandbox=${codex_sandbox} / approval=${codex_approval} / search=${codex_search}"
 echo "Claude:  ${claude_model} / effort=${claude_effort}"
 echo
 
