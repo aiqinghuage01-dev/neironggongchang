@@ -1980,7 +1980,7 @@ def material_lib_categories():
     return {
         "categories": ms.list_categories(),
         "root": str(ms.get_materials_root()),
-        "source_label": "Downloads 演示源" if ms.get_materials_root().name == "Downloads" else "素材库目录",
+        "source_label": "临时素材源" if ms.get_materials_root().name == "Downloads" else "素材库目录",
     }
 
 

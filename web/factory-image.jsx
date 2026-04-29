@@ -4,12 +4,12 @@
 const IMAGE_TOOLS = [
   {
     page: "imagegen", icon: "🖼️", label: "直接出图",
-    desc: "一句画面描述 → N 张候选 · 16:9 / 9:16 / 1:1 / 3:4 / 4:3 任选 · 默认 30-60s/张",
+    desc: "一句画面描述 → 多张候选 · 16:9 / 9:16 / 1:1 / 3:4 / 4:3 任选 · 默认每张约 30-60 秒",
     steps: 1, route_prefix: "image-gen", source_skill: "image-gen",
   },
   {
-    page: "dreamina", icon: "🎬", label: "即梦 AIGC",
-    desc: "字节即梦 4K 出图 + 图生视频 · 写实 / 国风 / 二次元等多种模型 · 适合高质量产出 60-120s/张",
+    page: "dreamina", icon: "🎬", label: "即梦图片/视频",
+    desc: "字节即梦 4K 出图 + 图生视频 · 写实 / 国风 / 二次元等多种模型 · 适合高质量产出, 每张约 1-2 分钟",
     steps: 2, route_prefix: "dreamina", source_skill: "dreamina",
   },
 ];
@@ -65,7 +65,7 @@ function PageImage({ onNav }) {
     <div style={{ display: "flex", flexDirection: "column", height: "100%", position: "relative" }}>
       <div style={{ padding: "22px 32px 18px", background: "#fff", borderBottom: `1px solid ${T.border}` }}>
         <div style={{ fontSize: 22, fontWeight: 600, letterSpacing: -0.2 }}>🎨 出图片</div>
-        <div style={{ fontSize: 13, color: T.muted, marginTop: 6 }}>AI 帮你出图 · 2 个引擎按场景选</div>
+        <div style={{ fontSize: 13, color: T.muted, marginTop: 6 }}>AI 帮你出图 · 2 个工具按场景选</div>
       </div>
 
       <div style={{ flex: 1, overflow: "auto", padding: "20px 32px 60px", background: T.bg }}>
@@ -78,7 +78,7 @@ function PageImage({ onNav }) {
             <StatBlock label="🌟 今日偏好" value={hottestLabel} sub={hottest ? `用了 ${hottest[1]} 次` : "今天还没出图"} small />
           </div>
 
-          <div style={{ fontSize: 13, fontWeight: 600, color: T.muted, letterSpacing: "0.06em", marginBottom: 14 }}>选个引擎开始</div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: T.muted, letterSpacing: "0.06em", marginBottom: 14 }}>选个工具开始</div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 14 }}>
             {IMAGE_TOOLS.map(tool => (
               <ToolCard key={tool.page} tool={tool} count={todayBySkill[tool.source_skill] || 0} onClick={() => onNav(tool.page)} />
@@ -102,7 +102,7 @@ function PageImage({ onNav }) {
           {recent.length === 0 && !loading && (
             <div style={{ marginTop: 32, padding: 30, textAlign: "center", color: T.muted2, background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 12 }}>
               <div style={{ fontSize: 32, marginBottom: 8 }}>🖼️</div>
-              <div style={{ fontSize: 13.5, color: T.muted }}>今天还没出过图 · 点上面任一引擎开始</div>
+              <div style={{ fontSize: 13.5, color: T.muted }}>今天还没出过图 · 点上面任一工具开始</div>
             </div>
           )}
 
@@ -118,7 +118,7 @@ function RecentImageCard({ w, onClick }) {
   const sourceLabels = {
     "image-gen": "🖼️ 直接出图",
     "wechat-cover": "📄 公众号封面", "wechat-cover-batch": "📄 封面批量",
-    "wechat-section-image": "📄 段间图", "dreamina": "🎬 即梦 AIGC",
+    "wechat-section-image": "📄 段间图", "dreamina": "🎬 即梦图片/视频",
   };
   const ts = new Date(w.created_at * 1000);
   const time = `${String(ts.getHours()).padStart(2,"0")}:${String(ts.getMinutes()).padStart(2,"0")}`;

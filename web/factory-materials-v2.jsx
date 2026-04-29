@@ -286,7 +286,7 @@ function mv2IsDownloadsRoot(root) {
 
 function mv2RootLabel(root) {
   if (!root) return "未设置";
-  if (mv2IsDownloadsRoot(root)) return "Downloads 演示源";
+  if (mv2IsDownloadsRoot(root)) return "临时素材源";
   return "专用素材库";
 }
 
@@ -318,7 +318,7 @@ function MV2RootSetting({ root, onSaved }) {
     <div style={{ background: "#fff", border: `1px solid ${T.border}`, borderRadius: 8, padding: 12, marginBottom: 12 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
         <div style={{ fontSize: 12.5, fontWeight: 700, color: T.text }}>当前素材源</div>
-        <Tag size="xs" color={isDownloads ? "amber" : "green"}>{isDownloads ? "Downloads 演示源" : "专用目录"}</Tag>
+        <Tag size="xs" color={isDownloads ? "amber" : "green"}>{isDownloads ? "临时素材源" : "专用目录"}</Tag>
         {saved && <Tag size="xs" color="green">已保存</Tag>}
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -348,7 +348,7 @@ function MV2RootSetting({ root, onSaved }) {
         </div>
       )}
       <div style={{ fontSize: 10.5, color: T.muted2, marginTop: 6, lineHeight: 1.5 }}>
-        现在先用 Downloads 跑演示, 以后换专用素材库只改这里。
+        现在先用临时素材源跑演示, 以后换专用素材库只改这里。
       </div>
       {err && <InlineError err={err} />}
     </div>
@@ -506,7 +506,7 @@ function MV2L1Home({ stats, categories, root, loading, err, onPickCategory, onSc
           icon="⚠" label="未入业务类"
           testid="mv2-l1-pending-kpi"
           value={pendingCount}
-          sub={stats?.pending_review > 0 ? `${stats.pending_review} 条建议待确认` : "Downloads 杂文件先放这里"}
+          sub={stats?.pending_review > 0 ? `${stats.pending_review} 条建议待确认` : "临时素材先放这里"}
           accent="amber"
           onClick={stats?.pending_review > 0 ? onAudit : () => onPickCategory("00 待整理")}
         />
@@ -616,7 +616,7 @@ function MV2L1Home({ stats, categories, root, loading, err, onPickCategory, onSc
                     <div>
                       <div style={{ fontSize: 12.5, fontWeight: 700, color: T.amber }}>未入业务类 · {pendingCount} 条</div>
                       <div style={{ fontSize: 11, color: T.muted2, marginTop: 2 }}>
-                        Downloads 里的截图、缓存和泛文件名素材先放这里, 不影响上面的业务素材使用
+                        临时素材源里的截图、缓存和泛文件名素材先放这里, 不影响上面的业务素材使用
                       </div>
                     </div>
                     <Tag size="xs" color="amber">去整理</Tag>

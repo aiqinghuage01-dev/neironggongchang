@@ -33,7 +33,7 @@ const LEGACY_NAV_HIDDEN = [
   { id: "planner", icon: "🗓️", label: "内容策划" },
   { id: "compliance", icon: "🛡️", label: "违规审查" },
   { id: "imagegen", icon: "🖼️", label: "直接出图" },   // 进 出图片 二级页
-  { id: "dreamina", icon: "🎨", label: "即梦 AIGC" },
+  { id: "dreamina", icon: "🎨", label: "即梦图片/视频" },
 ];
 
 // D-066: 部门 = group, 含 icon + label + 工具列表

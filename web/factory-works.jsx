@@ -10,7 +10,7 @@ const SOURCE_LABELS = {
   "wechat-cover": "📄 公众号封面",
   "wechat-cover-batch": "📄 封面批量",
   "wechat-section-image": "📄 段间图",
-  "dreamina": "🎬 即梦 AIGC",
+  "dreamina": "🎬 即梦图片/视频",
   "shortvideo": "🎥 数字人视频",
   "baokuan": "💥 爆款改写",
   "hotrewrite": "🔥 热点改写",

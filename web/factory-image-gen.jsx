@@ -295,7 +295,7 @@ function PageImageGen({ onNav }) {
                   ))}
                 </div>
                 <div style={{ fontSize: 11, color: T.muted2, marginTop: 8 }}>
-                  💡 {imgEngine === "dreamina" ? "即梦 60-120s/张" : "快速出图 30-60s/张"}, 张数越多越慢
+                  💡 {imgEngine === "dreamina" ? "即梦每张约 1-2 分钟" : "快速出图每张约 30-60 秒"}, 张数越多越慢
                 </div>
               </div>
             </div>
@@ -408,9 +408,9 @@ function PageImageGen({ onNav }) {
           <div style={{ padding: "32px 40px 60px", maxWidth: 1280, margin: "0 auto" }}>
             <div style={{ marginBottom: 16, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 20, fontWeight: 700 }}>📦 批量出图中 · {batchTasks.length} 个 task</div>
+                <div style={{ fontSize: 20, fontWeight: 700 }}>📦 批量出图中 · {batchTasks.length} 条任务</div>
                 <div style={{ fontSize: 12, color: T.muted, marginTop: 4 }}>
-                  每条画面描述出 {n} 张, 共 {batchTasks.length * n} 张. 并行起跑.
+                  每条画面描述出 {n} 张, 共 {batchTasks.length * n} 张, 会一起开始。
                 </div>
               </div>
               <Btn variant="outline" onClick={() => setBatchTasks([])}>← 改描述</Btn>
@@ -665,7 +665,7 @@ function ImgBatchTaskCard({ taskId, prompt, idx, n }) {
 
       {poller.isFailed && (
         <div style={{ fontSize: 11, color: T.red, padding: 8, background: T.redSoft, borderRadius: 6 }}>
-          ⚠ {poller.error || "出图失败"}
+          ⚠ <ErrorText err={poller.error || "出图失败"} maxLen={80} />
         </div>
       )}
 

@@ -6,7 +6,7 @@
 //   prompt 多行 = 自动批量并发 (≤20). 结果区显示 N 个 task 卡片.
 
 const DM_STEPS = [
-  { id: "input",   n: 1, label: "Prompt + 配置" },
+  { id: "input",   n: 1, label: "描述 + 配置" },
   { id: "result",  n: 2, label: "提交 / 结果" },
 ];
 
@@ -29,6 +29,23 @@ function videoRoute(refsCount) {
   if (refsCount === 0) return { name: "text2video", label: "纯文字生视频" };
   if (refsCount === 1) return { name: "image2video", label: "首帧图动起来" };
   return { name: "multimodal2video", label: `${refsCount} 张全参考` };
+}
+
+function dreaminaRouteLabel(route) {
+  const labels = {
+    text2image: "文本生图",
+    text2video: "纯文字生视频",
+    image2video: "首帧图动起来",
+    multimodal2video: "多图参考成片",
+    video: "视频生成",
+  };
+  return labels[route] || "视频生成";
+}
+
+function dreaminaVideoModelLabel(model) {
+  if (model === "seedance2.0fast") return "快速版";
+  if (model === "seedance2.0") return "标准版";
+  return model || "默认";
 }
 
 function PageDreamina({ onNav }) {
@@ -158,7 +175,7 @@ function PageDreamina({ onNav }) {
       return;
     }
     // video 模式
-    if (videoPromptCount === 0) { setStep("input"); setErr("至少填一条 prompt"); return; }
+    if (videoPromptCount === 0) { setStep("input"); setErr("至少填一条画面描述"); return; }
     setBatchTasks([]); setLoading(true);
     try {
       const r = await api.post("/api/dreamina/batch-video", {
@@ -176,7 +193,7 @@ function PageDreamina({ onNav }) {
 
   async function pollOnce() {
     const submitId = t2iSubmit?.result?.submit_id || t2iSubmit?.result?.SubmitId;
-    if (!submitId) { setErr("没拿到 submit_id, 看 raw 输出"); return; }
+    if (!submitId) { setErr("还没拿到任务编号, 稍等一下再查"); return; }
     setPolling(true); setErr("");
     try {
       const r = await api.post("/api/dreamina/query", { submit_id: submitId, download: true });
@@ -196,9 +213,8 @@ function PageDreamina({ onNav }) {
 
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", background: T.bg, position: "relative", overflow: "hidden" }}>
-      <StepHeader icon="🎨" title="即梦 · AIGC"
+      <StepHeader icon="🎨" title="即梦 · 图片/视频"
         steps={DM_STEPS} currentStep={step}
-        skillInfo={info ? { slug: "dreamina-cli", skill_md_chars: info.version?.length || 0 } : null}
         onBack={() => onNav("home")} />
       <div style={{ flex: 1, overflow: "auto" }}>
         <WfRestoreBanner show={wf.hasSnapshot} onDismiss={wf.dismissSnapshot}
@@ -251,10 +267,10 @@ function DStepInput({
   return (
     <div style={{ padding: "32px 40px 80px", maxWidth: 820, margin: "0 auto" }}>
       <div style={{ textAlign: "center", marginBottom: 16 }}>
-        <div style={{ fontSize: 26, fontWeight: 700, color: T.text, marginBottom: 6 }}>即梦 · 字节官方 AIGC 🎨</div>
+        <div style={{ fontSize: 26, fontWeight: 700, color: T.text, marginBottom: 6 }}>即梦 · 字节官方图片/视频 🎨</div>
         <div style={{ fontSize: 13, color: T.muted }}>
-          ~/.local/bin/dreamina CLI ·
-          {info?.credit?.credit?.total_credit != null ? <> 余额 <b style={{ color: T.brand, fontFamily: "SF Mono, monospace" }}>{info.credit.credit.total_credit}</b> credits</> : " 探活中..."}
+          字节即梦 ·
+          {info?.credit?.credit?.total_credit != null ? <> 余额 <b style={{ color: T.brand, fontFamily: "SF Mono, monospace" }}>{info.credit.credit.total_credit}</b> 点</> : " 额度检查中..."}
         </div>
       </div>
 
@@ -281,7 +297,7 @@ function DStepInput({
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
               <div style={{ fontSize: 11.5, color: T.muted2, fontWeight: 600, letterSpacing: "0.08em" }}>📷 共享参考图</div>
               <span style={{ fontSize: 11, color: T.muted2 }}>
-                {readyRefs.length} 张 · 走 <b style={{ color: T.brand }}>{route.name}</b> ({route.label})
+                {readyRefs.length} 张参考图 · <b style={{ color: T.brand }}>{route.label}</b>
               </span>
             </div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
@@ -332,13 +348,13 @@ function DStepInput({
             />
           </div>
 
-          {/* prompt 卡片列表 */}
+          {/* 画面描述卡片列表 */}
           <div style={{ padding: 14, background: "#fff", border: `1.5px solid ${T.brand}`, boxShadow: `0 0 0 5px ${T.brandSoft}`, borderRadius: 14, marginBottom: 14 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-              <div style={{ fontSize: 11.5, color: T.muted2, fontWeight: 600, letterSpacing: "0.08em" }}>📝 PROMPT 列表</div>
+              <div style={{ fontSize: 11.5, color: T.muted2, fontWeight: 600, letterSpacing: "0.08em" }}>📝 画面描述列表</div>
               <span style={{ fontSize: 11, color: T.muted2 }}>{promptList.length} 条 · 上限 {promptMax}</span>
               <div style={{ flex: 1 }} />
-              <span style={{ fontSize: 11, color: T.muted2 }}>批量并发跑</span>
+              <span style={{ fontSize: 11, color: T.muted2 }}>批量一起跑</span>
             </div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -354,7 +370,7 @@ function DStepInput({
                   padding: 10, border: `1.5px dashed ${T.border}`, borderRadius: 10,
                   textAlign: "center", color: T.muted, fontSize: 12.5, cursor: "pointer", background: T.bg2,
                   fontFamily: "inherit",
-                }}>+ 添加 prompt</div>
+                }}>+ 添加描述</div>
               )}
             </div>
 
@@ -368,7 +384,7 @@ function DStepInput({
                 padding: "7px 18px", fontSize: 13, fontWeight: 600,
                 background: ready ? T.brand : T.muted3, color: "#fff",
                 border: "none", borderRadius: 100, cursor: ready ? "pointer" : "not-allowed", fontFamily: "inherit",
-              }}>{loading ? "提交中..." : videoPromptCount > 1 ? `批量提交 ${videoPromptCount} 条 →` : "提交任务 →"}</button>
+              }}>{loading ? "提交中..." : videoPromptCount > 1 ? `批量提交 ${videoPromptCount} 条 →` : "提交 →"}</button>
             </div>
           </div>
         </>
@@ -381,7 +397,7 @@ function DStepInput({
             placeholder="描述图片(主体/风格/光线/构图)..."
             style={{ width: "100%", border: "none", outline: "none", background: "transparent", fontSize: 14, fontFamily: "inherit", resize: "vertical", lineHeight: 1.7, color: T.text }} />
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, paddingTop: 10, borderTop: `1px solid ${T.borderSoft}` }}>
-            <div style={{ fontSize: 11.5, color: T.muted2 }}>提示 {prompt.length} 字 · 即梦消耗 credits</div>
+            <div style={{ fontSize: 11.5, color: T.muted2 }}>画面描述 {prompt.length} 字 · 会消耗即梦点数</div>
             <div style={{ flex: 1 }} />
             <button onClick={onGo} disabled={!ready} style={{
               padding: "7px 18px", fontSize: 13, fontWeight: 600,
@@ -440,7 +456,7 @@ function DStepInput({
               <div style={{ gridColumn: "span 3" }}>
                 <div style={{ color: T.muted, marginBottom: 4 }}>模型版本</div>
                 <select value={videoModelVer} onChange={e => setVideoModelVer(e.target.value)} style={selectStyle}>
-                  {DM_VIDEO_MODELS.map(m => <option key={m} value={m}>{m}{m === "seedance2.0fast" ? " · 推荐, 更快" : ""}</option>)}
+                  {DM_VIDEO_MODELS.map(m => <option key={m} value={m}>{dreaminaVideoModelLabel(m)}{m === "seedance2.0fast" ? " · 推荐, 更快" : ""}</option>)}
                 </select>
               </div>
             </>
@@ -448,7 +464,7 @@ function DStepInput({
         </div>
         {isVideo && (
           <div style={{ fontSize: 11, color: T.muted2, marginTop: 10, lineHeight: 1.6 }}>
-            💡 单条 60-180s. 批量并行起跑总耗时 ≈ 单条耗时. 每条扣 ~300-500 credits.
+            💡 单条约 1-3 分钟. 批量一起开始, 总耗时接近单条. 每条约扣 300-500 点.
           </div>
         )}
       </div>
@@ -474,7 +490,7 @@ function DPromptCard({ idx, text, route, onChange, onDup, onRemove }) {
           display: "flex", alignItems: "center", justifyContent: "center",
         }}>{idx}</div>
         <div style={{ fontSize: 10.5, color: T.muted, fontFamily: "SF Mono, monospace" }}>
-          {route?.name || "video"}
+          {route?.label || "视频生成"}
         </div>
         <div style={{ flex: 1 }} />
         <button onClick={onDup} title="复制" style={cardActionStyle}>📋</button>
@@ -494,8 +510,8 @@ function DPromptCard({ idx, text, route, onChange, onDup, onRemove }) {
 // ── 文本生图结果区 (D-028 老路径不变, 单 submit_id + 手动轮询)
 function DStepT2IResult({ submitResult, queryResult, loading, polling, onPoll, onPrev, onReset }) {
   if (loading || !submitResult) return <Spinning icon="🎨" phases={[
-    { text: "提交任务到即梦", sub: "subprocess 调 ~/.local/bin/dreamina" },
-    { text: "等任务编号(submit_id)", sub: "" },
+    { text: "提交给即梦", sub: "正在进入生成队列" },
+    { text: "等待即梦受理", sub: "" },
   ]} />;
   const submitId = submitResult.result?.submit_id || submitResult.result?.SubmitId;
   const media = queryResult?.media_urls || [];
@@ -508,7 +524,7 @@ function DStepT2IResult({ submitResult, queryResult, loading, polling, onPoll, o
           任务已提交 {status === "succeed" || status === "Success" ? "✅" : "🎨"}
         </div>
         <div style={{ fontSize: 12, color: T.muted, fontFamily: "SF Mono, monospace" }}>
-          submit_id: {submitId || "(未获取)"} · 文本生图
+          任务编号: {submitId || "(未获取)"} · 文本生图
         </div>
       </div>
 
@@ -542,14 +558,14 @@ function DStepT2IResult({ submitResult, queryResult, loading, polling, onPoll, o
 
         {queryResult && !media.length && (
           <details style={{ padding: 10, background: T.bg2, borderRadius: 8, marginTop: 8 }}>
-            <summary style={{ fontSize: 11.5, color: T.muted, cursor: "pointer" }}>没找到媒体, 看下技术细节</summary>
+            <summary style={{ fontSize: 11.5, color: T.muted, cursor: "pointer" }}>没找到媒体, 查看排查信息</summary>
             <pre style={{ fontSize: 11, color: T.muted, marginTop: 6, whiteSpace: "pre-wrap", maxHeight: 240, overflow: "auto" }}>{JSON.stringify(queryResult, null, 2)}</pre>
           </details>
         )}
       </div>
 
       <div style={{ display: "flex", gap: 10 }}>
-        <Btn variant="outline" onClick={onPrev}>← 改 prompt</Btn>
+        <Btn variant="outline" onClick={onPrev}>← 改描述</Btn>
         <div style={{ flex: 1 }} />
         <Btn variant="primary" onClick={onReset}>再来一个</Btn>
       </div>
@@ -560,18 +576,18 @@ function DStepT2IResult({ submitResult, queryResult, loading, polling, onPoll, o
 // ── 视频结果区 (D-075 N 个 task 卡片, 每个独立 useTaskPoller)
 function DStepVideoResult({ batchTasks, loading, onPrev, onReset }) {
   if (loading || batchTasks.length === 0) return <Spinning icon="🎬" phases={[
-    { text: "提交批量任务", sub: `准备起 ${batchTasks.length || "N"} 个并发 task` },
-    { text: "起 daemon thread", sub: "即将拿到 N 个 task_id" },
+    { text: "提交批量任务", sub: `准备 ${batchTasks.length || "N"} 条视频任务` },
+    { text: "进入后台队列", sub: "马上开始逐条追踪进度" },
   ]} />;
 
   return (
     <div style={{ padding: "32px 40px 80px", maxWidth: 1080, margin: "0 auto" }}>
       <div style={{ marginBottom: 14 }}>
         <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 6 }}>
-          🎬 批量视频生成中 · {batchTasks.length} 个 task
+          🎬 批量视频生成中 · {batchTasks.length} 条
         </div>
         <div style={{ fontSize: 12, color: T.muted }}>
-          每条 60-180s · 并行起跑 · 完成后自动入作品库
+          每条约 1-3 分钟 · 一起开始 · 完成后自动入作品库
         </div>
       </div>
 
@@ -582,7 +598,7 @@ function DStepVideoResult({ batchTasks, loading, onPrev, onReset }) {
       </div>
 
       <div style={{ display: "flex", gap: 10 }}>
-        <Btn variant="outline" onClick={onPrev}>← 改 prompt</Btn>
+        <Btn variant="outline" onClick={onPrev}>← 改描述</Btn>
         <div style={{ flex: 1 }} />
         <Btn variant="primary" onClick={onReset}>再来一批</Btn>
       </div>
@@ -596,6 +612,7 @@ function DTaskCard({ taskId, prompt, idx }) {
   const mediaUrls = result?.media_urls || [];
   const downloaded = result?.downloaded || [];
   const route = result?.route || poller.task?.kind?.replace("dreamina.", "") || "video";
+  const routeLabel = dreaminaRouteLabel(route);
   const elapsed = poller.elapsedSec || 0;
   const pct = poller.progressPct || (poller.isRunning ? 15 : 0);
 
@@ -610,7 +627,7 @@ function DTaskCard({ taskId, prompt, idx }) {
           color: T.brand, fontSize: 11, fontWeight: 700,
           display: "flex", alignItems: "center", justifyContent: "center",
         }}>{idx}</div>
-        <div style={{ fontSize: 11, color: T.muted2, fontFamily: "SF Mono, monospace" }}>{route}</div>
+        <div style={{ fontSize: 11, color: T.muted2 }}>{routeLabel}</div>
         <div style={{ flex: 1 }} />
         <div style={{ fontSize: 11, color: T.muted }}>{elapsed}s</div>
       </div>
@@ -629,7 +646,7 @@ function DTaskCard({ taskId, prompt, idx }) {
 
       {poller.isFailed && (
         <div style={{ fontSize: 11, color: T.red, padding: 8, background: T.redSoft, borderRadius: 6 }}>
-          ⚠ {poller.error || "任务失败"}
+          ⚠ <ErrorText err={poller.error || "任务失败"} maxLen={80} />
         </div>
       )}
 

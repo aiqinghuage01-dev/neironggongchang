@@ -19,10 +19,10 @@
 const DHV5_CATEGORIES = ["全部", "培训", "电商", "财经", "三农", "教育", "情感", "职场", "未分类"];
 const DHV5_DURATION_BUCKETS = [
   { id: "all",     label: "全部时长", test: () => true },
-  { id: "15s",     label: "≤20s",   test: d => d <= 20 },
-  { id: "30s",     label: "20-40s", test: d => d > 20 && d <= 40 },
-  { id: "60s",     label: "40-70s", test: d => d > 40 && d <= 70 },
-  { id: "long",    label: ">70s",   test: d => d > 70 },
+  { id: "15s",     label: "≤20秒",   test: d => d <= 20 },
+  { id: "30s",     label: "20-40秒", test: d => d > 20 && d <= 40 },
+  { id: "60s",     label: "40-70秒", test: d => d > 40 && d <= 70 },
+  { id: "long",    label: ">70秒",   test: d => d > 70 },
 ];
 
 function PageDhv5({ onNav }) {
@@ -84,7 +84,7 @@ function PageDhv5({ onNav }) {
   async function runAlign() {
     if (!selectedTemplateId) return;
     if (alignMode === "auto" && !transcript.trim()) {
-      setErr("auto 模式需要 transcript"); return;
+      setErr("自动切分需要先粘贴数字人文案"); return;
     }
     setAligning(true); setErr("");
     try {
@@ -206,7 +206,7 @@ function PageDhv5({ onNav }) {
 
   async function startRender() {
     if (!alignedScenes || alignedScenes.length === 0) {
-      setErr("没有 aligned scenes 可渲染"); return;
+      setErr("还没有完成文案对齐"); return;
     }
     setRendering(true); setErr("");
     try {
@@ -300,7 +300,7 @@ function PageDhv5({ onNav }) {
             </div>
             <div style={{ flex: 1 }} />
             <span style={{ fontSize: 11, color: T.muted2 }}>
-              模板由本机技能库提供
+              模板由本机模板库提供
             </span>
           </div>
 
@@ -361,7 +361,7 @@ function PageDhv5({ onNav }) {
                 <div style={{ fontSize: 14, fontWeight: 600, color: T.text }}>已选: {selectedTemplate.name}</div>
                 <div style={{ fontSize: 12, color: T.muted, marginTop: 3 }}>
                   时长 {selectedTemplate.duration_sec}s · 字数预算 ~{selectedTemplate.word_budget} ·
-                  scenes A{selectedTemplate.scenes_breakdown?.A || 0}+B{selectedTemplate.scenes_breakdown?.B || 0}+C{selectedTemplate.scenes_breakdown?.C || 0}
+                  镜头 A{selectedTemplate.scenes_breakdown?.A || 0}+B{selectedTemplate.scenes_breakdown?.B || 0}+C{selectedTemplate.scenes_breakdown?.C || 0}
                 </div>
               </div>
               <Btn variant="outline" onClick={() => setSelectedTemplateId(null)}>换一个</Btn>
@@ -421,7 +421,7 @@ function PageDhv5({ onNav }) {
 
                 <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 12, paddingTop: 12, borderTop: `1px solid ${T.borderSoft}` }}>
                   <div style={{ fontSize: 11.5, color: T.muted2 }}>
-                    共 {validBatchTranscripts.length} 条有内容 · 每条 ~3-10min · 并发起 ≈ 1 条耗时
+                    共 {validBatchTranscripts.length} 条有内容 · 每条约 3-10 分钟 · 一起开始, 整体耗时接近单条
                   </div>
                   <div style={{ flex: 1 }} />
                   <Btn variant="outline" onClick={backToSelect}>← 改模板</Btn>
@@ -441,8 +441,8 @@ function PageDhv5({ onNav }) {
                 <div style={{ fontSize: 14, fontWeight: 600, color: T.text }}>对齐模式</div>
                 <div style={{ display: "flex", gap: 6 }}>
                   {[
-                    { id: "auto", label: "AI 自动切", desc: "走 deepseek 把 transcript 切到每个 scene" },
-                    { id: "placeholder", label: "用模板原字段", desc: "模板里 cover_title/scenes 字段直接用" },
+                    { id: "auto", label: "AI 自动切", desc: "按文案自动切到每段镜头" },
+                    { id: "placeholder", label: "用模板原稿", desc: "直接用模板里预设好的文案" },
                     { id: "manual", label: "手动填", desc: "字段留空, 自己一行行填" },
                   ].map(m => (
                     <button key={m.id} onClick={() => setAlignMode(m.id)} title={m.desc}
@@ -464,7 +464,7 @@ function PageDhv5({ onNav }) {
                 <textarea
                   value={transcript}
                   onChange={e => setTranscript(e.target.value)}
-                  placeholder="贴数字人念的整段 transcript (可从公众号草稿 / 转写 / 自己写)"
+                  placeholder="贴数字人要念的整段文案 (可从公众号草稿 / 转写 / 自己写)"
                   rows={6}
                   style={{
                     width: "100%", padding: 12, border: `1px solid ${T.borderSoft}`,
@@ -486,7 +486,7 @@ function PageDhv5({ onNav }) {
             {alignedScenes && (
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 <div style={{ fontSize: 14, fontWeight: 600, color: T.text, marginBottom: 4 }}>
-                  🎬 {alignedScenes.length} 个 scenes · 内联编辑下面的字段
+                  🎬 {alignedScenes.length} 段镜头 · 可以直接改每段文案
                 </div>
                 {alignedScenes.map((s, i) => (
                   <Dhv5SceneRow key={i} idx={i} scene={s}
@@ -501,9 +501,9 @@ function PageDhv5({ onNav }) {
                 <div style={{ marginTop: 18, padding: 16, background: "#fff", border: `1.5px solid ${T.brand}`, boxShadow: `0 0 0 4px ${T.brandSoft}`, borderRadius: 12, display: "flex", alignItems: "center", gap: 14 }}>
                   <div style={{ fontSize: 26 }}>✓</div>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 14, fontWeight: 600, color: T.text }}>对齐完成 · 共 {alignedScenes.length} scene</div>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: T.text }}>对齐完成 · 共 {alignedScenes.length} 段镜头</div>
                     <div style={{ fontSize: 12, color: T.muted, marginTop: 3 }}>
-                      下一步: D-059d 触发渲染 (调 /api/dhv5/render 异步走 task 池, 真跑 3-10 分钟)
+                      下一步开始渲染, 通常 3-10 分钟。可以离开页面, 后台会继续跑。
                     </div>
                   </div>
                   <Btn variant="outline" onClick={backToSelect}>← 改模板</Btn>
@@ -531,9 +531,9 @@ function PageDhv5({ onNav }) {
             <div style={{ maxWidth: 1200, margin: "0 auto" }}>
               <div style={{ marginBottom: 16, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 20, fontWeight: 700 }}>📦 批量数字人渲染中 · {batchTasks.length} 个 task</div>
+                  <div style={{ fontSize: 20, fontWeight: 700 }}>📦 批量数字人渲染中 · {batchTasks.length} 条任务</div>
                   <div style={{ fontSize: 12, color: T.muted, marginTop: 4 }}>
-                    每个 ~3-10min · 并发起跑 · 完成后自动入作品库
+                    每条约 3-10 分钟 · 一起开始 · 完成后自动入作品库
                   </div>
                 </div>
                 <Btn variant="outline" onClick={() => { setBatchTasks([]); setStep("align"); }}>← 改文案</Btn>
@@ -582,7 +582,7 @@ function PageDhv5({ onNav }) {
                   <div style={{ fontSize: 15, fontWeight: 600, color: T.text, marginBottom: 6 }}>渲染中… 已 {elapsed}s</div>
                   <div style={{ fontSize: 12, color: T.muted, marginBottom: 12 }}>{progress}</div>
                   <div style={{ fontSize: 11, color: T.muted2 }}>
-                    PIL plate + ffmpeg 合成 · 通常 3-10 分钟 · 可以离开页面, 走 task 池后台跑
+                    正在合成画面和声音 · 通常 3-10 分钟 · 可以离开页面, 后台会继续跑
                   </div>
                 </div>
               ) : isFailed ? (
@@ -591,8 +591,8 @@ function PageDhv5({ onNav }) {
                     <div style={{ fontSize: 36, marginBottom: 8 }}>❌</div>
                     <div style={{ fontSize: 15, fontWeight: 600, color: T.red }}>渲染失败</div>
                   </div>
-                  <div style={{ padding: 12, background: T.redSoft, color: T.red, borderRadius: 8, fontSize: 11.5, fontFamily: "SF Mono, monospace", whiteSpace: "pre-wrap", maxHeight: 240, overflow: "auto" }}>
-                    {errLog || "(无错误信息)"}
+                  <div style={{ padding: 12, background: T.redSoft, color: T.red, borderRadius: 8, fontSize: 12, lineHeight: 1.6, whiteSpace: "pre-wrap", maxHeight: 240, overflow: "auto" }}>
+                    <ErrorText err={errLog || "渲染失败"} maxLen={220} />
                   </div>
                 </div>
               ) : isDone ? (
@@ -653,7 +653,7 @@ function DhvHumanPicker({ value, onChange, worksList, onLoadWorks, showPicker, s
         <input
           value={displayValue}
           onChange={e => onChange(e.target.value)}
-          placeholder="从作品库选择一段数字人视频, 或粘贴本机视频路径"
+          placeholder="从作品库选择一段数字人视频, 或粘贴视频文件位置"
           style={{
             flex: 1, padding: "8px 12px", border: `1px solid ${T.border}`, borderRadius: 8,
             fontSize: 12, fontFamily: "SF Mono, Menlo, monospace", outline: "none", background: "#fff",
@@ -680,7 +680,7 @@ function DhvHumanPicker({ value, onChange, worksList, onLoadWorks, showPicker, s
                   }}>
                   <span style={{ color: T.muted2, fontFamily: "SF Mono, monospace" }}>#{w.id}</span>
                   <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{w.title || "(无标题)"}</span>
-                  <Tag size="xs" color="blue">{w.status}</Tag>
+                  <Tag size="xs" color="blue">{dhvWorkStatusLabel(w.status)}</Tag>
                 </div>
               ))}
               <div style={{ padding: "6px 10px", fontSize: 10.5, color: T.muted2, textAlign: "center" }}>
@@ -692,6 +692,18 @@ function DhvHumanPicker({ value, onChange, worksList, onLoadWorks, showPicker, s
       )}
     </div>
   );
+}
+
+function dhvWorkStatusLabel(status) {
+  const labels = {
+    ready: "待发",
+    published: "已发",
+    generating: "合成中",
+    pending: "等待",
+    failed: "失败",
+    ok: "已完成",
+  };
+  return labels[status] || "可用";
 }
 
 // ─── 模板卡片 ─────────────────────────────────────────────
@@ -892,7 +904,7 @@ function Dhv5SceneRow({ idx, scene, onChange, expanded, onToggleExpand, brollUrl
               }} />
             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
               <span style={{ fontSize: 10, color: T.muted2, fontFamily: "SF Mono, monospace" }}>
-                走快速出图 · 30-60s/张
+                走快速出图 · 每张约 30-60 秒
               </span>
               <div style={{ flex: 1 }} />
               {brollUrl && (
@@ -940,7 +952,7 @@ function DhvTranscriptCard({ idx, text, onChange, onDup, onRemove }) {
           display: "flex", alignItems: "center", justifyContent: "center",
         }}>{idx}</div>
         <div style={{ fontSize: 10.5, color: T.muted, fontFamily: "SF Mono, monospace" }}>
-          {charCount} 字 · 预计 ~3-10min
+          {charCount} 字 · 预计 3-10 分钟
         </div>
         <div style={{ flex: 1 }} />
         <button onClick={onDup} title="复制" style={{
@@ -955,7 +967,7 @@ function DhvTranscriptCard({ idx, text, onChange, onDup, onRemove }) {
         }}>✕</button>}
       </div>
       <textarea rows={3} value={text} onChange={e => onChange(e.target.value)}
-        placeholder={`第 ${idx} 段文案 · 数字人念的整段 transcript`}
+        placeholder={`第 ${idx} 段文案 · 数字人要念的整段内容`}
         style={{
           width: "100%", border: "none", outline: "none", resize: "vertical",
           background: "transparent", fontSize: 12.5, fontFamily: "inherit",
@@ -984,7 +996,7 @@ function DhvBatchTaskCard({ taskId, transcript, idx }) {
           display: "flex", alignItems: "center", justifyContent: "center",
         }}>{idx}</div>
         <div style={{ fontSize: 11, color: T.muted2 }}>
-          {result?.scenes_count ? `${result.scenes_count} scenes` : "对齐中"}
+          {result?.scenes_count ? `${result.scenes_count} 段镜头` : "对齐中"}
         </div>
         <div style={{ flex: 1 }} />
         <div style={{ fontSize: 11, color: T.muted }}>{elapsed}s</div>
@@ -1005,7 +1017,7 @@ function DhvBatchTaskCard({ taskId, transcript, idx }) {
 
       {poller.isFailed && (
         <div style={{ fontSize: 11, color: T.red, padding: 8, background: T.redSoft, borderRadius: 6 }}>
-          ⚠ {poller.error || "渲染失败"}
+          ⚠ <ErrorText err={poller.error || "渲染失败"} maxLen={80} />
         </div>
       )}
 
