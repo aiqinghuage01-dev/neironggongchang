@@ -10,7 +10,7 @@
 |---|---|---|---|
 | 总控 Agent | 自动派工已接入 | `~/Desktop/neironggongchang` | 已接管并完成 T-026 素材库精品原片库主线验证; 素材库自动返工循环已停止 |
 | 内容开发 Agent | 空闲 | `~/Desktop/nrg-worktrees/content-dev` | T-021 已 done; 等新内容任务 |
-| 媒体开发 Agent | 空闲 | `~/Desktop/nrg-worktrees/media-dev` | T-035 重复 worker 已由总控停止并 block |
+| 媒体开发 Agent | 空闲 | `~/Desktop/nrg-worktrees/media-dev` | T-035/T-038 重复 worker 已由总控停止并 block |
 | QA 测试 Agent | 空闲 | `~/Desktop/nrg-worktrees/qa`, `~/Desktop/nrg-worktrees/qa-1`, `~/Desktop/nrg-worktrees/qa-2` | T-030/T-031 已 done; T-028 由总控真实浏览器闭环关闭 |
 | 审查 Agent | 空闲 | `~/Desktop/nrg-worktrees/review` | T-029 已 done; T-027 由总控结合 T-029 风险清单关闭 |
 
@@ -50,6 +50,7 @@
 | T-031 | 素材库接口基线 curl/pytest 准备 | QA 测试 Agent | done | 不改功能代码 | 当前 `/api/material-lib/*` 返回形状和复测清单已交付 |
 | T-032 | 素材库返修第 2 轮 | 媒体开发 Agent | blocked | 同 T-026 | worker 技术退出, 已由定时巡检推进到 T-035 |
 | T-035 | 素材库返修第 3 轮 | 媒体开发 Agent | blocked | 同 T-026 | 重复 worker 已停止; 总控已在 main 完成同范围实现与验证, 避免旧 worktree 覆盖主线 |
+| T-038 | 素材库返修第 4 轮 | 媒体开发 Agent | blocked | 同 T-026 | 自动返工循环残留任务; 总控已在 main@7ac7379 完成并关闭 T-026/T-027/T-028 |
 | T-036~T-040 | 素材库后续审查/QA/返工循环 | 自动创建 | 停止 | 同 T-026/T-027/T-028 | D-124 本轮已由总控收束; 如后续要做视觉识别/物理整理, 另起新任务 |
 
 ---
