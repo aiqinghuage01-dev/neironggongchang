@@ -4,7 +4,24 @@
 
 ---
 
-## 当前状态 (2026-04-29 · D-107 Agent 启动短口令)
+## 当前状态 (2026-04-29 · D-108 桌面一键打开 5 Agent)
+
+**版本**: v0.7.6-agent7 — 双击桌面按钮即可打开 5 个 Agent workspace.
+
+### D-108 修复
+- 新增 `scripts/install_agent_desktop_launcher.sh`: 生成桌面
+  `打开内容工厂5个Agent.app`, 双击后自动运行 cmux 5-Agent 启动脚本.
+- `docs/MULTI_AGENT_WORKFLOW.md`: 补桌面按钮作为最简单入口.
+- 说明: 当前 cmux socket 仍返回 `Broken pipe`, 所以脚本会走 fallback;
+  fallback 下个别 workspace 可能只打开目录但不自动启动模型, 进入后输入 `开工`.
+
+### 验证
+- 已生成 `/Users/black.chen/Desktop/打开内容工厂5个Agent.app` ✅
+- `bash -n scripts/install_agent_desktop_launcher.sh` ✅
+
+---
+
+## 上一里程碑 (2026-04-29 · D-107 Agent 启动短口令)
 
 **版本**: v0.7.6-agent6 — 进入 Agent workspace 后输入 `开工` 即可启动.
 

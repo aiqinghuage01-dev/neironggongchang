@@ -137,6 +137,16 @@
 
 一键准备 5 个 cmux workspace:
 
+最简单: 双击桌面上的 `打开内容工厂5个Agent.app`.
+
+如果桌面按钮丢了, 重新安装:
+
+```bash
+bash scripts/install_agent_desktop_launcher.sh
+```
+
+命令行方式:
+
 ```bash
 bash scripts/start_multi_agents_cmux.sh
 ```
