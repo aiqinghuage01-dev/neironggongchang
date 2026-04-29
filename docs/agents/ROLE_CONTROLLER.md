@@ -76,6 +76,22 @@ python3 ~/Desktop/neironggongchang/scripts/agent_queue.py list
 - 只有需要老板做业务选择时才打断老板.
 - 不要求老板去别的窗口转发任务.
 
+## 自动派工器
+
+如果后台派工器已启动, 总控写入队列后不需要再叫老板去其他窗口输入 `claim`.
+
+```bash
+bash scripts/start_agent_dispatcher.sh --status
+```
+
+总控职责变成:
+- 把老板目标拆成清楚的队列任务.
+- 用 `depends_on` 串起必须先后执行的链路.
+- 等 Agent 自己 `done/block`, 再通过收件箱和队列状态做合并/返工判断.
+- 不把中间任务复制给老板; 只在 `owner_decision` 时问老板.
+
+自动派工器只派 `content` / `media` / `qa` / `review`, 不派 `controller`.
+
 ## 每次交付
 
 - 今日任务拆分.

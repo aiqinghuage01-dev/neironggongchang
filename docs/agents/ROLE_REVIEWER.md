@@ -47,10 +47,16 @@ Claude Opus.
 python3 ~/Desktop/neironggongchang/scripts/agent_queue.py claim --role review --agent review --format prompt
 ```
 
-如果领到任务, 只读审查, 不改业务代码. 完成后:
+如果领到任务, 只读审查, 不改业务代码. 没有发现阻塞问题、审查通过后:
 
 ```bash
 python3 ~/Desktop/neironggongchang/scripts/agent_queue.py done T-XXX --agent review --report <报告路径> --commit <commit>
 ```
 
-如果需要老板做业务选择, 才用 `block --owner-decision`. 完成或阻塞后继续 claim 下一条审查任务.
+如果发现必须返修的问题, 不要用 `done`, 要用:
+
+```bash
+python3 ~/Desktop/neironggongchang/scripts/agent_queue.py block T-XXX --agent review --reason "<审查发现的阻塞问题>"
+```
+
+如果需要老板做业务选择, 才额外加 `--owner-decision`. 完成或阻塞后继续 claim 下一条审查任务.

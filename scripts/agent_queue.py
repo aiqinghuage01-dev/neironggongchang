@@ -123,8 +123,9 @@ def task_prompt(task: dict[str, Any]) -> str:
 - 自己完成实现/测试/审查, 不让老板传话.
 - 报告写到 docs/agent-handoff/.
 - commit 自己的改动和报告.
-- 成功后运行: python3 {script_path} done {task.get("id")} --agent "$USER_OR_AGENT" --report <报告路径> --commit <commit>
-- 如果需要老板做业务选择, 运行: python3 {script_path} block {task.get("id")} --agent "$USER_OR_AGENT" --reason "<需要老板确认什么>" --owner-decision
+- 验收通过后运行: python3 {script_path} done {task.get("id")} --agent "$USER_OR_AGENT" --report <报告路径> --commit <commit>
+- 如果验证不通过、发现缺陷、缺依赖或需要返修, 运行: python3 {script_path} block {task.get("id")} --agent "$USER_OR_AGENT" --reason "<不通过原因/返修点>"
+- 如果需要老板做业务选择, 才额外加 --owner-decision.
 - 完成或阻塞后继续 claim 下一条适合自己角色的任务.
 """
 

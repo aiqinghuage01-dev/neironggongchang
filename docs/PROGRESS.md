@@ -4,18 +4,19 @@
 
 ---
 
-## 当前状态 (2026-04-29 · 总控启动巡检)
+## 当前状态 (2026-04-29 · 自动派工器接入)
 
-**版本**: v0.7.6-agent20 — 总控启动后完成队列和收件箱复核; controller role 当前无可领任务, T-015 已被 QA 领取但尚未交报告, T-016 仍依赖 T-015。T-013/T-014 均有开发自验证据, 但还没有独立 QA 通过, 不能写项目完成。
+**版本**: v0.7.6-agent21 — 接入本机自动派工器, 老板只需和总控窗口聊天; 总控写入共享队列后, content/media/qa/review worker 自动领取。T-015 QA 真烧不通过, 已从 `done` 纠正为 `blocked`; T-016 已 blocked, 不再在投流失败后继续烧下游 credits。
 
 ### 当前进行
-- T-014: 内容开发提交 `5d4fc59`, 隔离端口真实 curl `n=1` 53 秒 `ok`; 只能算开发自验通过, 等 T-015 独立 QA 页面真烧.
-- T-015: 已被 `NRG QA 测试` 领取, role=`qa`, priority=10; 尚未有 QA 交接报告. 只提交 1 次投流 `n=1`, 必须交截图/console/pageerror/task/AI usage 证据.
-- T-016: 已入共享任务队列, role=`qa`, depends_on=`T-015`; T-015 未 done 前不会被自动领取.
+- T-014: 内容开发提交 `5d4fc59`, 隔离端口真实 curl `n=1` 53 秒 `ok`; 但 T-015 独立 QA 真烧仍 timeout, 需继续返修投流真实链路.
+- T-015: 已被 `NRG QA 测试` 标记 `blocked`; QA 不通过: 真烧 task `5984e0bcdb754ad994d4b65415bd901e` 724s 后 Claude Opus/OpenClaw Request timed out; console/pageerror=0; pytest touliu 17 passed.
+- T-016: 已被总控标记 `blocked`; T-015 未通过前不继续烧录音/热点 credits.
 - T-013: 媒体开发提交 `99f1fb3`, fault injection 自验通过; `codex/media-dev` 落后主线, 不可整分支合并, 只能同步主线后再合或 cherry-pick 单提交.
 - 总控巡检: `python3 scripts/agent_queue.py claim --role controller --agent "NRG 总控" --format prompt` -> 无 controller 任务; `python3 scripts/agent_inbox.py --hours 24` -> 50 reports, 未发现新的 T-015/T-016 通过证据. 报告: `docs/agent-handoff/CONTROLLER_STARTUP_20260429_1852.md`.
 - 多 Agent 协作流程已调整: Agent 自己写 `docs/agent-handoff/` 报告并 commit, 总控用收件箱脚本主动扫描, 老板不再做人肉复制粘贴中转。
-- 自动任务队列已启用: `python3 ~/Desktop/neironggongchang/scripts/agent_queue.py list` 可看队列; `claim` / `done` / `block --owner-decision` 分别用于领任务、完成、需要老板选择时阻塞.
+- 自动任务队列已启用: `python3 ~/Desktop/neironggongchang/scripts/agent_queue.py list` 可看队列; `done` 只表示验收通过, 验证不通过必须 `block`.
+- 自动派工器已启用: `bash scripts/start_agent_dispatcher.sh --status` 显示 LaunchAgent running; 现在无 runnable task, 会待命.
 - 5-Agent 启动器已恢复: worktree 有本地改动或不能 fast-forward 时只跳过同步, 不再中断整个启动流程.
 - Agent 监控器已恢复: LaunchAgent 优先使用非系统 Python, 避免 `/usr/bin/python3` 读取 Desktop 脚本被 macOS 拦截.
 - 额外 QA cmux 脚本已改为 socket 不可用时只准备 worktree, 不再强行 fallback 打开多个空白窗口。
@@ -28,7 +29,9 @@
 - QA-1 待命报告: `docs/agent-handoff/QA1_READY_20260429.md` (worktree: `qa-1`).
 - 总控审查报告: `docs/agent-handoff/CONTROLLER_AUDIT_20260429.md`.
 - 合并风险: `git diff main..codex/media-dev` 显示该分支会删除 `scripts/agent_inbox.py`, `scripts/start_agent_monitor.sh` 和多份主线报告/角色文档; 不允许整分支 merge.
-- 任务队列: `~/Desktop/nrg-agent-queue/tasks.json` 已有 T-015 / T-016.
+- 任务队列: `~/Desktop/nrg-agent-queue/tasks.json` 已有 T-015 / T-016, 当前均 blocked.
+- 自动派工器: `scripts/agent_dispatcher.py`, `scripts/start_agent_dispatcher.sh`, 桌面入口 `打开内容工厂自动派工.app`.
+- 派工器验证: `bash scripts/start_agent_dispatcher.sh --dry-run` -> 无 runnable task; `--status` -> LaunchAgent running, 6 个槽位 idle; `/tmp/nrg-agent-dispatcher.log` 只显示当前待命状态.
 - 启动器验证: `bash scripts/start_multi_agents_cmux.sh` 已成功打开 5 个 cmux tab: main/content-dev/media-dev/qa/review.
 
 ### QA 证据 · 公众号
@@ -131,10 +134,9 @@
 - 结论: T-012 通过, 未发现新的 P0/P1/P2; 作品库 T-009/T-010/T-011 可标记完成.
 
 ### 剩余阻塞
-1. T-013: 开发自验完成但未独立 QA; media 分支落后主线, 不可整分支合并.
-2. T-014: 开发自验完成但未独立 QA; T-015 页面真烧未跑.
-3. T-015: T-014 修后投流 `n=1` 最小真烧复测未跑.
-4. T-016: 录音改写真实 LLM 和热点改写 4 版真实链路未复测; 必须等 T-015 通过后再烧 credits.
+1. T-014/T-015: 投流 `n=1` 独立 QA 真烧仍 timeout, 必须返修后重新入队 QA.
+2. T-016: 录音改写真实 LLM 和热点改写 4 版真实链路未复测; 必须等 T-015 通过后再恢复.
+3. T-013: 开发自验完成但未独立 QA; media 分支落后主线, 不可整分支合并.
 
 ### 下一步
 - `docs/AGENT_BOARD.md` 已登记:
@@ -148,10 +150,32 @@
   - `T-011`: 已完成, 处理图片占位卡.
   - `T-012`: 已完成, 修后作品库全链路回归.
   - `T-013`: 待 QA, 但先处理 media 分支合并风险.
-  - `T-014`: 待 QA.
-  - `T-015`: 已进入共享任务队列, QA Agent 自动领取.
-  - `T-016`: 已进入共享任务队列, 依赖 T-015 done.
+  - `T-014`: 需返修, T-015 独立 QA 不通过.
+  - `T-015`: blocked, QA 真烧 timeout.
+  - `T-016`: blocked, 依赖 T-015 真正通过.
 - T-013/T-014/T-015/T-016 完成并由 QA 真测通过前, 不能说项目整体完成.
+
+---
+
+## 上一里程碑 (2026-04-29 · D-120 自动派工器)
+
+**版本**: v0.7.6-agent21 — 任务队列升级为后台自动派工, 减少老板复制粘贴和窗口切换。
+
+### D-120 修复
+- 新增 `scripts/agent_dispatcher.py`: 扫描共享队列, 自动把 runnable task 派给 content/media/qa/review worker.
+- 新增 `scripts/start_agent_dispatcher.sh`: LaunchAgent 后台启动/停止/状态/干跑.
+- `scripts/install_agent_desktop_launcher.sh`: 新增桌面入口 `打开内容工厂自动派工.app`.
+- `docs/MULTI_AGENT_WORKFLOW.md` / 角色文档: 明确老板只和总控聊天; `done` 只表示验收通过, 失败/返修必须 `block`.
+- 派工器不依赖 cmux socket; cmux 只作为可视化工作台.
+- 修复 LaunchAgent PATH 短导致找不到 `codex` 的问题, 自动定位 `~/.npm-global/bin/codex` 和 `~/.local/bin/claude`.
+- T-015 QA 不通过后, 已将 T-015/T-016 队列状态纠正为 `blocked`, 防止下游误跑.
+
+### D-120 验证
+- `python3 -m py_compile scripts/agent_dispatcher.py scripts/agent_queue.py scripts/agent_inbox.py`.
+- `bash -n scripts/start_agent_dispatcher.sh scripts/install_agent_desktop_launcher.sh scripts/start_agent_monitor.sh`.
+- 临时队列 dry-run: qa task 只模拟派给一个 QA 槽位, 不重复显示给多个 QA.
+- 真实队列 dry-run: 当前无 runnable task; T-015/T-016 blocked.
+- `bash scripts/start_agent_dispatcher.sh --status` -> LaunchAgent `state = running`, 所有槽位 idle.
 
 ---
 

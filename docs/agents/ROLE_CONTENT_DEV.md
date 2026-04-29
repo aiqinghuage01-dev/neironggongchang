@@ -63,10 +63,10 @@ GPT 5.5 / Codex.
 python3 ~/Desktop/neironggongchang/scripts/agent_queue.py claim --role content --agent content-dev --format prompt
 ```
 
-如果领到任务, 直接按任务说明执行. 完成后:
+如果领到任务, 直接按任务说明执行. 自验和验收标准通过后:
 
 ```bash
 python3 ~/Desktop/neironggongchang/scripts/agent_queue.py done T-XXX --agent content-dev --report <报告路径> --commit <commit>
 ```
 
-如果需要老板做业务选择, 才用 `block --owner-decision`. 完成或阻塞后继续 claim 下一条内容开发任务.
+如果实现失败、验证不通过、依赖缺失或需要返修, 用 `block --reason "<原因>"`. 如果需要老板做业务选择, 才额外加 `--owner-decision`. 完成或阻塞后继续 claim 下一条内容开发任务.

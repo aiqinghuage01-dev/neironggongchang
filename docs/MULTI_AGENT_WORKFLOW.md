@@ -191,6 +191,12 @@ python3 ~/Desktop/neironggongchang/scripts/agent_queue.py claim --role qa --agen
 python3 ~/Desktop/neironggongchang/scripts/agent_queue.py done T-015 --agent qa-1 --report docs/agent-handoff/QA_T015_20260429.md --commit abc1234
 ```
 
+`done` 只表示验收通过. 如果 QA/Review 发现问题, 不要用 `done`, 要用 `block` 把问题留给总控返修:
+
+```bash
+python3 ~/Desktop/neironggongchang/scripts/agent_queue.py block T-015 --agent qa-1 --reason "真烧失败: task xxx timeout, 需要内容开发返修"
+```
+
 需要老板确认时才阻塞:
 
 ```bash
@@ -206,9 +212,68 @@ python3 ~/Desktop/neironggongchang/scripts/agent_queue.py list
 Agent 规则:
 - 开工后先 claim 队列, 不等老板手工派.
 - 有任务就直接做; 没任务才等待.
-- 完成后写交接报告 + commit + `agent_queue.py done`.
+- 验收通过才写交接报告 + commit + `agent_queue.py done`.
+- 验证不通过或需要返修时, 写交接报告 + commit + `agent_queue.py block`.
 - 阻塞只能因为需要老板做业务选择、缺密钥/外部服务、或依赖任务未完成.
 - 完成/阻塞后继续 claim 下一条适合自己角色的任务.
+
+---
+
+## 3.5 自动派工器
+
+自动任务队列仍要求 Agent 自己输入 `claim`. 如果老板希望「只和总控聊天」, 开启自动派工器:
+
+```bash
+bash scripts/start_agent_dispatcher.sh
+```
+
+也可以双击桌面:
+
+```text
+打开内容工厂自动派工.app
+```
+
+自动派工器做 4 件事:
+- 每 8 秒扫描 `~/Desktop/nrg-agent-queue/tasks.json`.
+- 发现可执行任务后, 按角色启动对应 worker:
+  - `content` -> `~/Desktop/nrg-worktrees/content-dev` · Codex GPT-5.5 xhigh
+  - `media` -> `~/Desktop/nrg-worktrees/media-dev` · Codex GPT-5.5 xhigh
+  - `qa` -> `qa` / `qa-1` / `qa-2` · Codex GPT-5.5 xhigh
+  - `review` -> `~/Desktop/nrg-worktrees/review` · Claude Opus max
+- worker 自己读任务、做事、写 `docs/agent-handoff/` 报告、commit, 再 `agent_queue.py done/block`.
+- 如果 worker 退出但忘了更新队列, 派工器把任务标记为 `blocked`, 并把日志路径写进原因里.
+
+派工器不自动跑 `controller` 任务. 老板仍然只和总控窗口聊天; 总控负责把业务目标拆成队列任务.
+
+常用命令:
+
+```bash
+# 启动后台派工
+bash scripts/start_agent_dispatcher.sh
+
+# 看派工器和每个 worker 槽位状态
+bash scripts/start_agent_dispatcher.sh --status
+
+# 干跑: 只看现在会派谁, 不真正领取任务
+bash scripts/start_agent_dispatcher.sh --dry-run
+
+# 停止后台派工
+bash scripts/start_agent_dispatcher.sh --stop
+```
+
+日志位置:
+
+```text
+/tmp/nrg-agent-dispatcher.log
+~/Desktop/nrg-agent-queue/logs/
+~/Desktop/nrg-agent-queue/prompts/
+```
+
+安全边界:
+- worktree 有未提交改动时, 派工器默认跳过该槽位, 不往脏工作区继续塞新活.
+- 有依赖的任务不会提前跑, 例如 T-016 必须等 T-015 `done`.
+- 真烧 credits 仍按 §3.1 最小闭环规则执行; 失败后不自动重复提交.
+- 需要老板做业务选择时, Agent 必须 `block --owner-decision`, 不能自己拍脑袋.
 
 ---
 
@@ -246,7 +311,7 @@ Agent 规则:
 2. 把老板目标拆成任务, 写进 `docs/AGENT_BOARD.md`.
 3. 给每个任务指定角色、worktree、文件范围、验收标准.
 4. 用 `scripts/create_agent_worktree.sh` 创建或复用 worktree.
-5. 给每个 Agent 一段可复制的任务说明.
+5. 把下一步任务写进共享队列, 由自动派工器领取; 不让老板去其他窗口复制任务.
 
 老板只需要给总控一句:
 
@@ -257,6 +322,16 @@ Agent 规则:
 2. 修数字人/生图作品库展示
 3. QA 回归昨天合并的功能
 4. Claude 只审查, 不改代码
+```
+
+理想模式:
+
+```text
+老板 -> 总控: 我要修 XX / 做 YY
+总控 -> 队列: 拆成 content/media/qa/review 任务
+自动派工器 -> 对应 Agent: 自动领取并开干
+Agent -> 收件箱/队列: 写报告、commit、done/block
+总控 -> 老板: 只汇报结果、风险、必须选择的问题
 ```
 
 ---

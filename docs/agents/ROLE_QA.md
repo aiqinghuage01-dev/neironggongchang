@@ -70,10 +70,16 @@ python3 ~/Desktop/neironggongchang/scripts/agent_queue.py claim --role qa --agen
 python3 ~/Desktop/neironggongchang/scripts/agent_queue.py claim --role qa --agent qa-1 --format prompt
 ```
 
-如果领到任务, 直接按任务说明执行. 完成后:
+如果领到任务, 直接按任务说明执行. 验收通过后:
 
 ```bash
 python3 ~/Desktop/neironggongchang/scripts/agent_queue.py done T-XXX --agent qa-1 --report <报告路径> --commit <commit>
 ```
 
-如果需要老板做业务选择, 才用 `block --owner-decision`. 完成或阻塞后继续 claim 下一条 QA 任务.
+如果验证不通过、发现缺陷、外部链路失败或需要开发返修, 不要用 `done`, 要用:
+
+```bash
+python3 ~/Desktop/neironggongchang/scripts/agent_queue.py block T-XXX --agent qa-1 --reason "<不通过原因/返修点>"
+```
+
+如果需要老板做业务选择, 才额外加 `--owner-decision`. 完成或阻塞后继续 claim 下一条 QA 任务.

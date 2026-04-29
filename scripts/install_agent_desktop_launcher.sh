@@ -4,12 +4,15 @@ set -euo pipefail
 repo_root="$(git rev-parse --show-toplevel)"
 launcher="${HOME}/Desktop/打开内容工厂5个Agent.app"
 monitor_launcher="${HOME}/Desktop/打开内容工厂Agent监控.app"
+dispatcher_launcher="${HOME}/Desktop/打开内容工厂自动派工.app"
 script_file="$(mktemp)"
 monitor_script_file="$(mktemp)"
+dispatcher_script_file="$(mktemp)"
 
 cleanup() {
   rm -f "$script_file"
   rm -f "$monitor_script_file"
+  rm -f "$dispatcher_script_file"
 }
 trap cleanup EXIT
 
@@ -41,9 +44,23 @@ EOF
 rm -rf "$monitor_launcher"
 osacompile -o "$monitor_launcher" "$monitor_script_file"
 
+cat > "$dispatcher_script_file" <<EOF
+set repoPath to "${repo_root}"
+set logPath to "/tmp/nrg-agent-dispatcher.log"
+
+do shell script "cd " & quoted form of repoPath & " && /bin/bash scripts/start_agent_dispatcher.sh > " & quoted form of logPath & " 2>&1"
+
+display notification "自动派工已启动。你只需要在总控窗口安排任务。" with title "内容工厂 Agent"
+EOF
+
+rm -rf "$dispatcher_launcher"
+osacompile -o "$dispatcher_launcher" "$dispatcher_script_file"
+
 echo "Desktop launcher installed:"
 echo "  $launcher"
 echo "  $monitor_launcher"
+echo "  $dispatcher_launcher"
 echo
 echo "Double-click it to open the 5 Agent workspaces."
 echo "Double-click the monitor launcher to get notifications when reports change."
+echo "Double-click the dispatcher launcher to auto-assign queued tasks."

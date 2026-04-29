@@ -8,10 +8,10 @@
 
 | 角色 | 状态 | 工作区 | 当前任务 |
 |---|---|---|---|
-| 总控 Agent | 巡检完成 | `~/Desktop/neironggongchang` | controller 队列暂无可领任务; 等 T-015 QA 报告 |
-| 内容开发 Agent | 已提交待 QA | `~/Desktop/nrg-worktrees/content-dev` | T-014 提交 `5d4fc59` + 交接 `1eb78aa`; 等 T-015 |
+| 总控 Agent | 自动派工已接入 | `~/Desktop/neironggongchang` | 派工器运行中; T-015 QA 不通过, 下一步应派内容开发返修投流 |
+| 内容开发 Agent | 已提交但需返修 | `~/Desktop/nrg-worktrees/content-dev` | T-014 提交 `5d4fc59` + 交接 `1eb78aa`; T-015 真烧失败需返修 |
 | 媒体开发 Agent | 已提交待 QA | `~/Desktop/nrg-worktrees/media-dev` | T-013 提交 `99f1fb3` + 交接 `a700c0f`; 分支落后主线, 不可整分支合并 |
-| QA 测试 Agent | 已领取 T-015 | `~/Desktop/nrg-worktrees/qa`, `~/Desktop/nrg-worktrees/qa-1`, `~/Desktop/nrg-worktrees/qa-2` | T-015 claimed by `NRG QA 测试`; T-016 依赖 T-015 通过 |
+| QA 测试 Agent | T-015 不通过 | `~/Desktop/nrg-worktrees/qa`, `~/Desktop/nrg-worktrees/qa-1`, `~/Desktop/nrg-worktrees/qa-2` | T-015 blocked; T-016 blocked, 等投流返修通过后再恢复 |
 | 审查 Agent | 待启动 | `~/Desktop/nrg-worktrees/review` | 待分配 |
 
 ---
@@ -30,16 +30,16 @@
 | T-011 | 处理作品库图片占位卡: 无预览/无下载的图片作品要可解释或可恢复 | 总控/平台开发 | 已完成 | `backend/api.py`, `web/factory-works.jsx`, 可能涉及数据修复脚本; 先读 QA 报告现场数据 | T-012 已验证: 文件缺失图片显示明确状态; API 状态字段正确 |
 | T-012 | T-009/T-010/T-011 修后作品库全链路回归 | QA 测试 Agent | 已完成 | 不改功能代码; 只提交报告/必要测试脚本需总控确认 | QA 通过: pytest/e2e/真实 UI/curl/截图均通过, 未发现新 P0/P1/P2 |
 | T-013 | 补直接出图 apimart 下载失败路径保护和 fault injection 回归 | 媒体开发 Agent | 待 QA | `backend/services/apimart_service.py`, `tests/test_apimart_service.py`, 必要时前端结果错误展示 | 模拟远端 done 但下载失败时, task 不假成功、不写坏作品记录、用户看到可理解失败/重试信息; 回归覆盖 |
-| T-014 | 修投流文案 `n=1` 最小真链路 10 分钟失败 + LLM 非 JSON | 内容开发 Agent | 待 QA | `backend/services/touliu_pipeline.py`, 投流 endpoint 估时返回处, `tests/test_pipelines.py`/相关 tests; 暂不合入失败的 `2670a5a` | `n=1` 使用真实 LLM 能稳定返回 JSON 作品; 不再 181 秒仍 running; 初始 `estimated_seconds` 与 task 行一致; 解析 fenced JSON/前缀或给明确截断错误 |
-| T-015 | T-014 修后投流 `n=1` 最小真烧复测 | QA 测试 Agent | 已领取 | 不改功能代码; 只提交报告/必要测试脚本需总控确认 | 只提交 1 次投流 `n=1`; task `ok`; 页面/接口有结果; console/pageerror=0; 记录耗时和 AI usage; 不通过则不继续烧录音/热点 |
-| T-016 | 投流通过后复测录音改写真实 LLM + 热点改写 4 版真实链路 | QA 测试 Agent | 队列中(依赖 T-015) | 不改功能代码; 只提交报告/必要测试脚本需总控确认 | 在 T-015 通过后再跑; 录音改写返回非空正文或明确重试后失败; 热点 4 版返回 4 个版本且进度可见; 控制 credits, 不重复提交 |
+| T-014 | 修投流文案 `n=1` 最小真链路 10 分钟失败 + LLM 非 JSON | 内容开发 Agent | 需返修 | `backend/services/touliu_pipeline.py`, 投流 endpoint 估时返回处, `tests/test_pipelines.py`/相关 tests; 暂不合入失败的 `2670a5a` | T-015 真实 QA 仍 timeout, 需继续定位 OpenClaw/Claude timeout 与 task 失败态 |
+| T-015 | T-014 修后投流 `n=1` 最小真烧复测 | QA 测试 Agent | blocked | 不改功能代码; 只提交报告/必要测试脚本需总控确认 | QA 不通过: 真烧 task `5984e0bcdb754ad994d4b65415bd901e` 724s timeout; console/pageerror=0; pytest touliu 17 passed |
+| T-016 | 投流通过后复测录音改写真实 LLM + 热点改写 4 版真实链路 | QA 测试 Agent | blocked(等 T-015 通过) | 不改功能代码; 只提交报告/必要测试脚本需总控确认 | 暂停执行; 投流未通过前不继续烧录音/热点 credits |
 
 ---
 
 ## 最近证据
 
 - 总控启动巡检: `docs/agent-handoff/CONTROLLER_STARTUP_20260429_1852.md`.
-- 队列状态: T-015 `claimed` by `NRG QA 测试`; T-016 `queued` and depends_on `T-015`; controller role 暂无 queued 任务.
+- 队列状态: T-015 `blocked` by `NRG QA 测试`; T-016 `blocked` by `NRG 总控`, 等 T-015 真正通过后再恢复.
 - 收件箱: `python3 scripts/agent_inbox.py --hours 24` -> 50 reports; 未发现新的 T-015/T-016 通过报告.
 - QA 报告: `docs/agent-handoff/QA_WECHAT_20260429.md`
 - QA 原提交: `cb3454c`
@@ -100,8 +100,12 @@
 - 总控审查报告: `docs/agent-handoff/CONTROLLER_AUDIT_20260429.md`.
 - 自动任务队列:
   - 位置: `~/Desktop/nrg-agent-queue/tasks.json`
-  - 已入队: T-015(role=`qa`, priority=10), T-016(role=`qa`, depends_on=`T-015`, priority=20)
+  - 当前: T-015/T-016 均 blocked, 避免投流失败后继续烧下游 credits.
   - 领任务命令: `python3 ~/Desktop/neironggongchang/scripts/agent_queue.py claim --role qa --agent qa-1 --format prompt`
+- 自动派工器:
+  - 启动: `bash scripts/start_agent_dispatcher.sh`
+  - 状态: `bash scripts/start_agent_dispatcher.sh --status`
+  - 桌面入口: `打开内容工厂自动派工.app`
 
 ---
 
