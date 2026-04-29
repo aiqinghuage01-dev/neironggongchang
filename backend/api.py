@@ -3072,19 +3072,25 @@ class TouliuGenerateReq(BaseModel):
 
 @app.post("/api/touliu/generate", tags=["投流"], summary="一次出 n 条投流文案 (异步, 立即返 task_id)")
 def touliu_generate(req: TouliuGenerateReq):
-    """D-037b6 异步化: 立即返 task_id, daemon thread 跑 2-3 分钟 (Opus 6K system + lint).
+    """D-037b6 异步化: 立即返 task_id.
 
     完成后 task.result = {batch, lint, alloc, style_summary, tokens}.
     """
+    n = max(1, min(req.n, 15))
     task_id = touliu_pipeline.generate_batch_async(
         pitch=req.pitch,
         industry=req.industry,
         target_action=req.target_action,
-        n=max(1, min(req.n, 15)),
+        n=n,
         channel=req.channel,
         run_lint=req.run_lint,
     )
-    return {"task_id": task_id, "status": "running", "estimated_seconds": 150, "page_id": "ad"}
+    return {
+        "task_id": task_id,
+        "status": "running",
+        "estimated_seconds": 60 if n <= 2 else 150,
+        "page_id": "ad",
+    }
 
 
 class TouliuLintReq(BaseModel):
