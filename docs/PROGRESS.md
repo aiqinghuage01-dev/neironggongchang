@@ -4,7 +4,30 @@
 
 ---
 
-## 当前状态 (2026-04-29 · D-099 公众号 HTML 底部头像本地预览修复)
+## 当前状态 (2026-04-29 · D-100 做视频 Step 1 热点排行入口优化)
+
+**版本**: v0.7.5 — 做视频默认页底部从复用作品改为热点排行, 直连热点改写.
+
+### D-100 修复
+- `web/factory-make-v2.jsx`: Step 1 默认页底部删除“复用最近做过的”区域, 改成常驻
+  `热点排行` 面板.
+- 热点卡采用排行式信息结构: 排名 / 平台 / 夜班标记 / 匹配度 / 热度条 / 改写入口.
+- 点击任意热点直接写入 `hotrewrite_seed_hotspot`, 设置 `from_make_anchor`, 跳转
+  `PageHotrewrite`; 热点改写页自动进入拆解 + 选角度流程.
+- 按老板标注, 暂时隐藏“或者从这里开始写文案”的 6 个 skill 快捷卡, 降低默认页噪声.
+
+### 验证
+- Playwright :8001 `?page=make` 注入 3 条热点: 页面显示 `热点排行`; 不再出现
+  `复用最近做过的` / `或者从这里开始写文案` ✅
+- Playwright 点击第一条热点: 跳到热点改写 Step 2 `选切入角度`; `/api/hotrewrite/analyze`
+  body 含被选热点标题; console/pageerror=0 ✅
+- 截图已读:
+  `/tmp/_ui_shots/d100_make_hot_rank.png`,
+  `/tmp/_ui_shots/d100_make_hot_to_hotrewrite.png`.
+
+---
+
+## 上一里程碑 (2026-04-29 · D-099 公众号 HTML 底部头像本地预览修复)
 
 **版本**: v0.7.4 — Step 6 HTML 预览底部头像避开微信 mmbiz 防盗链.
 

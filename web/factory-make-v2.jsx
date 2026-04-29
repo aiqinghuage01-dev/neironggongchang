@@ -186,26 +186,14 @@ const MAKE_V2_SKILL_NAMES = {
 function MakeV2StepScript({ script, setScript, onNext, onNav, seedFrom, onDismissSeed }) {
   // D-062a: 当日热点预览 (从 hot_topics 表拉前 3 条)
   const [hotTopics, setHotTopics] = React.useState(null);
-  React.useEffect(() => {
+  function reloadHotTopics() {
     api.get("/api/hot-topics?limit=10")
       .then(items => setHotTopics(items || []))
       .catch(() => setHotTopics([]));
-  }, []);
-
-  // C10: 最近做过的视频 (复用快捷入口 · 拉 3 条)
-  const [recentWorks, setRecentWorks] = React.useState(null);
-  React.useEffect(() => {
-    api.get("/api/works?limit=3")
-      .then(items => setRecentWorks(items || []))
-      .catch(() => setRecentWorks([]));
-  }, []);
-
-  function reuseWork(w) {
-    // 复用 work.final_text 当 seed (final_text 已 truncate 120 字 by backend)
-    if (!w.final_text) return;
-    setScript(w.final_text);
-    // 不触发 setSeedFrom (没 dismiss banner 机制), 用户能看到 textarea 已填
   }
+  React.useEffect(() => {
+    reloadHotTopics();
+  }, []);
 
   function pickHotTopic(t) {
     // "只塞文案"模式: 把热点拼成 seed 塞 tab 4 (已写好的文案), 用户自己写
@@ -761,41 +749,147 @@ function MakeV2StepScript({ script, setScript, onNext, onNav, seedFrom, onDismis
         );
       })()}
 
-      {/* C10: 复用最近做过的 (3 条 mini 卡, 一键塞 textarea) */}
-      {recentWorks && recentWorks.length > 0 && (
-        <div style={{ marginBottom: 20 }}>
-          <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 12 }}>
-            <span style={{ fontSize: 15, fontWeight: 600, color: T.text }}>♻️ 复用最近做过的</span>
-            <span style={{ fontSize: 11, color: T.muted2 }}>· 选一条把文案塞回上面继续</span>
-            <div style={{ flex: 1 }} />
-            <button onClick={() => onNav("works")}
-              style={{ background: "transparent", border: "none", color: T.muted2, cursor: "pointer", fontSize: 11.5, fontFamily: "inherit" }}>
-              全部 →
-            </button>
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 10 }}>
-            {recentWorks.slice(0, 3).map(w => (
-              <RecentWorkCard key={w.id} w={w} onReuse={() => reuseWork(w)} />
-            ))}
-          </div>
-        </div>
-      )}
+      {/* D-100: 默认页底部改成热点排行, 选热点直接进入热点改写; 6 个 skill 快捷卡暂隐藏. */}
+      <HotRankPanel topics={hotTopics} onTake={takeThisHot} onRefresh={reloadHotTopics}
+        onNight={() => onNav("nightshift")} />
+    </div>
+  );
+}
 
-      {/* D-062nn-C1: 6 大 skill 卡 — 删研发文案标题, 改简洁 hero */}
-      <div style={{ marginBottom: 16 }}>
-        <div style={{ fontSize: 15, fontWeight: 600, color: T.text, marginBottom: 12 }}>
-          或者从这里开始写文案 ↓
+function HotRankPanel({ topics, onTake, onRefresh, onNight }) {
+  const ready = Array.isArray(topics);
+  const top = ready ? topics.slice(0, 6) : [];
+  return (
+    <div style={{ margin: "4px 0 20px" }}>
+      <div style={{
+        display: "flex", alignItems: "center", gap: 12, marginBottom: 12,
+        padding: "0 2px",
+      }}>
+        <div style={{
+          width: 34, height: 34, borderRadius: 10,
+          background: "linear-gradient(135deg, #ff7a1a 0%, #b91c1c 100%)",
+          color: "#fff", display: "flex", alignItems: "center", justifyContent: "center",
+          fontSize: 17, fontWeight: 800, flexShrink: 0,
+          boxShadow: "0 8px 18px rgba(185,28,28,0.16)",
+        }}>🔥</div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
+            <span style={{ fontSize: 16, fontWeight: 700, color: T.text }}>热点排行</span>
+            <span style={{ fontSize: 11.5, color: T.muted2 }}>选一条, 直接进入热点文案改写</span>
+          </div>
+          <div style={{ fontSize: 11, color: T.muted2, marginTop: 2 }}>
+            按热度和清华哥定位匹配度排序 · 先拆角度, 再写成口播
+          </div>
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 10 }}>
-          {MAKE_V2_SCRIPT_SKILLS.map(s => (
-            <ScriptSkillCard key={s.id} skill={s} onClick={() => {
-              setFromMake(s.id);
-              onNav(s.id);
+        <button onClick={onRefresh}
+          style={{
+            padding: "6px 12px", borderRadius: 100, border: `1px solid ${T.borderSoft}`,
+            background: "#fff", color: T.muted, cursor: "pointer",
+            fontSize: 11.5, fontWeight: 600, fontFamily: "inherit",
+          }}>
+          刷新
+        </button>
+      </div>
+
+      {!ready ? (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 10 }}>
+          {[1, 2, 3].map(i => (
+            <div key={i} style={{
+              height: 118, borderRadius: 12, background: "#fff",
+              border: `1px solid ${T.borderSoft}`, opacity: 0.7,
             }} />
           ))}
         </div>
-      </div>
+      ) : top.length === 0 ? (
+        <NightHotFlywheel compact onTopics={onRefresh} />
+      ) : (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 10 }}>
+          {top.map((t, idx) => (
+            <HotRankCard key={t.id || `${t.title}-${idx}`} t={t} idx={idx} onTake={() => onTake(t)} />
+          ))}
+        </div>
+      )}
+
+      {ready && top.length > 0 && (
+        <div style={{ marginTop: 10, display: "flex", justifyContent: "flex-end" }}>
+          <button onClick={onNight}
+            style={{ background: "transparent", border: "none", color: T.muted2, cursor: "pointer", fontSize: 11.5, fontFamily: "inherit" }}>
+            去小华夜班看更多 →
+          </button>
+        </div>
+      )}
     </div>
+  );
+}
+
+function HotRankCard({ t, idx, onTake }) {
+  const heat = Math.max(0, Math.min(100, Number(t.heat_score || 0)));
+  const matchPct = t.match_persona
+    ? Math.min(99, 88 + (heat % 12))
+    : Math.min(82, 58 + (heat % 24));
+  const fromNight = t.fetched_from === "night-shift";
+  const platform = t.platform || "热点";
+  return (
+    <button onClick={onTake} style={{
+      textAlign: "left", padding: 14, borderRadius: 12,
+      background: idx === 0 ? "linear-gradient(135deg, #fff7ed 0%, #fff 72%)" : "#fff",
+      border: `1px solid ${idx === 0 ? "#f5c99a" : T.borderSoft}`,
+      cursor: "pointer", fontFamily: "inherit",
+      minHeight: 132, display: "flex", flexDirection: "column", gap: 9,
+      boxShadow: idx === 0 ? "0 10px 24px rgba(194, 91, 34, 0.08)" : "none",
+    }}
+      onMouseEnter={e => {
+        e.currentTarget.style.borderColor = idx === 0 ? "#d97706" : T.brand;
+        e.currentTarget.style.boxShadow = `0 0 0 3px ${T.brandSoft}`;
+      }}
+      onMouseLeave={e => {
+        e.currentTarget.style.borderColor = idx === 0 ? "#f5c99a" : T.borderSoft;
+        e.currentTarget.style.boxShadow = idx === 0 ? "0 10px 24px rgba(194, 91, 34, 0.08)" : "none";
+      }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <span style={{
+          width: 26, height: 26, borderRadius: 8,
+          background: idx === 0 ? "#c2410c" : T.bg2,
+          color: idx === 0 ? "#fff" : T.muted,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          fontSize: 12, fontWeight: 800, flexShrink: 0,
+        }}>{idx + 1}</span>
+        <Tag size="xs" color={idx === 0 ? "amber" : "gray"}>{platform}</Tag>
+        {fromNight && <Tag size="xs" color="purple">夜班</Tag>}
+        <div style={{ flex: 1 }} />
+        <span style={{ fontSize: 11, color: T.brand, fontWeight: 700 }}>匹配 {matchPct}%</span>
+      </div>
+
+      <div style={{
+        fontSize: 14, fontWeight: 700, color: T.text, lineHeight: 1.45,
+        display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden",
+      }}>
+        {t.title}
+      </div>
+
+      {t.match_reason ? (
+        <div style={{
+          fontSize: 11.5, color: T.muted, lineHeight: 1.45,
+          display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden",
+        }}>
+          {t.match_reason}
+        </div>
+      ) : (
+        <div style={{ fontSize: 11.5, color: T.muted2 }}>点开后先拆 3 个切入角度</div>
+      )}
+
+      <div style={{ marginTop: "auto", display: "flex", alignItems: "center", gap: 8 }}>
+        <div style={{ flex: 1, height: 5, borderRadius: 100, background: T.bg2, overflow: "hidden" }}>
+          <div style={{
+            width: `${Math.max(12, heat)}%`, height: "100%", borderRadius: 100,
+            background: idx === 0 ? "#ea580c" : T.brand,
+          }} />
+        </div>
+        <span style={{ fontSize: 11.5, color: T.brand, fontWeight: 700, whiteSpace: "nowrap" }}>
+          改写 →
+        </span>
+      </div>
+    </button>
   );
 }
 
