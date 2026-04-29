@@ -9,7 +9,7 @@
 | 角色 | 状态 | 工作区 | 当前任务 |
 |---|---|---|---|
 | 总控 Agent | 进行中 | `~/Desktop/neironggongchang` | 核验 QA 报告、登记修复任务 |
-| 内容开发 Agent | 待启动 | `~/Desktop/nrg-worktrees/content-dev` | 待领 T-004 / T-005 |
+| 内容开发 Agent | 已完成 | `~/Desktop/nrg-worktrees/content-dev` | T-004 / T-005 已合入主线 |
 | 媒体开发 Agent | 待启动 | `~/Desktop/nrg-worktrees/media-dev` | 待领 T-007 |
 | QA 测试 Agent | 已完成 | `~/Desktop/nrg-worktrees/qa`, `~/Desktop/nrg-worktrees/qa-2` | QA-WECHAT / QA2-IMAGEGEN 真测不通过报告已提交 |
 | 审查 Agent | 待启动 | `~/Desktop/nrg-worktrees/review` | 待分配 |
@@ -20,8 +20,8 @@
 
 | ID | 业务目标 | 负责人 | 状态 | 文件范围 | 验收标准 |
 |---|---|---|---|---|---|
-| T-004 | 修公众号 Step 4 手动编辑正文没有进入后续配图/HTML/草稿的问题 | 内容开发 Agent | 待分配 | `web/factory-wechat-v2.jsx`; 必要 e2e 回归脚本 | QA 加标记后, `plan-images` 请求、HTML、草稿推送前 HTML 都包含编辑标记 |
-| T-005 | 修公众号推送前 sanitize 把真实段间图和头像全部剥掉的问题 | 内容开发 Agent | 待分配 | `backend/services/wechat_scripts.py`, `tests/test_wechat_sanitize.py`; 如沉淀新坑同步 `docs/WECHAT-SKILL-LESSONS.md` | 真实 `mmbiz_url` 带 `?from=appmsg` 的本次上传图不被误剥; 非己方历史图仍安全处理; 回归测试覆盖 |
+| T-004 | 修公众号 Step 4 手动编辑正文没有进入后续配图/HTML/草稿的问题 | 内容开发 Agent | 已完成 | `web/factory-wechat-v2.jsx`; `scripts/e2e_wechat_edit_propagation.js` | 主线已验证: `plan-images` 请求、HTML 预览、curl `/api/wechat/html` 都包含编辑标记 |
+| T-005 | 修公众号推送前 sanitize 把真实段间图和头像全部剥掉的问题 | 内容开发 Agent | 已完成 | `backend/services/wechat_scripts.py`, `tests/test_wechat_sanitize.py`, `docs/WECHAT-SKILL-LESSONS.md` | 主线已验证: 4 张本次段间图保留; `from=appmsg` 和内部标记清掉; 历史 appmsg 图仍剥除 |
 | T-006 | T-004/T-005 修后公众号 8 步链路复测 | QA 测试 Agent | 待分配 | 不改功能代码; 只提交报告/必要测试脚本需总控确认 | Playwright 真点真填 + console/pageerror=0 + 截图 + curl/pytest + 最小真烧; 草稿推送前 `img_count_sanitized >= 4` |
 | T-007 | 修直接出图 apimart 单图成功后结果区显示 `0/0 成功`、不展示图片的问题 | 媒体开发 Agent | 待分配 | `backend/services/apimart_service.py`, `web/factory-image-gen.jsx`, 对应 tests/e2e; 避免改 `backend/api.py` 除非总控确认 | apimart watcher 单图 task.result 对齐 `{images:[...]}` 契约或前端兼容 raw 结果; 结果页展示生成图; 作品库仍正常入库 |
 | T-008 | T-007 修后直接出图最小真烧复测 | QA 测试 Agent | 待分配 | 不改功能代码; 只提交报告/必要测试脚本需总控确认 | 1 张最低规格真烧; console/pageerror=0; 结果区显示 1/1 且有图; 作品库同图可见 |
@@ -38,6 +38,10 @@
 - QA2 原提交: `4f44f7a`
 - 主线证据提交: `6f9fc3f`
 - 结论: 不通过, 后端生图/入库成功, 但直接出图结果区显示 `0/0 成功` 且不展示图片.
+- T-004/T-005 代码提交: `2c9778e`
+- T-004/T-005 开发交接: `99ff4c9`
+- T-004/T-005 QA 复测报告: `49dabaa`
+- 结论: T-004/T-005 scoped 通过并已合入主线; 未包含真实公众号草稿推送, T-006 继续待测.
 
 ---
 

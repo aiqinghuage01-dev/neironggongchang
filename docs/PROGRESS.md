@@ -4,9 +4,9 @@
 
 ---
 
-## 当前状态 (2026-04-29 · QA 真测不通过待修)
+## 当前状态 (2026-04-29 · T-004/T-005 合入, T-006/T-007 待处理)
 
-**版本**: v0.7.6-agent10 — 多 QA 启动能力已在 D-111 落地; 公众号和直接出图均已做最小真烧, 但发现阻塞问题, 暂不算对应链路验收通过。
+**版本**: v0.7.6-agent10 — 公众号编辑传播 + 段间图 sanitizer 已修并合入主线; 真实公众号草稿推送复测和直接出图结果区仍待处理。
 
 ### QA 证据 · 公众号
 - QA 报告已合入主线: `docs/agent-handoff/QA_WECHAT_20260429.md`
@@ -26,19 +26,29 @@
 - 截图已核: `/tmp/_ui_shots/qa2_imagegen_04_final.png` 显示 `出图完成 · 0/0 成功`; `/tmp/_ui_shots/qa2_imagegen_05_works.png` 显示作品库已有该图.
 - pytest 未跑; 本轮未改业务代码, 仅做最小 credits 真链路和浏览器闭环.
 
-### 阻塞问题
-1. Step 4 手动编辑后的长文只停在 `WxStepWrite` 局部 state, 后续 `plan-images` / HTML / 草稿仍用旧 `article.content`.
-2. 推送草稿前 `sanitize_for_push` 把真实生成的 4 张段间图和头像全部剥掉: 原 HTML `img=5`, 推送前 HTML `img=0`.
-3. 直接出图 apimart 单图 watcher 后端链路成功, 但前端结果区按 `result.images` 展示, task.result 只有 raw `url/task_id`, 最终显示 `0/0 成功`.
+### 已合入 · T-004/T-005
+- 代码提交: `2c9778e fix: preserve wechat edits and section images`
+- 开发交接: `99ff4c9 docs: add wechat content dev handoff`
+- QA 复测报告: `49dabaa qa: report wechat edit propagation retest`
+- 主线验证:
+  - `.venv/bin/pytest -q tests/test_wechat_sanitize.py tests/test_wechat_html_inject.py` -> 31 passed.
+  - `.venv/bin/pytest -q tests/test_wechat_*.py tests/test_llm_empty_content.py tests/test_llm_retry.py` -> exit 0.
+  - `node scripts/e2e_wechat_edit_propagation.js` -> exit 0; 截图已读 `/tmp/_ui_shots/t004_wechat_edit_propagation.png`.
+  - 临时 API `8120` + `curl POST /api/wechat/html` + `sanitize_for_push`: 编辑标记存在; 原 `img=5`, 清洗后 `img=4`; `from=appmsg` 和 `data-nrg-section-image` 均清空.
+- 范围说明: T-004/T-005 scoped 通过; 没有执行真实公众号草稿推送.
+
+### 剩余阻塞
+1. T-006: 公众号 8 步真实草稿推送复测未跑, 需要最小真烧闭环确认 `last_push_request` 和真实草稿一致.
+2. T-007: 直接出图 apimart 单图 watcher 后端链路成功, 但前端结果区按 `result.images` 展示, task.result 只有 raw `url/task_id`, 最终显示 `0/0 成功`.
 
 ### 下一步
 - `docs/AGENT_BOARD.md` 已登记:
-  - `T-004`: 修手动编辑正文未进入后续流程.
-  - `T-005`: 修 sanitize 误剥真实段间图/头像.
+  - `T-004`: 已完成.
+  - `T-005`: 已完成.
   - `T-006`: 修后公众号 8 步链路复测.
   - `T-007`: 修直接出图结果区不展示 apimart 单图产物.
   - `T-008`: 修后直接出图最小真烧复测.
-- 上述问题修完并由 QA 真测通过前, 不能说对应链路完成.
+- T-006/T-007/T-008 完成并由 QA 真测通过前, 不能说对应链路完成.
 
 ---
 
