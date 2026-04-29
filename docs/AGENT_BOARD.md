@@ -8,10 +8,10 @@
 
 | 角色 | 状态 | 工作区 | 当前任务 |
 |---|---|---|---|
-| 总控 Agent | 自动派工已接入 | `~/Desktop/neironggongchang` | T-058 QA 阻塞项已返修: 旧热点任务展示清洗; 继续按队列推进 |
+| 总控 Agent | 自动派工已接入 | `~/Desktop/neironggongchang` | T-058 返修已通过 T-059 独立 QA; 继续按队列推进 |
 | 内容开发 Agent | 空闲 | `~/Desktop/nrg-worktrees/content-dev` | T-021/T-022 已合入 main; 等新内容任务 |
 | 媒体开发 Agent | 空闲 | `~/Desktop/nrg-worktrees/media-dev` | T-035/T-038 重复 worker 已由总控停止并 block |
-| QA 测试 Agent | 待复测 | `~/Desktop/nrg-worktrees/qa`, `~/Desktop/nrg-worktrees/qa-1`, `~/Desktop/nrg-worktrees/qa-2` | T-058 已 block; T-059 将复测总控返修, 不烧新热点 credits |
+| QA 测试 Agent | 空闲 | `~/Desktop/nrg-worktrees/qa`, `~/Desktop/nrg-worktrees/qa-1`, `~/Desktop/nrg-worktrees/qa-2` | T-059 已通过; 等新 QA 任务 |
 | 审查 Agent | 空闲 | `~/Desktop/nrg-worktrees/review` | T-043 已完成 |
 
 ---
@@ -63,7 +63,7 @@
 | T-056 | 全页面本机路径与技术词体验清理 | 总控 Agent | 已完成 | `web/factory-materials-v2.jsx`, `web/factory-strategy.jsx`, `web/factory-home.jsx` | 素材库默认不露 `/Users`; 战略部观察台不露 provider 工程词; 首页不露 `prompt`; 23 页可见文案扫描 + full pytest 通过 |
 | T-057 | 热点改写 4 版 Opus 超时兜底 | 总控 Agent | 已完成 | `backend/services/hotrewrite_pipeline.py`, `backend/api.py`, `shortvideo/ai.py`, `tests/test_hotrewrite_versions.py` | 4 版任务逐版进度 + 快路兜底 + 产出清洗; 真实 task `250a97291f9d4c8289231d4ab93609c7` ok, `version_count=4`, `fallback_count=1`, browser errors=0; full pytest 通过 |
 | T-058 | T-057 热点 4 版兜底独立回归 | QA 测试 Agent | blocked | 只读 QA; 不重复真实提交 4 版 LLM 任务 | QA 不通过: 兜底指标成立, 但旧 task 第 4 版仍露 `已走技能/需要进一步操作吗`; 报告 commit `c662933` |
-| T-059 | T-058 返修后热点旧任务展示 no-credit 回归 | QA 测试 Agent | 待派发 | 只读 QA; 不重复真实提交 4 版 LLM 任务 | 复核最新 main: 旧 task `250a97291f9d4c8289231d4ab93609c7` 详情/列表 API 与页面第 4 版均不含 `已走技能/需要进一步操作吗`; pytest/页面 smoke 通过 |
+| T-059 | T-058 返修后热点旧任务展示 no-credit 回归 | QA 测试 Agent | 已完成 | 只读 QA; 不重复真实提交 4 版 LLM 任务 | QA 通过: 旧 task 详情/列表 API 与页面第 4 版均不含内部文案; pytest 10 passed; console/pageerror/requestfailed/http error=0; 未提交新热点任务 |
 
 ---
 
@@ -82,7 +82,7 @@
 - T-057 总控返修: 新增 `hotrewrite.write.fast`、4 版逐版进度、Opus 超时后兜底 DeepSeek、产出清洗; 真实页面 task `250a97291f9d4c8289231d4ab93609c7` -> ok, 4 版, `fallback_count=1`; console/pageerror/requestfailed/http>=400 均 0; 页面 smoke 16/16 OK。
 - T-058 QA blocked: no-credit 独立复核确认旧 task 第 4 版正文仍用户可见 `已走技能/需要进一步操作吗`; 报告 `/Users/black.chen/Desktop/nrg-worktrees/qa/docs/agent-handoff/QA_T058_HOTREWRITE_FALLBACK_20260430.md`, commit `c662933`。
 - T-058 返修: 任务详情/列表 API 对热点改写旧结果做展示清洗, 不改原始 DB; 同一旧 task curl 详情/列表均 `v4_has_skill=false`, `v4_has_next=false`; Playwright 页面 textarea 同样干净, 截图 `/tmp/_ui_shots/t058_hotrewrite_existing_task_v4_fixed.png`。
-- T-059 准备派发: QA 只做 no-credit 回归, 禁止重复提交新的热点 4 版任务。
+- T-059 QA 通过: 报告 `docs/agent-handoff/QA_T059_HOTREWRITE_LEGACY_NO_CREDIT_20260430.md`; QA commit `79c8b7d`, main cherry-pick `2461f37`; 旧 task 详情/列表和页面第 4 版 textarea 均干净, `forbiddenPosts=0`, pytest 10 passed, 未烧新热点 credits。
 - D-124 素材库总控交接: `docs/agent-handoff/CONTROLLER_MATERIALS_T026_MAIN_20260429.md`.
 - D-124 验证: `python3 -m pytest -q` -> 通过; `git diff --check` -> clean; 临时 API `:18000` curl `/categories`、`/match`、`/classify-batch?limit=100` 通过; Playwright 截图 `/tmp/_ui_shots/t026_materials_desktop_home.png`, `/tmp/_ui_shots/t026_materials_desktop_category.png`, `/tmp/_ui_shots/t026_materials_desktop_match.png`, `/tmp/_ui_shots/t026_materials_mobile_home.png`, console error/pageerror/requestfailed/http error=0.
 - 总控本轮交接: `docs/agent-handoff/CONTROLLER_T013_T017_20260429_2011.md`.
