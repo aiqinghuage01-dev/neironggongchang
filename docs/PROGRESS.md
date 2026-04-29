@@ -4,7 +4,23 @@
 
 ---
 
-## 当前状态 (2026-04-29 · D-108 桌面一键打开 5 Agent)
+## 当前状态 (2026-04-29 · D-109 Claude Opus CLI 模型名修复)
+
+**版本**: v0.7.6-agent8 — 审查 Agent 默认 Claude 模型从 `opus4.7` 改为 CLI 可用别名 `opus`.
+
+### D-109 修复
+- `scripts/start_multi_agents_cmux.sh` / `scripts/start_multi_agents_tmux.sh`:
+  Claude 审查 Agent 默认 `CLAUDE_MODEL` 从 `opus4.7` 改为 `opus`.
+- 原因: `opus4.7` 是 UI 展示名风格, Claude CLI 不识别; CLI 帮助明确支持
+  `opus` 作为最新 Opus 别名.
+- `docs/MULTI_AGENT_WORKFLOW.md`: 同步默认模型说明.
+
+### 验证
+- `claude --model opus --effort max --no-session-persistence -p 'Reply only: OK'` -> `OK` ✅
+
+---
+
+## 上一里程碑 (2026-04-29 · D-108 桌面一键打开 5 Agent)
 
 **版本**: v0.7.6-agent7 — 双击桌面按钮即可打开 5 个 Agent workspace.
 

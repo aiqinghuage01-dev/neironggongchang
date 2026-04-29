@@ -34,7 +34,7 @@ session="nrg-agents"
 socket="${TMPDIR:-/tmp}/nrg-agents.sock"
 codex_model="${CODEX_MODEL:-gpt-5.5}"
 codex_effort="${CODEX_REASONING_EFFORT:-xhigh}"
-claude_model="${CLAUDE_MODEL:-opus4.7}"
+claude_model="${CLAUDE_MODEL:-opus}"
 claude_effort="${CLAUDE_EFFORT:-max}"
 
 while [[ $# -gt 0 ]]; do

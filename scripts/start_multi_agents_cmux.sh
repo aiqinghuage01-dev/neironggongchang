@@ -31,7 +31,7 @@ open_fallback=1
 cmux_cli="/Applications/cmux.app/Contents/Resources/bin/cmux"
 codex_model="${CODEX_MODEL:-gpt-5.5}"
 codex_effort="${CODEX_REASONING_EFFORT:-xhigh}"
-claude_model="${CLAUDE_MODEL:-opus4.7}"
+claude_model="${CLAUDE_MODEL:-opus}"
 claude_effort="${CLAUDE_EFFORT:-max}"
 
 while [[ $# -gt 0 ]]; do

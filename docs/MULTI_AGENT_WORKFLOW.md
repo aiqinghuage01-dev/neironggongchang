@@ -159,12 +159,12 @@ bash scripts/start_multi_agents_cmux.sh --launch
 
 默认模型:
 - Codex: `gpt-5.5` + `model_reasoning_effort="xhigh"` (超高)
-- Claude: `opus4.7` + `--effort max`
+- Claude: `opus` + `--effort max` (`opus` 是 Claude CLI 的最新 Opus 别名)
 
 如需临时覆盖:
 
 ```bash
-CODEX_MODEL=gpt-5.5 CODEX_REASONING_EFFORT=xhigh CLAUDE_MODEL=opus4.7 CLAUDE_EFFORT=max \
+CODEX_MODEL=gpt-5.5 CODEX_REASONING_EFFORT=xhigh CLAUDE_MODEL=opus CLAUDE_EFFORT=max \
   bash scripts/start_multi_agents_cmux.sh --launch
 ```
 
