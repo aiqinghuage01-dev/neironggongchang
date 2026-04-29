@@ -22,6 +22,7 @@ from .llm_retry import TransientLLMError, with_retry
 DEFAULT_BASE_URL = "http://localhost:3456/v1"
 DEFAULT_MODEL = "claude-opus-4-6"
 DEFAULT_API_KEY = "not-needed"
+DEFAULT_TIMEOUT = 120.0
 
 
 class ClaudeOpusError(RuntimeError):
@@ -29,19 +30,32 @@ class ClaudeOpusError(RuntimeError):
 
 
 class ClaudeOpusClient:
-    def __init__(self, base_url: str | None = None, api_key: str | None = None, model: str | None = None):
+    def __init__(
+        self,
+        base_url: str | None = None,
+        api_key: str | None = None,
+        model: str | None = None,
+        *,
+        timeout: float | None = None,
+        sdk_max_retries: int = 0,
+        llm_max_retries: int = 1,
+    ):
         self.base_url = base_url or DEFAULT_BASE_URL
         # 空字符串 / None 都用默认哨兵值(OpenAI SDK 要求非空)
         self.api_key = api_key if api_key else DEFAULT_API_KEY
         self.model = model or DEFAULT_MODEL
+        self.timeout = timeout or DEFAULT_TIMEOUT
+        self.sdk_max_retries = max(0, int(sdk_max_retries))
+        self.llm_max_retries = max(0, int(llm_max_retries))
         # trust_env=False: 不读 macOS 系统代理(Clash/Surge/VPN 等)。
         # OpenClaw proxy 是 localhost,绝对不该走 system proxy,
         # 否则 httpx 把请求发给系统代理,代理看是 localhost 就返回 503。
-        self._http_client = httpx.Client(trust_env=False, timeout=120)
+        self._http_client = httpx.Client(trust_env=False, timeout=self.timeout)
         self._client = OpenAI(
             api_key=self.api_key,
             base_url=self.base_url,
             http_client=self._http_client,
+            max_retries=self.sdk_max_retries,
         )
 
     def chat(
@@ -82,7 +96,7 @@ class ClaudeOpusClient:
         try:
             resp, text = with_retry(
                 _call_and_extract,
-                max_retries=1,
+                max_retries=self.llm_max_retries,
                 on_retry=lambda n, e: logging.getLogger("claude_opus").warning(
                     f"transient err, retrying #{n}: {str(e)[:150]}"
                 ),

@@ -135,7 +135,7 @@ def test_touliu_max_tokens_scales_with_batch_size():
     assert touliu_pipeline._max_tokens_for_batch(10) == 12000
 
 
-def test_touliu_quick_batches_use_deepseek_route_key():
+def test_touliu_quick_batches_use_quick_route_key():
     assert touliu_pipeline._route_key_for_batch(1) == "touliu.generate.quick"
     assert touliu_pipeline._route_key_for_batch(2) == "touliu.generate.quick"
     assert touliu_pipeline._route_key_for_batch(3) == "touliu.generate"
@@ -160,6 +160,7 @@ def test_touliu_generate_one_uses_compact_budget(monkeypatch):
         )
 
     fake_ai.chat = fake_chat
+    fake_ai.engine_name = "opus"
     fake_skill = {
         "skill_md": "方法论" * 4000,
         "references": {
@@ -186,6 +187,7 @@ def test_touliu_generate_one_uses_compact_budget(monkeypatch):
 
     assert len(r["batch"]) == 1
     assert r["route_key"] == "touliu.generate.quick"
+    assert r["engine"] == "opus"
     assert captured["route_key"] == "touliu.generate.quick"
     assert captured["deep"] is False
     assert captured["max_tokens"] == 2200

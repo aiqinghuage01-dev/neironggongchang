@@ -1192,3 +1192,27 @@ D-016 localStorage 恢复: 快照是 `step=write + article=null`, 旧 `WxStepWri
 - `pytest -q -x` 全量通过.
 - Playwright 种入同款坏快照 (`step=write + article=null`) 后, 页面自动显示 2964 字正文 +
   自检结果, screenshot `/tmp/_ui_shots/d095_wechat_write_recovered.png`.
+
+
+## D-118 - 投流快出路由回 Opus + 关闭 SDK 叠加重试 (2026-04-29)
+
+**触发**: T-020 复测时 `touliu.generate.quick` 已改走 DeepSeek, 但真实页面 `n=1`
+task 立即失败 `Authentication Fails (governor)`, `tokens=0`. 同时 Review 指出
+OpenAI SDK 默认 retry 与项目 `with_retry` 叠加, 会把 OpenClaw/DeepSeek 故障放大成
+数分钟等待, 不符合投流快出 60s 目标.
+
+**决策**:
+- `touliu.generate.quick` 默认路由改回 `opus`, 继续走 `shortvideo.ai.get_ai_client`.
+- 快出路径使用紧凑 prompt、`deep=False`、小输出预算, 并设置 fail-fast runtime options:
+  `timeout=55s`, `llm_max_retries=0`.
+- `ClaudeOpusClient` / `DeepSeekClient` 初始化 `OpenAI(..., max_retries=0)`, 关闭 SDK
+  内置 retry; 保留项目层 `with_retry` 作为默认唯一可观测 retry.
+- 投流 task result 增加 `engine`, 与 `route_key` 和 `ai_calls` usage 对账.
+
+**验证**:
+- `tests/test_ai_routing.py` 覆盖快出默认 `opus` + fail-fast client 参数.
+- `tests/test_llm_empty_content.py` 覆盖 SDK retry 关闭和 fail-fast 不外层重试.
+- 真实 curl 只提交一次投流 `n=1`: task `c0a4f4817f774c22b5ef7fc3b7f78c5e`,
+  38 秒 `ok`, `result.route_key=touliu.generate.quick`, `result.engine=opus`.
+- `ai_calls` usage: `engine=opus`, `route_key=touliu.generate.quick`, `duration_ms=37897`,
+  `prompt_tokens=4134`, `completion_tokens=260`, `total_tokens=4394`, `ok=1`.

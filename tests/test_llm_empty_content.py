@@ -74,6 +74,19 @@ def test_claude_opus_empty_content_persists_raises():
     assert "6558" in str(ei.value)
 
 
+def test_claude_opus_failfast_client_does_not_outer_retry_empty_content():
+    """快出类 fail-fast 客户端禁用项目外层重试,避免一个故障等两轮。"""
+    from shortvideo.claude_opus import ClaudeOpusClient, ClaudeOpusError
+    c = ClaudeOpusClient(llm_max_retries=0)
+    c._client = MagicMock()
+    create = MagicMock(return_value=_fake_resp(content="", completion_tokens=6558))
+    c._client.chat.completions.create = create
+
+    with pytest.raises(ClaudeOpusError):
+        c.chat("hello")
+    assert create.call_count == 1
+
+
 def test_claude_opus_empty_content_with_zero_tokens_returns_empty_no_retry():
     """空 content + completion_tokens=0 (合法的 0-output 路径) → 不重试, 返回空 text."""
     from shortvideo.claude_opus import ClaudeOpusClient
@@ -130,6 +143,20 @@ def test_deepseek_empty_content_with_tokens_retries_then_succeeds():
     r = ds.chat("hi")
     assert r.text == "rewritten text"
     assert len(calls) == 2
+
+
+def test_openai_sdk_retries_are_disabled_in_llm_clients():
+    """T-021: OpenAI SDK 自带重试必须关掉,只保留项目自己可控的 LLM retry。"""
+    from shortvideo.claude_opus import ClaudeOpusClient
+    from shortvideo.deepseek import DeepSeekClient
+
+    c = ClaudeOpusClient()
+    ds = DeepSeekClient(api_key="test")
+
+    assert c.sdk_max_retries == 0
+    assert c._client.max_retries == 0
+    assert ds.sdk_max_retries == 0
+    assert ds._client.max_retries == 0
 
 
 def test_deepseek_none_content_no_attribute_error():

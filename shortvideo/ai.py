@@ -38,6 +38,11 @@ class PersonaInjectedAI:
         """漏出底层客户端(极少用,仅用于绕过人设注入做探活等)。"""
         return self._inner
 
+    @property
+    def engine_name(self) -> str:
+        """当前解析后的底层引擎名,供任务结果标注和排障使用。"""
+        return self._engine_name
+
     def chat(
         self,
         prompt: str,
@@ -176,7 +181,7 @@ DEFAULT_ENGINE_ROUTES = {
     "baokuan.rewrite":       "opus",      # 多版改写 (V1-V4), 质量优先
     # touliu-agent skill (D-014) 替换旧 ad.generate
     "touliu.generate":       "opus",      # 3+ 条批量 × 400-650 字,质量优先
-    "touliu.generate.quick": "deepseek",  # 1/2 条快出,短 JSON,避开 Opus/OpenClaw 长超时
+    "touliu.generate.quick": "opus",      # 1/2 条快出,DeepSeek 当前认证不可用; Opus 走紧凑上下文 + fail-fast
     # 短视频 / 改写
     "rewrite":            "opus",       # 短视频口播文案,风格决定
     # 批量生成类
@@ -225,18 +230,32 @@ def _resolve_engine(route_key: str | None) -> str:
     return (s.get("ai_engine") or "opus").lower()
 
 
-def _build_raw_client(engine: str):
+FAIL_FAST_ROUTE_OPTIONS = {
+    # T-021: 快出路径不叠加 SDK retry + 项目 retry,外部卡住时 60s 内失败。
+    "touliu.generate.quick": {"timeout": 55.0, "llm_max_retries": 0},
+}
+
+
+def _runtime_options_for_route(route_key: str | None) -> dict:
+    if not route_key:
+        return {}
+    return dict(FAIL_FAST_ROUTE_OPTIONS.get(route_key, {}))
+
+
+def _build_raw_client(engine: str, route_key: str | None = None):
     try:
         from backend.services import settings as settings_service
         s = settings_service.get_all()
     except Exception:
         s = {}
+    runtime_options = _runtime_options_for_route(route_key)
     if engine == "deepseek":
-        return DeepSeekClient()
+        return DeepSeekClient(**runtime_options)
     return ClaudeOpusClient(
         base_url=s.get("opus_base_url") or None,
         api_key=s.get("opus_api_key") or None,
         model=s.get("opus_model") or None,
+        **runtime_options,
     )
 
 
@@ -247,7 +266,7 @@ def get_ai_client(route_key: str | None = None) -> PersonaInjectedAI:
       不传则用 settings.ai_engine 全局引擎。
     """
     engine = _resolve_engine(route_key)
-    return PersonaInjectedAI(_build_raw_client(engine), route_key=route_key)
+    return PersonaInjectedAI(_build_raw_client(engine, route_key=route_key), route_key=route_key)
 
 
 def routes_info() -> dict:

@@ -29,7 +29,21 @@ def test_resolve_engine_uses_default_routes(monkeypatch):
     assert _resolve_engine("wechat.titles") == "deepseek"
     assert _resolve_engine("wechat.write") == "opus"
     assert _resolve_engine("touliu.generate") == "opus"
-    assert _resolve_engine("touliu.generate.quick") == "deepseek"
+    assert _resolve_engine("touliu.generate.quick") == "opus"
+
+
+def test_touliu_quick_route_uses_opus_fail_fast_client(monkeypatch):
+    """T-021: DeepSeek 认证不可用时,快出默认走 Opus 且不叠加重试。"""
+    monkeypatch.setattr("backend.services.settings.get_all", lambda: {})
+
+    raw = ai_mod._build_raw_client("opus", route_key="touliu.generate.quick")
+
+    assert _resolve_engine("touliu.generate.quick") == "opus"
+    assert type(raw).__name__ == "ClaudeOpusClient"
+    assert raw.timeout <= 55
+    assert raw.llm_max_retries == 0
+    assert raw.sdk_max_retries == 0
+    assert raw._client.max_retries == 0
 
 
 def test_resolve_engine_user_override_wins(monkeypatch):

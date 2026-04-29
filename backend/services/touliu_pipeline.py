@@ -274,6 +274,7 @@ def generate_batch(
 
     route_key = _route_key_for_batch(n)
     ai = get_ai_client(route_key=route_key)
+    engine = getattr(ai, "engine_name", "unknown")
     r = ai.chat(prompt, system=system, deep=False, temperature=0.85, max_tokens=_max_tokens_for_batch(n))
     # D-094: 不让 JSON 解析失败 fallback 成 batch=[] 假成功 (前端看 0 条投流文案以为正常).
     obj = _extract_json(r.text, "object")
@@ -317,6 +318,7 @@ def generate_batch(
             "target_action": target_action, "n": n, "channel": channel,
         },
         "route_key": route_key,
+        "engine": engine,
         "tokens": r.total_tokens,
     }
 

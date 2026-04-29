@@ -151,6 +151,23 @@ if not content:
 - `deep=False` 精简 ~300 token
 - 6 个核心模型加 `deep` 参数 (D-008), 新加 endpoint 注意保持
 
+### 2.3 OpenAI SDK 内置 retry 必须关闭 (D-118)
+
+**现象**: OpenAI 兼容 SDK 默认 `max_retries=2`, 再叠加项目 `with_retry(max_retries=1)`,
+一次 OpenClaw/DeepSeek 故障会被放大成多轮等待, 投流快出从 60s 目标拖到数分钟.
+
+**正例**:
+```python
+OpenAI(..., max_retries=0)
+with_retry(_call, max_retries=1)  # 只保留项目层可观测 retry
+```
+
+**反例**:
+- 依赖 SDK 默认重试, 同时外面再包 `with_retry`
+- 快出路径继续用 120s timeout + 外层 retry
+
+**为什么**: 重试次数和超时必须在项目层可控, usage/error 才能对账, 失败也能 fail-fast.
+
 ---
 
 ## 3. 访客模式硬约束 (D-070)

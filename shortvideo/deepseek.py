@@ -27,13 +27,25 @@ class DeepSeekClient:
     # 路径正常, UI 立刻看到失败原因.
     DEFAULT_TIMEOUT = 120.0
 
-    def __init__(self, api_key: str | None = None, base_url: str | None = None, model: str | None = None,
-                 timeout: float | None = None):
+    def __init__(
+        self,
+        api_key: str | None = None,
+        base_url: str | None = None,
+        model: str | None = None,
+        timeout: float | None = None,
+        *,
+        sdk_max_retries: int = 0,
+        llm_max_retries: int = 1,
+    ):
         self.model = model or settings.deepseek_model
+        self.timeout = timeout or self.DEFAULT_TIMEOUT
+        self.sdk_max_retries = max(0, int(sdk_max_retries))
+        self.llm_max_retries = max(0, int(llm_max_retries))
         self._client = OpenAI(
             api_key=api_key or settings.deepseek_api_key,
             base_url=base_url or settings.deepseek_base_url,
-            timeout=timeout or self.DEFAULT_TIMEOUT,
+            timeout=self.timeout,
+            max_retries=self.sdk_max_retries,
         )
 
     def chat(
@@ -71,7 +83,7 @@ class DeepSeekClient:
 
         resp, text = with_retry(
             _call_and_extract,
-            max_retries=1,
+            max_retries=self.llm_max_retries,
             on_retry=lambda n, e: logging.getLogger("deepseek").warning(
                 f"transient err, retrying #{n}: {str(e)[:150]}"
             ),
