@@ -167,6 +167,17 @@ async function newPage(browser, errors, workflow) {
     if (sectionCalls.length !== 4) throw new Error(`Step 5 一键生成应提交 4 张, 实际 ${sectionCalls.length}`);
     const spread = Math.max(...sectionCalls) - Math.min(...sectionCalls);
     if (spread > 1000) throw new Error(`Step 5 一键生成不是并发提交, spread=${spread}ms`);
+    await page.waitForSelector("text=一键重生 4 张", { timeout: 10000 });
+    await page.getByRole("button", { name: /一键重生 4 张/ }).click();
+    for (let tries = 0; tries < 20 && sectionCalls.length < 8; tries++) {
+      await page.waitForTimeout(250);
+    }
+    if (sectionCalls.length !== 8) throw new Error(`Step 5 一键重生应再提交 4 张, 实际总请求 ${sectionCalls.length}`);
+    const regenCalls = sectionCalls.slice(4);
+    const regenSpread = Math.max(...regenCalls) - Math.min(...regenCalls);
+    if (regenSpread > 1000) throw new Error(`Step 5 一键重生不是并发提交, spread=${regenSpread}ms`);
+    await page.waitForFunction(() => document.body.innerText.includes("段间配图 · 4/4"), null, { timeout: 15000 });
+    await page.screenshot({ path: "/tmp/_ui_shots/d097_images_regen_all.png", fullPage: true });
     await page.getByRole("button", { name: /拼 HTML/ }).click();
     await page.waitForSelector("text=排版好了", { timeout: 10000 });
     await page.screenshot({ path: "/tmp/_ui_shots/d096_images_html_success.png", fullPage: true });

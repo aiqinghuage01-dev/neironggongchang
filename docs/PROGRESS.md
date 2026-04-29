@@ -4,7 +4,31 @@
 
 ---
 
-## 当前状态 (2026-04-28 · D-096 公众号全链路交互收口)
+## 当前状态 (2026-04-29 · D-097 公众号段间图已完成后也能一键并发重生)
+
+**版本**: v0.7.3 — 修 Step 5 4/4 已生成后只能逐张重生.
+
+**触发 case**: 老板截图显示 Step 5 已经 `段间配图 · 4/4`, 但每张卡片只有
+"用新 prompt 重生", 看起来只能一张张重生. D-096 只给 pending 图做了"一键生成",
+没有覆盖 done 图的批量重生状态.
+
+### D-097 修复
+- `web/factory-wechat-v2.jsx`: Step 5 在 `pending=0 && doneCount>0` 时显示
+  `一键重生 N 张`; 点击后用同一套 `Promise.all(indices.map(onGen))` 并发提交所有
+  已完成卡片.
+- `generateOneImage`: 进入 running 时清掉旧 `mmbiz_url/media_url/error`, 避免重生中
+  继续显示旧图误导.
+- `scripts/e2e_wechat_d096_flow.js`: 增加 4/4 后点击"一键重生 4 张"的回归,确认
+  第二批 4 个 `/api/wechat/section-image` 请求也在 1 秒内提交.
+
+### 验证
+- `node scripts/e2e_wechat_d096_flow.js` ✅
+- 截图已读: `/tmp/_ui_shots/d097_images_regen_all.png`, 顶部显示
+  `一键重生 4 张`, 页面仍为 `段间配图 · 4/4`.
+
+---
+
+## 上一里程碑 (2026-04-28 · D-096 公众号全链路交互收口)
 
 **版本**: v0.7.2 — 修公众号 Step 2 标题换一批重复、Step 5 配图先选风格再生成、
 Step 6 拼 HTML 错误误导.

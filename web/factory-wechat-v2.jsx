@@ -253,7 +253,13 @@ function PageWechat({ onNav }) {
 
   async function generateOneImage(idx) {
     const plan = imagePlans[idx];
-    setImagePlans(prev => prev.map((p, i) => i === idx ? { ...p, status: "running" } : p));
+    setImagePlans(prev => prev.map((p, i) => i === idx ? {
+      ...p,
+      status: "running",
+      mmbiz_url: null,
+      media_url: null,
+      error: undefined,
+    } : p));
     try {
       // D-037b6: section-image 异步化, 用 apiPostThenWait 自动轮询任务完成
       const r = await apiPostThenWait("/api/wechat/section-image", { prompt: plan.image_prompt, size: "16:9", engine: imgEngine });
@@ -1057,14 +1063,15 @@ function WxStepImages({ plans, setPlans, onGen, loading, onPrev, onNext, onRegen
   const pending = plans.filter(p => p.status !== "done" && p.status !== "running");
   const styleReady = !!globalStyleId && !restyling;
 
-  async function genAll() {
+  async function genAll(options) {
     if (!styleReady) {
       setStyleErr("先选一个统一风格,再生成图片。");
       return;
     }
+    const includeDone = !!(options && options.includeDone);
     const indices = plans
       .map((p, i) => ({ p, i }))
-      .filter(x => x.p.status !== "done" && x.p.status !== "running")
+      .filter(x => x.p.status !== "running" && (includeDone || x.p.status !== "done"))
       .map(x => x.i);
     await Promise.all(indices.map(i => onGen(i)));
   }
@@ -1093,6 +1100,11 @@ function WxStepImages({ plans, setPlans, onGen, loading, onPrev, onNext, onRegen
         {pending.length > 0 && (
           <Btn variant="primary" onClick={genAll} disabled={runningCount > 0 || restyling || !globalStyleId}>
             {globalStyleId ? `✨ 一键生成 ${pending.length} 张` : "先选风格"}
+          </Btn>
+        )}
+        {pending.length === 0 && doneCount > 0 && (
+          <Btn variant="outline" onClick={() => genAll({ includeDone: true })} disabled={runningCount > 0 || restyling || !globalStyleId}>
+            {globalStyleId ? `🔄 一键重生 ${doneCount} 张` : "先选风格"}
           </Btn>
         )}
       </div>
