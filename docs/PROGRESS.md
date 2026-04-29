@@ -4,15 +4,16 @@
 
 ---
 
-## 当前状态 (2026-04-29 · Agent 启动器恢复)
+## 当前状态 (2026-04-29 · 总控启动巡检)
 
-**版本**: v0.7.6-agent19 — 修复 5-Agent 桌面启动器因 worktree 无法 fast-forward 中途退出的问题; 多 Agent 共享任务队列继续可用。T-013/T-014 均有开发自验证据, 但还没有独立 QA 通过; T-015/T-016 仍是最终收口阻塞。
+**版本**: v0.7.6-agent20 — 总控启动后完成队列和收件箱复核; controller role 当前无可领任务, T-015 已被 QA 领取但尚未交报告, T-016 仍依赖 T-015。T-013/T-014 均有开发自验证据, 但还没有独立 QA 通过, 不能写项目完成。
 
 ### 当前进行
 - T-014: 内容开发提交 `5d4fc59`, 隔离端口真实 curl `n=1` 53 秒 `ok`; 只能算开发自验通过, 等 T-015 独立 QA 页面真烧.
-- T-015: 已入共享任务队列, role=`qa`, priority=10; QA Agent 新启动后会自己 claim, 只提交 1 次投流 `n=1`, 必须交截图/console/pageerror/task/AI usage 证据.
+- T-015: 已被 `NRG QA 测试` 领取, role=`qa`, priority=10; 尚未有 QA 交接报告. 只提交 1 次投流 `n=1`, 必须交截图/console/pageerror/task/AI usage 证据.
 - T-016: 已入共享任务队列, role=`qa`, depends_on=`T-015`; T-015 未 done 前不会被自动领取.
 - T-013: 媒体开发提交 `99f1fb3`, fault injection 自验通过; `codex/media-dev` 落后主线, 不可整分支合并, 只能同步主线后再合或 cherry-pick 单提交.
+- 总控巡检: `python3 scripts/agent_queue.py claim --role controller --agent "NRG 总控" --format prompt` -> 无 controller 任务; `python3 scripts/agent_inbox.py --hours 24` -> 50 reports, 未发现新的 T-015/T-016 通过证据. 报告: `docs/agent-handoff/CONTROLLER_STARTUP_20260429_1852.md`.
 - 多 Agent 协作流程已调整: Agent 自己写 `docs/agent-handoff/` 报告并 commit, 总控用收件箱脚本主动扫描, 老板不再做人肉复制粘贴中转。
 - 自动任务队列已启用: `python3 ~/Desktop/neironggongchang/scripts/agent_queue.py list` 可看队列; `claim` / `done` / `block --owner-decision` 分别用于领任务、完成、需要老板选择时阻塞.
 - 5-Agent 启动器已恢复: worktree 有本地改动或不能 fast-forward 时只跳过同步, 不再中断整个启动流程.
@@ -20,7 +21,8 @@
 - 额外 QA cmux 脚本已改为 socket 不可用时只准备 worktree, 不再强行 fallback 打开多个空白窗口。
 
 ### 总控审查证据
-- 收件箱: `python3 scripts/agent_inbox.py --hours 24` -> 49 reports.
+- 总控启动巡检: `docs/agent-handoff/CONTROLLER_STARTUP_20260429_1852.md`.
+- 收件箱: `python3 scripts/agent_inbox.py --hours 24` -> 50 reports.
 - T-014 开发交接: `docs/agent-handoff/DEV_CONTENT_T014_TOULIU_20260429.md` (worktree: `content-dev`).
 - T-013 开发交接: `docs/agent-handoff/MEDIA_DEV_T013_APIMART_DOWNLOAD_20260429.md` (worktree: `media-dev`).
 - QA-1 待命报告: `docs/agent-handoff/QA1_READY_20260429.md` (worktree: `qa-1`).
