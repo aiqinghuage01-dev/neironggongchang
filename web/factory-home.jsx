@@ -58,8 +58,8 @@ function PageHome({ onNav }) {
               onClick={() => onNav("image")}
             />
             <BigAction
-              icon="🧪" title="黑科技" subtitle="实验性功能 · 给未来好玩的留位置"
-              stat="暂时空着"
+              icon="🧪" title="科技与狠活" subtitle="研发部状态 · 自动派工进度"
+              stat="看谁在干活"
               onClick={() => onNav("beta")}
             />
           </div>

@@ -2,7 +2,7 @@
 // 1:1 还原 docs/design_v3/factory3-shell.jsx
 
 // D-040d 信息架构: 工厂四大板块 (首页→总部 + 生产部 / 档案部 / 夜班分组)
-// D-066: 生产部从 11 个收纳到 6 个 (写文案/出图片/黑科技 是 3 个二级页, 子工具进入对应二级页)
+// D-066: 生产部从 11 个收纳到 6 个 (写文案/出图片/科技与狠活 是 3 个二级页, 子工具进入对应二级页)
 // D-068b: 总部入口移到品牌行 (🏭 清华哥内容工厂 → home), 原 NAV_TOP 槽位让给"战略部"
 const NAV_TOP = [{ id: "strategy", icon: "🧭", label: "战略部" }];
 const NAV_MAIN = [
@@ -11,7 +11,7 @@ const NAV_MAIN = [
   { id: "moments", icon: "📱", label: "朋友圈" },
   { id: "write", icon: "✏️", label: "写文案" },
   { id: "image", icon: "🎨", label: "出图片" },
-  { id: "beta", icon: "🧪", label: "黑科技" },
+  { id: "beta", icon: "🧪", label: "科技与狠活" },
 ];
 const NAV_ASSETS = [
   { id: "materials", icon: "📥", label: "素材库" },

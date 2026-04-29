@@ -4,9 +4,9 @@
 
 ---
 
-## 当前状态 (2026-04-29 · Agent 研发部状态面板)
+## 当前状态 (2026-04-29 · 科技与狠活嵌入研发部状态面板)
 
-**版本**: v0.7.6-agent26 — 在“单按钮工作台 + 自动派工器”上补研发部状态面板; 老板双击桌面工作台后会自动打开 `http://127.0.0.1:8765/`, 能看到各 Agent 是否上岗、是否在干活、领了什么任务、最近日志和队列状态。同步修复 `data/` 等本地运行产物误判为脏工作区导致不派活的问题。此前 T-013 合入、T-017/T-018/T-019 派工状态沿用上一轮。
+**版本**: v0.7.6-agent27 — 生产部原「黑科技」占位页已替换为「科技与狠活」, 直接嵌入 `http://127.0.0.1:8765/` 研发部状态面板; 老板既可以双击桌面工作台启动研发部, 也可以在内容工厂网页里点「科技与狠活」查看状态。状态面板补 CORS, 支持从 `:8001` 页面读取 `:8765` 状态。
 
 ### 当前进行
 - T-017: 已入共享队列并被 `NRG 内容开发` 领取; 目标是继续返修 T-015 暴露的投流 `n=1` 页面真实链路 724s timeout。
@@ -23,7 +23,8 @@
 - 研发部状态面板已新增: `scripts/agent_dashboard.py` + `scripts/start_agent_dashboard.sh`, 默认本地端口 `8765`, 只读取队列/派工器/日志, 不改代码、不烧 credits.
 - 单按钮工作台已升级: 桌面只保留 `打开内容工厂工作台.app`, 会启动 Agent 监控器、自动派工器、状态面板, 并安全激活已有 5 个 Agent 工作区.
 - 自动派工器脏工作区判断已修正: `data/`、`vendor/`、`.pytest_cache/` 等本地运行产物不再阻塞派工; 真正的代码/文档改动仍会触发保护.
-- T-021 已自动派给 `NRG 内容开发自动`; T-022 等待 T-021 完成后由 QA 自动领取.
+- 「科技与狠活」已实装: `web/factory-beta.jsx` 嵌入研发部状态面板; `web/factory-shell.jsx` 和 `web/factory-home.jsx` 入口文案已同步.
+- T-021 已由 `NRG 内容开发自动` 完成; T-022 已由 `NRG QA 自动` 完成; 后续仍需总控按交接报告决定是否合入/关闭旧 blocked 任务.
 - cmux 安全启动已加: 日常按钮不再使用 `open -a cmux <worktree>` 兜底, 避免一叠重复窗口.
 - 总控自然语言接单规则已写入 `docs/agents/ROLE_CONTROLLER.md`: 老板不需要指定角色/分支/任务编号/测试命令.
 - 5-Agent 启动器已恢复: worktree 有本地改动或不能 fast-forward 时只跳过同步, 不再中断整个启动流程.
@@ -49,6 +50,8 @@
 - 派工器验证: `bash scripts/start_agent_dispatcher.sh --dry-run` -> 无 runnable task; `--status` -> LaunchAgent running, 6 个槽位 idle; `/tmp/nrg-agent-dispatcher.log` 只显示当前待命状态.
 - 状态面板验证: `python3 -m py_compile scripts/agent_dashboard.py`; `bash -n scripts/start_agent_dashboard.sh scripts/start_agent_workbench.sh scripts/install_agent_desktop_launcher.sh`; `curl http://127.0.0.1:8765/api/status` 可返回 slots/tasks/logs JSON.
 - 派工修复验证: `python3 scripts/agent_dispatcher.py --once --dry-run --verbose` -> `Would dispatch T-021 -> NRG 内容开发自动`; 重启派工器后 `bash scripts/start_agent_dispatcher.sh --status` -> `content-dev: running pid=91039 task=T-021`.
+- 科技与狠活验证: Playwright 从首页点击侧栏「科技与狠活」-> `?page=beta`, iframe 成功加载 `http://127.0.0.1:8765/`, 可见 6 个 Agent 卡片, console/pageerror/requestfailed 均 0, 截图 `/tmp/nrg_beta_dashboard.png`.
+- 相关测试: `.venv/bin/pytest -q tests/test_skills_smoke.py tests/test_lidock_tools.py` -> 52 passed.
 - 启动器验证: `bash scripts/start_multi_agents_cmux.sh` 已成功打开 5 个 cmux tab: main/content-dev/media-dev/qa/review.
 
 ### QA 证据 · 公众号
