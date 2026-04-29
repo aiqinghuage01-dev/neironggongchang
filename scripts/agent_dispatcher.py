@@ -61,6 +61,13 @@ TOOL_PATH = ":".join(
     ]
 )
 
+IGNORED_STATUS_PREFIXES = (
+    "?? data/",
+    "?? vendor/",
+    "?? .DS_Store",
+    "?? .pytest_cache/",
+)
+
 
 def find_bin(name: str, env_name: str, candidates: list[Path]) -> str | None:
     override = os.environ.get(env_name)
@@ -210,7 +217,7 @@ def pid_alive(pid: int) -> bool:
     return True
 
 
-def git_dirty(workdir: Path) -> bool:
+def significant_git_status(workdir: Path) -> list[str]:
     result = subprocess.run(
         ["git", "-C", str(workdir), "status", "--porcelain"],
         text=True,
@@ -219,8 +226,13 @@ def git_dirty(workdir: Path) -> bool:
         check=False,
     )
     if result.returncode != 0:
-        return True
-    return bool(result.stdout.strip())
+        return [result.stderr.strip() or "git status failed"]
+    lines = [line for line in result.stdout.splitlines() if line.strip()]
+    return [line for line in lines if not line.startswith(IGNORED_STATUS_PREFIXES)]
+
+
+def git_dirty(workdir: Path) -> bool:
+    return bool(significant_git_status(workdir))
 
 
 def read_task(task_id: str) -> dict[str, Any] | None:

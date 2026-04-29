@@ -62,7 +62,7 @@ tell application "cmux"
   activate
 end tell
 
-display notification "工作台已启动：监控、自动派工、5 个 Agent 工作区。" with title "内容工厂 Agent"
+display notification "工作台已启动：状态面板、监控、自动派工、5 个 Agent 工作区。" with title "内容工厂 Agent"
 EOF
 
 rm -rf "$all_launcher"

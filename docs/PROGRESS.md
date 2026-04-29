@@ -4,9 +4,9 @@
 
 ---
 
-## 当前状态 (2026-04-29 · 总控合入 T-013 + 投流返修派工)
+## 当前状态 (2026-04-29 · Agent 研发部状态面板)
 
-**版本**: v0.7.6-agent25 — 总控启动后领取队列无 controller 任务, 读取收件箱 53 份报告; 已把 T-013 从 `codex/media-dev` 安全 cherry-pick 到 main, 跑通 apimart/remote_jobs 回归和全量 pytest; 已派 T-017 内容开发返修投流 724s timeout, T-018 等返修后 QA 真烧, T-019 QA 复测 T-013 fault injection。
+**版本**: v0.7.6-agent26 — 在“单按钮工作台 + 自动派工器”上补研发部状态面板; 老板双击桌面工作台后会自动打开 `http://127.0.0.1:8765/`, 能看到各 Agent 是否上岗、是否在干活、领了什么任务、最近日志和队列状态。同步修复 `data/` 等本地运行产物误判为脏工作区导致不派活的问题。此前 T-013 合入、T-017/T-018/T-019 派工状态沿用上一轮。
 
 ### 当前进行
 - T-017: 已入共享队列并被 `NRG 内容开发` 领取; 目标是继续返修 T-015 暴露的投流 `n=1` 页面真实链路 724s timeout。
@@ -20,7 +20,10 @@
 - 多 Agent 协作流程已调整: Agent 自己写 `docs/agent-handoff/` 报告并 commit, 总控用收件箱脚本主动扫描, 老板不再做人肉复制粘贴中转。
 - 自动任务队列已启用: `python3 ~/Desktop/neironggongchang/scripts/agent_queue.py list` 可看队列; `done` 只表示验收通过, 验证不通过必须 `block`.
 - 自动派工器已启用: `bash scripts/start_agent_dispatcher.sh --status` 显示 LaunchAgent running; 当前队列显示 T-017 已被内容开发领取, T-019 正由自动 QA 运行。
-- 单按钮工作台已安装: 桌面只保留 `打开内容工厂工作台.app`, 会启动 Agent 监控器、自动派工器, 并安全激活已有 5 个 Agent 工作区.
+- 研发部状态面板已新增: `scripts/agent_dashboard.py` + `scripts/start_agent_dashboard.sh`, 默认本地端口 `8765`, 只读取队列/派工器/日志, 不改代码、不烧 credits.
+- 单按钮工作台已升级: 桌面只保留 `打开内容工厂工作台.app`, 会启动 Agent 监控器、自动派工器、状态面板, 并安全激活已有 5 个 Agent 工作区.
+- 自动派工器脏工作区判断已修正: `data/`、`vendor/`、`.pytest_cache/` 等本地运行产物不再阻塞派工; 真正的代码/文档改动仍会触发保护.
+- T-021 已自动派给 `NRG 内容开发自动`; T-022 等待 T-021 完成后由 QA 自动领取.
 - cmux 安全启动已加: 日常按钮不再使用 `open -a cmux <worktree>` 兜底, 避免一叠重复窗口.
 - 总控自然语言接单规则已写入 `docs/agents/ROLE_CONTROLLER.md`: 老板不需要指定角色/分支/任务编号/测试命令.
 - 5-Agent 启动器已恢复: worktree 有本地改动或不能 fast-forward 时只跳过同步, 不再中断整个启动流程.
@@ -40,9 +43,12 @@
 - 合并风险: `git diff main..codex/media-dev` 显示该分支会删除 `scripts/agent_inbox.py`, `scripts/start_agent_monitor.sh` 和多份主线报告/角色文档; 不允许整分支 merge.
 - 任务队列: `~/Desktop/nrg-agent-queue/tasks.json` 已有 T-015/T-016 blocked; 新增 T-017/T-018/T-019 推进返修与复测。
 - 自动派工器: `scripts/agent_dispatcher.py`, `scripts/start_agent_dispatcher.sh`; 日常不单独放桌面入口, 由工作台统一启动.
+- 研发部状态面板: `http://127.0.0.1:8765/`; 日常由工作台自动打开, 可单独运行 `bash scripts/start_agent_dashboard.sh --open`.
 - 单按钮工作台: 桌面入口 `打开内容工厂工作台.app`, 日常只需要点这个; 调试按钮默认从桌面移除, 需要时用 `--with-debug-launchers` 重建.
 - cmux workbench wrapper: `scripts/start_agent_workbench.sh`; 若 cmux 工作区真的丢失, 才用 `--force-open-fallback` 做一次性修复.
 - 派工器验证: `bash scripts/start_agent_dispatcher.sh --dry-run` -> 无 runnable task; `--status` -> LaunchAgent running, 6 个槽位 idle; `/tmp/nrg-agent-dispatcher.log` 只显示当前待命状态.
+- 状态面板验证: `python3 -m py_compile scripts/agent_dashboard.py`; `bash -n scripts/start_agent_dashboard.sh scripts/start_agent_workbench.sh scripts/install_agent_desktop_launcher.sh`; `curl http://127.0.0.1:8765/api/status` 可返回 slots/tasks/logs JSON.
+- 派工修复验证: `python3 scripts/agent_dispatcher.py --once --dry-run --verbose` -> `Would dispatch T-021 -> NRG 内容开发自动`; 重启派工器后 `bash scripts/start_agent_dispatcher.sh --status` -> `content-dev: running pid=91039 task=T-021`.
 - 启动器验证: `bash scripts/start_multi_agents_cmux.sh` 已成功打开 5 个 cmux tab: main/content-dev/media-dev/qa/review.
 
 ### QA 证据 · 公众号

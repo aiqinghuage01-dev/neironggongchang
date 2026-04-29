@@ -164,6 +164,7 @@ bash scripts/start_agent_monitor.sh --stop
 它会依次做:
 - 启动 Agent 监控器.
 - 启动自动派工器.
+- 启动研发部状态面板并自动打开网页.
 - 安全激活已有的 5 个 cmux Agent 工作区.
 
 为什么是“安全激活”:
@@ -185,6 +186,41 @@ bash scripts/install_agent_desktop_launcher.sh --with-debug-launchers
 ```bash
 bash scripts/start_agent_workbench.sh --force-open-fallback
 ```
+
+### 研发部状态面板
+
+老板不需要靠观察 cmux 黑窗口判断 Agent 有没有干活. 日常双击 `打开内容工厂工作台.app` 后, 会自动打开:
+
+```text
+http://127.0.0.1:8765/
+```
+
+这个网页就是“研发部值班大屏”, 只看 3 件事:
+- 谁在上岗: 内容开发、媒体开发、QA、Review 当前是工作中/空闲/异常退出.
+- 谁领了什么任务: 任务 ID、状态、领取人、阻塞原因.
+- 最近日志: 点“看日志”能看到后台 Agent 实际输出.
+
+状态面板只是本地网页, 不改业务代码、不烧 credits. 它读取共享队列、派工器状态和日志, 用来让老板看见后台系统是否真的在跑.
+
+单独重启面板:
+
+```bash
+bash scripts/start_agent_dashboard.sh --open
+```
+
+查看面板状态:
+
+```bash
+bash scripts/start_agent_dashboard.sh --status
+```
+
+停止面板:
+
+```bash
+bash scripts/start_agent_dashboard.sh --stop
+```
+
+这套“队列 + 派工器 + 状态面板”的模式可以复用到其他项目. 换项目时保留同一套脚本思想, 只需要替换项目目录、角色分工和 worktree 名称.
 
 ---
 
@@ -304,6 +340,7 @@ bash scripts/start_agent_dispatcher.sh --stop
 
 安全边界:
 - worktree 有未提交改动时, 派工器默认跳过该槽位, 不往脏工作区继续塞新活.
+- `data/`、`vendor/`、`.pytest_cache/` 等本地运行产物不算业务改动, 不会阻塞派工.
 - 有依赖的任务不会提前跑, 例如 T-016 必须等 T-015 `done`.
 - 真烧 credits 仍按 §3.1 最小闭环规则执行; 失败后不自动重复提交.
 - 需要老板做业务选择时, Agent 必须 `block --owner-decision`, 不能自己拍脑袋.
@@ -344,7 +381,7 @@ bash scripts/start_agent_dispatcher.sh --stop
 打开内容工厂工作台.app
 ```
 
-然后只在总控窗口说业务目标.
+然后只在总控窗口说业务目标. 想看后台有没有真的动, 看自动打开的状态面板即可.
 
 老板给总控的输入应该是自然语言, 例如:
 

@@ -19,6 +19,7 @@ Options:
 Default is safe daily mode:
   - start monitor
   - start dispatcher
+  - start web dashboard
   - activate existing cmux workspaces
   - do not use macOS open fallback that creates duplicate windows
 USAGE
@@ -137,6 +138,8 @@ mkdir -p "$(dirname "$log_file")"
   echo "=== $(date '+%Y-%m-%d %H:%M:%S') start workbench ==="
   bash "${repo_root}/scripts/start_agent_monitor.sh" || true
   bash "${repo_root}/scripts/start_agent_dispatcher.sh" || true
+  bash "${repo_root}/scripts/start_agent_dashboard.sh" || true
+  open "http://127.0.0.1:${AGENT_DASHBOARD_PORT:-8765}/" >/dev/null 2>&1 || true
 
   open -a cmux >/dev/null 2>&1 || true
   sleep 0.5
@@ -167,3 +170,4 @@ mkdir -p "$(dirname "$log_file")"
 } >>"$log_file" 2>&1
 
 echo "Agent workbench started. Log: ${log_file}"
+echo "Agent dashboard: http://127.0.0.1:${AGENT_DASHBOARD_PORT:-8765}/"
