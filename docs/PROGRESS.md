@@ -4,7 +4,23 @@
 
 ---
 
-## 当前状态 (2026-04-29 · D-097 公众号段间图已完成后也能一键并发重生)
+## 当前状态 (2026-04-29 · D-098 AGENTS/CLAUDE 入口同步)
+
+**版本**: v0.7.3-doc — 文档入口同步, 无代码改动.
+
+### D-098 修复
+- `AGENTS.md`: 同步 `CLAUDE.md` 新增的 `docs/WECHAT-SKILL-LESSONS.md` 按需读入口.
+- `AGENTS.md`: 文档事实源表补公众号 skill 踩坑大全.
+- `AGENTS.md`: UI 验证措辞同步为 "Read 看截图", 与 `docs/SYSTEM-CONSTRAINTS.md` §7.1 对齐.
+- 保留 `AGENTS.md` 的 Codex/GPT 入口标题和说明.
+
+### 验证
+- `diff -u AGENTS.md CLAUDE.md` 仅剩入口文件身份相关差异.
+- `wc -l AGENTS.md CLAUDE.md` 均小于 200 行.
+
+---
+
+## 上一里程碑 (2026-04-29 · D-097 公众号段间图已完成后也能一键并发重生)
 
 **版本**: v0.7.3 — 修 Step 5 4/4 已生成后只能逐张重生.
 
