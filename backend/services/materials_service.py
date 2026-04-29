@@ -781,6 +781,49 @@ def match_assets(
     return scored[:max(1, min(limit, 50))]
 
 
+def list_featured_assets(limit: int = 18) -> list[dict[str, Any]]:
+    """首页精选: 只取可预览、已归到业务大类的素材.
+
+    Downloads 演示源杂文件很多, 首页若把 00 待整理放到主视觉会误导成"素材库全是垃圾"。
+    这里明确挑出剪辑时最可能直接用的素材: 有缩略图、有结构化画像、非待整理,
+    再按质量、业务相关度和新鲜度排序。
+    """
+    _ensure_schema()
+    safe_limit = max(1, min(int(limit or 18), 48))
+    out: list[dict[str, Any]] = []
+    with closing(get_connection()) as con:
+        con.row_factory = sqlite3.Row
+        rows = con.execute(
+            """
+            SELECT * FROM material_assets
+            WHERE COALESCE(category, ?) != ?
+              AND thumb_path IS NOT NULL
+              AND profile_updated_at IS NOT NULL
+            ORDER BY
+              COALESCE(quality_score, 0) DESC,
+              COALESCE(relevance_score, 0) DESC,
+              imported_at DESC
+            LIMIT ?
+            """,
+            (DEFAULT_CATEGORY, DEFAULT_CATEGORY, safe_limit),
+        ).fetchall()
+        for r in rows:
+            d = _with_profile_defaults(dict(r))
+            tag_rows = con.execute(
+                """SELECT t.id, t.name, t.source, at.confidence FROM material_tags t
+                   JOIN material_asset_tags at ON at.tag_id = t.id
+                   WHERE at.asset_id = ?""",
+                (d["id"],),
+            ).fetchall()
+            d["tags"] = [{"id": t[0], "name": t[1], "source": t[2], "confidence": t[3]} for t in tag_rows]
+            d["hits"] = con.execute(
+                "SELECT COUNT(*) FROM material_usage_log WHERE asset_id = ?",
+                (d["id"],),
+            ).fetchone()[0]
+            out.append(d)
+    return out
+
+
 def list_top_folders(limit: int = 12) -> list[dict[str, Any]]:
     """L1 大屏 8 张文件夹大卡片. 按一级目录聚合 count + week_new."""
     _ensure_schema()

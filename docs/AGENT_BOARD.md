@@ -8,7 +8,7 @@
 
 | 角色 | 状态 | 工作区 | 当前任务 |
 |---|---|---|---|
-| 总控 Agent | 自动派工已接入 | `~/Desktop/neironggongchang` | 已接管并完成 T-026 素材库精品原片库主线验证; 素材库自动返工循环已停止 |
+| 总控 Agent | 自动派工已接入 | `~/Desktop/neironggongchang` | D-125 素材库验收补强已自验; 准备继续派全站 QA/审查巡检 |
 | 内容开发 Agent | 空闲 | `~/Desktop/nrg-worktrees/content-dev` | T-021 已 done; 等新内容任务 |
 | 媒体开发 Agent | 空闲 | `~/Desktop/nrg-worktrees/media-dev` | T-035/T-038 重复 worker 已由总控停止并 block |
 | QA 测试 Agent | 空闲 | `~/Desktop/nrg-worktrees/qa`, `~/Desktop/nrg-worktrees/qa-1`, `~/Desktop/nrg-worktrees/qa-2` | T-030/T-031 已 done; T-028 由总控真实浏览器闭环关闭 |
@@ -57,6 +57,9 @@
 
 ## 最近证据
 
+- D-125 素材库验收补强: 首页新增可预览业务素材精选, `00 待整理` 降级为单独整理入口, KPI 区分总素材/业务素材/未入业务类/已识别; 新增 API `/api/material-lib/featured`.
+- D-125 验证: `git diff --check` -> clean; `.venv/bin/pytest -q tests/test_materials_lib_api.py tests/test_materials_service.py tests/test_materials_pipeline.py` -> 172 passed; `.venv/bin/pytest -q -x` -> 通过; 正式 `8000/8001` curl + Playwright 首页/预览/分类/剪辑检索/移动视口通过, console/pageerror/requestfailed/http error=0.
+- D-125 报告: `docs/agent-handoff/CONTROLLER_MATERIALS_D125_QA_20260429.md`.
 - D-124 素材库总控交接: `docs/agent-handoff/CONTROLLER_MATERIALS_T026_MAIN_20260429.md`.
 - D-124 验证: `python3 -m pytest -q` -> 通过; `git diff --check` -> clean; 临时 API `:18000` curl `/categories`、`/match`、`/classify-batch?limit=100` 通过; Playwright 截图 `/tmp/_ui_shots/t026_materials_desktop_home.png`, `/tmp/_ui_shots/t026_materials_desktop_category.png`, `/tmp/_ui_shots/t026_materials_desktop_match.png`, `/tmp/_ui_shots/t026_materials_mobile_home.png`, console error/pageerror/requestfailed/http error=0.
 - 总控本轮交接: `docs/agent-handoff/CONTROLLER_T013_T017_20260429_2011.md`.

@@ -144,6 +144,36 @@ function MV2CategoryCard({ category, onClick }) {
 }
 
 
+function MV2FeaturedStrip({ items, onPickAsset, compact }) {
+  if (!items || items.length === 0) return null;
+  return (
+    <div data-testid="mv2-featured-strip" style={{ marginBottom: 16 }}>
+      <div style={{
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        marginBottom: 9, gap: 10, flexDirection: compact ? "column" : "row",
+      }}>
+        <div>
+          <div style={{ fontSize: 14, fontWeight: 800, color: T.text }}>可直接预览的业务素材</div>
+          <div style={{ fontSize: 11.5, color: T.muted2, marginTop: 2 }}>
+            已归到演讲、上课、研发、空镜等业务类, 点击卡片可看原片
+          </div>
+        </div>
+        <Tag size="sm" color="green">{items.length} 条精选</Tag>
+      </div>
+      <div style={{
+        display: "grid",
+        gridTemplateColumns: compact ? "repeat(2, minmax(0, 1fr))" : "repeat(6, minmax(0, 1fr))",
+        gap: 8,
+      }}>
+        {items.slice(0, compact ? 6 : 12).map(a => (
+          <MV2AssetCard key={a.id} asset={a} onClick={() => onPickAsset && onPickAsset(a)} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+
 function _hashStr(s) {
   let h = 0;
   for (let i = 0; i < (s || "").length; i++) h = ((h << 5) - h + s.charCodeAt(i)) | 0;
@@ -369,11 +399,14 @@ function MV2MatchBox({ categories, onPickAsset, compact }) {
 
 function MV2L1Home({ stats, categories, root, loading, err, onPickCategory, onScan, scanning, onClassify, classifying,
                     onAudit, activity, topUsed, sideLoading, search, onSearch, searchResults, searching, onPickAsset,
-                    onRootSaved, compact }) {
+                    onRootSaved, featured, compact }) {
   if (loading) return <div style={{ padding: 60, textAlign: "center", color: T.muted }}>加载中...</div>;
   const remainProfile = stats ? Math.max(0, stats.total - (stats.profiled || 0)) : 0;
-  const usable = (categories || []).reduce((n, c) => n + (c.usable || 0), 0);
-  const pendingCount = (categories || []).find(c => c.key === "00 待整理")?.total || 0;
+  const pendingCategory = (categories || []).find(c => c.key === "00 待整理");
+  const pendingCount = pendingCategory?.total || 0;
+  const businessCategories = (categories || []).filter(c => c.key !== "00 待整理");
+  const usable = businessCategories.reduce((n, c) => n + (c.usable || 0), 0);
+  const businessTotal = businessCategories.reduce((n, c) => n + (c.total || 0), 0);
   return (
     <div>
       {/* Header (顶部 全宽 含搜索框) */}
@@ -423,10 +456,15 @@ function MV2L1Home({ stats, categories, root, loading, err, onPickCategory, onSc
           sub={stats?.week_added > 0 ? `本周 +${stats.week_added} ↗` : "本周 +0"}
         />
         <MV2KpiCard
-          icon="⚠" label="待整理"
+          icon="◎" label="业务素材"
+          value={businessTotal}
+          sub={`${usable} 条可直接预览`}
+        />
+        <MV2KpiCard
+          icon="⚠" label="未入业务类"
           testid="mv2-l1-pending-kpi"
           value={pendingCount}
-          sub={stats?.pending_review > 0 ? `${stats.pending_review} 条建议待确认` : "新素材先放这里"}
+          sub={stats?.pending_review > 0 ? `${stats.pending_review} 条建议待确认` : "Downloads 杂文件先放这里"}
           accent="amber"
           onClick={stats?.pending_review > 0 ? onAudit : () => onPickCategory("00 待整理")}
         />
@@ -434,11 +472,6 @@ function MV2L1Home({ stats, categories, root, loading, err, onPickCategory, onSc
           icon="✓" label="已识别"
           value={stats?.profiled ?? 0}
           sub={`覆盖率 ${stats?.profile_coverage ?? 0}%`}
-        />
-        <MV2KpiCard
-          icon="◎" label="可用素材"
-          value={usable}
-          sub={`本月用过 ${stats?.usage_this_month ?? 0} 次`}
         />
       </div>
 
@@ -449,7 +482,7 @@ function MV2L1Home({ stats, categories, root, loading, err, onPickCategory, onSc
           marginBottom: 10, flexDirection: compact ? "column" : "row", gap: compact ? 8 : 0,
         }}>
           <div style={{ fontSize: 13, color: T.muted, fontWeight: 500 }}>
-            业务大类 · 8 个 · <span style={{ color: T.muted2 }}>点击进入素材货架</span>
+            业务大类 · {businessCategories.length} 个 · <span style={{ color: T.muted2 }}>点击进入素材货架</span>
           </div>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
             {remainProfile > 0 && (
@@ -515,11 +548,32 @@ function MV2L1Home({ stats, categories, root, loading, err, onPickCategory, onSc
               </div>
             ) : (
               <>
+                <MV2FeaturedStrip items={featured || []} onPickAsset={onPickAsset} compact={compact} />
                 <div style={{ display: "grid", gridTemplateColumns: compact ? "1fr" : "repeat(2, minmax(0, 1fr))", gap: 10 }}>
-                  {categories.map(c => (
+                  {businessCategories.map(c => (
                     <MV2CategoryCard key={c.key} category={c} onClick={() => onPickCategory(c.key)} />
                   ))}
                 </div>
+                {pendingCategory && pendingCount > 0 && (
+                  <div
+                    onClick={() => onPickCategory("00 待整理")}
+                    style={{
+                      marginTop: 10, padding: "10px 12px", background: "#fff7e6",
+                      border: `1px solid ${T.amber}33`, borderRadius: 8,
+                      display: "flex", alignItems: compact ? "flex-start" : "center",
+                      justifyContent: "space-between", gap: 10, cursor: "pointer",
+                      flexDirection: compact ? "column" : "row",
+                    }}
+                  >
+                    <div>
+                      <div style={{ fontSize: 12.5, fontWeight: 700, color: T.amber }}>未入业务类 · {pendingCount} 条</div>
+                      <div style={{ fontSize: 11, color: T.muted2, marginTop: 2 }}>
+                        Downloads 里的截图、缓存和泛文件名素材先放这里, 不影响上面的业务素材使用
+                      </div>
+                    </div>
+                    <Tag size="xs" color="amber">去整理</Tag>
+                  </div>
+                )}
                 <MV2MatchBox categories={categories} onPickAsset={onPickAsset} compact={compact} />
               </>
             )
@@ -1451,6 +1505,7 @@ function PageMaterialsV2({ onNav }) {
   // 大屏数据
   const [stats, setStats] = React.useState(null);
   const [categories, setCategories] = React.useState([]);
+  const [featured, setFeatured] = React.useState([]);
   const [root, setRoot] = React.useState("");
   const [activity, setActivity] = React.useState([]);
   const [topUsed, setTopUsed] = React.useState([]);
@@ -1492,14 +1547,16 @@ function PageMaterialsV2({ onNav }) {
   async function loadHome() {
     setLoading(true); setSideLoading(true); setErr("");
     try {
-      const [s, f, a, t] = await Promise.all([
+      const [s, f, ft, a, t] = await Promise.all([
         api.get("/api/material-lib/stats"),
         api.get("/api/material-lib/categories"),
+        api.get("/api/material-lib/featured?limit=18"),
         api.get("/api/material-lib/recent-activity?limit=6"),
         api.get("/api/material-lib/top-used?limit=5"),
       ]);
       setStats(s);
       setCategories(f.categories || []);
+      setFeatured(ft.items || []);
       setRoot(f.root || s.root || "");
       setActivity(a.events || []);
       setTopUsed(t.items || []);
@@ -1613,6 +1670,7 @@ function PageMaterialsV2({ onNav }) {
           searchResults={searchResults} searching={searching}
           onPickAsset={(a) => setPreviewAsset(a)}
           onRootSaved={loadHome}
+          featured={featured}
           compact={isNarrow}
         />
       )}

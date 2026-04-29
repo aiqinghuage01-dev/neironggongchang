@@ -129,6 +129,43 @@ def test_categories_returns_fixed_8_business_categories(populated_client):
     assert d["categories"][0]["total"] == 3
 
 
+def test_featured_returns_only_previewable_business_assets(populated_client):
+    from backend.services.materials_service import list_assets, update_asset_profile
+
+    assets = list_assets(sort="name")
+    podium = next(a for a in assets if a["filename"] == "podium.jpg")
+    outside = next(a for a in assets if a["filename"] == "outside.jpg")
+    update_asset_profile(podium["id"], {
+        "category": "01 演讲舞台",
+        "visual_summary": "清华哥在舞台演讲",
+        "shot_type": "演讲现场",
+        "orientation": "横屏",
+        "quality_score": 90,
+        "usage_hint": "适合做开场和权威背书",
+        "relevance_score": 88,
+        "recognition_source": "metadata",
+        "profile_updated_at": int(time.time()),
+    })
+    update_asset_profile(outside["id"], {
+        "category": "00 待整理",
+        "visual_summary": "无明确业务分类",
+        "shot_type": "现场照片",
+        "orientation": "横屏",
+        "quality_score": 95,
+        "usage_hint": "先整理",
+        "relevance_score": 20,
+        "recognition_source": "metadata",
+        "profile_updated_at": int(time.time()),
+    })
+
+    r = populated_client.get("/api/material-lib/featured?limit=6")
+    assert r.status_code == 200
+    items = r.json()["items"]
+    assert [a["id"] for a in items] == [podium["id"]]
+    assert items[0]["thumb_path"]
+    assert items[0]["category"] == "01 演讲舞台"
+
+
 def test_subfolders_top_level(populated_client):
     r = populated_client.get("/api/material-lib/subfolders?top=00 讲台高光")
     assert r.status_code == 200

@@ -4,11 +4,14 @@
 
 ---
 
-## 当前状态 (2026-04-29 · D-124 素材库精品原片库主线完成)
+## 当前状态 (2026-04-29 · D-125 素材库验收补强 + 全站 QA 排程)
 
-**版本**: v0.7.7-materials — 素材库已从 Downloads 文件浏览器升级为「精品原片库」主心智: 首页固定 8 个业务大类, 支持素材源目录保存、metadata 结构化画像、限量分类批处理、按文案/镜头描述检索本地素材, 并完成桌面/移动浏览器闭环验证。当前仍用 `~/Downloads/` 做演示源, 后续可切到专用素材目录。
+**版本**: v0.7.8-materials-qa — 素材库首页已针对老板验收反馈补强: 不再把 `00 待整理` 杂文件当主业务素材展示, 首页新增可预览业务素材精选, KPI 区分总素材/业务素材/未入业务类/已识别, 并在正式 `8000/8001` 端口完成 pytest/curl/Playwright 复测。下一步是把全站巡检任务继续派给 QA 和审查 Agent。
 
 ### 当前进行
+- D-125 素材库验收补强已由总控在 main 实装: 新增 `/api/material-lib/featured`, 首页先展示可直接预览的业务素材卡片, 主分类只显示 7 个业务大类, `00 待整理` 单独降级为整理入口; 解决「网页显示全是 0 / 看不到业务分类 / 没有素材预览」的验收体感问题。
+- 正式端口已重启并验证: `http://127.0.0.1:8000/api/material-lib/featured?limit=18` 返回 18 条非待整理、带缩略图、已画像素材; `/categories` 返回业务素材 55 条、可直接预览 42 条、待整理 1563 条。
+- 全站继续推进: 素材库修正提交后, 总控会把素材库复测、全站导航/作品库/内容链路/媒体链路巡检继续写入共享队列, 由 QA/审查 Agent 持续发现问题并返修。
 - D-124 素材库长任务已由总控接管收束: T-026 媒体自动 Agent 卡在未提交 patch 输出, 总控停止进程后将已通过测试的 patch 合入 main, 并补右栏画像字段、旧标签参与分类、移动端响应式; T-035/T-038 自动返工重复 worker 已停止并标 blocked, `scripts/start_materials_loop.sh --stop` 已关闭素材库返工守护进程.
 - 素材库真实演示源仍是 `~/Downloads/`: 已 metadata 分类 120 条, 分类结果包含演讲舞台/上课教学/研发产品/空镜补画面/品牌资产; 未调用 LLM, 未烧 credits. 大量泛文件名素材仍在 `00 待整理`, 符合当前演示源质量.
 - T-017: 已入共享队列并被 `NRG 内容开发` 领取; 目标是继续返修 T-015 暴露的投流 `n=1` 页面真实链路 724s timeout。
@@ -34,6 +37,10 @@
 - 额外 QA cmux 脚本已改为 socket 不可用时只准备 worktree, 不再强行 fallback 打开多个空白窗口。
 
 ### 总控审查证据
+- D-125 素材库验收补强报告: `docs/agent-handoff/CONTROLLER_MATERIALS_D125_QA_20260429.md`.
+- D-125 测试: `git diff --check` -> clean; `.venv/bin/pytest -q tests/test_materials_lib_api.py tests/test_materials_service.py tests/test_materials_pipeline.py` -> 172 passed; `.venv/bin/pytest -q -x` -> 通过, 仅 dhv5 本地 skill 缺失用例跳过。
+- D-125 正式端口 API: `/api/material-lib/featured?limit=18` -> `featured_count=18`, 18 条都不是 `00 待整理` 且有 `thumb_path`; `/api/material-lib/categories` -> 7 个业务类 + `00 待整理`, 业务素材 55 条。
+- D-125 浏览器闭环: `http://127.0.0.1:8001/?page=materials` 首页/精选预览弹窗/上课教学分类/剪辑检索/移动视口截图已读; console error/pageerror/requestfailed/http error 均 0。截图: `/tmp/_ui_shots/materials_clean_home.png`, `/tmp/_ui_shots/materials_clean_preview.png`, `/tmp/_ui_shots/materials_category_side_waited.png`, `/tmp/_ui_shots/materials_clean_match.png`, `/tmp/_ui_shots/materials_clean_mobile.png`.
 - D-124 素材库总控交接: `docs/agent-handoff/CONTROLLER_MATERIALS_T026_MAIN_20260429.md`.
 - D-124 主线验证: `python3 -m pytest -q tests/test_materials_service.py tests/test_materials_pipeline.py tests/test_materials_lib_api.py tests/test_migrations.py` -> 通过; `python3 -m pytest -q` -> 通过, 仅 dhv5 skill 缺失用例跳过; `git diff --check` -> clean.
 - D-124 真实 API: 临时后端 `:18000`, `/api/material-lib/categories` 返回固定 8 类; `/api/material-lib/match` 输入演讲/出差文案返回带分数和理由的候选; `/api/material-lib/classify-batch?limit=100` task `64e1eaa9abaf47fbad12864d685c07c2` -> `ok`, `scanned=100`, `failed=0`, `source=metadata`.

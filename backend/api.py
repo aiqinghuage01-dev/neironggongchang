@@ -1962,6 +1962,13 @@ def material_lib_categories():
     }
 
 
+@app.get("/api/material-lib/featured", tags=["档案部"], summary="(D-124) 素材库首页精选业务素材")
+def material_lib_featured(limit: int = 18):
+    from backend.services import materials_service as ms
+    items = ms.list_featured_assets(limit=limit)
+    return {"items": items, "count": len(items)}
+
+
 @app.get("/api/material-lib/subfolders", tags=["档案部"], summary="(D-087) 二级子文件夹 (L2)")
 def material_lib_subfolders(top: str, limit: int = 32):
     from backend.services import materials_service as ms
