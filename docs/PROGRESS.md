@@ -4,12 +4,12 @@
 
 ---
 
-## 当前状态 (2026-04-29 · T-007/T-008 合入通过)
+## 当前状态 (2026-04-29 · T-006/T-007/T-008 通过)
 
-**版本**: v0.7.6-agent12 — 直接出图 apimart 单图结果区问题已修并通过最小真烧 QA; 作品库 T-009/T-010/T-011 已修待独立 QA; 真实公众号草稿推送复测仍待处理。
+**版本**: v0.7.6-agent13 — 公众号真实草稿推送 T-006 已二次复核通过; 直接出图 apimart 单图 T-007/T-008 已通过; 作品库 T-009/T-010/T-011 已修待独立 QA。
 
 ### 当前进行
-- 下一步优先分配 T-012 作品库全链路 QA 复跑; T-006 公众号真实草稿推送复测仍待跑; T-013 直接出图 download 失败路径待补 fault injection.
+- 下一步优先分配 T-012 作品库全链路 QA 复跑; T-013 直接出图 download 失败路径待补 fault injection.
 
 ### QA 证据 · 公众号
 - QA 报告已合入主线: `docs/agent-handoff/QA_WECHAT_20260429.md`
@@ -59,6 +59,23 @@
   - 临时 API `8120` + `curl POST /api/wechat/html` + `sanitize_for_push`: 编辑标记存在; 原 `img=5`, 清洗后 `img=4`; `from=appmsg` 和 `data-nrg-section-image` 均清空.
 - 范围说明: T-004/T-005 scoped 通过; 没有执行真实公众号草稿推送.
 
+### 已合入 · T-006
+- QA 首版报告: `f306718 docs: add T006 wechat push QA report`
+- QA 更新报告: `ff5be05 docs: update T006 wechat push QA report`
+  - QA 原提交: `7167fba` -> `d8bbc72`
+  - 报告: `docs/agent-handoff/QA_T006_WECHAT_PUSH_20260429.md`
+- 第二次真实草稿 ID: `QbCZvI0l3BDFBWrSXSwYcZaJmVU4q9t42P2nOY7C936R9f28m5_kCaT9c5ARmRoR`
+- 验证边界:
+  - 复用已有文章、4 张段间图、封面.
+  - 只调用 `/api/wechat/html` 和 `/api/wechat/push`.
+  - 未调用 `/api/wechat/write`, `/api/wechat/section-image`, `/api/wechat/cover`, `/api/wechat/cover-batch`, 没有重复烧长文/生图/封面 credits.
+- 关键证据:
+  - `/tmp/preview/last_push_request.json`: `img_count_sanitized=4`.
+  - 远端微信 `draft/batchget`: `img_count=4`, `mmbiz_count=4`, `has_qa_marker=true`.
+  - 浏览器 Step 6/7/8 正常; console/pageerror 干净.
+  - pytest: wechat 相关 101 passed.
+- 结论: T-006 通过. 首轮旧后端产生的无图草稿仍在草稿箱, 本轮 QA 未做第三次外发.
+
 ### QA 证据 · 作品库
 - QA 报告已合入主线: `docs/agent-handoff/QA_WORKS_20260429.md`
   - QA 原提交: `eed2d29`
@@ -82,15 +99,14 @@
   - 临时 API `8121` + curl 已验证: 老作品搜索、详情读取、留/删返回新 work、`completion_rate=80` 保存 `0.8`、缺失图片返回 `asset_status=missing_file`.
 
 ### 剩余阻塞
-1. T-006: 公众号 8 步真实草稿推送复测未跑, 需要最小真烧闭环确认 `last_push_request` 和真实草稿一致.
-2. T-012: 作品库修复后的独立 QA 复跑未跑; T-009/T-010/T-011 还不能算 QA 通过.
-3. T-013: 直接出图 apimart download 失败路径未做 fault injection, 仍有假成功/坏记录风险需要单独修测.
+1. T-012: 作品库修复后的独立 QA 复跑未跑; T-009/T-010/T-011 还不能算 QA 通过.
+2. T-013: 直接出图 apimart download 失败路径未做 fault injection, 仍有假成功/坏记录风险需要单独修测.
 
 ### 下一步
 - `docs/AGENT_BOARD.md` 已登记:
   - `T-004`: 已完成.
   - `T-005`: 已完成.
-  - `T-006`: 修后公众号 8 步链路复测.
+  - `T-006`: 已完成, 修后公众号 8 步链路复测.
   - `T-007`: 已完成, 修直接出图结果区不展示 apimart 单图产物.
   - `T-008`: 已完成, 修后直接出图最小真烧复测.
   - `T-009`: 待 QA, 修作品库看板打开历史作品 + 搜索老作品.
@@ -98,7 +114,24 @@
   - `T-011`: 待 QA, 处理图片占位卡.
   - `T-012`: 修后作品库全链路回归.
   - `T-013`: 补直接出图 download 失败路径 fault injection.
-- T-006/T-012/T-013 完成并由 QA 真测通过前, 不能说项目整体完成; T-009/T-010/T-011 需等 T-012 背书后才能说作品库通过.
+- T-012/T-013 完成并由 QA 真测通过前, 不能说项目整体完成; T-009/T-010/T-011 需等 T-012 背书后才能说作品库通过.
+
+---
+
+## 上一里程碑 (2026-04-29 · D-114 WeChat T-006 二次真实草稿通过)
+
+**版本**: v0.7.6-agent13 — T-004/T-005 修后公众号真实草稿推送复核通过。
+
+### D-114 验证
+- QA 报告合入: `docs/agent-handoff/QA_T006_WECHAT_PUSH_20260429.md`.
+- 第二次复核只复用已有文章、4 张段间图、封面; 只调 `/api/wechat/html` 和 `/api/wechat/push`.
+- 推送前 payload: `img_count_sanitized=4`.
+- 远端微信草稿: `img_count=4`, `mmbiz_count=4`, `has_qa_marker=true`.
+- 第二次草稿 ID: `QbCZvI0l3BDFBWrSXSwYcZaJmVU4q9t42P2nOY7C936R9f28m5_kCaT9c5ARmRoR`.
+- console/pageerror 干净; wechat 相关 pytest 101 passed.
+
+### 备注
+- 首轮旧后端产生的无图草稿仍在草稿箱里; 这是历史残留, 不作为当前代码失败证据.
 
 ---
 
