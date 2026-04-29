@@ -25,6 +25,10 @@ launch=0
 sync_worktrees=1
 dry_run=0
 cmux_cli="/Applications/cmux.app/Contents/Resources/bin/cmux"
+codex_model="${CODEX_MODEL:-gpt-5.5}"
+codex_effort="${CODEX_REASONING_EFFORT:-xhigh}"
+claude_model="${CLAUDE_MODEL:-opus4.7}"
+claude_effort="${CLAUDE_EFFORT:-max}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -232,18 +236,18 @@ write_role_files() {
 EOF
 
   if [[ "$tool" == "claude" ]]; then
-    cat > "${dir}/.agent-start.sh" <<'EOF'
+    cat > "${dir}/.agent-start.sh" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
-cd "$(dirname "$0")"
-exec claude "$(cat .agent-role.md)"
+cd "\$(dirname "\$0")"
+exec claude --model "${claude_model}" --effort "${claude_effort}" "\$(cat .agent-role.md)"
 EOF
   else
-    cat > "${dir}/.agent-start.sh" <<'EOF'
+    cat > "${dir}/.agent-start.sh" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
-cd "$(dirname "$0")"
-exec codex --cd "$PWD" "$(cat .agent-role.md)"
+cd "\$(dirname "\$0")"
+exec codex --cd "\$PWD" --model "${codex_model}" -c "model_reasoning_effort=\"${codex_effort}\"" "\$(cat .agent-role.md)"
 EOF
   fi
   chmod +x "${dir}/.agent-start.sh"
@@ -283,6 +287,8 @@ roles=(controller content media qa review)
 echo "Repo:   ${repo_root}"
 echo "cmux:   ${cmux_cli}"
 echo "Launch: ${launch}"
+echo "Codex:  ${codex_model} / effort=${codex_effort}"
+echo "Claude: ${claude_model} / effort=${claude_effort}"
 echo
 
 for role in "${roles[@]}"; do

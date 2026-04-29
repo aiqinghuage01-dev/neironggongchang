@@ -4,7 +4,27 @@
 
 ---
 
-## 当前状态 (2026-04-29 · D-102 一键启动 5-Agent 工作台)
+## 当前状态 (2026-04-29 · D-103 5-Agent 默认模型参数固定)
+
+**版本**: v0.7.6-agent2 — Codex/Claude 多 Agent 启动默认模型显式固定.
+
+### D-103 修复
+- `scripts/start_multi_agents_cmux.sh` / `scripts/start_multi_agents_tmux.sh`:
+  `.agent-start.sh` 生成时显式带 Codex `gpt-5.5` +
+  `model_reasoning_effort="xhigh"`.
+- Claude 审查 Agent 显式带 `--model opus4.7 --effort max`.
+- 支持环境变量临时覆盖:
+  `CODEX_MODEL`, `CODEX_REASONING_EFFORT`, `CLAUDE_MODEL`, `CLAUDE_EFFORT`.
+- `docs/MULTI_AGENT_WORKFLOW.md`: 补默认模型说明.
+
+### 验证
+- `bash -n scripts/start_multi_agents_cmux.sh scripts/start_multi_agents_tmux.sh` ✅
+- `bash scripts/start_multi_agents_cmux.sh --dry-run` ✅
+- `bash scripts/start_multi_agents_tmux.sh --dry-run` ✅
+
+---
+
+## 上一里程碑 (2026-04-29 · D-102 一键启动 5-Agent 工作台)
 
 **版本**: v0.7.6-agent — 多 Agent 操作从"手动开 5 个窗口"升级为 cmux/tmux 一键准备.
 
