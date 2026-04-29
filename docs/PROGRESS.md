@@ -4,9 +4,9 @@
 
 ---
 
-## 当前状态 (2026-04-30 · 热点 4 版超时兜底已修)
+## 当前状态 (2026-04-30 · 热点 4 版历史结果展示清洗已修)
 
-**版本**: v0.8.1-hotrewrite-fallback — T-054 QA-1 已证明录音改写真链路通过、热点改写 4 版在 Opus/OpenClaw timeout 后失败; 总控完成 T-057 返修, 新增热点 4 版逐版进度、Opus 超时快路兜底、产出清洗, 并用唯一一次真实页面 4 版任务验证通过。
+**版本**: v0.8.2-hotrewrite-legacy-sanitize — T-057 已修热点 4 版 Opus timeout 兜底; T-058 QA no-credit 回归发现旧任务第 4 版仍在页面展示“已走技能/需要进一步操作吗”内部菜单; 总控已补任务详情/列表读取时的展示清洗, 同一历史任务 API 与页面复测均干净。
 
 ### 当前进行
 - T-042/T-044/T-045 阻塞项已由总控返修并自测通过: 新增 `/api/tasks/counts`; 作品库只暴露 `/media` 可服务文件; 前端 `api.media()` 阻断 `/private`/`/Users`; 投流失败页只显示友好失败卡; 直接出图/作品库/图片预览按钮将 `prompt/apimart/URL` 改成“画面描述/快速出图/链接”; 数字人 picker 只列视频作品并校验 `.mp4`; 页面补内联 favicon 清掉 404 console 噪音。
@@ -15,7 +15,9 @@
 - T-054 QA-1 结论: 录音改写真链路通过; 热点改写唯一 4 版 task `673043b93c2f40338e1bb00fa314ad91` 在 Opus/OpenClaw `Request timed out` 后 failed, 未重复提交。
 - T-057 总控返修已完成: 纯改写 V1/V2 走 `hotrewrite.write.fast` 快路, 业务 V3/V4 保持 Opus 优先并在 timeout 后自动兜底快路; 4 版任务有逐版进度和 360 秒估时; 产出层清理“已走技能/需要进一步操作吗”内部文本。
 - T-057 真实复测通过: 页面只提交 1 次热点 4 版 task `250a97291f9d4c8289231d4ab93609c7`, `status=ok`, `version_count=4`, `fallback_count=1`; 第 3 版 Opus timeout 后兜底成功, 第 4 版 Opus 正常完成; console/pageerror/requestfailed/http>=400 均 0。
-- T-058 已派给 QA 自动做独立回归: 明确不重复真实提交热点 4 版任务, 只做 no-credit pytest/页面 smoke/已完成 task 与截图复核。
+- T-058 QA 自动已完成独立回归并正确 block: 兜底指标成立, 但旧 task `250a97291f9d4c8289231d4ab93609c7` 的第 4 版仍用户可见“已走技能/需要进一步操作吗”内部菜单, 未重复提交新热点任务。
+- T-058 返修已完成: `/api/tasks/{id}` 与 `/api/tasks` 对 `hotrewrite.write` 历史结果统一清洗 `content` 和 `versions[].content`; 同一旧 task 详情/列表接口均验证 `v4_has_skill=false`, `v4_has_next=false`; Playwright 恢复页面第 4 版 textarea 同样为 false, console/pageerror/requestfailed/http>=400 均 0。
+- 下一步已安排 T-059: QA 只做 no-credit 复测, 复核本次返修后的同一历史 task 和页面展示, 不再重复烧热点 4 版 credits。
 - 全站优化 8 小时定时巡检已启动: `bash scripts/start_site_optimization_watch.sh` 运行 LaunchAgent `com.neironggongchang.site-optimization-watch`, 窗口 2026-04-30 00:11~08:11, 每 2 小时检查一次工作台. 若没有 claimed/queued 任务, 自动补下一批全站优化任务; 当前首轮发现 T-041/T-042/T-043/T-044 正在跑、T-045 queued, 因此没有重复塞任务.
 - D-125 素材库验收补强已由总控在 main 实装: 新增 `/api/material-lib/featured`, 首页先展示可直接预览的业务素材卡片, 主分类只显示 7 个业务大类, `00 待整理` 单独降级为整理入口; 解决「网页显示全是 0 / 看不到业务分类 / 没有素材预览」的验收体感问题。
 - 正式端口已重启并验证: `http://127.0.0.1:8000/api/material-lib/featured?limit=18` 返回 18 条非待整理、带缩略图、已画像素材; `/categories` 返回业务素材 55 条、可直接预览 42 条、待整理 1563 条。
@@ -54,7 +56,9 @@
 - T-057 验证: `git diff --check` clean; 热点/路由/空内容 targeted pytest -> 18 passed; `.venv/bin/pytest -q -x` -> 通过, 仅 dhv5 本地 skill 缺失用例跳过; API 重启后 `/api/health` ok。
 - T-057 Playwright: 真实 task `250a97291f9d4c8289231d4ab93609c7` -> ok, 4 版, `fallback_count=1`, word counts `1695,1747,1898,1915`; 截图 `/tmp/_ui_shots/t057_hotrewrite_ready.png`, `/tmp/_ui_shots/t057_hotrewrite_ok.png`; console/pageerror/requestfailed/http>=400 全 0。
 - T-057 全站 smoke: `node scripts/e2e_pages_smoke.js /tmp/_ui_shots/site_smoke_after_t057_20260430` -> 16/16 pages OK, errors=0。
-- T-058 QA 队列: `NRG QA 自动` 已领取, 验收要求是不烧新的热点 4 版 credits。
+- T-058 QA 报告: `/Users/black.chen/Desktop/nrg-worktrees/qa/docs/agent-handoff/QA_T058_HOTREWRITE_FALLBACK_20260430.md`, commit `c662933`; no-credit 回归不通过, 发现旧任务第 4 版内部菜单外露。
+- T-058 返修报告: `docs/agent-handoff/CONTROLLER_T058_HOTREWRITE_LEGACY_SANITIZE_20260430.md`。
+- T-058 返修验证: `git diff --check` clean; `.venv/bin/pytest -q tests/test_tasks_api.py tests/test_hotrewrite_versions.py tests/test_llm_empty_content.py::test_hotrewrite_write_script_raises_on_empty_content tests/test_llm_empty_content.py::test_hotrewrite_normal_content_no_raise` -> 12 passed; `.venv/bin/pytest -q -x` -> 通过, 仅 dhv5 本地 skill 缺失用例跳过; curl 旧 task 详情/列表均 `v4_has_skill=false`, `v4_has_next=false`; Playwright 截图 `/tmp/_ui_shots/t058_hotrewrite_existing_task_v4_fixed.png`, console/pageerror/requestfailed/http>=400 全 0。
 - D-125 素材库验收补强报告: `docs/agent-handoff/CONTROLLER_MATERIALS_D125_QA_20260429.md`.
 - D-125 测试: `git diff --check` -> clean; `.venv/bin/pytest -q tests/test_materials_lib_api.py tests/test_materials_service.py tests/test_materials_pipeline.py` -> 172 passed; `.venv/bin/pytest -q -x` -> 通过, 仅 dhv5 本地 skill 缺失用例跳过。
 - D-125 正式端口 API: `/api/material-lib/featured?limit=18` -> `featured_count=18`, 18 条都不是 `00 待整理` 且有 `thumb_path`; `/api/material-lib/categories` -> 7 个业务类 + `00 待整理`, 业务素材 55 条。

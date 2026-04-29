@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import re
+from copy import deepcopy
 from typing import Any
 
 from backend.services import skill_loader
@@ -57,6 +58,33 @@ def _clean_script_content(text: str) -> str:
         content,
     ).strip()
     return content
+
+
+def _count_script_chars(content: str) -> int:
+    return len(re.sub(r"[#*_`>\-\[\]()\s]", "", content or ""))
+
+
+def sanitize_result_for_display(result: Any) -> Any:
+    """清洗旧任务里已落库的内部提示,避免历史结果打开时继续露出系统菜单。"""
+    if not isinstance(result, dict):
+        return result
+    cleaned = deepcopy(result)
+
+    def _clean_item(item: Any) -> None:
+        if not isinstance(item, dict) or not isinstance(item.get("content"), str):
+            return
+        before = item.get("content") or ""
+        after = _clean_script_content(before)
+        if after != before:
+            item["content"] = after
+            item["word_count"] = _count_script_chars(after)
+
+    _clean_item(cleaned)
+    versions = cleaned.get("versions")
+    if isinstance(versions, list):
+        for version in versions:
+            _clean_item(version)
+    return cleaned
 
 
 # ─── Step 1 · 热点拆解 + 3 个切入角度 ──────────────────────
@@ -292,7 +320,7 @@ def write_script(
         "pass": False, "summary": "自检解析失败,请人工审阅",
     }
 
-    word_count = len(re.sub(r"[#*_`>\-\[\]()\s]", "", content))
+    word_count = _count_script_chars(content)
     return {
         "content": content,
         "word_count": word_count,

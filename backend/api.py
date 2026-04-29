@@ -666,6 +666,17 @@ def skills_catalog():
 # ─── 全局任务清单 (D-037a) ───────────────────────────────
 # 只读 + 取消。endpoint 异步化在 D-037b 做。
 
+def _sanitize_task_for_display(task: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not task:
+        return task
+    if not str(task.get("kind") or "").startswith("hotrewrite.write"):
+        return task
+    from backend.services import hotrewrite_pipeline
+    out = dict(task)
+    out["result"] = hotrewrite_pipeline.sanitize_result_for_display(out.get("result"))
+    return out
+
+
 @app.get("/api/tasks", tags=["全局任务"], summary="任务列表 + 状态计数")
 def tasks_list(
     status: Optional[str] = None,
@@ -675,8 +686,9 @@ def tasks_list(
 ):
     """列任务。status 支持多值逗号分隔,如 status=running,pending。"""
     from backend.services import tasks as tasks_service
+    tasks = tasks_service.list_tasks(status=status, kind=kind, ns=ns, limit=limit)
     return {
-        "tasks": tasks_service.list_tasks(status=status, kind=kind, ns=ns, limit=limit),
+        "tasks": [_sanitize_task_for_display(t) for t in tasks],
         "counts": tasks_service.counts(),
     }
 
@@ -694,7 +706,7 @@ def tasks_get(task_id: str):
     t = tasks_service.get_task(task_id)
     if not t:
         raise HTTPException(status_code=404, detail="task not found")
-    return t
+    return _sanitize_task_for_display(t)
 
 
 @app.post("/api/tasks/{task_id}/cancel", tags=["全局任务"], summary="软取消任务 (409 if already finished)")
