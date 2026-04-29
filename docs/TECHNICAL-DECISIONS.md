@@ -4,6 +4,31 @@
 
 ---
 
+## D-099 - 公众号 HTML 预览头像必须本地化, 推送头像仍走微信图床（2026-04-29）
+
+**背景**：老板截图里 Step 6 HTML 底部作者卡片头像显示微信"未经允许不可引用"
+占位图. 这不是段间图问题: D-090 只处理了正文 section images 的
+`media_url`/`mmbiz_url` 双路径, template 底部 author-avatar 仍硬编码
+`mmbiz.qpic.cn/...from=appmsg`.
+
+**结论**：
+- 预览 raw HTML (`wechat_article_raw.html`) 里, author-avatar 必须替换成本地
+  `http://127.0.0.1:8000/media/wechat-avatar/...`.
+- 本地头像来源按优先级: Settings 上传的 `author_avatar_path`; 手工配置的外部本地图
+  复制到 `data/wechat-avatar/`; 没配置时缓存 template 的 mmbiz 头像到本地.
+- 推送 raw HTML (`wechat_article_raw_push.html`) 和 converter 输出仍保留微信图床 URL,
+  不能把本机 `/media/` 地址写进微信草稿箱链路.
+- `last_assemble_request.json` 写入 `avatar_preview` 诊断,以后能直接看头像替换是否命中.
+
+**代价**：首次没配置头像时会请求一次 template 头像 URL 并缓存 422KB PNG 到
+`data/wechat-avatar/template-avatar.png`; 如果网络失败,预览会退化到旧 mmbiz URL,但诊断里
+会记录 error,不影响拼 HTML 主流程.
+
+**测试要求**：单测覆盖 data 内头像、外部头像复制、template mmbiz 缓存、preview/push
+隔离; UI 闭环必须看 iframe 内 `.author-avatar` 的 `naturalWidth` 和截图.
+
+---
+
 ## D-097 - 公众号段间图生成按钮要覆盖 pending 和 done 两种状态（2026-04-29）
 
 **背景**：D-096 把 Step 5 改成"先选风格,再一键生成 N 张",但按钮只在

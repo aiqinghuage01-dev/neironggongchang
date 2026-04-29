@@ -45,6 +45,33 @@ media_url   = /media/wechat-images/<ts>_<name>.jpg
 **测试入口**: `tests/test_wechat_html_inject.py::test_md_to_wechat_html_prefer_media_*`,
 `test_md_to_wechat_html_push_uses_mmbiz_not_media`.
 
+### 1.1 底部头像也是双 URL 问题 (D-099)
+
+**症状**: Step 6 HTML 预览底部作者卡片里, 段间图都正常,但头像位置显示
+"此图片来自微信公众平台 未经允许不可引用"占位图.
+
+**根因**: template-v3-clean.html 底部 author-card 硬编码了公众号头像
+`mmbiz.qpic.cn/...from=appmsg`. D-090 只把正文段间图拆成 preview `media_url`
+和 push `mmbiz_url`, 没处理 template 自带头像. 所以 iframe 预览仍然撞微信防盗链.
+
+**修法**:
+- preview raw HTML: `assemble_html` 先拿本地头像 URL,再用 `replace_template_avatar`
+  替换 template 硬编码头像.
+- 本地头像优先级:
+  1. Settings 上传的 `author_avatar_path` 且文件在 `data/` 下 → 直接转
+     `http://127.0.0.1:8000/media/...`.
+  2. 手工配置的外部本地图 → 复制到 `data/wechat-avatar/avatar-preview.*`.
+  3. 没配头像 → 下载/缓存 template 的 mmbiz 头像到
+     `data/wechat-avatar/template-avatar.png`.
+- push raw HTML: 仍保留 mmbiz URL. **不能**把 `127.0.0.1/media/...` 写进推送给
+  微信的 HTML, 微信草稿箱加载不到本机地址.
+
+**诊断入口**: `/tmp/preview/last_assemble_request.json` 的 `avatar_preview`:
+`source` / `url` / `replaced`.
+
+**测试入口**: `tests/test_wechat_avatar.py::test_preview_avatar_url_*`,
+`test_assemble_html_preview_replaces_avatar_but_push_keeps_wechat_url`.
+
 ---
 
 ## 2. `_inject_into_template` 替换正则 (D-089)

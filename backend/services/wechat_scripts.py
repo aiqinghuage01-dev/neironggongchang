@@ -18,8 +18,10 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 import subprocess
 import time
+import urllib.request
 from pathlib import Path
 from typing import Any
 
@@ -402,6 +404,7 @@ def assemble_html(
 
     digest = _auto_digest(content_md)
     author_url = _read_asset_text("avatar-wechat-url.txt").strip() or ""
+    preview_author_url, preview_avatar_meta = _preview_avatar_url(author_url)
 
     # 把 body 塞进 template 里 .article-body > .content 的位置
     # template-v3-clean.html 本身是完整 HTML,我们做字符串替换
@@ -413,7 +416,7 @@ def assemble_html(
         hero_title_html=hero_title_html,
         hero_subtitle=hero_subtitle,
         body_html=body_html_preview,
-        avatar_url=author_url,
+        avatar_url=preview_author_url or author_url,
     )
     html_push = _inject_into_template(
         template_html,
@@ -424,6 +427,9 @@ def assemble_html(
         body_html=body_html_push,
         avatar_url=author_url,
     )
+    preview_avatar_replaced = 0
+    if preview_author_url:
+        html_preview, preview_avatar_replaced = replace_template_avatar(html_preview, preview_author_url)
 
     # 兼容下文 `len(re.findall(r"<img\b", html))` 诊断 (取 preview 版数图)
     html = html_preview
@@ -446,6 +452,10 @@ def assemble_html(
             "section_images_with_mmbiz_url": len(_images_with_url),
             "section_images_urls": [x.get("mmbiz_url", "") for x in _images_in[:8]],
             "img_in_raw_html": len(re.findall(r"<img\b", html)),
+            "avatar_preview": {
+                **preview_avatar_meta,
+                "replaced": preview_avatar_replaced,
+            },
             "paragraphs_count": len([p for p in (content_md or "").split("\n\n") if p.strip()]),
         }, ensure_ascii=False, indent=2),
         encoding="utf-8",
@@ -487,6 +497,128 @@ def assemble_html(
 
 
 _MEDIA_PREVIEW_BASE = "http://127.0.0.1:8000"  # 路线 B 部署改 env (LH 本机够用)
+
+
+def _media_preview_url_for_path(path: Path) -> str:
+    """data/ 下本地文件 → 前端 iframe 可加载的绝对 /media URL."""
+    from shortvideo.config import DATA_DIR
+    try:
+        rel = path.resolve().relative_to(DATA_DIR.resolve())
+    except ValueError:
+        return ""
+    return f"{_MEDIA_PREVIEW_BASE}/media/{rel.as_posix()}"
+
+
+def _copy_avatar_to_media(path: Path, stem: str = "avatar-preview") -> Path:
+    """把任意本地头像复制到 data/wechat-avatar/, 让 /media 能暴露给预览 HTML."""
+    from shortvideo.config import DATA_DIR
+    suffix = path.suffix.lower()
+    if suffix not in {".jpg", ".jpeg", ".png"}:
+        suffix = ".jpg"
+    target_dir = DATA_DIR / "wechat-avatar"
+    target_dir.mkdir(parents=True, exist_ok=True)
+    target = target_dir / f"{stem}{suffix}"
+    if path.resolve() != target.resolve():
+        shutil.copy2(path, target)
+    return target
+
+
+def _remote_avatar_cache_path(content_type: str, payload: bytes) -> Path:
+    from shortvideo.config import DATA_DIR
+    target_dir = DATA_DIR / "wechat-avatar"
+    target_dir.mkdir(parents=True, exist_ok=True)
+    ct = (content_type or "").lower()
+    if "png" in ct or payload.startswith(b"\x89PNG"):
+        suffix = ".png"
+    elif "jpeg" in ct or "jpg" in ct or payload.startswith(b"\xff\xd8"):
+        suffix = ".jpg"
+    else:
+        suffix = ".jpg"
+    return target_dir / f"template-avatar{suffix}"
+
+
+def _download_template_avatar_for_preview(url: str, timeout: int = 8) -> tuple[str, dict[str, Any]]:
+    """把 template 里的 mmbiz 头像缓存成本地图, 只供本地预览避防盗链.
+
+    这不是推送链路: 推送仍在 push_to_wechat 阶段上传合法素材 URL.
+    """
+    meta: dict[str, Any] = {"source": "template_mmbiz_cache", "cached": False, "error": None}
+    if not url.startswith("http"):
+        meta["error"] = "模板头像 URL 为空"
+        return "", meta
+
+    from shortvideo.config import DATA_DIR
+    target_dir = DATA_DIR / "wechat-avatar"
+    for old in [target_dir / "template-avatar.png", target_dir / "template-avatar.jpg"]:
+        if old.exists():
+            return _media_preview_url_for_path(old), {**meta, "cached": True}
+
+    try:
+        req = urllib.request.Request(
+            url,
+            headers={
+                "User-Agent": "Mozilla/5.0",
+                "Referer": "https://mp.weixin.qq.com/",
+            },
+        )
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            payload = resp.read(1024 * 1024 + 1)
+            content_type = resp.headers.get("Content-Type", "")
+        if len(payload) > 1024 * 1024:
+            raise WechatScriptError("模板头像超过 1MB, 不缓存")
+        if not (
+            payload.startswith(b"\x89PNG")
+            or payload.startswith(b"\xff\xd8")
+            or (content_type or "").lower().startswith("image/")
+        ):
+            raise WechatScriptError(f"模板头像返回的不是图片: {content_type}")
+        target = _remote_avatar_cache_path(content_type, payload)
+        target.write_bytes(payload)
+        return _media_preview_url_for_path(target), {**meta, "cached": True}
+    except Exception as e:
+        import logging
+        logging.getLogger("wechat_scripts.avatar").warning(
+            f"cache template avatar for preview failed: {type(e).__name__}: {e}"
+        )
+        return "", {**meta, "error": f"{type(e).__name__}: {e}"}
+
+
+def _preview_avatar_url(default_mmbiz_url: str = "") -> tuple[str, dict[str, Any]]:
+    """返回本地预览头像 URL.
+
+    优先用 Settings 上传的 author_avatar_path; 没配时缓存 template 自带头像.
+    """
+    meta: dict[str, Any] = {
+        "configured": False,
+        "exists": False,
+        "source": "",
+        "url": "",
+        "error": None,
+    }
+    cfg = _read_wechat_config()
+    raw = (cfg.get("author_avatar_path") or "").strip()
+    if raw:
+        meta["configured"] = True
+        avatar_path = Path(raw).expanduser()
+        meta["exists"] = avatar_path.exists()
+        if not avatar_path.exists():
+            return "", {**meta, "error": "本地头像文件不存在"}
+        url = _media_preview_url_for_path(avatar_path)
+        if url:
+            return url, {**meta, "source": "configured_data", "url": url}
+        try:
+            copied = _copy_avatar_to_media(avatar_path)
+            url = _media_preview_url_for_path(copied)
+            return url, {**meta, "source": "configured_copied", "url": url}
+        except Exception as e:
+            import logging
+            logging.getLogger("wechat_scripts.avatar").warning(
+                f"copy configured avatar for preview failed: {type(e).__name__}: {e}"
+            )
+            return "", {**meta, "error": f"{type(e).__name__}: {e}"}
+
+    url, cache_meta = _download_template_avatar_for_preview(default_mmbiz_url)
+    return url, {**meta, **cache_meta, "url": url}
 
 
 def _md_to_wechat_html(

@@ -4,7 +4,39 @@
 
 ---
 
-## 当前状态 (2026-04-29 · D-098 AGENTS/CLAUDE 入口同步)
+## 当前状态 (2026-04-29 · D-099 公众号 HTML 底部头像本地预览修复)
+
+**版本**: v0.7.4 — Step 6 HTML 预览底部头像避开微信 mmbiz 防盗链.
+
+### D-099 修复
+- `backend/services/wechat_scripts.py`: Step 6 预览头像新增本地化链路:
+  1. 优先用 Settings 上传的 `author_avatar_path` 且在 `data/` 下的文件.
+  2. 手工配置了 `data/` 外部头像时,复制到 `data/wechat-avatar/avatar-preview.*`.
+  3. 没配置头像时,把 template 自带的 mmbiz 头像缓存到
+     `data/wechat-avatar/template-avatar.png`, 预览 iframe 用
+     `http://127.0.0.1:8000/media/wechat-avatar/...`.
+- `assemble_html`: preview raw HTML 用本地头像替换 template 硬编码头像; push raw 仍保留
+  微信图床头像,不把本地 `/media/` 泄进草稿箱推送 HTML.
+- `last_assemble_request.json`: 增加 `avatar_preview` 诊断字段,能看 source / url /
+  replaced,以后头像问题不用和段间图混查.
+- `tests/test_wechat_avatar.py`: 增 4 个 D-099 回归,覆盖 data 内头像、外部头像复制、
+  template mmbiz 缓存、preview/push 双路径隔离.
+
+### 验证
+- `pytest -q tests/test_wechat_avatar.py tests/test_wechat_html_inject.py` ✅
+- 真实 `POST /api/wechat/html` 用最近公众号长文 + 4 张段间图返回 200; `raw_html`
+  头像为 `http://127.0.0.1:8000/media/wechat-avatar/template-avatar.png`; push raw
+  仍走 mmbiz ✅
+- `curl -I http://127.0.0.1:8000/media/wechat-avatar/template-avatar.png` 返回 200
+  `image/png`, 432544 bytes ✅
+- Playwright :8001 Step 6 真 iframe: `.author-avatar` `naturalWidth=822`,
+  `clientWidth=88`, console/pageerror=0; 截图已读:
+  `/tmp/_ui_shots/d099_wechat_avatar_preview.png` ✅
+- `pytest -q -x` ✅ (全量通过; dhv5 本机缺 skill 的 skip 仍为预期)
+
+---
+
+## 上一里程碑 (2026-04-29 · D-098 AGENTS/CLAUDE 入口同步)
 
 **版本**: v0.7.3-doc — 文档入口同步, 无代码改动.
 

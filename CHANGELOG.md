@@ -6,6 +6,19 @@
 
 ---
 
+## [v0.7.4] — 2026-04-29 (D-099 公众号 HTML 底部头像本地预览)
+
+- **修复**: Step 6 HTML 预览底部作者头像仍用 template 硬编码的
+  `mmbiz.qpic.cn/...from=appmsg`, 浏览器里显示"未经允许不可引用"占位图.
+- **后端**: 预览头像新增本地化链路: Settings 已上传头像直接用
+  `/media/wechat-avatar/avatar.*`; 外部配置头像复制到 `data/wechat-avatar/`;
+  没配置时缓存 template 自带 mmbiz 头像到 `data/wechat-avatar/template-avatar.png`.
+- **隔离**: preview raw HTML 用本地头像; push raw / 微信 markup 仍保留微信图床 URL,
+  不把 `127.0.0.1` 本地地址写进草稿箱推送 HTML.
+- **诊断**: `last_assemble_request.json` 增加 `avatar_preview` 字段,记录 source/url/replaced.
+- **测试**: 头像本地化 4 个回归 + 真实 `/api/wechat/html` + Playwright iframe 截图
+  验证头像 `naturalWidth=822`; `pytest -q -x` 通过.
+
 ## [v0.7.3] — 2026-04-29 (D-097 公众号段间图一键重生)
 
 - **修复**: Step 5 段间图 4/4 都已生成后, 页面只剩单张"重生"按钮,想重跑 4 张只能

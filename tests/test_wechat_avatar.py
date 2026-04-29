@@ -5,6 +5,7 @@
 """
 from __future__ import annotations
 
+import json
 import subprocess
 from pathlib import Path
 from unittest.mock import patch
@@ -12,6 +13,7 @@ from unittest.mock import patch
 import pytest
 
 from backend.services import wechat_scripts
+from shortvideo import config as shortvideo_config
 
 
 # ─── replace_template_avatar 单元 ─────────────────────────
@@ -131,3 +133,118 @@ def test_read_wechat_config_valid(tmp_path, monkeypatch):
     cfg = wechat_scripts._read_wechat_config()
     assert cfg["wechat_appid"] == "wxabc"
     assert cfg["author_avatar_path"] == "~/Desktop/avatar.jpg"
+
+
+# ─── D-099 预览头像本地化 ─────────────────────────────────
+
+def test_preview_avatar_url_uses_configured_data_avatar(tmp_path, monkeypatch):
+    """Settings 上传到 data/wechat-avatar 的头像 → 预览 HTML 用本地 /media 绝对 URL."""
+    data_dir = tmp_path / "data"
+    avatar = data_dir / "wechat-avatar" / "avatar.png"
+    avatar.parent.mkdir(parents=True)
+    avatar.write_bytes(b"\x89PNG\r\n\x1a\nfake")
+    cfg_path = tmp_path / "wechat-config.json"
+    cfg_path.write_text(json.dumps({"author_avatar_path": str(avatar)}), encoding="utf-8")
+
+    monkeypatch.setattr(shortvideo_config, "DATA_DIR", data_dir)
+    monkeypatch.setattr(wechat_scripts, "_WECHAT_CONFIG_PATH", cfg_path)
+
+    url, meta = wechat_scripts._preview_avatar_url("http://mmbiz.qpic.cn/avatar/0?from=appmsg")
+    assert url == "http://127.0.0.1:8000/media/wechat-avatar/avatar.png"
+    assert meta["source"] == "configured_data"
+    assert meta["configured"] is True
+    assert meta["exists"] is True
+
+
+def test_preview_avatar_url_copies_external_configured_avatar(tmp_path, monkeypatch):
+    """手工配置了 data/ 外部头像时, 复制一份到 data/wechat-avatar 供本地预览."""
+    data_dir = tmp_path / "data"
+    src = tmp_path / "desktop-avatar.png"
+    src.write_bytes(b"\x89PNG\r\n\x1a\nfake")
+    cfg_path = tmp_path / "wechat-config.json"
+    cfg_path.write_text(json.dumps({"author_avatar_path": str(src)}), encoding="utf-8")
+
+    monkeypatch.setattr(shortvideo_config, "DATA_DIR", data_dir)
+    monkeypatch.setattr(wechat_scripts, "_WECHAT_CONFIG_PATH", cfg_path)
+
+    url, meta = wechat_scripts._preview_avatar_url("")
+    assert url == "http://127.0.0.1:8000/media/wechat-avatar/avatar-preview.png"
+    assert (data_dir / "wechat-avatar" / "avatar-preview.png").exists()
+    assert meta["source"] == "configured_copied"
+
+
+def test_preview_avatar_url_caches_template_mmbiz_when_no_config(tmp_path, monkeypatch):
+    """没上传头像时, 缓存 template 自带的 mmbiz 头像到本地, 避免预览页防盗链占位."""
+    data_dir = tmp_path / "data"
+    cfg_path = tmp_path / "missing-config.json"
+    monkeypatch.setattr(shortvideo_config, "DATA_DIR", data_dir)
+    monkeypatch.setattr(wechat_scripts, "_WECHAT_CONFIG_PATH", cfg_path)
+
+    class FakeResp:
+        headers = {"Content-Type": "image/png"}
+        def __enter__(self):
+            return self
+        def __exit__(self, exc_type, exc, tb):
+            return False
+        def read(self, _n):
+            return b"\x89PNG\r\n\x1a\nfake"
+
+    monkeypatch.setattr(wechat_scripts.urllib.request, "urlopen", lambda *_a, **_kw: FakeResp())
+
+    url, meta = wechat_scripts._preview_avatar_url("http://mmbiz.qpic.cn/avatar/0?from=appmsg")
+    assert url == "http://127.0.0.1:8000/media/wechat-avatar/template-avatar.png"
+    assert (data_dir / "wechat-avatar" / "template-avatar.png").exists()
+    assert meta["source"] == "template_mmbiz_cache"
+    assert meta["cached"] is True
+
+
+def test_assemble_html_preview_replaces_avatar_but_push_keeps_wechat_url(tmp_path, monkeypatch):
+    """Step 6 iframe raw_html 用本地头像; push raw 仍保留微信图床头像."""
+    data_dir = tmp_path / "data"
+    avatar = data_dir / "wechat-avatar" / "avatar.png"
+    avatar.parent.mkdir(parents=True)
+    avatar.write_bytes(b"\x89PNG\r\n\x1a\nfake")
+    cfg_path = tmp_path / "wechat-config.json"
+    cfg_path.write_text(json.dumps({"author_avatar_path": str(avatar)}), encoding="utf-8")
+    preview_dir = tmp_path / "preview"
+    preview_dir.mkdir()
+    mmbiz_avatar = "http://mmbiz.qpic.cn/mmbiz_png/oldavatar/0?from=appmsg"
+    template = f"""
+    <html><body>
+      <div class="hero-title">old title</div>
+      <div class="hero-subtitle">old sub</div>
+      <div class="content">demo copy
+      <div class="footer-fixed">
+        <a href="https://mp.weixin.qq.com/mp/profile_ext?action=home&amp;__biz=ABC#wechat_redirect">
+          <img class="author-avatar" src="{mmbiz_avatar}" alt="清华哥">
+        </a>
+      </div>
+    </body></html>
+    """
+
+    monkeypatch.setattr(shortvideo_config, "DATA_DIR", data_dir)
+    monkeypatch.setattr(wechat_scripts, "_WECHAT_CONFIG_PATH", cfg_path)
+    monkeypatch.setattr(wechat_scripts, "PREVIEW_DIR", preview_dir)
+    monkeypatch.setattr(wechat_scripts, "_load_template", lambda _name="v3-clean": template)
+    monkeypatch.setattr(wechat_scripts, "_read_asset_text", lambda _filename: mmbiz_avatar)
+    monkeypatch.setattr(wechat_scripts, "_skill_python", lambda: "python3")
+    monkeypatch.setattr(wechat_scripts.skill_loader, "load_skill", lambda _slug: {"scripts_dir": tmp_path})
+
+    def fake_run(cmd, *, timeout=180, cwd=None):
+        in_path = Path(cmd[cmd.index("--input") + 1])
+        out_path = Path(cmd[cmd.index("--output") + 1])
+        meta_path = Path(cmd[cmd.index("--meta") + 1])
+        out_path.write_text(in_path.read_text(encoding="utf-8"), encoding="utf-8")
+        meta_path.write_text("{}", encoding="utf-8")
+        return subprocess.CompletedProcess(args=cmd, returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(wechat_scripts, "_run", fake_run)
+
+    res = wechat_scripts.assemble_html(title="测试标题", content_md="正文第一段")
+    preview_avatar = "http://127.0.0.1:8000/media/wechat-avatar/avatar.png"
+    assert preview_avatar in res["raw_html"]
+    assert mmbiz_avatar not in res["raw_html"]
+
+    push_raw = (preview_dir / "wechat_article_raw_push.html").read_text(encoding="utf-8")
+    assert preview_avatar not in push_raw
+    assert mmbiz_avatar in push_raw
