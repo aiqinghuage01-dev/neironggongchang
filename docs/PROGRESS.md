@@ -15,6 +15,7 @@
 - T-054 QA-1 结论: 录音改写真链路通过; 热点改写唯一 4 版 task `673043b93c2f40338e1bb00fa314ad91` 在 Opus/OpenClaw `Request timed out` 后 failed, 未重复提交。
 - T-057 总控返修已完成: 纯改写 V1/V2 走 `hotrewrite.write.fast` 快路, 业务 V3/V4 保持 Opus 优先并在 timeout 后自动兜底快路; 4 版任务有逐版进度和 360 秒估时; 产出层清理“已走技能/需要进一步操作吗”内部文本。
 - T-057 真实复测通过: 页面只提交 1 次热点 4 版 task `250a97291f9d4c8289231d4ab93609c7`, `status=ok`, `version_count=4`, `fallback_count=1`; 第 3 版 Opus timeout 后兜底成功, 第 4 版 Opus 正常完成; console/pageerror/requestfailed/http>=400 均 0。
+- T-058 已派给 QA 自动做独立回归: 明确不重复真实提交热点 4 版任务, 只做 no-credit pytest/页面 smoke/已完成 task 与截图复核。
 - 全站优化 8 小时定时巡检已启动: `bash scripts/start_site_optimization_watch.sh` 运行 LaunchAgent `com.neironggongchang.site-optimization-watch`, 窗口 2026-04-30 00:11~08:11, 每 2 小时检查一次工作台. 若没有 claimed/queued 任务, 自动补下一批全站优化任务; 当前首轮发现 T-041/T-042/T-043/T-044 正在跑、T-045 queued, 因此没有重复塞任务.
 - D-125 素材库验收补强已由总控在 main 实装: 新增 `/api/material-lib/featured`, 首页先展示可直接预览的业务素材卡片, 主分类只显示 7 个业务大类, `00 待整理` 单独降级为整理入口; 解决「网页显示全是 0 / 看不到业务分类 / 没有素材预览」的验收体感问题。
 - 正式端口已重启并验证: `http://127.0.0.1:8000/api/material-lib/featured?limit=18` 返回 18 条非待整理、带缩略图、已画像素材; `/categories` 返回业务素材 55 条、可直接预览 42 条、待整理 1563 条。
@@ -53,6 +54,7 @@
 - T-057 验证: `git diff --check` clean; 热点/路由/空内容 targeted pytest -> 18 passed; `.venv/bin/pytest -q -x` -> 通过, 仅 dhv5 本地 skill 缺失用例跳过; API 重启后 `/api/health` ok。
 - T-057 Playwright: 真实 task `250a97291f9d4c8289231d4ab93609c7` -> ok, 4 版, `fallback_count=1`, word counts `1695,1747,1898,1915`; 截图 `/tmp/_ui_shots/t057_hotrewrite_ready.png`, `/tmp/_ui_shots/t057_hotrewrite_ok.png`; console/pageerror/requestfailed/http>=400 全 0。
 - T-057 全站 smoke: `node scripts/e2e_pages_smoke.js /tmp/_ui_shots/site_smoke_after_t057_20260430` -> 16/16 pages OK, errors=0。
+- T-058 QA 队列: `NRG QA 自动` 已领取, 验收要求是不烧新的热点 4 版 credits。
 - D-125 素材库验收补强报告: `docs/agent-handoff/CONTROLLER_MATERIALS_D125_QA_20260429.md`.
 - D-125 测试: `git diff --check` -> clean; `.venv/bin/pytest -q tests/test_materials_lib_api.py tests/test_materials_service.py tests/test_materials_pipeline.py` -> 172 passed; `.venv/bin/pytest -q -x` -> 通过, 仅 dhv5 本地 skill 缺失用例跳过。
 - D-125 正式端口 API: `/api/material-lib/featured?limit=18` -> `featured_count=18`, 18 条都不是 `00 待整理` 且有 `thumb_path`; `/api/material-lib/categories` -> 7 个业务类 + `00 待整理`, 业务素材 55 条。
