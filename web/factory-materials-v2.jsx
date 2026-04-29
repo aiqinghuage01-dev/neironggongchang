@@ -144,8 +144,8 @@ function MV2CategoryCard({ category, onClick }) {
 }
 
 
-function MV2FeaturedStrip({ items, onPickAsset, compact }) {
-  if (!items || items.length === 0) return null;
+function MV2FeaturedStrip({ items, onPickAsset, onClassify, classifying, compact }) {
+  const hasItems = items && items.length > 0;
   return (
     <div data-testid="mv2-featured-strip" style={{ marginBottom: 16 }}>
       <div style={{
@@ -158,17 +158,35 @@ function MV2FeaturedStrip({ items, onPickAsset, compact }) {
             已归到演讲、上课、研发、空镜等业务类, 点击卡片可看原片
           </div>
         </div>
-        <Tag size="sm" color="green">{items.length} 条精选</Tag>
+        <Tag size="sm" color={hasItems ? "green" : "amber"}>{hasItems ? `${items.length} 条精选` : "等识别"}</Tag>
       </div>
-      <div style={{
-        display: "grid",
-        gridTemplateColumns: compact ? "repeat(2, minmax(0, 1fr))" : "repeat(6, minmax(0, 1fr))",
-        gap: 8,
-      }}>
-        {items.slice(0, compact ? 6 : 12).map(a => (
-          <MV2AssetCard key={a.id} asset={a} onClick={() => onPickAsset && onPickAsset(a)} />
-        ))}
-      </div>
+      {hasItems ? (
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: compact ? "repeat(2, minmax(0, 1fr))" : "repeat(6, minmax(0, 1fr))",
+          gap: 8,
+        }}>
+          {items.slice(0, compact ? 6 : 12).map(a => (
+            <MV2AssetCard key={a.id} asset={a} onClick={() => onPickAsset && onPickAsset(a)} />
+          ))}
+        </div>
+      ) : (
+        <div style={{
+          padding: "12px 14px", border: `1px dashed ${T.border}`, borderRadius: 8,
+          background: "#fff", display: "flex", alignItems: compact ? "flex-start" : "center",
+          justifyContent: "space-between", gap: 10, flexDirection: compact ? "column" : "row",
+        }}>
+          <div>
+            <div style={{ fontSize: 12.5, fontWeight: 700, color: T.text }}>还没有可直接推荐的业务素材</div>
+            <div style={{ fontSize: 11, color: T.muted2, marginTop: 3 }}>
+              先识别一批素材, 演讲、上课、研发等业务素材会自动出现在这里
+            </div>
+          </div>
+          <Btn variant="outline" size="sm" onClick={() => onClassify && onClassify(20)} disabled={classifying}>
+            {classifying ? "识别中..." : "识别 20 条"}
+          </Btn>
+        </div>
+      )}
     </div>
   );
 }
@@ -458,7 +476,7 @@ function MV2L1Home({ stats, categories, root, loading, err, onPickCategory, onSc
         <MV2KpiCard
           icon="◎" label="业务素材"
           value={businessTotal}
-          sub={`${usable} 条可直接预览`}
+          sub={`${usable} 条质量达标`}
         />
         <MV2KpiCard
           icon="⚠" label="未入业务类"
@@ -548,7 +566,13 @@ function MV2L1Home({ stats, categories, root, loading, err, onPickCategory, onSc
               </div>
             ) : (
               <>
-                <MV2FeaturedStrip items={featured || []} onPickAsset={onPickAsset} compact={compact} />
+                <MV2FeaturedStrip
+                  items={featured || []}
+                  onPickAsset={onPickAsset}
+                  onClassify={onClassify}
+                  classifying={classifying}
+                  compact={compact}
+                />
                 <div style={{ display: "grid", gridTemplateColumns: compact ? "1fr" : "repeat(2, minmax(0, 1fr))", gap: 10 }}>
                   {businessCategories.map(c => (
                     <MV2CategoryCard key={c.key} category={c} onClick={() => onPickCategory(c.key)} />
@@ -556,7 +580,7 @@ function MV2L1Home({ stats, categories, root, loading, err, onPickCategory, onSc
                 </div>
                 {pendingCategory && pendingCount > 0 && (
                   <div
-                    onClick={() => onPickCategory("00 待整理")}
+                    onClick={stats?.pending_review > 0 ? onAudit : () => onPickCategory("00 待整理")}
                     style={{
                       marginTop: 10, padding: "10px 12px", background: "#fff7e6",
                       border: `1px solid ${T.amber}33`, borderRadius: 8,
@@ -1547,10 +1571,11 @@ function PageMaterialsV2({ onNav }) {
   async function loadHome() {
     setLoading(true); setSideLoading(true); setErr("");
     try {
+      const featuredReq = api.get("/api/material-lib/featured?limit=18").catch(() => ({ items: [] }));
       const [s, f, ft, a, t] = await Promise.all([
         api.get("/api/material-lib/stats"),
         api.get("/api/material-lib/categories"),
-        api.get("/api/material-lib/featured?limit=18"),
+        featuredReq,
         api.get("/api/material-lib/recent-activity?limit=6"),
         api.get("/api/material-lib/top-used?limit=5"),
       ]);

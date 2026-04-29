@@ -54,7 +54,7 @@
 | T-036~T-040 | 素材库后续审查/QA/返工循环 | 自动创建 | 停止 | 同 T-026/T-027/T-028 | D-124 本轮已由总控收束; 如后续要做视觉识别/物理整理, 另起新任务 |
 | T-041 | D-125 素材库正式端口独立复测 | QA 测试 Agent | claimed | 只读 QA | 正式 8000/8001 端口复测素材库首页精选/大类/预览/剪辑检索/移动端 |
 | T-042 | 全站基础导航与页面状态 smoke | QA 测试 Agent | claimed | 只读 QA | 全站主要入口加载、截图、console/pageerror/requestfailed 汇总 |
-| T-043 | D-125 素材库改动只读审查 | 审查 Agent | claimed | 只读审查 | 检查素材库产品心智、性能、路径设置、测试遗漏、credits 风险 |
+| T-043 | D-125 素材库改动只读审查 | 审查 Agent / 总控返修 | 已完成 | 只读审查 + 总控修复 | 审查无 P0; 总控已修 P1/P2: missing_at 过滤、featured 降级、limit 校验、空态引导、补 featured 测试 |
 | T-044 | 全站内容链路低风险页面巡检 | QA 测试 Agent | claimed | 只读 QA | 公众号/投流/热点/录音/朋友圈/策划/合规页面巡检, 不重复烧 credits |
 | T-045 | 全站媒体链路低风险页面巡检 | QA 测试 Agent | queued | 只读 QA | 素材库/作品库/直接出图/即梦/数字人/声音视频入口巡检 |
 | T-046~T-053 | 全站优化自动补任务窗口 | 自动创建 | pending | content/media/qa/review 分批 | `scripts/start_site_optimization_watch.sh` 未来 8 小时每 2 小时检查; 工作台空闲时自动派开发修复、QA 回归、Review 审查 |
@@ -69,6 +69,7 @@
 - D-125 验证: `git diff --check` -> clean; `.venv/bin/pytest -q tests/test_materials_lib_api.py tests/test_materials_service.py tests/test_materials_pipeline.py` -> 172 passed; `.venv/bin/pytest -q -x` -> 通过; 正式 `8000/8001` curl + Playwright 首页/预览/分类/剪辑检索/移动视口通过, console/pageerror/requestfailed/http error=0.
 - D-125 报告: `docs/agent-handoff/CONTROLLER_MATERIALS_D125_QA_20260429.md`.
 - 投流 T-021/T-022 已合入 main: `3ba6254`, `1384513`, `205d109`; QA 真烧 task `2ca3ceaff54e481c8045573afc7cd50b` -> `ok`, `route_key=touliu.generate.quick`, `engine=opus`, 页面展示 1 条; main 投流相关测试 34 passed, 全量 pytest 通过; 已新增 T-054 恢复下游录音/热点真链路。
+- T-043 返修: `docs/agent-handoff/CONTROLLER_T043_MATERIALS_REPAIR_20260430.md`; featured 排除 `missing_at`, limit=0/49 返 422, featured 失败首页可降级, 空态显示识别引导; 素材库相关测试 175 passed, 全量 pytest 通过, Playwright 正常路径 console/pageerror/requestfailed/http error=0.
 - D-124 素材库总控交接: `docs/agent-handoff/CONTROLLER_MATERIALS_T026_MAIN_20260429.md`.
 - D-124 验证: `python3 -m pytest -q` -> 通过; `git diff --check` -> clean; 临时 API `:18000` curl `/categories`、`/match`、`/classify-batch?limit=100` 通过; Playwright 截图 `/tmp/_ui_shots/t026_materials_desktop_home.png`, `/tmp/_ui_shots/t026_materials_desktop_category.png`, `/tmp/_ui_shots/t026_materials_desktop_match.png`, `/tmp/_ui_shots/t026_materials_mobile_home.png`, console error/pageerror/requestfailed/http error=0.
 - 总控本轮交接: `docs/agent-handoff/CONTROLLER_T013_T017_20260429_2011.md`.

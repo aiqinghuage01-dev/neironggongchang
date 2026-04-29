@@ -14,6 +14,7 @@
 - 正式端口已重启并验证: `http://127.0.0.1:8000/api/material-lib/featured?limit=18` 返回 18 条非待整理、带缩略图、已画像素材; `/categories` 返回业务素材 55 条、可直接预览 42 条、待整理 1563 条。
 - 全站继续推进: 素材库修正提交后, 总控会把素材库复测、全站导航/作品库/内容链路/媒体链路巡检继续写入共享队列, 由 QA/审查 Agent 持续发现问题并返修。
 - 投流快出链路已恢复并合入 main: T-021/T-022 报告显示页面真烧 `n=1` 只提交 1 次, task `2ca3ceaff54e481c8045573afc7cd50b` 34 秒 `ok`, `route_key=touliu.generate.quick`, `engine=opus`; 总控 cherry-pick `3ba6254`/`1384513` 并补 `205d109` 让 API 对 `n<=2` 返回 60 秒估时。T-054 已排队恢复录音改写 + 热点改写真实链路复测。
+- T-043 审查无 P0, 但指出素材库 featured 缺失文件过滤和首页降级问题; 总控已返修: `missing_at IS NULL`, featured limit 422 校验, featured 失败不拖垮首页, 空 featured 显示识别引导, KPI 文案改为「质量达标」。
 - D-124 素材库长任务已由总控接管收束: T-026 媒体自动 Agent 卡在未提交 patch 输出, 总控停止进程后将已通过测试的 patch 合入 main, 并补右栏画像字段、旧标签参与分类、移动端响应式; T-035/T-038 自动返工重复 worker 已停止并标 blocked, `scripts/start_materials_loop.sh --stop` 已关闭素材库返工守护进程.
 - 素材库真实演示源仍是 `~/Downloads/`: 已 metadata 分类 120 条, 分类结果包含演讲舞台/上课教学/研发产品/空镜补画面/品牌资产; 未调用 LLM, 未烧 credits. 大量泛文件名素材仍在 `00 待整理`, 符合当前演示源质量.
 - T-017: 已入共享队列并被 `NRG 内容开发` 领取; 目标是继续返修 T-015 暴露的投流 `n=1` 页面真实链路 724s timeout。
@@ -44,6 +45,7 @@
 - D-125 正式端口 API: `/api/material-lib/featured?limit=18` -> `featured_count=18`, 18 条都不是 `00 待整理` 且有 `thumb_path`; `/api/material-lib/categories` -> 7 个业务类 + `00 待整理`, 业务素材 55 条。
 - D-125 浏览器闭环: `http://127.0.0.1:8001/?page=materials` 首页/精选预览弹窗/上课教学分类/剪辑检索/移动视口截图已读; console error/pageerror/requestfailed/http error 均 0。截图: `/tmp/_ui_shots/materials_clean_home.png`, `/tmp/_ui_shots/materials_clean_preview.png`, `/tmp/_ui_shots/materials_category_side_waited.png`, `/tmp/_ui_shots/materials_clean_match.png`, `/tmp/_ui_shots/materials_clean_mobile.png`.
 - 投流 T-021/T-022 合入证据: `docs/agent-handoff/DEV_CONTENT_T021_TOULIU_ROUTE_FALLBACK_20260429.md`, `/Users/black.chen/Desktop/nrg-worktrees/qa/docs/agent-handoff/QA_T022_TOULIU_N1_20260429.md`; main 测试 `.venv/bin/pytest -q tests/test_ai_routing.py tests/test_pipelines.py -k 'touliu or routing' tests/test_llm_empty_content.py tests/test_llm_retry.py` -> 34 passed; `.venv/bin/pytest -q -x` -> 通过; `curl /api/health` ok, `/api/ai/routes` 显示 `touliu.generate.quick.default/effective=opus`.
+- T-043 返修报告: `docs/agent-handoff/CONTROLLER_T043_MATERIALS_REPAIR_20260430.md`; 验证 `.venv/bin/pytest -q tests/test_materials_lib_api.py tests/test_materials_service.py tests/test_materials_pipeline.py` -> 175 passed, 全量 pytest 通过, 正常 Playwright console/pageerror/requestfailed/http error=0, 强制 featured 500 时首页降级可用。
 - D-124 素材库总控交接: `docs/agent-handoff/CONTROLLER_MATERIALS_T026_MAIN_20260429.md`.
 - D-124 主线验证: `python3 -m pytest -q tests/test_materials_service.py tests/test_materials_pipeline.py tests/test_materials_lib_api.py tests/test_migrations.py` -> 通过; `python3 -m pytest -q` -> 通过, 仅 dhv5 skill 缺失用例跳过; `git diff --check` -> clean.
 - D-124 真实 API: 临时后端 `:18000`, `/api/material-lib/categories` 返回固定 8 类; `/api/material-lib/match` 输入演讲/出差文案返回带分数和理由的候选; `/api/material-lib/classify-batch?limit=100` task `64e1eaa9abaf47fbad12864d685c07c2` -> `ok`, `scanned=100`, `failed=0`, `source=metadata`.

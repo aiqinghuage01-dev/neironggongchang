@@ -166,6 +166,83 @@ def test_featured_returns_only_previewable_business_assets(populated_client):
     assert items[0]["category"] == "01 演讲舞台"
 
 
+def test_featured_filters_profile_thumb_and_missing_independently(populated_client):
+    from backend.services.materials_service import get_connection, list_assets, update_asset_profile
+
+    assets = {a["filename"]: a for a in list_assets(sort="name")}
+    podium = assets["podium.jpg"]
+    outside = assets["outside.jpg"]
+    raise_hand = assets["raise_hand.jpg"]
+    now = int(time.time())
+
+    for asset in [podium, outside, raise_hand]:
+        update_asset_profile(asset["id"], {
+            "category": "01 演讲舞台",
+            "visual_summary": "清华哥业务现场素材",
+            "shot_type": "现场照片",
+            "orientation": "横屏",
+            "quality_score": 88,
+            "usage_hint": "适合做业务证明",
+            "relevance_score": 80,
+            "recognition_source": "metadata",
+            "profile_updated_at": now,
+        })
+
+    with get_connection() as con:
+        con.execute("UPDATE material_assets SET missing_at=? WHERE id=?", (now, podium["id"]))
+        con.execute("UPDATE material_assets SET profile_updated_at=NULL WHERE id=?", (outside["id"],))
+        con.execute("UPDATE material_assets SET thumb_path=NULL WHERE id=?", (raise_hand["id"],))
+        con.commit()
+
+    r = populated_client.get("/api/material-lib/featured?limit=6")
+    assert r.status_code == 200
+    assert r.json()["items"] == []
+
+
+def test_featured_orders_quality_relevance_then_freshness(populated_client):
+    from backend.services.materials_service import get_connection, list_assets, update_asset_profile
+
+    assets = {a["filename"]: a for a in list_assets(sort="name")}
+    profiles = [
+        ("podium.jpg", 70, 99, 300),
+        ("outside.jpg", 90, 70, 100),
+        ("raise_hand.jpg", 90, 70, 200),
+    ]
+    now = int(time.time())
+    for filename, quality, relevance, imported_at in profiles:
+        asset = assets[filename]
+        update_asset_profile(asset["id"], {
+            "category": "02 上课教学",
+            "visual_summary": filename,
+            "shot_type": "现场照片",
+            "orientation": "横屏",
+            "quality_score": quality,
+            "usage_hint": "排序测试",
+            "relevance_score": relevance,
+            "recognition_source": "metadata",
+            "profile_updated_at": now,
+        })
+        with get_connection() as con:
+            con.execute("UPDATE material_assets SET imported_at=? WHERE id=?", (imported_at, asset["id"]))
+            con.commit()
+
+    r = populated_client.get("/api/material-lib/featured?limit=3")
+    assert r.status_code == 200
+    assert [a["filename"] for a in r.json()["items"]] == [
+        "raise_hand.jpg",
+        "outside.jpg",
+        "podium.jpg",
+    ]
+
+
+def test_featured_empty_and_limit_validation(client):
+    r = client.get("/api/material-lib/featured")
+    assert r.status_code == 200
+    assert r.json() == {"items": [], "count": 0}
+    assert client.get("/api/material-lib/featured?limit=0").status_code == 422
+    assert client.get("/api/material-lib/featured?limit=49").status_code == 422
+
+
 def test_subfolders_top_level(populated_client):
     r = populated_client.get("/api/material-lib/subfolders?top=00 讲台高光")
     assert r.status_code == 200

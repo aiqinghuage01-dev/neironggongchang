@@ -799,6 +799,7 @@ def list_featured_assets(limit: int = 18) -> list[dict[str, Any]]:
             WHERE COALESCE(category, ?) != ?
               AND thumb_path IS NOT NULL
               AND profile_updated_at IS NOT NULL
+              AND missing_at IS NULL
             ORDER BY
               COALESCE(quality_score, 0) DESC,
               COALESCE(relevance_score, 0) DESC,
