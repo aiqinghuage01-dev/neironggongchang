@@ -31,6 +31,34 @@ def _extract_json(text: str, wrap: str = "object") -> Any:
         return None
 
 
+def _clean_script_content(text: str) -> str:
+    """去掉模型偶发吐出的执行说明/后续操作建议,只保留口播正文。"""
+    content = (text or "").strip()
+    content = re.sub(
+        r"^\s*(?:已(?:经)?走(?:完)?(?:技能|skill)[:：].*?)(?:\n{1,2}|$)",
+        "",
+        content,
+        flags=re.IGNORECASE,
+    ).strip()
+    content = re.sub(
+        r"^\s*(?:以下是(?:正文|文案|口播正文)|正文如下)[:：]?\s*(?:\n{1,2}|$)",
+        "",
+        content,
+        flags=re.IGNORECASE,
+    ).strip()
+    content = re.sub(
+        r"\n\s*-{3,}\s*\n\s*需要进一步操作吗[？?]?[\s\S]*$",
+        "",
+        content,
+    ).strip()
+    content = re.sub(
+        r"\n\s*需要进一步操作吗[？?]?[\s\S]*$",
+        "",
+        content,
+    ).strip()
+    return content
+
+
 # ─── Step 1 · 热点拆解 + 3 个切入角度 ──────────────────────
 
 def analyze_hotspot(hotspot: str) -> dict[str, Any]:
@@ -99,6 +127,7 @@ def analyze_hotspot(hotspot: str) -> dict[str, Any]:
 _VARIANT_SPECS = {
     "pure_v1": {
         "mode_label": "纯改写 V1 · 换皮版",
+        "route_key": "hotrewrite.write.fast",
         "instruction": (
             "纯改写 V1: 保留热点原始冲突和信息顺序, 换成清华哥口播表达. "
             "不植入业务, 只做观点改写、节奏增强和金句收口."
@@ -106,6 +135,7 @@ _VARIANT_SPECS = {
     },
     "pure_v2": {
         "mode_label": "纯改写 V2 · 狠劲版",
+        "route_key": "hotrewrite.write.fast",
         "instruction": (
             "纯改写 V2: 观点更锋利, 开头更有态度, 反差更强. "
             "不植入业务, 重点让老板看完觉得'这话说透了'."
@@ -113,6 +143,7 @@ _VARIANT_SPECS = {
     },
     "biz_v3": {
         "mode_label": "结合业务 V3 · 翻转版",
+        "route_key": "hotrewrite.write",
         "instruction": (
             "结合业务 V3: 80% 讲热点背后的经营规律, 20% 自然植入 AI+短视频获客方案. "
             "结构上做一次关键翻转: 表面是热点, 本质是实体老板获客/信任/效率问题."
@@ -120,6 +151,7 @@ _VARIANT_SPECS = {
     },
     "biz_v4": {
         "mode_label": "结合业务 V4 · 圈人版",
+        "route_key": "hotrewrite.write",
         "instruction": (
             "结合业务 V4: 更强调'哪些老板和我同频', 语气更像筛选同路人. "
             "业务植入放在第三条建议和低压 CTA, 不能硬卖."
@@ -171,6 +203,7 @@ def write_script(
 - 人设名"清华哥"(不能写成青蛙哥/清哥等变体)
 - 禁用 markdown 符号 / emoji 作段首(留给后续排版)
 - 输出纯文本正文,不要标题/前言/说明
+- 禁止输出"已走技能"、下一步操作建议、菜单选项、"需要进一步操作吗"等系统提示
 {f"- 本版写法: {variant_instruction}" if variant_instruction else ""}
 """
 
@@ -193,9 +226,22 @@ def write_script(
 
 直接输出正文,不要任何前言:"""
 
-    ai = get_ai_client(route_key="hotrewrite.write")
-    write_r = ai.chat(write_prompt, system=system, deep=False, temperature=0.85, max_tokens=5000)
-    content = (write_r.text or "").strip()
+    route_key = variant.get("route_key") or "hotrewrite.write"
+    primary_error = ""
+    try:
+        ai = get_ai_client(route_key=route_key)
+        write_r = ai.chat(write_prompt, system=system, deep=False, temperature=0.85, max_tokens=3800)
+        used_route_key = route_key
+        fallback_used = False
+    except Exception as exc:
+        if route_key == "hotrewrite.write.fast":
+            raise
+        primary_error = f"{type(exc).__name__}: {exc}"
+        ai = get_ai_client(route_key="hotrewrite.write.fast")
+        write_r = ai.chat(write_prompt, system=system, deep=False, temperature=0.82, max_tokens=3800)
+        used_route_key = "hotrewrite.write.fast"
+        fallback_used = True
+    content = _clean_script_content(write_r.text)
 
     # D-088 同款 fail-fast: content 空就不能进自检, 防 LLM 在空字符串上 hallucinate 通过.
     # (客户端 D-088 已加空 content + token>0 transient 重试 1 次, 这里兜底持续故障.)
@@ -257,6 +303,9 @@ def write_script(
             "write": write_r.total_tokens,
             "check": check_r.total_tokens,
         },
+        "route_key": used_route_key,
+        "fallback_used": fallback_used,
+        "primary_error": primary_error,
     }
 
 
@@ -265,12 +314,20 @@ def write_script_batch(
     breakdown: dict[str, Any],
     angle: dict[str, Any],
     modes: dict[str, Any] | None = None,
+    ctx: tasks_service.TaskContext | None = None,
 ) -> dict[str, Any]:
     """按前端勾选模式一次任务生成 2/4 个版本, 返回 versions[]."""
     variants = build_write_variants(modes)
     versions: list[dict[str, Any]] = []
-    for spec in variants:
+    total = len(variants)
+    for idx, spec in enumerate(variants, start=1):
+        if ctx:
+            pct = 15 + int((((idx - 1) * 2) / max(1, total * 2)) * 75)
+            ctx.update_progress(f"正在写第 {idx}/{total} 版 · {spec.get('mode_label')}", pct=pct)
         versions.append(write_script(hotspot, breakdown, angle, variant=spec))
+        if ctx:
+            pct = 15 + int((((idx * 2) - 1) / max(1, total * 2)) * 75)
+            ctx.update_progress(f"已完成第 {idx}/{total} 版", pct=pct)
     first = versions[0] if versions else write_script(hotspot, breakdown, angle)
     return {
         "content": first.get("content", ""),
@@ -282,6 +339,7 @@ def write_script_batch(
         },
         "versions": versions,
         "version_count": len(versions),
+        "fallback_count": sum(1 for v in versions if v.get("fallback_used")),
     }
 
 
@@ -304,7 +362,7 @@ def write_script_async(
         page_id="hotrewrite",
         step="write",
         payload={"hotspot_preview": hotspot[:100], "angle_label": angle_label, "version_count": version_count},
-        estimated_seconds=max(60, 45 * version_count),
+        estimated_seconds=max(120, 90 * version_count),
         progress_text=f"小华写 {version_count} 版口播文案 + 自检...",
-        sync_fn=lambda: write_script_batch(hotspot, breakdown, angle, modes),
+        sync_fn_with_ctx=lambda ctx: write_script_batch(hotspot, breakdown, angle, modes, ctx=ctx),
     )

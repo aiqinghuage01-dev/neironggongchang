@@ -172,6 +172,7 @@ DEFAULT_ENGINE_ROUTES = {
     # 热点文案改写V2 skill (D-012)
     "hotrewrite.analyze":    "deepseek",  # 拆解 + 3 角度,JSON 输出
     "hotrewrite.write":      "opus",      # 1800-2600 字口播正文,质量优先
+    "hotrewrite.write.fast": "deepseek",  # 纯改写/Opus 超时兜底,保证多版本任务不整单归零
     "hotrewrite.self-check": "deepseek",  # 六维自检
     # 录音文案改写 skill (D-013)
     "voicerewrite.analyze":  "deepseek",  # 提骨架 + 2 角度

@@ -8,10 +8,10 @@
 
 | 角色 | 状态 | 工作区 | 当前任务 |
 |---|---|---|---|
-| 总控 Agent | 自动派工已接入 | `~/Desktop/neironggongchang` | 已启动 8 小时全站优化定时巡检: 每 2 小时检查一次, 空闲则自动补下一批任务 |
+| 总控 Agent | 自动派工已接入 | `~/Desktop/neironggongchang` | T-057 已完成热点改写 4 版 Opus 超时兜底; 继续按队列推进 |
 | 内容开发 Agent | 空闲 | `~/Desktop/nrg-worktrees/content-dev` | T-021/T-022 已合入 main; 等新内容任务 |
 | 媒体开发 Agent | 空闲 | `~/Desktop/nrg-worktrees/media-dev` | T-035/T-038 重复 worker 已由总控停止并 block |
-| QA 测试 Agent | 进行中 | `~/Desktop/nrg-worktrees/qa`, `~/Desktop/nrg-worktrees/qa-1`, `~/Desktop/nrg-worktrees/qa-2` | T-055 已通过; T-054 正在 QA-1 真链路复测 |
+| QA 测试 Agent | 待命 | `~/Desktop/nrg-worktrees/qa`, `~/Desktop/nrg-worktrees/qa-1`, `~/Desktop/nrg-worktrees/qa-2` | T-055 已通过; T-054 已证明热点 4 版失败, 总控 T-057 已返修 |
 | 审查 Agent | 空闲 | `~/Desktop/nrg-worktrees/review` | T-043 已完成 |
 
 ---
@@ -58,9 +58,10 @@
 | T-044 | 全站内容链路低风险页面巡检 | QA 测试 Agent / 总控返修 | 已完成 | 只读 QA + 总控修复 | 投流失败恢复态不再露 `没匹配到已知模式/原始 message`; 显示友好失败卡; T-055 再做独立回归 |
 | T-045 | 全站媒体链路低风险页面巡检 | QA 测试 Agent / 总控返修 | 已完成 | 只读 QA + 总控修复 | 直接出图/作品库去技术词, 作品库绝对路径过滤, 数字人 picker 只列视频并隐藏本机路径; T-055 再做独立回归 |
 | T-046~T-053 | 全站优化自动补任务窗口 | 自动创建 | pending | content/media/qa/review 分批 | `scripts/start_site_optimization_watch.sh` 未来 8 小时每 2 小时检查; 工作台空闲时自动派开发修复、QA 回归、Review 审查 |
-| T-054 | 投流恢复后录音改写 + 热点改写真链路复测 | QA 测试 Agent | queued | 只读 QA 报告; 不改功能代码 | 最小真实 LLM 复测: 录音改写 analyze/write + 热点改写 4 版; 每条链路只提交一次, 记录 task/usage/截图 |
+| T-054 | 投流恢复后录音改写 + 热点改写真链路复测 | QA 测试 Agent | blocked | 只读 QA 报告; 不改功能代码 | QA 结论: 录音改写真链路通过; 热点改写 4 版 task `673043b93c2f40338e1bb00fa314ad91` 因 Opus/OpenClaw timeout 失败, 未重复提交 |
 | T-055 | T-042/T-044/T-045 返修后综合回归 | QA 测试 Agent | 已完成 | 只读 QA | QA 通过: 战略部/投流失败恢复/直接出图/作品库/数字人 picker console/pageerror/requestfailed/http error=0, 不烧 credits, 禁止词与本机路径不外露 |
 | T-056 | 全页面本机路径与技术词体验清理 | 总控 Agent | 已完成 | `web/factory-materials-v2.jsx`, `web/factory-strategy.jsx`, `web/factory-home.jsx` | 素材库默认不露 `/Users`; 战略部观察台不露 provider 工程词; 首页不露 `prompt`; 23 页可见文案扫描 + full pytest 通过 |
+| T-057 | 热点改写 4 版 Opus 超时兜底 | 总控 Agent | 已完成 | `backend/services/hotrewrite_pipeline.py`, `backend/api.py`, `shortvideo/ai.py`, `tests/test_hotrewrite_versions.py` | 4 版任务逐版进度 + 快路兜底 + 产出清洗; 真实 task `250a97291f9d4c8289231d4ab93609c7` ok, `version_count=4`, `fallback_count=1`, browser errors=0; full pytest 通过 |
 
 ---
 
@@ -75,6 +76,8 @@
 - T-042/T-044/T-045 返修: `docs/agent-handoff/CONTROLLER_T042_T044_T045_REPAIR_20260430.md`; `/api/tasks/counts` 200, 作品库本机绝对路径不再暴露, 投流失败恢复不露内部错误, 直接出图/作品库/数字人 picker 去技术词与错误选择; targeted pytest 4 passed, 全量 pytest 通过, Playwright console error=0.
 - T-055 QA 通过: `/Users/black.chen/Desktop/nrg-worktrees/qa/docs/agent-handoff/QA_T055_REPAIR_REGRESSION_20260430.md`, commit `606aea9`; 5 个页面场景 console/pageerror/requestfailed/http error=0, 无本机路径媒体请求, 投流失败恢复禁词不可见, 数字人 picker 只列视频。
 - T-056 总控清理: 素材库路径默认隐藏, 战略部观察台 provider 工程词改用户话, 首页出图入口去 `prompt`; 23 页可见文案扫描均无 `/Users`、`/private`、`prompt`、`apimart`、`tokens`、`API`, full pytest 通过。
+- T-054 QA-1 结论: 录音改写真链路通过; 热点改写 4 版唯一 task `673043b93c2f40338e1bb00fa314ad91` Opus timeout 后 failed, 未重复提交。
+- T-057 总控返修: 新增 `hotrewrite.write.fast`、4 版逐版进度、Opus 超时后兜底 DeepSeek、产出清洗; 真实页面 task `250a97291f9d4c8289231d4ab93609c7` -> ok, 4 版, `fallback_count=1`; console/pageerror/requestfailed/http>=400 均 0; 页面 smoke 16/16 OK。
 - D-124 素材库总控交接: `docs/agent-handoff/CONTROLLER_MATERIALS_T026_MAIN_20260429.md`.
 - D-124 验证: `python3 -m pytest -q` -> 通过; `git diff --check` -> clean; 临时 API `:18000` curl `/categories`、`/match`、`/classify-batch?limit=100` 通过; Playwright 截图 `/tmp/_ui_shots/t026_materials_desktop_home.png`, `/tmp/_ui_shots/t026_materials_desktop_category.png`, `/tmp/_ui_shots/t026_materials_desktop_match.png`, `/tmp/_ui_shots/t026_materials_mobile_home.png`, console error/pageerror/requestfailed/http error=0.
 - 总控本轮交接: `docs/agent-handoff/CONTROLLER_T013_T017_20260429_2011.md`.

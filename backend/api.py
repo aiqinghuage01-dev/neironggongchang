@@ -2942,9 +2942,9 @@ class HotrewriteWriteReq(BaseModel):
 
 @app.post("/api/hotrewrite/write", tags=["热点改写"], summary="Step 2 写口播文案 (异步, 立即返 task_id)")
 def hotrewrite_write(req: HotrewriteWriteReq):
-    """D-037b5 异步化: 立即返 task_id, daemon thread 跑 30-60s.
+    """D-037b5 异步化: 立即返 task_id, daemon thread 跑多版本改写任务.
 
-    走 opus 出长口播 + 六维自检 (开头钩子/数据/反差/金句/Call to action/字数).
+    按模式生成 2/4 版长口播 + 六维自检 (开头钩子/数据/反差/金句/Call to action/字数).
     完成后 task.result = {content, word_count, self_check, tokens, versions[]}.
     """
     task_id = hotrewrite_pipeline.write_script_async(req.hotspot, req.breakdown, req.angle, req.modes)
@@ -2952,7 +2952,7 @@ def hotrewrite_write(req: HotrewriteWriteReq):
     return {
         "task_id": task_id,
         "status": "running",
-        "estimated_seconds": max(60, 45 * version_count),
+        "estimated_seconds": max(120, 90 * version_count),
         "page_id": "hotrewrite",
         "version_count": version_count,
     }
