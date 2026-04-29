@@ -18,6 +18,8 @@ import agent_queue
 
 
 STATE_PATH = agent_queue.queue_dir() / "materials_loop_state.json"
+TECHNICAL_EXIT_PREFIX = "自动派工 worker 已退出但任务没有 done/block"
+MAX_TECHNICAL_RETRIES = 6
 
 ROUNDS = [
     {"round": 1, "impl": "T-026", "review": "T-027", "qa": "T-028"},
@@ -223,6 +225,39 @@ def create_rework_if_needed(tasks: list[dict[str, Any]], idx: int, state: dict[s
         event(state, f"已创建 {next_impl_id} 返修任务, 进入第 {next_round['round']} 轮")
 
 
+def reset_technical_exit_if_needed(tasks: list[dict[str, Any]], current: dict[str, str], state: dict[str, Any]) -> bool:
+    for task_id in (current["impl"], current["review"], current["qa"]):
+        task = get_task(tasks, task_id)
+        if not task or task.get("status") != "blocked":
+            continue
+        summary = str(task.get("summary") or "")
+        if task.get("owner_decision") or not summary.startswith(TECHNICAL_EXIT_PREFIX):
+            continue
+
+        retry_key = f"technical_retries.{task_id}"
+        retries = int(state.get(retry_key) or 0)
+        if retries >= MAX_TECHNICAL_RETRIES:
+            event(state, f"{task_id} 技术退出已重试 {retries} 次, 不再自动重置当前轮")
+            continue
+
+        task["status"] = "queued"
+        task["claimed_by"] = ""
+        task["claimed_at"] = ""
+        task["updated_at"] = agent_queue.now()
+        state[retry_key] = retries + 1
+        agent_queue.append_event(
+            {
+                "event": "reset",
+                "task_id": task_id,
+                "reason": "materials_technical_retry",
+                "retry": retries + 1,
+            }
+        )
+        event(state, f"{task_id} 是 worker 技术退出, 已重置当前轮第 {retries + 1} 次")
+        return True
+    return False
+
+
 def campaign_done(tasks: list[dict[str, Any]], idx: int) -> bool:
     current = ROUNDS[idx]
     return (
@@ -239,11 +274,13 @@ def tick() -> dict[str, Any]:
 
     with agent_queue.locked_queue() as tasks:
         current = ROUNDS[active_idx]
-        ensure_review_and_qa(tasks, current, state)
-        create_rework_if_needed(tasks, active_idx, state)
-        if campaign_done(tasks, active_idx):
-            event(state, f"素材库第 {current['round']} 轮 Review/QA 均通过, 自动循环完成。")
-            state["completed"] = True
+        did_reset = reset_technical_exit_if_needed(tasks, current, state)
+        if not did_reset:
+            ensure_review_and_qa(tasks, current, state)
+            create_rework_if_needed(tasks, active_idx, state)
+            if campaign_done(tasks, active_idx):
+                event(state, f"素材库第 {current['round']} 轮 Review/QA 均通过, 自动循环完成。")
+                state["completed"] = True
 
     save_state(state)
     return state

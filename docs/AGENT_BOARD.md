@@ -8,9 +8,9 @@
 
 | 角色 | 状态 | 工作区 | 当前任务 |
 |---|---|---|---|
-| 总控 Agent | 自动派工已接入 | `~/Desktop/neironggongchang` | 已确认素材库 D-124 精品原片库方向; 已启动素材库自动返工循环, 守 T-026/T-027/T-028 至多轮返修 |
+| 总控 Agent | 自动派工已接入 | `~/Desktop/neironggongchang` | 已确认素材库 D-124 精品原片库方向; 已启动素材库定时巡检 + 自动返工循环 |
 | 内容开发 Agent | 空闲 | `~/Desktop/nrg-worktrees/content-dev` | T-021 已 done; 等新内容任务 |
-| 媒体开发 Agent | 进行中 | `~/Desktop/nrg-worktrees/media-dev` | T-026 claimed: 素材库精品原片库完整页 |
+| 媒体开发 Agent | 进行中 | `~/Desktop/nrg-worktrees/media-dev` | T-035 claimed: 素材库第 3 轮继续接管 T-026 半成品 |
 | QA 测试 Agent | 空闲/待依赖 | `~/Desktop/nrg-worktrees/qa`, `~/Desktop/nrg-worktrees/qa-1`, `~/Desktop/nrg-worktrees/qa-2` | T-030/T-031 已 done; T-028 queued 等 T-026/T-027 |
 | 审查 Agent | 空闲/待依赖 | `~/Desktop/nrg-worktrees/review` | T-029 已 done; T-027 queued 等 T-026 |
 
@@ -48,7 +48,9 @@
 | T-029 | 素材库完整页前置审查: 产品方向与架构风险 | 审查 Agent | done | 只读 D-124 设计和当前实现 | T-026 前置风险清单已交付, 不等开发完成 |
 | T-030 | 素材库当前版本基线 QA 与测试脚本准备 | QA 测试 Agent | done | 不改功能代码 | 当前页面截图/console/差距清单已交付, 不烧 credits |
 | T-031 | 素材库接口基线 curl/pytest 准备 | QA 测试 Agent | done | 不改功能代码 | 当前 `/api/material-lib/*` 返回形状和复测清单已交付 |
-| T-032~T-040 | 素材库自动返工循环 | 自动创建 | pending | 同 T-026/T-027/T-028 | 若 Review/QA blocked, `bash scripts/start_materials_loop.sh` 启动的守夜进程自动派下一轮媒体返修、审查、QA |
+| T-032 | 素材库返修第 2 轮 | 媒体开发 Agent | blocked | 同 T-026 | worker 技术退出, 已由定时巡检推进到 T-035 |
+| T-035 | 素材库返修第 3 轮 | 媒体开发 Agent | claimed | 同 T-026 | 接管 media-dev 半成品继续实现; 定时巡检会重试技术掉线, 不直接耗尽后续轮次 |
+| T-036~T-040 | 素材库后续审查/QA/返工循环 | 自动创建 | pending | 同 T-026/T-027/T-028 | 若 Review/QA blocked, `bash scripts/start_materials_loop.sh` 启动的守夜进程自动派下一轮媒体返修、审查、QA |
 
 ---
 

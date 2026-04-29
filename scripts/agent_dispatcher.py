@@ -483,7 +483,9 @@ def slot_available(slot: AgentSlot, args: argparse.Namespace) -> tuple[bool, str
         return False, "codex command not found"
     if slot.tool == "claude" and not CLAUDE_BIN:
         return False, "claude command not found"
-    if not args.allow_dirty and git_dirty(slot.workdir):
+    dirty_slots = set(args.allow_dirty_slot or [])
+    dirty_allowed = args.allow_dirty or slot.slot_id in dirty_slots or slot.role in dirty_slots
+    if not dirty_allowed and git_dirty(slot.workdir):
         return False, "worktree has local changes"
     return True, ""
 
@@ -593,6 +595,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--interval", type=float, default=8.0, help="Polling interval in seconds.")
     parser.add_argument("--slot", action="append", help="Restrict to a slot id or role. Can be repeated.")
     parser.add_argument("--allow-dirty", action="store_true", help="Allow dispatching into dirty worktrees.")
+    parser.add_argument(
+        "--allow-dirty-slot",
+        action="append",
+        help="Allow dirty worktree dispatch only for this slot id or role. Can be repeated.",
+    )
     parser.add_argument("--verbose", action="store_true")
     return parser
 

@@ -33,11 +33,14 @@ Options:
   --status       Show launchctl and dispatcher status.
   --foreground   Internal: run the dispatcher in the foreground.
   --dry-run      Show runnable queued tasks without claiming them.
+  --allow-dirty-slot SLOT
+                 Allow one slot/role to continue from a dirty worktree.
   -h, --help     Show this help.
 USAGE
 }
 
 mode="start"
+dispatcher_extra_args=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --stop)
@@ -56,6 +59,14 @@ while [[ $# -gt 0 ]]; do
       mode="dry-run"
       shift
       ;;
+    --allow-dirty-slot)
+      if [[ $# -lt 2 ]]; then
+        echo "--allow-dirty-slot requires a value" >&2
+        exit 2
+      fi
+      dispatcher_extra_args+=(--allow-dirty-slot "$2")
+      shift 2
+      ;;
     -h|--help)
       usage
       exit 0
@@ -72,13 +83,13 @@ if [[ "$mode" == "foreground" ]]; then
   cd "$repo_root"
   export PATH="$tool_path"
   export PYTHONUNBUFFERED=1
-  exec "$python_bin" scripts/agent_dispatcher.py --watch --interval 8 --verbose
+  exec "$python_bin" scripts/agent_dispatcher.py --watch --interval 8 --verbose "${dispatcher_extra_args[@]}"
 fi
 
 if [[ "$mode" == "dry-run" ]]; then
   cd "$repo_root"
   export PATH="$tool_path"
-  exec "$python_bin" scripts/agent_dispatcher.py --once --dry-run --verbose
+  exec "$python_bin" scripts/agent_dispatcher.py --once --dry-run --verbose "${dispatcher_extra_args[@]}"
 fi
 
 if [[ "$mode" == "stop" ]]; then
@@ -105,7 +116,11 @@ fi
 
 mkdir -p "$(dirname "$plist")"
 : > "$log_file"
-launch_command="export PATH='${tool_path}' && export PYTHONUNBUFFERED=1 && cd '${repo_root}' && exec '${python_bin}' scripts/agent_dispatcher.py --watch --interval 8"
+extra_args=""
+for arg in "${dispatcher_extra_args[@]}"; do
+  extra_args+=" $(printf '%q' "$arg")"
+done
+launch_command="export PATH='${tool_path}' && export PYTHONUNBUFFERED=1 && cd '${repo_root}' && exec '${python_bin}' scripts/agent_dispatcher.py --watch --interval 8${extra_args}"
 cat > "$plist" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
