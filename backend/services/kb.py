@@ -32,6 +32,15 @@ KB_ROOT = Path(os.path.expanduser("~/Desktop/清华哥知识库"))
 
 EXCLUDE_DIRS = {".obsidian", ".trash", ".git", "05 🔧 系统文件"}
 EXCLUDE_FILES = {".DS_Store"}
+DISPLAY_TEXT_REPLACEMENTS = (
+    (re.compile(r"OpenClaw", re.IGNORECASE), "小华"),
+    (re.compile(r"AI清华哥", re.IGNORECASE), "小华"),
+    (re.compile(r"AI(?=[\u4e00-\u9fff])", re.IGNORECASE), "小华"),
+    (re.compile(r"persona[\s_-]*prompts?", re.IGNORECASE), "人设说明"),
+    (re.compile(r"promptflow", re.IGNORECASE), "写作流程"),
+    (re.compile(r"prompts?", re.IGNORECASE), "写作说明"),
+    (re.compile(r"\bagent\b", re.IGNORECASE), "助手"),
+)
 
 # 常用停用词(防止"的了吗"占分)
 STOP = set("的了吗呢啊吧也是就都在有个这那我你他她它们都和与或及从对把被为以到上下中能要会可会说".split())
@@ -63,6 +72,20 @@ def _safe(p: Path) -> bool:
         return True
     except Exception:
         return False
+
+
+def _display_text(text: str) -> str:
+    out = text
+    for pattern, replacement in DISPLAY_TEXT_REPLACEMENTS:
+        out = pattern.sub(replacement, out)
+    return out
+
+
+def _display_path(rel_path: str) -> str:
+    p = Path(rel_path)
+    display_name = _display_text(p.stem)
+    display_parts = [*p.parts[:-1], display_name]
+    return str(Path(*display_parts)) if display_parts else display_name
 
 
 # ─── 目录树(前端浏览用) ─────────────────────────────────
@@ -100,6 +123,8 @@ def build_tree(refresh: bool = False) -> dict[str, Any]:
                 docs_here.append({
                     "path": _relpath(p),
                     "title": fn[:-3],
+                    "display_title": _display_text(fn[:-3]),
+                    "display_path": _display_path(_relpath(p)),
                     "mtime": int(stat.st_mtime),
                     "size": stat.st_size,
                 })
@@ -110,11 +135,22 @@ def build_tree(refresh: bool = False) -> dict[str, Any]:
             if not docs and sub_name != "(root)":
                 continue
             docs.sort(key=lambda d: -d["mtime"])
-            sub_list.append({"name": sub_name, "docs": docs, "count": len(docs)})
+            sub_list.append({
+                "name": sub_name,
+                "display_name": "根目录" if sub_name == "(root)" else _display_text(sub_name),
+                "docs": docs,
+                "count": len(docs),
+            })
             count += len(docs)
         if count == 0:
             continue
-        item = {"name": entry.name, "doc_count": count, "subsections": sub_list, "standard": is_std(entry.name)}
+        item = {
+            "name": entry.name,
+            "display_name": _display_text(entry.name),
+            "doc_count": count,
+            "subsections": sub_list,
+            "standard": is_std(entry.name),
+        }
         if is_std(entry.name):
             sections.append(item)
         else:
@@ -136,6 +172,8 @@ def read_doc(rel_path: str) -> dict[str, Any]:
     summary = re.sub(r"[#*_`>\-\[\]()]", "", body).strip()[:200]
     return {
         "path": rel_path, "title": p.stem,
+        "display_title": _display_text(p.stem),
+        "display_path": _display_path(rel_path),
         "content": text, "summary": summary,
         "word_count": len(body), "mtime": int(stat.st_mtime),
     }
@@ -284,7 +322,9 @@ def match(query: str, k: int = 5, min_score: float = 0.5) -> list[dict[str, Any]
         seen_docs.add(c.doc_path)
         results.append({
             "path": c.doc_path, "title": c.doc_title,
-            "section": c.section, "heading": c.heading,
+            "display_title": _display_text(c.doc_title),
+            "display_path": _display_path(c.doc_path),
+            "section": c.section, "display_section": _display_text(c.section), "heading": c.heading,
             "score": round(score, 2),
             "text": c.text,
             "preview": c.text[:180].replace("\n", " "),
@@ -319,7 +359,11 @@ def search(query: str, k: int = 8) -> list[dict[str, Any]]:
                 if score > 0:
                     scored.append({
                         "path": d["path"], "title": d["title"],
+                        "display_title": d.get("display_title") or _display_text(d["title"]),
+                        "display_path": d.get("display_path") or _display_path(d["path"]),
                         "section": section["name"], "subsection": sub["name"],
+                        "display_section": section.get("display_name") or _display_text(section["name"]),
+                        "display_subsection": sub.get("display_name") or ("根目录" if sub["name"] == "(root)" else _display_text(sub["name"])),
                         "score": score,
                         "preview": text[:160].replace("\n", " ").strip(),
                     })

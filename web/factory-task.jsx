@@ -615,8 +615,8 @@ function TaskCard({ task, onClick, compact, onCancel }) {
       )}
       {failed && (task.kind || "").startsWith("dreamina.") && task.payload?.submit_id && (
         <div style={{ marginTop: 8, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6 }}>
-          <span style={{ fontSize: 10.5, color: T.muted2, fontFamily: "monospace" }}>
-            id: {String(task.payload.submit_id).slice(0, 12)}…
+          <span style={{ fontSize: 10.5, color: T.muted2 }}>
+            可尝试重新取回结果
           </span>
           <button
             onClick={async (e) => {
@@ -629,11 +629,11 @@ function TaskCard({ task, onClick, compact, onCancel }) {
                 const r = await fetch(`/api/dreamina/recover/${sid}`, { method: "POST" });
                 const j = await r.json();
                 if (j.recovered) {
-                  alert(`✅ 即梦端真出来了, 已入作品库 (status=${j.status})`);
+                  alert("✅ 即梦端结果已取回, 已放进作品库");
                 } else if (j.watcher_will_retry) {
-                  alert(`🔄 即梦还在跑 (status=${j.status}), 后台 watcher 已重新接管, 稍后再看`);
+                  alert("🔄 即梦还在生成, 后台会继续跟进, 稍后再看");
                 } else {
-                  alert(`❌ 远程返回 ${j.status}: ${j.error || ''}`);
+                  alert(`❌ 暂时没找到结果: ${j.error || "稍后再试"}`);
                 }
                 if (onClick) onClick();  // 刷新
               } catch (err) {

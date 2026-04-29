@@ -374,7 +374,7 @@ function NightJobCard({ job, runs, onToggle, onRun, onEdit, onDelete }) {
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 5 }}>
           <div style={{ fontSize: 14.5, fontWeight: 600, color: T.text }}>{job.name}</div>
-          {job.skill_slug && <Tag size="xs" color="blue">{job.skill_slug}</Tag>}
+          {job.skill_slug && <Tag size="xs" color="blue">方法已选</Tag>}
           {target && <span style={{ fontSize: 11, color: T.muted2 }}>→ {target.label}</span>}
         </div>
         <div style={{ fontSize: 11.5, color: T.muted, display: "flex", gap: 12 }}>
@@ -446,8 +446,8 @@ function NightDeleteConfirm({ job, onCancel, onConfirm, deleting }) {
           background: T.bg2, color: T.muted, fontFamily: "SF Mono, Menlo, monospace",
         }}>
           <div>id: {job.id}</div>
-          {job.skill_slug && <div>skill_slug: {job.skill_slug}</div>}
-          {job.trigger_type && <div>trigger_type: {job.trigger_type}</div>}
+          {job.skill_slug && <div>关联方法: {job.skill_slug}</div>}
+          {job.trigger_type && <div>触发方式: {job.trigger_type}</div>}
           {job.enabled === false && <div style={{ color: T.muted2 }}>(当前已禁用)</div>}
         </div>
 
@@ -589,7 +589,7 @@ function NightJobEditor({ job, onClose, onSaved }) {
           <Field label="图标" style={{ width: 100 }}>
             <input value={icon} onChange={e => setIcon(e.target.value)} placeholder="🌙" style={inp} />
           </Field>
-          <Field label="对应 skill" style={{ flex: 1 }}>
+          <Field label="对应方法" style={{ flex: 1 }}>
             <input value={skillSlug} onChange={e => setSkillSlug(e.target.value)}
               placeholder="content-planner / daily-recap · 留空走占位" style={inp} />
           </Field>

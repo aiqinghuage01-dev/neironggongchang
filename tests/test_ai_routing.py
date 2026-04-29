@@ -102,3 +102,25 @@ def test_get_ai_info_can_use_short_probe_options(monkeypatch):
     assert info["engine"] == "opus"
     assert captured["timeout"] == 3.0
     assert captured["llm_max_retries"] == 0
+
+
+def test_get_ai_info_default_probe_keeps_full_client_defaults(monkeypatch):
+    """完整 AI 探活不传短探活重试参数, 保持原默认行为。"""
+    captured = {}
+
+    class FakeClaudeClient:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+        def health(self):
+            return {"ok": True}
+
+    monkeypatch.setattr("backend.services.settings.get_all", lambda: {"ai_engine": "opus"})
+    monkeypatch.setattr(ai_mod, "ClaudeOpusClient", FakeClaudeClient)
+
+    info = ai_mod.get_ai_info()
+
+    assert info["engine"] == "opus"
+    assert info["ok"] is True
+    assert captured["timeout"] is None
+    assert "llm_max_retries" not in captured

@@ -107,9 +107,9 @@ function TitlesSkeleton() {
 function SkillBadge({ skillInfo }) {
   if (!skillInfo) return null;
   return (
-    <span title={`~/Desktop/skills/${skillInfo.slug}/ · SKILL.md ${skillInfo.skill_md_chars} 字`}
+    <span title="本页方法已加载"
       style={{ fontSize: 10.5, color: T.brand, background: T.brandSoft, padding: "2px 8px", borderRadius: 100, marginLeft: 6 }}>
-      用技能:{skillInfo.slug}
+      方法已加载
     </span>
   );
 }

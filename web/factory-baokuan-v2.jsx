@@ -204,9 +204,9 @@ function BkHeader({ current, onBack, skillInfo }) {
         <div style={{ width: 26, height: 26, borderRadius: 7, background: T.text, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13 }}>✍️</div>
         <div style={{ fontSize: 13.5, fontWeight: 600 }}>爆款改写 · 2 步</div>
         {skillInfo && (
-          <span title={`~/Desktop/skills/${skillInfo.slug}/`}
+          <span title="本页方法已加载"
             style={{ fontSize: 10.5, color: T.brand, background: T.brandSoft, padding: "2px 8px", borderRadius: 100, marginLeft: 6 }}>
-            用技能:{skillInfo.slug}
+            方法已加载
           </span>
         )}
       </div>

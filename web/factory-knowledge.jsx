@@ -65,13 +65,13 @@ function PageKnowledge({ onNav }) {
           <Btn size="sm" onClick={load}>↻ 刷新</Btn>
         </div>
         <div style={{ fontSize: 12.5, color: T.muted, marginTop: 6 }}>
-          写文案、做视频时小华自动取用 · 编辑请在 Obsidian · 路径: <code style={{ background: T.bg2, padding: "1px 5px", borderRadius: 4, fontSize: 11 }}>~/Desktop/清华哥知识库/</code>
+          写文案、做视频时小华自动取用 · 编辑请在 Obsidian · 工厂这里只读
         </div>
       </div>
 
       <div style={{ flex: 1, overflow: "auto", padding: "24px 32px", background: T.bg }}>
         <div style={{ maxWidth: 1100, margin: "0 auto" }}>
-          {loading ? <div style={{ textAlign: "center", padding: 40, color: T.muted2 }}>扫 Obsidian vault 中...</div> : mainView}
+          {loading ? <div style={{ textAlign: "center", padding: 40, color: T.muted2 }}>扫知识库中...</div> : mainView}
         </div>
       </div>
 
@@ -126,7 +126,7 @@ function SectionCard({ section, accent, onClick, dim }) {
         cursor: "pointer", opacity: dim ? 0.75 : 1,
         transition: "all 0.15s",
       }}>
-      <div style={{ fontSize: 14, fontWeight: 600, color: T.text, marginBottom: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{section.name}</div>
+      <div style={{ fontSize: 14, fontWeight: 600, color: T.text, marginBottom: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{section.display_name || section.name}</div>
       <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
         <div style={{ fontSize: 32, fontWeight: 700, color: c, lineHeight: 1, fontFamily: "SF Mono, monospace" }}>{section.doc_count}</div>
         <div style={{ fontSize: 11, color: T.muted }}>条</div>
@@ -147,7 +147,7 @@ function SectionDetail({ section, onOpen, onBack }) {
     <div>
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 18 }}>
         <Btn size="sm" onClick={onBack}>← 返回分区</Btn>
-        <div style={{ fontSize: 18, fontWeight: 600 }}>{section.name}</div>
+        <div style={{ fontSize: 18, fontWeight: 600 }}>{section.display_name || section.name}</div>
         <Tag color="gray">{section.doc_count} 条</Tag>
       </div>
 
@@ -161,7 +161,7 @@ function SectionDetail({ section, onOpen, onBack }) {
               border: `1px solid ${activeSub === s.name ? "transparent" : T.border}`,
               cursor: "pointer", fontFamily: "inherit",
             }}>
-              {s.name === "(root)" ? "根目录" : s.name} <span style={{ opacity: 0.6 }}>{s.count}</span>
+              {s.display_name || (s.name === "(root)" ? "根目录" : s.name)} <span style={{ opacity: 0.6 }}>{s.count}</span>
             </button>
           ))}
         </div>
@@ -175,7 +175,7 @@ function SectionDetail({ section, onOpen, onBack }) {
               background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 10, cursor: "pointer",
             }}>
               <div style={{ fontSize: 15, color: T.muted2 }}>📄</div>
-              <div style={{ flex: 1, fontSize: 13.5, fontWeight: 500, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.title}</div>
+              <div style={{ flex: 1, fontSize: 13.5, fontWeight: 500, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.display_title || d.title}</div>
               <div style={{ fontSize: 11, color: T.muted2, fontFamily: "SF Mono, Menlo, monospace" }}>
                 {Math.round(d.size / 1024)}KB · {new Date(d.mtime * 1000).toLocaleDateString("zh-CN", { month: "2-digit", day: "2-digit" })}
               </div>
@@ -204,9 +204,9 @@ function SearchResults({ results, onOpen, onClose }) {
               padding: 14, background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 10, cursor: "pointer",
             }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-                <div style={{ fontSize: 14, fontWeight: 600, color: T.text }}>{r.title}</div>
-                <Tag size="xs" color="green">score {r.score}</Tag>
-                <Tag size="xs" color="gray">{r.section} / {r.subsection === "(root)" ? "根目录" : r.subsection}</Tag>
+                <div style={{ fontSize: 14, fontWeight: 600, color: T.text }}>{r.display_title || r.title}</div>
+                <Tag size="xs" color="green">匹配 {r.score}</Tag>
+                <Tag size="xs" color="gray">{r.display_section || r.section} / {r.display_subsection || (r.subsection === "(root)" ? "根目录" : r.subsection)}</Tag>
               </div>
               <div style={{ fontSize: 12, color: T.muted, lineHeight: 1.55, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{r.preview}</div>
             </div>
@@ -229,11 +229,11 @@ function DocDrawer({ doc, onClose }) {
         boxShadow: "-8px 0 30px rgba(0,0,0,0.12)",
       }}>
         <div style={{ padding: "16px 22px", borderBottom: `1px solid ${T.borderSoft}`, display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ fontSize: 10.5, color: T.muted2, fontFamily: "SF Mono, Menlo, monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{doc.path}</div>
+          <div style={{ fontSize: 10.5, color: T.muted2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{doc.display_path || doc.path}</div>
           <button onClick={onClose} style={{ background: "transparent", border: "none", color: T.muted, cursor: "pointer", fontSize: 22 }}>×</button>
         </div>
         <div style={{ padding: "18px 26px 14px 26px", borderBottom: `1px solid ${T.borderSoft}` }}>
-          <div style={{ fontSize: 20, fontWeight: 700, color: T.text }}>{doc.title}</div>
+          <div style={{ fontSize: 20, fontWeight: 700, color: T.text }}>{doc.display_title || doc.title}</div>
           <div style={{ fontSize: 11.5, color: T.muted2, fontFamily: "SF Mono, Menlo, monospace", marginTop: 6 }}>
             {doc.word_count} 字 · 修改于 {new Date(doc.mtime * 1000).toLocaleString("zh-CN")}
           </div>

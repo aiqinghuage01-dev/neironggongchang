@@ -242,9 +242,9 @@ function VoiceHeader({ current, onBack, skillInfo }) {
         <div style={{ width: 26, height: 26, borderRadius: 7, background: T.text, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13 }}>🎙️</div>
         <div style={{ fontSize: 13.5, fontWeight: 600 }}>录音改写 · 3 步</div>
         {skillInfo && (
-          <span title={`~/Desktop/skills/${skillInfo.slug}/`}
+          <span title="本页方法已加载"
             style={{ fontSize: 10.5, color: T.brand, background: T.brandSoft, padding: "2px 8px", borderRadius: 100, marginLeft: 6 }}>
-            用技能:{skillInfo.slug}
+            方法已加载
           </span>
         )}
       </div>
@@ -302,7 +302,7 @@ function VStepInput({ transcript, setTranscript, onGo, loading, skillInfo }) {
           if (okStatus && q.text) {
             setTranscript(q.text);
             setUrl("");
-            setTranscribeMsg(`✓ ${q.title || "转写完成"} · ${q.text.length} 字 · 已填进下面 textarea`);
+            setTranscribeMsg(`✓ ${q.title || "转写完成"} · ${q.text.length} 字 · 已填进下面输入框`);
             setTranscribing(false);
             return;
           }

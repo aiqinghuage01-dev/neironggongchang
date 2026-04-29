@@ -444,9 +444,9 @@ function WxHeader({ current, onBack, skillInfo, autoMode, onJump }) {
           </span>
         )}
         {skillInfo && (
-          <span title={`~/Desktop/skills/${skillInfo.slug}/ · 精简版 + ${Object.keys(skillInfo.references||{}).length} refs`}
+          <span title="本页方法已加载"
             style={{ fontSize: 10.5, color: T.brand, background: T.brandSoft, padding: "2px 8px", borderRadius: 100, marginLeft: 6 }}>
-            用技能:{skillInfo.slug}
+            方法已加载
           </span>
         )}
       </div>

@@ -292,9 +292,9 @@ function HotHeader({ current, onBack, skillInfo }) {
         <div style={{ width: 26, height: 26, borderRadius: 7, background: T.text, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13 }}>🔥</div>
         <div style={{ fontSize: 13.5, fontWeight: 600 }}>热点文案改写 · 3 步</div>
         {skillInfo && (
-          <span title={`~/Desktop/skills/${skillInfo.slug}/ · SKILL.md ${skillInfo.skill_md_chars} 字`}
+          <span title="本页方法已加载"
             style={{ fontSize: 10.5, color: T.brand, background: T.brandSoft, padding: "2px 8px", borderRadius: 100, marginLeft: 6 }}>
-            用技能:{skillInfo.slug}
+            方法已加载
           </span>
         )}
       </div>
@@ -382,7 +382,7 @@ function HotStepInput({ hotspot, setHotspot, onGo, loading, skillInfo }) {
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
           <span style={{ fontSize: 13, fontWeight: 600, color: T.text }}>📅 今日热点</span>
           <Tag size="xs" color="gray">{hotTopics?.length || 0}</Tag>
-          <span style={{ fontSize: 10.5, color: T.muted2 }}>· 点一条一键塞 textarea</span>
+          <span style={{ fontSize: 10.5, color: T.muted2 }}>· 点一条自动填入上方</span>
         </div>
         {!hotTopics ? (
           <div style={{ fontSize: 11, color: T.muted2, padding: 8 }}>加载…</div>
