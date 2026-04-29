@@ -1,0 +1,119 @@
+from __future__ import annotations
+
+import json
+import time
+from pathlib import Path
+
+import pytest
+from fastapi.testclient import TestClient
+
+
+@pytest.fixture()
+def client(tmp_path, monkeypatch):
+    db_path = tmp_path / "works.db"
+    monkeypatch.setattr("shortvideo.config.DB_PATH", db_path)
+    from backend.services import migrations
+
+    migrations.reset_for_test()
+    from backend.api import app
+
+    return TestClient(app)
+
+
+def test_works_search_filters_before_limit(client):
+    from shortvideo.works import insert_work
+
+    old_ts = int(time.time()) - 400 * 86400
+    target = insert_work(
+        title="needle-old-work-301",
+        final_text="target body",
+        type="text",
+        source_skill="wechat",
+        status="ready",
+        created_at=old_ts,
+    )
+    now = int(time.time())
+    for i in range(304):
+        insert_work(
+            title=f"newer work {i}",
+            final_text="ordinary",
+            type="text",
+            source_skill="wechat",
+            status="ready",
+            created_at=now - i,
+        )
+
+    r = client.get("/api/works", params={"limit": 300, "q": "needle-old-work-301"})
+    assert r.status_code == 200
+    ids = [x["id"] for x in r.json()]
+    assert ids == [target]
+
+
+def test_works_detail_reads_work_outside_current_list(client):
+    from shortvideo.works import insert_work, upsert_metric
+
+    wid = insert_work(
+        title="old analytics work",
+        final_text="full text for old analytics work",
+        type="text",
+        source_skill="wechat",
+        status="ready",
+        created_at=int(time.time()) - 60 * 86400,
+    )
+    upsert_metric(work_id=wid, platform="douyin", views=999)
+
+    analytics = client.get("/api/works/analytics").json()
+    assert analytics["top_by_views"][0]["work_id"] == wid
+
+    detail = client.get(f"/api/works/{wid}")
+    assert detail.status_code == 200
+    assert detail.json()["final_text"] == "full text for old analytics work"
+
+
+def test_works_action_returns_updated_metadata_and_work(client):
+    from shortvideo.works import get_work, insert_work
+
+    wid = insert_work(title="action work", final_text="body", type="text", status="ready")
+    r = client.post(f"/api/works/{wid}/action", json={"action": "kept"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["user_action"] == "kept"
+    assert json.loads(body["metadata"])["user_action"] == "kept"
+    assert json.loads(body["work"]["metadata"])["user_action"] == "kept"
+    assert json.loads(get_work(wid).metadata)["user_action"] == "kept"
+
+
+def test_completion_rate_accepts_percent_input(client):
+    from shortvideo.works import insert_work
+
+    wid = insert_work(title="metric work", final_text="body", type="text", status="ready")
+    r = client.post(
+        f"/api/works/{wid}/metrics",
+        json={"platform": "douyin", "views": 10, "completion_rate": 80},
+    )
+    assert r.status_code == 200
+    metrics = client.get(f"/api/works/{wid}/metrics").json()
+    assert metrics[0]["completion_rate"] == pytest.approx(0.8)
+
+
+def test_image_missing_file_gets_explicit_asset_status(client, tmp_path):
+    from shortvideo.works import insert_work
+
+    missing = tmp_path / "missing.png"
+    wid = insert_work(
+        title="missing image",
+        final_text="",
+        type="image",
+        source_skill="wechat-section-image",
+        local_path=str(missing),
+        thumb_path=str(missing),
+        status="ready",
+    )
+    r = client.get(f"/api/works/{wid}")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["thumb_url"] is None
+    assert body["local_url"] is None
+    assert body["asset_status"] == "missing_file"
+    assert body["preview_available"] is False
+    assert body["download_available"] is False

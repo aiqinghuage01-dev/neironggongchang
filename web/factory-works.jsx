@@ -78,6 +78,26 @@ function PageWorks({ onNav }) {
     load();
   }
 
+  async function openWork(workOrId) {
+    const fallback = typeof workOrId === "object" ? workOrId : null;
+    const id = fallback?.id || workOrId;
+    if (!id) return;
+    try {
+      const full = await api.get(`/api/works/${id}`);
+      setPicked(full);
+      setWorks(prev => prev.map(w => w.id === full.id ? { ...w, ...full } : w));
+    } catch (e) {
+      if (fallback) setPicked(fallback);
+      else alert(e.message);
+    }
+  }
+
+  function mergeWork(updated) {
+    if (!updated || !updated.id) return;
+    setPicked(updated);
+    setWorks(prev => prev.map(w => w.id === updated.id ? { ...w, ...updated } : w));
+  }
+
   // 当前 tab 下展示的来源 chip 列表(按 type 过滤 by_source)
   // 由于 by_source 不带 type 信息, 用 SOURCE_LABELS 的语义 + 一个简单分类
   const SOURCE_TYPE = {
@@ -180,24 +200,21 @@ function PageWorks({ onNav }) {
               columnCount: tab === "text" ? 2 : 4,
               columnGap: 14,
             }}>
-              {works.map(w => renderCard(w, () => setPicked(w)))}
+              {works.map(w => renderCard(w, () => openWork(w)))}
             </div>
           )}
 
           {!loading && tab === "analytics" && (
-            <AnalyticsView a={analytics} onOpen={(wid) => {
-              const w = works.find(x => x.id === wid);
-              if (w) setPicked(w);
-            }} />
+            <AnalyticsView a={analytics} onOpen={openWork} />
           )}
           {/* D-062z: 多平台发布矩阵 (跨视频聚合 publish_marks::* localStorage) */}
           {!loading && tab === "publish" && (
-            <PublishMatrix works={works} onOpenWork={setPicked} onMake={() => onNav("make")} />
+            <PublishMatrix works={works} onOpenWork={openWork} onMake={() => onNav("make")} />
           )}
         </div>
       </div>
 
-      {picked && <WorkDrawer work={picked} onClose={() => setPicked(null)} onDel={() => delOne(picked.id)} onRemake={() => {
+      {picked && <WorkDrawer work={picked} onClose={() => setPicked(null)} onDel={() => delOne(picked.id)} onWorkUpdate={mergeWork} onRemake={() => {
         // D-062-AUDIT-2-todo1: 统一到 localStorage seed
         try {
           const seed = picked.original_text || picked.title || "";
@@ -305,6 +322,7 @@ function renderCard(w, onPick) {
 
   // 图片卡 (masonry: 按原始 aspect ratio 铺满)
   if (w.type === "image") {
+    const noPreviewText = w.asset_status === "missing_file" ? "原图不在本机" : "只有作品记录";
     return (
       <div key={w.id} onClick={onPick} style={{
         background: "#fff", border: `1px solid ${T.borderSoft}`, borderRadius: 12, overflow: "hidden",
@@ -316,7 +334,10 @@ function renderCard(w, onPick) {
             <img src={api.media(w.thumb_url)} alt={w.title || ""} loading="lazy"
               style={{ width: "100%", height: "auto", display: "block" }} />
           ) : (
-            <div style={{ aspectRatio: "16/10", display: "flex", alignItems: "center", justifyContent: "center", color: T.muted2, fontSize: 32 }}>🖼️</div>
+            <div style={{ aspectRatio: "16/10", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: T.muted2, gap: 8 }}>
+              <div style={{ fontSize: 30 }}>🖼️</div>
+              <div style={{ fontSize: 11 }}>{noPreviewText}</div>
+            </div>
           )}
           <div style={{ position: "absolute", top: 8, left: 8 }}>
             <span style={{ padding: "3px 9px", borderRadius: 100, background: "rgba(255,255,255,0.92)", color: T.text, fontSize: 11, fontWeight: 500, border: "1px solid rgba(0,0,0,0.04)" }}>
@@ -407,8 +428,8 @@ function KeepDiscardActions({ work, onChange }) {
   const cur = meta.user_action;  // kept / discarded / undefined
   async function set(action) {
     try {
-      await api.post(`/api/works/${work.id}/action`, { action });
-      onChange && onChange();
+      const r = await api.post(`/api/works/${work.id}/action`, { action });
+      onChange && onChange(r.work || { ...work, metadata: r.metadata });
     } catch (e) { alert("失败: " + e.message); }
   }
   return (
@@ -431,7 +452,7 @@ function KeepDiscardActions({ work, onChange }) {
   );
 }
 
-function WorkDrawer({ work, onClose, onDel, onRemake }) {
+function WorkDrawer({ work, onClose, onDel, onRemake, onWorkUpdate }) {
   const [tab, setTab] = React.useState("info");   // info / metrics
   const [metrics, setMetrics] = React.useState([]);
   const [loading, setLoading] = React.useState(false);
@@ -458,7 +479,7 @@ function WorkDrawer({ work, onClose, onDel, onRemake }) {
       }}>
         <div style={{ padding: "14px 22px", borderBottom: `1px solid ${T.borderSoft}`, display: "flex", alignItems: "center", gap: 10 }}>
           <div style={{ flex: 1, fontSize: 15, fontWeight: 600 }}>作品详情 #{work.id}</div>
-          <KeepDiscardActions work={work} onChange={() => { /* 重读单条; 简化用 reload 整体 */ window.dispatchEvent(new CustomEvent("works-action-changed")); }} />
+          <KeepDiscardActions work={work} onChange={onWorkUpdate} />
           <button onClick={onClose} style={{ background: "transparent", border: "none", color: T.muted, cursor: "pointer", fontSize: 22, marginLeft: 4 }}>×</button>
         </div>
         <div style={{ display: "flex", gap: 2, padding: "8px 22px 0", borderBottom: `1px solid ${T.borderSoft}` }}>
@@ -543,6 +564,10 @@ function ImageInfoPanel({ work, onDel }) {
   try { meta = work.metadata ? JSON.parse(work.metadata) : {}; } catch (_) {}
   const sizeKB = meta.size_bytes ? Math.round(meta.size_bytes / 1024) : null;
   const sizeText = sizeKB ? (sizeKB > 1024 ? `${(sizeKB / 1024).toFixed(1)} MB` : `${sizeKB} KB`) : "--";
+  const noPreviewTitle = work.asset_status === "missing_file" ? "原图文件不在本机" : "这条作品只有记录";
+  const noPreviewHint = work.asset_status === "missing_file"
+    ? "作品记录还在, 但原图文件可能被移动或清理了, 暂时不能预览和下载。"
+    : "这条图片记录没有本地原图, 可能只保存了外部图床地址。";
   // ESC 关 lightbox
   React.useEffect(() => {
     if (!lightbox) return;
@@ -557,7 +582,11 @@ function ImageInfoPanel({ work, onDel }) {
           onClick={() => setLightbox(true)}
           style={{ width: "100%", maxHeight: 520, objectFit: "contain", borderRadius: 8, background: "#000", display: "block", cursor: "zoom-in" }} />
       ) : (
-        <div style={{ aspectRatio: "16/10", background: T.bg3, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", color: T.muted2, fontSize: 32 }}>🖼️</div>
+        <div style={{ aspectRatio: "16/10", background: T.bg3, borderRadius: 8, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: T.muted2, gap: 10, padding: 18, textAlign: "center" }}>
+          <div style={{ fontSize: 34 }}>🖼️</div>
+          <div style={{ fontSize: 14, fontWeight: 600, color: T.text2 }}>{noPreviewTitle}</div>
+          <div style={{ fontSize: 12, lineHeight: 1.6, maxWidth: 360 }}>{noPreviewHint}</div>
+        </div>
       )}
       {lightbox && work.thumb_url && (
         <div onClick={() => setLightbox(false)} style={{
@@ -663,7 +692,7 @@ function MetricsPanel({ work, metrics, loading, onReload }) {
       views: existing.views, likes: existing.likes, comments: existing.comments,
       shares: existing.shares, saves: existing.saves,
       followers_gained: existing.followers_gained, conversions: existing.conversions,
-      completion_rate: existing.completion_rate || "",
+      completion_rate: existing.completion_rate == null ? "" : Math.round(existing.completion_rate * 10000) / 100,
       notes: existing.notes || "",
     } : { views: 0, likes: 0, comments: 0, shares: 0, saves: 0, followers_gained: 0, conversions: 0, completion_rate: "", notes: "" });
     setEditPlat(platformId);
@@ -674,6 +703,9 @@ function MetricsPanel({ work, metrics, loading, onReload }) {
       const payload = { ...form, platform: editPlat };
       if (typeof payload.completion_rate === "string") {
         payload.completion_rate = payload.completion_rate === "" ? null : Number(payload.completion_rate);
+      }
+      if (typeof payload.completion_rate === "number" && Number.isFinite(payload.completion_rate) && payload.completion_rate > 1) {
+        payload.completion_rate = payload.completion_rate / 100;
       }
       ["views","likes","comments","shares","saves","followers_gained","conversions"].forEach(k => { payload[k] = Number(payload[k] || 0); });
       await api.post(`/api/works/${work.id}/metrics`, payload);
@@ -718,13 +750,14 @@ function MetricsPanel({ work, metrics, loading, onReload }) {
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, marginBottom: 8 }}>
                   {[
                     ["views", "播放/阅读"], ["likes", "点赞"], ["comments", "评论"], ["shares", "分享"],
-                    ["saves", "收藏"], ["followers_gained", "涨粉"], ["conversions", "转化/加微"], ["completion_rate", "完播率 %"],
+                    ["saves", "收藏"], ["followers_gained", "涨粉"], ["conversions", "转化/加微"], ["completion_rate", "完播率"],
                   ].map(([k, label]) => (
                     <label key={k} style={{ display: "flex", flexDirection: "column", gap: 3 }}>
                       <span style={{ fontSize: 11, color: T.muted }}>{label}</span>
                       <input
                         type="number"
                         value={form[k] ?? ""}
+                        placeholder={k === "completion_rate" ? "填 80" : ""}
                         onChange={e => setForm({ ...form, [k]: e.target.value })}
                         style={{ padding: "5px 8px", fontSize: 12.5, border: `1px solid ${T.borderSoft}`, borderRadius: 6, outline: "none", fontFamily: "inherit" }}
                       />

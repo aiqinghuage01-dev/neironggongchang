@@ -1614,6 +1614,66 @@ def stats_home():
 
 
 # ---- 作品库 ----
+def _work_to_api_dict(w, *, full_text: bool = False) -> dict[str, Any]:
+    """Serialize a Work row for the works UI with media URLs and asset state."""
+    local_url = None
+    thumb_url = None
+    local_missing = False
+    thumb_missing = False
+    if w.local_path:
+        p = Path(w.local_path)
+        if p.exists():
+            try:
+                local_url = media_url(p)
+            except Exception:
+                pass
+        else:
+            local_missing = True
+    if w.thumb_path:
+        p2 = Path(w.thumb_path)
+        if p2.exists():
+            try:
+                thumb_url = media_url(p2)
+            except Exception:
+                pass
+        else:
+            thumb_missing = True
+    # 图片类:缩略图 = 原图(没单独抽缩略)
+    if not thumb_url and w.type == "image" and local_url:
+        thumb_url = local_url
+
+    if local_url or thumb_url:
+        asset_status = "ready"
+    elif local_missing or thumb_missing:
+        asset_status = "missing_file"
+    elif w.type in ("image", "video"):
+        asset_status = "record_only"
+    else:
+        asset_status = "none"
+
+    final_text = w.final_text or ""
+    return {
+        "id": w.id,
+        "type": w.type,
+        "source_skill": w.source_skill,
+        "title": w.title,
+        "created_at": w.created_at,
+        "status": w.status,
+        "final_text": final_text if full_text else final_text[:200],
+        "avatar_id": w.avatar_id,
+        "speaker_id": w.speaker_id,
+        "shiliu_video_id": w.shiliu_video_id,
+        "duration_sec": w.duration_sec,
+        "local_url": local_url,
+        "thumb_url": thumb_url,
+        "asset_status": asset_status,
+        "preview_available": bool(thumb_url or local_url),
+        "download_available": bool(local_url),
+        "metadata": w.metadata,  # 前端可 JSON.parse
+        "tokens_used": w.tokens_used,
+    }
+
+
 @app.get("/api/works", tags=["档案部"], summary="作品库列表 (D-065: 三类统一)")
 def works_list(
     limit: int = 200,
@@ -1639,54 +1699,8 @@ def works_list(
             since_ts = int(now - 7 * 86400)
         elif since == "month":
             since_ts = int(now - 30 * 86400)
-    items = list_works(limit=limit, type=type, source_skill=source_skill, since_ts=since_ts)
-    if q:
-        kw = q.strip().lower()
-        items = [
-            w for w in items
-            if kw in (w.title or "").lower()
-            or kw in (w.final_text or "").lower()
-            or kw in (w.metadata or "").lower()
-        ]
-    out = []
-    for w in items:
-        local_url = None
-        thumb_url = None
-        if w.local_path:
-            p = Path(w.local_path)
-            if p.exists():
-                try:
-                    local_url = media_url(p)
-                except Exception:
-                    pass
-        if w.thumb_path:
-            p2 = Path(w.thumb_path)
-            if p2.exists():
-                try:
-                    thumb_url = media_url(p2)
-                except Exception:
-                    pass
-        # 图片类:缩略图 = 原图(没单独抽缩略)
-        if not thumb_url and w.type == "image" and local_url:
-            thumb_url = local_url
-        out.append({
-            "id": w.id,
-            "type": w.type,
-            "source_skill": w.source_skill,
-            "title": w.title,
-            "created_at": w.created_at,
-            "status": w.status,
-            "final_text": w.final_text[:200] if w.final_text else "",
-            "avatar_id": w.avatar_id,
-            "speaker_id": w.speaker_id,
-            "shiliu_video_id": w.shiliu_video_id,
-            "duration_sec": w.duration_sec,
-            "local_url": local_url,
-            "thumb_url": thumb_url,
-            "metadata": w.metadata,  # 前端可 JSON.parse
-            "tokens_used": w.tokens_used,
-        })
-    return out
+    items = list_works(limit=limit, type=type, source_skill=source_skill, since_ts=since_ts, q=q)
+    return [_work_to_api_dict(w) for w in items]
 
 
 @app.get("/api/works/sources", tags=["档案部"], summary="可选来源 + 各类型计数 (D-065 给筛选条用)")
@@ -1728,7 +1742,7 @@ def works_action(work_id: int, req: WorkActionReq):
     后续行为记忆抽取优先收 kept 的版本(高质量信号), discarded 的也记
     (避免重蹈覆辙). clear 撤销标记.
     """
-    w = next((x for x in list_works(limit=10000) if x.id == work_id), None)
+    w = get_work(work_id)
     if not w:
         raise HTTPException(404, f"work {work_id} not found")
     action = (req.action or "").strip().lower()
@@ -1744,16 +1758,23 @@ def works_action(work_id: int, req: WorkActionReq):
     else:
         meta["user_action"] = action
         meta["user_action_at"] = int(time.time())
-    update_work(work_id, metadata=json.dumps(meta, ensure_ascii=False))
-    return {"ok": True, "work_id": work_id, "user_action": meta.get("user_action")}
+    metadata = json.dumps(meta, ensure_ascii=False)
+    update_work(work_id, metadata=metadata)
+    updated = get_work(work_id)
+    return {
+        "ok": True,
+        "work_id": work_id,
+        "user_action": meta.get("user_action"),
+        "metadata": metadata,
+        "work": _work_to_api_dict(updated, full_text=True) if updated else None,
+    }
 
 
 @app.get("/api/works/{work_id}/local-path", tags=["档案部"], summary="作品本地绝对路径 (D-059c 给 v5 视频用)")
 def works_local_path(work_id: int):
     """v5 视频流程需要数字人 mp4 的绝对路径 (不是 /media URL).
     返回 {work_id, local_path, exists}."""
-    items = list_works(limit=500)
-    w = next((x for x in items if x.id == work_id), None)
+    w = get_work(work_id)
     if not w:
         raise HTTPException(404, f"work {work_id} not found")
     p = w.local_path
@@ -1775,7 +1796,7 @@ class MetricUpsertReq(BaseModel):
     saves: int = Field(0, ge=0, description="收藏")
     followers_gained: int = Field(0, ge=0, description="新增粉丝")
     conversions: int = Field(0, ge=0, description="转化数 (留资/到店/加微等)")
-    completion_rate: Optional[float] = Field(None, ge=0, le=1, description="完播率 0-1")
+    completion_rate: Optional[float] = Field(None, ge=0, le=100, description="完播率: 可填 0-1 或 0-100")
     notes: Optional[str] = Field(None, description="备注")
 
 
@@ -1795,12 +1816,15 @@ def work_metrics_get(work_id: int):
 @app.post("/api/works/{work_id}/metrics", tags=["档案部"], summary="录入作品指标 (按 work+platform upsert)")
 def work_metrics_upsert(work_id: int, req: MetricUpsertReq):
     """每条 work × platform 唯一. 重复录入同 work + platform 会更新而非新增."""
+    completion_rate = req.completion_rate
+    if completion_rate is not None and completion_rate > 1:
+        completion_rate = completion_rate / 100
     mid = upsert_metric(
         work_id=work_id, platform=req.platform,
         views=req.views, likes=req.likes, comments=req.comments,
         shares=req.shares, saves=req.saves,
         followers_gained=req.followers_gained, conversions=req.conversions,
-        completion_rate=req.completion_rate, notes=req.notes,
+        completion_rate=completion_rate, notes=req.notes,
     )
     return {"id": mid, "ok": True}
 
@@ -1815,7 +1839,7 @@ def metric_delete(metric_id: int):
 def works_analytics(limit: int = 50):
     """TOP 10 (按总曝光排序) + 各平台总量汇总 + 历史. 给作品库 PageWorks 数据 tab 用."""
     all_metrics = list_all_metrics(limit=500)
-    all_works = {w.id: w for w in list_works(limit=500)}
+    all_works = {w.id: w for w in list_works(limit=10000)}
 
     # 按 work 聚合(各平台指标加和)
     agg: dict[int, dict] = {}
@@ -1870,6 +1894,15 @@ def works_analytics(limit: int = 50):
         "top_by_conversions": top_conv,
         "platform_totals": platform_totals,
     }
+
+
+@app.get("/api/works/{work_id}", tags=["档案部"], summary="作品详情")
+def works_get(work_id: int):
+    """单条作品详情. 数据看板里的历史作品不一定在当前列表里, 必须按 id 读取."""
+    w = get_work(work_id)
+    if not w:
+        raise HTTPException(404, f"work {work_id} not found")
+    return _work_to_api_dict(w, full_text=True)
 
 
 # ---- 素材库(扒过的链接 + 原文案)----

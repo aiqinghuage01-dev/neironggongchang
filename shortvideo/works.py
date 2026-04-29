@@ -204,8 +204,13 @@ def list_works(
     type: str | None = None,
     source_skill: str | None = None,
     since_ts: int | None = None,
+    q: str | None = None,
 ) -> list[Work]:
-    """D-065: 加 type / source_skill / since_ts 过滤."""
+    """D-065: 加 type / source_skill / since_ts 过滤.
+
+    q 必须进 SQL WHERE, 不能先 LIMIT 再 Python 过滤; 作品超过首屏数量后,
+    先限量会导致老作品明明存在却搜不到.
+    """
     init_db()
     where: list[str] = []
     params: list[Any] = []
@@ -218,6 +223,15 @@ def list_works(
     if since_ts is not None:
         where.append("created_at >= ?")
         params.append(since_ts)
+    kw = (q or "").strip().lower()
+    if kw:
+        like = f"%{kw}%"
+        where.append(
+            "(LOWER(IFNULL(title,'')) LIKE ? "
+            "OR LOWER(IFNULL(final_text,'')) LIKE ? "
+            "OR LOWER(IFNULL(metadata,'')) LIKE ?)"
+        )
+        params.extend([like, like, like])
     sql = "SELECT * FROM works"
     if where:
         sql += " WHERE " + " AND ".join(where)
