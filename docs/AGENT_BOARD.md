@@ -8,11 +8,11 @@
 
 | 角色 | 状态 | 工作区 | 当前任务 |
 |---|---|---|---|
-| 总控 Agent | 自动派工已接入 | `~/Desktop/neironggongchang` | D-125 素材库验收补强已自验; 准备继续派全站 QA/审查巡检 |
+| 总控 Agent | 自动派工已接入 | `~/Desktop/neironggongchang` | 已启动 8 小时全站优化定时巡检: 每 2 小时检查一次, 空闲则自动补下一批任务 |
 | 内容开发 Agent | 空闲 | `~/Desktop/nrg-worktrees/content-dev` | T-021 已 done; 等新内容任务 |
 | 媒体开发 Agent | 空闲 | `~/Desktop/nrg-worktrees/media-dev` | T-035/T-038 重复 worker 已由总控停止并 block |
-| QA 测试 Agent | 空闲 | `~/Desktop/nrg-worktrees/qa`, `~/Desktop/nrg-worktrees/qa-1`, `~/Desktop/nrg-worktrees/qa-2` | T-030/T-031 已 done; T-028 由总控真实浏览器闭环关闭 |
-| 审查 Agent | 空闲 | `~/Desktop/nrg-worktrees/review` | T-029 已 done; T-027 由总控结合 T-029 风险清单关闭 |
+| QA 测试 Agent | 进行中 | `~/Desktop/nrg-worktrees/qa`, `~/Desktop/nrg-worktrees/qa-1`, `~/Desktop/nrg-worktrees/qa-2` | T-041/T-042/T-044 running; T-045 queued |
+| 审查 Agent | 进行中 | `~/Desktop/nrg-worktrees/review` | T-043 running |
 
 ---
 
@@ -52,12 +52,19 @@
 | T-035 | 素材库返修第 3 轮 | 媒体开发 Agent | blocked | 同 T-026 | 重复 worker 已停止; 总控已在 main 完成同范围实现与验证, 避免旧 worktree 覆盖主线 |
 | T-038 | 素材库返修第 4 轮 | 媒体开发 Agent | blocked | 同 T-026 | 自动返工循环残留任务; 总控已在 main@7ac7379 完成并关闭 T-026/T-027/T-028 |
 | T-036~T-040 | 素材库后续审查/QA/返工循环 | 自动创建 | 停止 | 同 T-026/T-027/T-028 | D-124 本轮已由总控收束; 如后续要做视觉识别/物理整理, 另起新任务 |
+| T-041 | D-125 素材库正式端口独立复测 | QA 测试 Agent | claimed | 只读 QA | 正式 8000/8001 端口复测素材库首页精选/大类/预览/剪辑检索/移动端 |
+| T-042 | 全站基础导航与页面状态 smoke | QA 测试 Agent | claimed | 只读 QA | 全站主要入口加载、截图、console/pageerror/requestfailed 汇总 |
+| T-043 | D-125 素材库改动只读审查 | 审查 Agent | claimed | 只读审查 | 检查素材库产品心智、性能、路径设置、测试遗漏、credits 风险 |
+| T-044 | 全站内容链路低风险页面巡检 | QA 测试 Agent | claimed | 只读 QA | 公众号/投流/热点/录音/朋友圈/策划/合规页面巡检, 不重复烧 credits |
+| T-045 | 全站媒体链路低风险页面巡检 | QA 测试 Agent | queued | 只读 QA | 素材库/作品库/直接出图/即梦/数字人/声音视频入口巡检 |
+| T-046~T-053 | 全站优化自动补任务窗口 | 自动创建 | pending | content/media/qa/review 分批 | `scripts/start_site_optimization_watch.sh` 未来 8 小时每 2 小时检查; 工作台空闲时自动派开发修复、QA 回归、Review 审查 |
 
 ---
 
 ## 最近证据
 
 - D-125 素材库验收补强: 首页新增可预览业务素材精选, `00 待整理` 降级为单独整理入口, KPI 区分总素材/业务素材/未入业务类/已识别; 新增 API `/api/material-lib/featured`.
+- 全站优化定时巡检已启动: `bash scripts/start_site_optimization_watch.sh`; 当前窗口 2026-04-30 00:11~08:11, 每 2 小时检查一次. 首轮识别 T-041/T-042/T-043/T-044 running、T-045 queued, 未重复补任务.
 - D-125 验证: `git diff --check` -> clean; `.venv/bin/pytest -q tests/test_materials_lib_api.py tests/test_materials_service.py tests/test_materials_pipeline.py` -> 172 passed; `.venv/bin/pytest -q -x` -> 通过; 正式 `8000/8001` curl + Playwright 首页/预览/分类/剪辑检索/移动视口通过, console/pageerror/requestfailed/http error=0.
 - D-125 报告: `docs/agent-handoff/CONTROLLER_MATERIALS_D125_QA_20260429.md`.
 - D-124 素材库总控交接: `docs/agent-handoff/CONTROLLER_MATERIALS_T026_MAIN_20260429.md`.
