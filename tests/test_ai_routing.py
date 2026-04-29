@@ -81,3 +81,24 @@ def test_routes_info_shape(monkeypatch):
     # 每条路由都含 default / override / effective 三字段
     for k, v in info["routes"].items():
         assert "default" in v and "effective" in v
+
+
+def test_get_ai_info_can_use_short_probe_options(monkeypatch):
+    """总健康检查可以用短 timeout + 不重试, 避免被完整 AI 探活拖慢。"""
+    captured = {}
+
+    class FakeClaudeClient:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+        def health(self):
+            return {"ok": False, "error": "timeout"}
+
+    monkeypatch.setattr("backend.services.settings.get_all", lambda: {"ai_engine": "opus"})
+    monkeypatch.setattr(ai_mod, "ClaudeOpusClient", FakeClaudeClient)
+
+    info = ai_mod.get_ai_info(timeout=3.0, llm_max_retries=0)
+
+    assert info["engine"] == "opus"
+    assert captured["timeout"] == 3.0
+    assert captured["llm_max_retries"] == 0

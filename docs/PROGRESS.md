@@ -4,9 +4,9 @@
 
 ---
 
-## 当前状态 (2026-04-30 · 热点 4 版历史结果展示清洗已修)
+## 当前状态 (2026-04-30 · 健康检查短探活 + 媒体页 no-credit 复测已通)
 
-**版本**: v0.8.2-hotrewrite-legacy-sanitize — T-057 已修热点 4 版 Opus timeout 兜底; T-058 QA no-credit 回归发现旧任务第 4 版仍在页面展示“已走技能/需要进一步操作吗”内部菜单; 总控已补任务详情/列表读取时的展示清洗, T-059 独立 QA 已通过。
+**版本**: v0.8.3-health-fast — T-047 媒体/资产区体验优化已合入; T-060 QA worker 因停启端口和 `/api/health` 5 秒超时误判被总控 block; D-126 已把总健康检查改为短 AI 探活, 总控完成 no-credit 页面复测。
 
 ### 当前进行
 - T-042/T-044/T-045 阻塞项已由总控返修并自测通过: 新增 `/api/tasks/counts`; 作品库只暴露 `/media` 可服务文件; 前端 `api.media()` 阻断 `/private`/`/Users`; 投流失败页只显示友好失败卡; 直接出图/作品库/图片预览按钮将 `prompt/apimart/URL` 改成“画面描述/快速出图/链接”; 数字人 picker 只列视频作品并校验 `.mp4`; 页面补内联 favicon 清掉 404 console 噪音。
@@ -19,7 +19,9 @@
 - T-058 返修已完成: `/api/tasks/{id}` 与 `/api/tasks` 对 `hotrewrite.write` 历史结果统一清洗 `content` 和 `versions[].content`; 同一旧 task 详情/列表接口均验证 `v4_has_skill=false`, `v4_has_next=false`; Playwright 恢复页面第 4 版 textarea 同样为 false, console/pageerror/requestfailed/http>=400 均 0。
 - T-059 独立 QA 已通过: 旧任务详情 API、旧任务列表 API、页面恢复第 4 版 textarea 均不含 `已走技能` / `需要进一步操作吗`; console/pageerror/requestfailed/http>=400 全 0; 未提交新的热点任务, `hotrewrite_task_count` 保持 9。
 - T-047 媒体/资产区体验优化已合入 main: 素材库 `Downloads` 统一改“临时素材源”; 即梦/直接出图/数字人/作品库去掉 `AIGC/CLI/credits/text2video/submit_id/task/ffmpeg/PIL/transcript/scenes` 等可见技术词; 失败态走友好错误展示; 未消耗媒体生成 credits。
-- T-060 已派 QA 做 T-047 主线 no-credit 独立回归: 只读覆盖 `image/imagegen/dreamina/dhv5/works/materials`, 不提交媒体生成任务; 验收素材源文案、技术词清理、console/pageerror/requestfailed/http error 和相关 pytest。
+- T-060 已由总控 block: QA worker 在环境确认阶段误停 8000/8001 并前台启动 uvicorn 卡住, 未产出 QA 报告; 这不是产品功能不通过。
+- D-126 已完成: `/api/health` 改用 `timeout=3.0` + `llm_max_retries=0` 的短 AI 探活, 5 秒内返回 200; 完整 AI 重探仍走 `/api/ai/health?fresh=1`。
+- 总控已补 T-047 主线 no-credit 复测: `image/imagegen/dreamina/dhv5/works/materials` 禁止词命中 0, console/pageerror/requestfailed/http error 全 0; 全站 16 页 smoke 通过。
 - 全站优化 8 小时定时巡检已启动: `bash scripts/start_site_optimization_watch.sh` 运行 LaunchAgent `com.neironggongchang.site-optimization-watch`, 窗口 2026-04-30 00:11~08:11, 每 2 小时检查一次工作台. 若没有 claimed/queued 任务, 自动补下一批全站优化任务; 当前首轮发现 T-041/T-042/T-043/T-044 正在跑、T-045 queued, 因此没有重复塞任务.
 - D-125 素材库验收补强已由总控在 main 实装: 新增 `/api/material-lib/featured`, 首页先展示可直接预览的业务素材卡片, 主分类只显示 7 个业务大类, `00 待整理` 单独降级为整理入口; 解决「网页显示全是 0 / 看不到业务分类 / 没有素材预览」的验收体感问题。
 - 正式端口已重启并验证: `http://127.0.0.1:8000/api/material-lib/featured?limit=18` 返回 18 条非待整理、带缩略图、已画像素材; `/categories` 返回业务素材 55 条、可直接预览 42 条、待整理 1563 条。
@@ -64,6 +66,9 @@
 - T-059 QA 报告: `docs/agent-handoff/QA_T059_HOTREWRITE_LEGACY_NO_CREDIT_20260430.md`, QA commit `79c8b7d`, main cherry-pick `2461f37`; 结果通过, 不烧新热点 credits。
 - T-059 QA 验证: `GET /api/tasks/250a97291f9d4c8289231d4ab93609c7` 和 `/api/tasks?ns=hotrewrite&limit=5` 第 4 版均不含内部文案; Playwright 第 4 版 textarea `textareaHasSkill=false`, `textareaHasNext=false`, `forbiddenPosts=0`; 截图 `/tmp/_ui_shots/t059_hotrewrite_existing_task_v4.png`, `/tmp/_ui_shots/t059_hotrewrite_input_no_submit.png`; pytest `tests/test_tasks_api.py tests/test_hotrewrite_versions.py` -> 10 passed。
 - T-047 媒体开发报告: `docs/agent-handoff/DEV_MEDIA_T047_SITE_OPT_20260430.md`, media commit `f118857`, main cherry-pick `284958e`; 验证 `git diff --check`, pytest `tests/test_works_api.py tests/test_apimart_service.py tests/test_materials_lib_api.py` -> 61 passed, curl `/api/material-lib/categories` 返回 `source_label=临时素材源`, Playwright 覆盖 `dreamina/imagegen/dhv5/works/materials/?page=image`, console/pageerror/requestfailed/http error=0。
+- D-126 总控报告: `docs/agent-handoff/CONTROLLER_D126_HEALTH_AND_T060_RECOVERY_20260430.md`; `git diff --check` clean; `tests/test_health_api.py tests/test_ai_routing.py` -> 10 passed; 媒体相关 pytest -> 61 passed; `.venv/bin/pytest -q -x` -> 通过, 仅 dhv5 本机 skill 缺失跳过。
+- D-126 正式端口: `/api/health` 3.308s 返回 HTTP 200, AI 慢响应记录为 `ai.ok=false`; `/api/material-lib/categories` -> `source_label=临时素材源`, `category_count=8`; `:8001` HTTP 200。
+- D-126 Playwright: 全站 smoke 16/16 pages OK, errors=0; 媒体/资产 6 页禁止词扫描命中 0, console/pageerror/requestfailed/http error=0; 截图 `/tmp/_ui_shots/t126_media_*.png`。
 - D-125 素材库验收补强报告: `docs/agent-handoff/CONTROLLER_MATERIALS_D125_QA_20260429.md`.
 - D-125 测试: `git diff --check` -> clean; `.venv/bin/pytest -q tests/test_materials_lib_api.py tests/test_materials_service.py tests/test_materials_pipeline.py` -> 172 passed; `.venv/bin/pytest -q -x` -> 通过, 仅 dhv5 本地 skill 缺失用例跳过。
 - D-125 正式端口 API: `/api/material-lib/featured?limit=18` -> `featured_count=18`, 18 条都不是 `00 待整理` 且有 `thumb_path`; `/api/material-lib/categories` -> 7 个业务类 + `00 待整理`, 业务素材 55 条。

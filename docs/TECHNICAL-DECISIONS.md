@@ -1216,3 +1216,20 @@ OpenAI SDK 默认 retry 与项目 `with_retry` 叠加, 会把 OpenClaw/DeepSeek 
   38 秒 `ok`, `result.route_key=touliu.generate.quick`, `result.engine=opus`.
 - `ai_calls` usage: `engine=opus`, `route_key=touliu.generate.quick`, `duration_ms=37897`,
   `prompt_tokens=4134`, `completion_tokens=260`, `total_tokens=4394`, `ok=1`.
+
+
+## D-126 - 总健康检查使用短 AI 探活 (2026-04-30)
+
+**触发**: T-060 QA no-credit 回归时用 5 秒 `curl /api/health` 做环境确认, 但
+`/api/health` 会同步跑 Opus/OpenClaw 真探活, 实测可到 7 秒以上, 导致端口可用时被误判
+超时, 后续 QA 又误停 8000/8001 影响页面复测.
+
+**决策**:
+- `/api/health` 是总运行态探活, 必须优先快返回; AI 探活改用 `timeout=3s` +
+  `llm_max_retries=0`, 失败也只写入 `ai.ok=false`, 不阻塞整体健康响应.
+- 保留 `/api/ai/health?fresh=1` 作为完整 AI 重探入口, 允许 5-7 秒真实等待.
+- `shortvideo.ai.get_ai_info()` 增加可选短探活参数, 默认行为不变, 避免影响业务生成链路.
+
+**验证**:
+- `tests/test_health_api.py` 覆盖 `/api/health` 调用短探活参数.
+- `tests/test_ai_routing.py` 覆盖 `get_ai_info(timeout=3.0, llm_max_retries=0)` 传参.

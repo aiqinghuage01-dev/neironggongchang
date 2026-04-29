@@ -361,8 +361,8 @@ def health():
             out["shiliu"] = {"ok": True, "points": c.get_credits().points}
     except Exception as e:
         out["shiliu"] = {"ok": False, "error": str(e)}
-    # 当前 AI 引擎探活
-    out["ai"] = get_ai_info()
+    # 总健康检查要快返回; 完整 AI 重探仍走 /api/ai/health?fresh=1。
+    out["ai"] = get_ai_info(timeout=3.0, llm_max_retries=0)
     try:
         tts = CosyVoiceLocal()
         out["cosyvoice"] = {"ok": tts.is_ready()}

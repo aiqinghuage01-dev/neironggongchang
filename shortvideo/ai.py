@@ -291,7 +291,7 @@ def routes_info() -> dict:
     }
 
 
-def get_ai_info() -> dict:
+def get_ai_info(timeout: float | None = None, llm_max_retries: int | None = None) -> dict:
     """当前 AI 引擎的元信息(给 /api/ai/health 用)。探活不需要人设。"""
     try:
         from backend.services import settings as settings_service
@@ -299,9 +299,12 @@ def get_ai_info() -> dict:
     except Exception:
         s = {}
     engine = (s.get("ai_engine") or "opus").lower()
+    retry_kwargs = {}
+    if llm_max_retries is not None:
+        retry_kwargs["llm_max_retries"] = llm_max_retries
     if engine == "deepseek":
         try:
-            r = DeepSeekClient().chat("ping", max_tokens=5, temperature=0)
+            r = DeepSeekClient(timeout=timeout, **retry_kwargs).chat("ping", max_tokens=5, temperature=0)
             return {"engine": "deepseek", "ok": True, "reply": r.text[:40]}
         except Exception as e:
             return {"engine": "deepseek", "ok": False, "error": str(e)}
@@ -309,6 +312,8 @@ def get_ai_info() -> dict:
         base_url=s.get("opus_base_url") or None,
         api_key=s.get("opus_api_key") or None,
         model=s.get("opus_model") or None,
+        timeout=timeout,
+        **retry_kwargs,
     )
     return {"engine": "opus", **c.health()}
 

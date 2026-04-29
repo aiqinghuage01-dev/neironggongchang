@@ -8,10 +8,10 @@
 
 | 角色 | 状态 | 工作区 | 当前任务 |
 |---|---|---|---|
-| 总控 Agent | 自动派工已接入 | `~/Desktop/neironggongchang` | T-060 已派 QA; 等独立 no-credit 回归结果 |
+| 总控 Agent | 自动派工已接入 | `~/Desktop/neironggongchang` | D-126 已自测; 准备派 T-061 独立只读 QA |
 | 内容开发 Agent | 空闲 | `~/Desktop/nrg-worktrees/content-dev` | T-021/T-022 已合入 main; 等新内容任务 |
 | 媒体开发 Agent | 空闲 | `~/Desktop/nrg-worktrees/media-dev` | T-047 已完成并合入 main; 等新媒体任务 |
-| QA 测试 Agent | 忙碌 | `~/Desktop/nrg-worktrees/qa`, `~/Desktop/nrg-worktrees/qa-1`, `~/Desktop/nrg-worktrees/qa-2` | T-060 媒体/资产区主线 no-credit 回归 |
+| QA 测试 Agent | 空闲 | `~/Desktop/nrg-worktrees/qa`, `~/Desktop/nrg-worktrees/qa-1`, `~/Desktop/nrg-worktrees/qa-2` | T-060 worker 已 block; 等 T-061 |
 | 审查 Agent | 空闲 | `~/Desktop/nrg-worktrees/review` | T-043 已完成 |
 
 ---
@@ -65,7 +65,7 @@
 | T-057 | 热点改写 4 版 Opus 超时兜底 | 总控 Agent | 已完成 | `backend/services/hotrewrite_pipeline.py`, `backend/api.py`, `shortvideo/ai.py`, `tests/test_hotrewrite_versions.py` | 4 版任务逐版进度 + 快路兜底 + 产出清洗; 真实 task `250a97291f9d4c8289231d4ab93609c7` ok, `version_count=4`, `fallback_count=1`, browser errors=0; full pytest 通过 |
 | T-058 | T-057 热点 4 版兜底独立回归 | QA 测试 Agent | blocked | 只读 QA; 不重复真实提交 4 版 LLM 任务 | QA 不通过: 兜底指标成立, 但旧 task 第 4 版仍露 `已走技能/需要进一步操作吗`; 报告 commit `c662933` |
 | T-059 | T-058 返修后热点旧任务展示 no-credit 回归 | QA 测试 Agent | 已完成 | 只读 QA; 不重复真实提交 4 版 LLM 任务 | QA 通过: 旧 task 详情/列表 API 与页面第 4 版均不含内部文案; pytest 10 passed; console/pageerror/requestfailed/http error=0; 未提交新热点任务 |
-| T-060 | T-047 媒体/资产区主线 no-credit 回归 | QA 测试 Agent | claimed | 只读 QA; 不提交媒体生成任务 | 覆盖 image/imagegen/dreamina/dhv5/works/materials; 查禁用技术词、素材源文案、console/pageerror/requestfailed/http error、相关 pytest; 报告写入 `docs/agent-handoff/QA_T060_MEDIA_ASSET_NO_CREDIT_20260430.md` |
+| T-060 | T-047 媒体/资产区主线 no-credit 回归 | QA 测试 Agent / 总控处理 | blocked | 只读 QA; 不提交媒体生成任务 | QA worker 误停 8000/8001 后前台启动 uvicorn 卡住, 未产出报告; 总控已补 D-126 健康检查短探活并完成 no-credit 自测 |
 
 ---
 
@@ -86,7 +86,8 @@
 - T-058 返修: 任务详情/列表 API 对热点改写旧结果做展示清洗, 不改原始 DB; 同一旧 task curl 详情/列表均 `v4_has_skill=false`, `v4_has_next=false`; Playwright 页面 textarea 同样干净, 截图 `/tmp/_ui_shots/t058_hotrewrite_existing_task_v4_fixed.png`。
 - T-059 QA 通过: 报告 `docs/agent-handoff/QA_T059_HOTREWRITE_LEGACY_NO_CREDIT_20260430.md`; QA commit `79c8b7d`, main cherry-pick `2461f37`; 旧 task 详情/列表和页面第 4 版 textarea 均干净, `forbiddenPosts=0`, pytest 10 passed, 未烧新热点 credits。
 - T-047 媒体/资产区优化已合入: 报告 `docs/agent-handoff/DEV_MEDIA_T047_SITE_OPT_20260430.md`; media commit `f118857`, main cherry-pick `284958e`; 即梦/直接出图/数字人/作品库/素材库可见技术词清理, Playwright 覆盖 6 个媒体页面, console/pageerror/requestfailed/http error=0。
-- T-060 已派 QA: 主线 no-credit 回归, 只读检查媒体/资产区 6 个入口、素材源文案、技术词、console/pageerror/requestfailed/http error 和相关 pytest。
+- T-060 已 block: QA worker 执行流程阻塞, 非产品功能不通过; 总控已修 `/api/health` 慢探活并补媒体/资产区 no-credit 验证。
+- D-126 健康检查短探活: 报告 `docs/agent-handoff/CONTROLLER_D126_HEALTH_AND_T060_RECOVERY_20260430.md`; full pytest 通过; `/api/health` 3.308s 返回 200; 全站 smoke 16/16 OK; 媒体/资产 6 页禁止词命中 0。
 - D-124 素材库总控交接: `docs/agent-handoff/CONTROLLER_MATERIALS_T026_MAIN_20260429.md`.
 - D-124 验证: `python3 -m pytest -q` -> 通过; `git diff --check` -> clean; 临时 API `:18000` curl `/categories`、`/match`、`/classify-batch?limit=100` 通过; Playwright 截图 `/tmp/_ui_shots/t026_materials_desktop_home.png`, `/tmp/_ui_shots/t026_materials_desktop_category.png`, `/tmp/_ui_shots/t026_materials_desktop_match.png`, `/tmp/_ui_shots/t026_materials_mobile_home.png`, console error/pageerror/requestfailed/http error=0.
 - 总控本轮交接: `docs/agent-handoff/CONTROLLER_T013_T017_20260429_2011.md`.
