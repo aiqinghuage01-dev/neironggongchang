@@ -24,6 +24,7 @@
 - 总控已补 T-047 主线 no-credit 复测: `image/imagegen/dreamina/dhv5/works/materials` 禁止词命中 0, console/pageerror/requestfailed/http error 全 0; 全站 16 页 smoke 通过。
 - T-061 独立 QA 已通过并合入 main: 严格只读复测 D-126 后媒体/资产区, 未停启 8000/8001, 未调用 `/api/health` 门禁, 未提交生成请求, 未烧媒体 credits。
 - T-062 总控二轮全站文案清理已完成: 首页和写文案页最后两处 `AIGC` / `AI token` 可见工程词已改掉; 21 个路由页面工程词/本机路径/接口词扫描命中 0, console/pageerror/requestfailed/http error 全 0。
+- T-063/T-064 已派: T-063 做 T-062 全站文案清理独立只读 QA; T-064 做 D-126/T-062 只读审查。
 - 全站优化 8 小时定时巡检已启动: `bash scripts/start_site_optimization_watch.sh` 运行 LaunchAgent `com.neironggongchang.site-optimization-watch`, 窗口 2026-04-30 00:11~08:11, 每 2 小时检查一次工作台. 若没有 claimed/queued 任务, 自动补下一批全站优化任务; 当前首轮发现 T-041/T-042/T-043/T-044 正在跑、T-045 queued, 因此没有重复塞任务.
 - D-125 素材库验收补强已由总控在 main 实装: 新增 `/api/material-lib/featured`, 首页先展示可直接预览的业务素材卡片, 主分类只显示 7 个业务大类, `00 待整理` 单独降级为整理入口; 解决「网页显示全是 0 / 看不到业务分类 / 没有素材预览」的验收体感问题。
 - 正式端口已重启并验证: `http://127.0.0.1:8000/api/material-lib/featured?limit=18` 返回 18 条非待整理、带缩略图、已画像素材; `/categories` 返回业务素材 55 条、可直接预览 42 条、待整理 1563 条。
