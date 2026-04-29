@@ -4,19 +4,22 @@
 
 ---
 
-## 当前状态 (2026-04-29 · cmux 安全启动)
+## 当前状态 (2026-04-29 · 总控合入 T-013 + 投流返修派工)
 
-**版本**: v0.7.6-agent24 — 修复单按钮工作台在 cmux CLI `Broken pipe` 时走 macOS open fallback 导致重复窗口的问题。日常入口改为安全激活已有 5 个工作区; 只有一次性修复时才允许强制 fallback。T-015/T-016 仍 blocked, 不继续烧下游 credits。
+**版本**: v0.7.6-agent25 — 总控启动后领取队列无 controller 任务, 读取收件箱 53 份报告; 已把 T-013 从 `codex/media-dev` 安全 cherry-pick 到 main, 跑通 apimart/remote_jobs 回归和全量 pytest; 已派 T-017 内容开发返修投流 724s timeout, T-018 等返修后 QA 真烧, T-019 QA 复测 T-013 fault injection。
 
 ### 当前进行
+- T-017: 已入共享队列并被 `NRG 内容开发` 领取; 目标是继续返修 T-015 暴露的投流 `n=1` 页面真实链路 724s timeout。
+- T-018: 已入共享队列, 依赖 T-017; 只允许 T-017 done 后做一次投流 `n=1` 页面最小真烧复测。
+- T-019: 已入共享队列并被 `NRG QA 自动` 领取; 目标是主线合入 T-013 后复测 apimart 下载失败保护, 不真烧 credits。
+- T-013: 已 cherry-pick 到 main: `6e05558 fix: fail apimart tasks on download errors` + `ff221fc docs: add media dev t013 handoff`; 主线验证 `.venv/bin/pytest -q tests/test_apimart_service.py tests/test_remote_jobs.py` -> 21 passed, `.venv/bin/pytest -q -x` -> passed, `git diff --check HEAD~2..HEAD` -> clean; 等 T-019 独立 QA 报告后才能关闭。
 - T-014: 内容开发提交 `5d4fc59`, 隔离端口真实 curl `n=1` 53 秒 `ok`; 但 T-015 独立 QA 真烧仍 timeout, 需继续返修投流真实链路.
 - T-015: 已被 `NRG QA 测试` 标记 `blocked`; QA 不通过: 真烧 task `5984e0bcdb754ad994d4b65415bd901e` 724s 后 Claude Opus/OpenClaw Request timed out; console/pageerror=0; pytest touliu 17 passed.
 - T-016: 已被总控标记 `blocked`; T-015 未通过前不继续烧录音/热点 credits.
-- T-013: 媒体开发提交 `99f1fb3`, fault injection 自验通过; `codex/media-dev` 落后主线, 不可整分支合并, 只能同步主线后再合或 cherry-pick 单提交.
-- 总控巡检: `python3 scripts/agent_queue.py claim --role controller --agent "NRG 总控" --format prompt` -> 无 controller 任务; `python3 scripts/agent_inbox.py --hours 24` -> 50 reports, 未发现新的 T-015/T-016 通过证据. 报告: `docs/agent-handoff/CONTROLLER_STARTUP_20260429_1852.md`.
+- 总控巡检: `python3 scripts/agent_queue.py claim --role controller --agent "NRG 总控" --format prompt` -> 无 controller 任务; `python3 scripts/agent_inbox.py --hours 24` -> 53 reports. 报告: `docs/agent-handoff/CONTROLLER_T013_T017_20260429_2011.md`.
 - 多 Agent 协作流程已调整: Agent 自己写 `docs/agent-handoff/` 报告并 commit, 总控用收件箱脚本主动扫描, 老板不再做人肉复制粘贴中转。
 - 自动任务队列已启用: `python3 ~/Desktop/neironggongchang/scripts/agent_queue.py list` 可看队列; `done` 只表示验收通过, 验证不通过必须 `block`.
-- 自动派工器已启用: `bash scripts/start_agent_dispatcher.sh --status` 显示 LaunchAgent running; 现在无 runnable task, 会待命.
+- 自动派工器已启用: `bash scripts/start_agent_dispatcher.sh --status` 显示 LaunchAgent running; 当前队列显示 T-017 已被内容开发领取, T-019 正由自动 QA 运行。
 - 单按钮工作台已安装: 桌面只保留 `打开内容工厂工作台.app`, 会启动 Agent 监控器、自动派工器, 并安全激活已有 5 个 Agent 工作区.
 - cmux 安全启动已加: 日常按钮不再使用 `open -a cmux <worktree>` 兜底, 避免一叠重复窗口.
 - 总控自然语言接单规则已写入 `docs/agents/ROLE_CONTROLLER.md`: 老板不需要指定角色/分支/任务编号/测试命令.
@@ -25,14 +28,17 @@
 - 额外 QA cmux 脚本已改为 socket 不可用时只准备 worktree, 不再强行 fallback 打开多个空白窗口。
 
 ### 总控审查证据
+- 总控本轮交接: `docs/agent-handoff/CONTROLLER_T013_T017_20260429_2011.md`.
 - 总控启动巡检: `docs/agent-handoff/CONTROLLER_STARTUP_20260429_1852.md`.
-- 收件箱: `python3 scripts/agent_inbox.py --hours 24` -> 50 reports.
+- 收件箱: `python3 scripts/agent_inbox.py --hours 24` -> 53 reports.
+- T-013 主线提交: `6e05558` + `ff221fc`; 验证 `.venv/bin/pytest -q tests/test_apimart_service.py tests/test_remote_jobs.py` -> 21 passed, `.venv/bin/pytest -q -x` -> passed.
+- 队列新增: T-017 content claimed, T-018 qa queued depends T-017, T-019 qa claimed.
 - T-014 开发交接: `docs/agent-handoff/DEV_CONTENT_T014_TOULIU_20260429.md` (worktree: `content-dev`).
 - T-013 开发交接: `docs/agent-handoff/MEDIA_DEV_T013_APIMART_DOWNLOAD_20260429.md` (worktree: `media-dev`).
 - QA-1 待命报告: `docs/agent-handoff/QA1_READY_20260429.md` (worktree: `qa-1`).
 - 总控审查报告: `docs/agent-handoff/CONTROLLER_AUDIT_20260429.md`.
 - 合并风险: `git diff main..codex/media-dev` 显示该分支会删除 `scripts/agent_inbox.py`, `scripts/start_agent_monitor.sh` 和多份主线报告/角色文档; 不允许整分支 merge.
-- 任务队列: `~/Desktop/nrg-agent-queue/tasks.json` 已有 T-015 / T-016, 当前均 blocked.
+- 任务队列: `~/Desktop/nrg-agent-queue/tasks.json` 已有 T-015/T-016 blocked; 新增 T-017/T-018/T-019 推进返修与复测。
 - 自动派工器: `scripts/agent_dispatcher.py`, `scripts/start_agent_dispatcher.sh`; 日常不单独放桌面入口, 由工作台统一启动.
 - 单按钮工作台: 桌面入口 `打开内容工厂工作台.app`, 日常只需要点这个; 调试按钮默认从桌面移除, 需要时用 `--with-debug-launchers` 重建.
 - cmux workbench wrapper: `scripts/start_agent_workbench.sh`; 若 cmux 工作区真的丢失, 才用 `--force-open-fallback` 做一次性修复.

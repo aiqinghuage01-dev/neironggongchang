@@ -8,11 +8,11 @@
 
 | 角色 | 状态 | 工作区 | 当前任务 |
 |---|---|---|---|
-| 总控 Agent | 自动派工已接入 | `~/Desktop/neironggongchang` | 派工器运行中; T-015 QA 不通过, 下一步应派内容开发返修投流 |
-| 内容开发 Agent | 已提交但需返修 | `~/Desktop/nrg-worktrees/content-dev` | T-014 提交 `5d4fc59` + 交接 `1eb78aa`; T-015 真烧失败需返修 |
-| 媒体开发 Agent | 已提交待 QA | `~/Desktop/nrg-worktrees/media-dev` | T-013 提交 `99f1fb3` + 交接 `a700c0f`; 分支落后主线, 不可整分支合并 |
-| QA 测试 Agent | T-015 不通过 | `~/Desktop/nrg-worktrees/qa`, `~/Desktop/nrg-worktrees/qa-1`, `~/Desktop/nrg-worktrees/qa-2` | T-015 blocked; T-016 blocked, 等投流返修通过后再恢复 |
-| 审查 Agent | 待启动 | `~/Desktop/nrg-worktrees/review` | 待分配 |
+| 总控 Agent | 自动派工已接入 | `~/Desktop/neironggongchang` | T-013 已 cherry-pick 到 main; 已派 T-017/T-018/T-019 |
+| 内容开发 Agent | 进行中 | `~/Desktop/nrg-worktrees/content-dev` | T-017 已领取: 返修投流 `n=1` 真实页面链路 724s timeout |
+| 媒体开发 Agent | 已提交待 QA | `~/Desktop/nrg-worktrees/media-dev` | T-013 已由总控 cherry-pick; `codex/media-dev` 仍落后主线, 不可整分支合并 |
+| QA 测试 Agent | 进行中 | `~/Desktop/nrg-worktrees/qa`, `~/Desktop/nrg-worktrees/qa-1`, `~/Desktop/nrg-worktrees/qa-2` | T-019 已领取; T-018 queued 等 T-017 done; T-015/T-016 blocked |
+| 审查 Agent | 空闲 | `~/Desktop/nrg-worktrees/review` | T-013 审查已完成; 等新任务 |
 
 ---
 
@@ -29,18 +29,25 @@
 | T-010 | 修作品库「留这版 / 删这版」写入成功但 UI 不变 + 完播率百分比输入误导 | 总控/平台开发 | 已完成 | `web/factory-works.jsx`, 必要时 `backend/api.py`, tests | T-012 已验证: 点击后按钮显示 `✓`; 完播率填 80 落库 0.8; 回归覆盖 |
 | T-011 | 处理作品库图片占位卡: 无预览/无下载的图片作品要可解释或可恢复 | 总控/平台开发 | 已完成 | `backend/api.py`, `web/factory-works.jsx`, 可能涉及数据修复脚本; 先读 QA 报告现场数据 | T-012 已验证: 文件缺失图片显示明确状态; API 状态字段正确 |
 | T-012 | T-009/T-010/T-011 修后作品库全链路回归 | QA 测试 Agent | 已完成 | 不改功能代码; 只提交报告/必要测试脚本需总控确认 | QA 通过: pytest/e2e/真实 UI/curl/截图均通过, 未发现新 P0/P1/P2 |
-| T-013 | 补直接出图 apimart 下载失败路径保护和 fault injection 回归 | 媒体开发 Agent | 待 QA | `backend/services/apimart_service.py`, `tests/test_apimart_service.py`, 必要时前端结果错误展示 | 模拟远端 done 但下载失败时, task 不假成功、不写坏作品记录、用户看到可理解失败/重试信息; 回归覆盖 |
+| T-013 | 补直接出图 apimart 下载失败路径保护和 fault injection 回归 | 媒体开发 Agent / 总控 | 已合入待 QA | `backend/services/apimart_service.py`, `tests/test_apimart_service.py`, 必要时前端结果错误展示 | 已 cherry-pick `6e05558`/`ff221fc`; 主线 pytest 通过; 等 T-019 独立 QA 后关闭 |
 | T-014 | 修投流文案 `n=1` 最小真链路 10 分钟失败 + LLM 非 JSON | 内容开发 Agent | 需返修 | `backend/services/touliu_pipeline.py`, 投流 endpoint 估时返回处, `tests/test_pipelines.py`/相关 tests; 暂不合入失败的 `2670a5a` | T-015 真实 QA 仍 timeout, 需继续定位 OpenClaw/Claude timeout 与 task 失败态 |
 | T-015 | T-014 修后投流 `n=1` 最小真烧复测 | QA 测试 Agent | blocked | 不改功能代码; 只提交报告/必要测试脚本需总控确认 | QA 不通过: 真烧 task `5984e0bcdb754ad994d4b65415bd901e` 724s timeout; console/pageerror=0; pytest touliu 17 passed |
 | T-016 | 投流通过后复测录音改写真实 LLM + 热点改写 4 版真实链路 | QA 测试 Agent | blocked(等 T-015 通过) | 不改功能代码; 只提交报告/必要测试脚本需总控确认 | 暂停执行; 投流未通过前不继续烧录音/热点 credits |
+| T-017 | 返修投流 `n=1` 页面真实链路 724s timeout | 内容开发 Agent | 进行中 | `backend/services/touliu_pipeline.py`, `backend/api.py`, `tests/test_pipelines.py` 或投流直接相关文件; 不改 `docs/PROGRESS.md` | 定位 T-014 curl 53s ok 但 T-015 页面 724s timeout; 投流相关 pytest 通过; 至少一次隔离端口真实 curl `n=1` ok; 报告和 commit |
+| T-018 | T-017 修后投流 `n=1` 页面最小真烧复测 | QA 测试 Agent | queued(等 T-017 done) | 不改功能代码; 只提交报告/必要测试脚本需总控确认 | 只提交 1 次; 页面展示 1 条投流文案; task ok; console/pageerror=0; 截图和 curl/usage 证据齐全 |
+| T-019 | T-013 主线合入后 apimart 下载失败路径复测 | QA 测试 Agent | 进行中 | 不改功能代码; mock/fault injection; 不真烧 credits | pytest 通过; 下载失败 task failed; 不写 ready 坏作品; 页面失败态可理解; console/pageerror=0 |
 
 ---
 
 ## 最近证据
 
+- 总控本轮交接: `docs/agent-handoff/CONTROLLER_T013_T017_20260429_2011.md`.
+- T-013 已安全 cherry-pick 到 main: `6e05558` + `ff221fc`; 未整支 merge `codex/media-dev`.
+- T-013 主线验证: `.venv/bin/pytest -q tests/test_apimart_service.py tests/test_remote_jobs.py` -> 21 passed; `.venv/bin/pytest -q -x` -> passed; `git diff --check HEAD~2..HEAD` -> clean.
+- 队列状态: T-017 `claimed` by `NRG 内容开发`; T-018 `queued` depends T-017; T-019 `claimed` by `NRG QA 自动`; T-015/T-016 继续 blocked.
 - 总控启动巡检: `docs/agent-handoff/CONTROLLER_STARTUP_20260429_1852.md`.
 - 队列状态: T-015 `blocked` by `NRG QA 测试`; T-016 `blocked` by `NRG 总控`, 等 T-015 真正通过后再恢复.
-- 收件箱: `python3 scripts/agent_inbox.py --hours 24` -> 50 reports; 未发现新的 T-015/T-016 通过报告.
+- 收件箱: `python3 scripts/agent_inbox.py --hours 24` -> 53 reports; 未发现新的 T-015/T-016 通过报告.
 - QA 报告: `docs/agent-handoff/QA_WECHAT_20260429.md`
 - QA 原提交: `cb3454c`
 - 主线证据提交: `9031337`
