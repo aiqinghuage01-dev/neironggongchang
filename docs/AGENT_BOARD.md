@@ -8,7 +8,7 @@
 
 | 角色 | 状态 | 工作区 | 当前任务 |
 |---|---|---|---|
-| 总控 Agent | 自动派工已接入 | `~/Desktop/neironggongchang` | 队列 T-075 科技与狠活作战室已通过 QA/审查, 正在主线提交收口 |
+| 总控 Agent | 自动派工已接入 | `~/Desktop/neironggongchang` | T-080 刷新降频已验证, 正在提交收口 |
 | 内容开发 Agent | 空闲 | `~/Desktop/nrg-worktrees/content-dev` | 队列 T-075 作战室开发已交付; 等新内容任务 |
 | 媒体开发 Agent | 空闲 | `~/Desktop/nrg-worktrees/media-dev` | T-047 已完成并合入 main; 等新媒体任务 |
 | QA 测试 Agent | 待领取 | `~/Desktop/nrg-worktrees/qa`, `~/Desktop/nrg-worktrees/qa-1`, `~/Desktop/nrg-worktrees/qa-2` | T-078 作战室响应式复测通过; 等后续 QA |
@@ -86,6 +86,7 @@
 
 ## 最近证据
 
+- T-080 研发部作战室刷新降频: beta 页和独立 `:8765` 面板均改为 60 秒刷新; 已重启独立面板服务。Playwright 计数显示 beta 页 4.2 秒内 `:8765/api/status` 只请求 1 次, 独立面板 4.2 秒内 `/api/status` 只请求 1 次, console/pageerror=0; 截图 `/tmp/_ui_shots/t080_beta_refresh_60s.png`, `/tmp/_ui_shots/t080_agent_dashboard_refresh_60s.png`; 静态测试 8 passed。报告 `docs/agent-handoff/CONTROLLER_T080_BETA_REFRESH_INTERVAL_20260430.md`。
 - 队列 T-075 科技与狠活作战室: 内容开发完成升级; T-076 QA 首轮 block 窄屏不可读, T-077 审查 block 静态守则/脱敏不足; 总控修复后 T-078 QA 通过、T-079 审查无 P0/P1。Playwright 桌面截图 `/tmp/_ui_shots/t075_beta_warroom.png` 已读, 日志摘要可点且敏感词命中 0; 390x900 截图 `/tmp/_ui_shots/t075_beta_mobile_final.png` 已读, `hasHorizontalScroll=false`, `offRightCount=0`, console/pageerror/requestfailed/http error 均 0。报告 `docs/agent-handoff/CONTROLLER_T075_BETA_WARROOM_FINAL_20260430.md`。
 - T-075 做视频首屏重构: Playwright 截图 `/tmp/nrg_make_t074/t074-make-full-tall-final.png` 已读, 与参考图一致为大输入框 + 紧凑热点列表; 真填文案后“开始”可点, 点击“行业”和“换一批”正常; `/api/hot-topics?limit=30` 返回 15 条且三类各 5; console error=0。
 - T-074 页面变更强制 QA 证据流程: `docs/MULTI_AGENT_WORKFLOW.md` 和 `docs/agents/ROLE_CONTROLLER.md` 已写明用户可见页面变化必须 QA; 没有截图/console/真实操作证据只能说待测, 不能说完成。

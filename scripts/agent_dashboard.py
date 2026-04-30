@@ -445,6 +445,7 @@ HTML = """<!doctype html>
     </section>
   </main>
   <script>
+    const STATUS_REFRESH_MS = 60000;
     const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     const statusText = s => ({running:'工作中', idle:'空闲', stale:'异常退出'}[s] || s);
     const taskStatus = s => ({queued:'排队', claimed:'已领取', done:'已完成', blocked:'阻塞', cancelled:'取消'}[s] || s);
@@ -527,7 +528,7 @@ HTML = """<!doctype html>
       }
     }
     tick();
-    setInterval(tick, 3000);
+    setInterval(tick, STATUS_REFRESH_MS);
   </script>
 </body>
 </html>

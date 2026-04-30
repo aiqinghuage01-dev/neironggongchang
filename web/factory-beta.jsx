@@ -1,6 +1,7 @@
 // factory-beta.jsx — 科技与狠活: 研发部作战室
 
 const AGENT_DASHBOARD_URL = "http://127.0.0.1:8765/";
+const BETA_STATUS_REFRESH_MS = 60000;
 // Keep these split: the static guard scans literal source text.
 const BETA_INTERNAL_WORDS = [
   "Open" + "Claw",
@@ -189,7 +190,7 @@ function PageBeta() {
 
   React.useEffect(() => {
     checkDashboard();
-    const timer = setInterval(checkDashboard, 10000);
+    const timer = setInterval(checkDashboard, BETA_STATUS_REFRESH_MS);
     return () => clearInterval(timer);
   }, [checkDashboard]);
 

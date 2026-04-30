@@ -4,11 +4,12 @@
 
 ---
 
-## 当前状态 (2026-04-30 · T-075 科技与狠活研发部作战室升级)
+## 当前状态 (2026-04-30 · T-080 研发部作战室刷新降频)
 
-**版本**: v0.8.15-beta-warroom — 「科技与狠活」升级为研发部作战室, 可见具体 Agent、领取任务、现场时间线、日志摘要、代码动向和交接证据; 已按页面变更门禁完成开发 Agent、QA Agent、审查 Agent 与总控最终验证。
+**版本**: v0.8.16-beta-refresh-60s — 「科技与狠活」作战室和独立研发部面板自动刷新从高频改为 60 秒一次, 页面打开仍立即加载一次状态。
 
 ### 当前进行
+- T-080 总控已完成: `?page=beta` 作战室从 10 秒刷新改为 60 秒刷新, `http://127.0.0.1:8765/` 独立研发部面板从 3 秒刷新改为 60 秒刷新, 并补静态守则防止回退。已重启 `scripts/start_agent_dashboard.sh` 让独立面板吃到新脚本。验证: `python3 -m pytest -q tests/test_frontend_copy_static.py` -> 8 passed; `python3 -m py_compile scripts/agent_dashboard.py` -> pass; `node --check scripts/e2e_beta_warroom.js` -> pass; Playwright 打开 beta 页 4.2 秒内 `:8765/api/status` 只请求 1 次, console/pageerror=0, 截图 `/tmp/_ui_shots/t080_beta_refresh_60s.png`; Playwright 打开独立面板 4.2 秒内 `/api/status` 只请求 1 次, console/pageerror=0, 截图 `/tmp/_ui_shots/t080_agent_dashboard_refresh_60s.png`。报告 `docs/agent-handoff/CONTROLLER_T080_BETA_REFRESH_INTERVAL_20260430.md`。
 - 队列 T-075「科技与狠活 · 研发部作战室」已合入待提交: 内容开发 Agent 完成页面升级; T-076 QA 首轮发现窄屏不可读并 block; T-077 审查发现静态守则被覆盖与脱敏范围不足并 block; 总控修复响应式与脱敏后, T-078 QA 复测通过, T-079 审查无 P0/P1。页面现在展示「谁在干活」「当前任务」「研发现场时间线」「日志与代码证据」, 日志按钮可点击并展示脱敏摘要, 明确显示 `agent_name` / `claimed_by`, 不再用「有人在跟」。主线验证: `python3 -m pytest -q tests/test_frontend_copy_static.py` -> 7 passed; `node --check scripts/e2e_beta_warroom.js` -> pass; `BETA_WEB_URL='http://127.0.0.1:8001/?page=beta' node scripts/e2e_beta_warroom.js` -> pass, `violations=[]`, console/pageerror/requestfailed/http error 全 0; 390x900 正式端口补测无横向滚动 (`bodyScrollWidth=390`, `offRightCount=0`)。报告 `docs/agent-handoff/CONTROLLER_T075_BETA_WARROOM_FINAL_20260430.md`。
 - T-075 总控已完成: 做视频 Step 1 严格按老板截图方向重构, 去掉四 tab 大入口和大热点卡首屏, 改为居中标题“把素材丢进来↓”、单一大输入框、底部“录音/上传/选题库/我的素材”工具按钮、右下“开始→”; 下方热点区改成“没思路？从热点开始”紧凑列表, 带“全网 5 / 行业 5 / 本地 5”和“换一批↻”。后端热点雷达池从 12 扩到 15 条, 保证三类各 5 条。验证: `pytest -q tests/test_make_hot_radar_static.py tests/test_works_api.py::test_hot_topics_list_gives_batch_pool_for_make_page tests/test_works_api.py::test_hot_topics_list_fills_radar_floor` 通过; `curl /api/hot-topics?limit=30` 返回 15 条且三类各 5; Playwright 截图已读, 真填文案后“开始”变可用, 点击“行业”和“换一批”正常, console/pageerror/requestfailed 均 0。报告 `docs/agent-handoff/CONTROLLER_T075_MAKE_DROP_MATERIAL_REDESIGN_20260430.md`。
 - T-074 总控已完成: 把“页面变化必须测试”固化进 `docs/MULTI_AGENT_WORKFLOW.md` 和 `docs/agents/ROLE_CONTROLLER.md`。后续任何用户可见页面/前端体验变化, 默认派开发 Agent + QA Agent; 总控直接小修也必须交付同等级 QA 证据, 没有截图/console/真实操作证据只能说“待测”, 不能说“完成”。报告 `docs/agent-handoff/CONTROLLER_T074_UI_QA_GATE_20260430.md`。

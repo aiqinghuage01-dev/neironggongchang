@@ -107,3 +107,14 @@ def test_beta_sanitizer_and_evidence_fields_are_present():
     assert "latest_commit" in src
     assert "task.commit" in src
     assert "task.report" in src
+
+
+def test_beta_and_dashboard_refresh_once_per_minute():
+    beta_src = (ROOT / "web/factory-beta.jsx").read_text(encoding="utf-8")
+    dashboard_src = (ROOT / "scripts/agent_dashboard.py").read_text(encoding="utf-8")
+    assert "BETA_STATUS_REFRESH_MS = 60000" in beta_src
+    assert "setInterval(checkDashboard, BETA_STATUS_REFRESH_MS)" in beta_src
+    assert "setInterval(checkDashboard, 10000)" not in beta_src
+    assert "STATUS_REFRESH_MS = 60000" in dashboard_src
+    assert "setInterval(tick, STATUS_REFRESH_MS)" in dashboard_src
+    assert "setInterval(tick, 3000)" not in dashboard_src
