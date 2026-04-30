@@ -3,7 +3,7 @@
 > 写新代码前必读. 所有约束都是踩坑后才有的, 违反 = 重新踩坑.
 > 集中放一份, 不再散落到 D-XXX 的故事里. 新踩坑就追加.
 
-最后更新: 2026-04-27 (D-083 集中化)
+最后更新: 2026-04-30 (迁移防腐层红线同步)
 
 ---
 
@@ -66,6 +66,30 @@ def get_data_dir() -> Path:
 - **新写代码默认接受 `user_id` 参数** (即便当前永远是 'qinghua'), 降低未来重构面积
 - 数据表加 user_id 列: 懒加, 真有第二个用户再加
 - 人设系统多租户化: 一期不做 (老板没要)
+
+### 0.5 迁移防腐层红线 (继续前端开发期必守)
+
+背景: `docs/design/MAC_MINI_TEAM_BETA_ARCHITECTURE.md` v1.1 已确定"干净迁移路线": Mac mini 可从空 DB 重建, 旧 `works.db` 不强迁。但继续开发必须先锁住防腐层, 防止新代码继续滚出本地迁移债。
+
+#### R1. 不新增 `127.0.0.1:8000` / `localhost:8000` 字面量
+- 前端新 API 调用走 `web/factory-api.jsx` 的统一客户端 (`api.get/post/patch/del/media`), 不要裸 `fetch("http://127.0.0.1:8000/...")`。
+- 后端生成给浏览器访问的 URL 优先用相对路径 (`/media/...`, `/skills/...`) 或 env (`MEDIA_PUBLIC_BASE`), 不要把本机端口写进内容。
+- 例外: 既有开发兜底 / 启动脚本 / 测试命令可以引用本机端口, 但不能成为新业务数据或用户可见链接的事实源。
+
+#### R2. 不写 `/Users/...` 绝对路径入库
+- `works.local_path` / `works.thumb_path` / 新增 path 字段写库前必须 normalize 成项目内相对路径。
+- 读旧数据时走 `backend/services/path_resolver.py::resolve_data_path()`, 不要直接 `Path(db_value).exists()`。
+- 任何新表只要保存本地文件路径, 字段值都必须可在另一台 Mac 上通过项目根或 data 根重建。
+
+#### R3. 新 API 走统一客户端
+- 前端页面 / 组件新增请求时, 默认封装进 `web/factory-api.jsx`。
+- 只有 `factory-api.jsx` 内部可以集中处理 base URL、cookie、错误文案、超时和重试; 页面层不要各自造一套请求逻辑。
+- 如果确实必须裸 `fetch`, 需要在代码旁写清楚原因, 并确认同源 / cookie / 错误处理不会绕开统一策略。
+
+#### R4. 新数据表提前想 owner
+- 新表只要未来可能被团队成员共同使用, 建表时必须明确 owner 策略: `owner_id INTEGER REFERENCES users(id)`、兼容旧表的 `user_id TEXT`, 或在决策文档中标注"admin-only / 单用户表"。
+- 现在仍是单用户, 也要避免新增"以后必然全表重洗"的数据模型。
+- 新接口返回列表时, 先想清楚 M2 后 member 看到的是"自己的"还是"全员共享的"。
 
 ---
 

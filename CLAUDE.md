@@ -68,6 +68,7 @@ cat docs/SYSTEM-CONSTRAINTS.md
 - 大改动前在 `docs/PROGRESS.md` 的 TODO 区写一行 "我要做 XX"
 - 触及 API/数据模型 → 先更新 PRD 或决策档案, 再写代码
 - 每次 session 结束: 更新 `docs/PROGRESS.md` + `git add + commit`
+- 继续前端/数据开发必须守迁移防腐层红线 (见 SYSTEM-CONSTRAINTS §0.5)
 - 改写/生成相关代码必须注入清华哥人设 (走 `shortvideo.ai.get_ai_client`, 见 SYSTEM-CONSTRAINTS §2)
 
 ### 禁区
@@ -128,6 +129,7 @@ bash scripts/run_e2e_full.sh       # 一键全量 (smoke + 真烧 + 截图 + pyt
 ### 系统硬约束 → 见 `docs/SYSTEM-CONSTRAINTS.md`
 本文档不复述, 仅列索引:
 - §0 路径策略 (路线 B + paths.py 抽象层)
+- §0.5 迁移防腐层红线 (不写死 8000 / 不写 `/Users` 入库 / API 统一客户端 / 新表想 owner)
 - §1 异步任务 (tasks 框架 + remote_jobs watcher)
 - §2 AI 调用关卡层 (`shortvideo.ai.get_ai_client`)
 - §3 访客模式 (`guest_mode.is_guest()` + contextvar)
