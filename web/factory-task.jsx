@@ -101,8 +101,9 @@ function LoadingProgress({ task, icon, title, subtitle, onCancel }) {
 
   return (
     <div style={{
-      maxWidth: 680, margin: "40px auto", background: "#fff",
-      border: `1.5px solid ${T.brand}`, borderRadius: 16, padding: 28,
+      width: "clamp(230px, calc(100vw - 160px), 680px)", maxWidth: "calc(100% - 24px)",
+      boxSizing: "border-box", margin: "40px auto", background: "#fff",
+      border: `1.5px solid ${T.brand}`, borderRadius: 16, padding: "clamp(18px, 4vw, 28px)",
       boxShadow: `0 0 0 5px ${T.brandSoft}`, textAlign: "center",
     }}>
       <div style={{ fontSize: 32 }}>{icon || "⏳"}</div>
@@ -166,6 +167,8 @@ function LoadingProgress({ task, icon, title, subtitle, onCancel }) {
         </div>
       )}
 
+      <TaskProgressTimeline task={task} title="阶段时间线" embedded />
+
       {/* 提示 */}
       <div style={{
         marginTop: 12, fontSize: 12, color: T.muted2,
@@ -194,17 +197,20 @@ function LoadingProgress({ task, icon, title, subtitle, onCancel }) {
 }
 
 // 结构化任务时间线: 给一批结果分段产出的页面复用。
-function TaskProgressTimeline({ task, title }) {
+function TaskProgressTimeline({ task, title, embedded }) {
   const data = task?.progress_data || {};
   const timeline = Array.isArray(data.timeline) ? data.timeline : [];
   if (!timeline.length) return null;
-  const total = data.total_versions || data.total || null;
+  const total = data.total_versions || data.total_stages || data.total || null;
   const done = typeof data.completed_versions === "number"
     ? data.completed_versions
-    : (typeof data.completed === "number" ? data.completed : timeline.filter(item => item.status !== "running").length);
+    : (typeof data.completed_stages === "number"
+      ? data.completed_stages
+      : (typeof data.completed === "number" ? data.completed : timeline.filter(item => item.status !== "running").length));
   const nowSec = Math.floor(Date.now() / 1000);
   function unitKey(item) {
     if (!item) return null;
+    if (item.stage) return `stage:${item.stage}`;
     if (item.unit_id) return `unit:${item.unit_id}`;
     if (item.variant_id) return `variant:${item.variant_id}`;
     if (item.version_index) return `version:${item.version_index}`;
@@ -225,14 +231,17 @@ function TaskProgressTimeline({ task, title }) {
   });
   return (
     <div style={{
-      background: "#fff",
-      border: `1px solid ${T.borderSoft}`,
-      borderRadius: 10,
-      padding: 12,
+      background: embedded ? "transparent" : "#fff",
+      border: embedded ? "none" : `1px solid ${T.borderSoft}`,
+      borderTop: embedded ? `1px dashed ${T.borderSoft}` : undefined,
+      borderRadius: embedded ? 0 : 10,
+      padding: embedded ? "12px 0 0" : 12,
+      marginTop: embedded ? 12 : 0,
+      textAlign: "left",
     }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
         <span style={{ fontSize: 13, fontWeight: 700, color: T.text }}>{title || "生成现场"}</span>
-        {total ? <Tag size="xs" color="green">已完成 {done}/{total}</Tag> : null}
+        {total ? <Tag size="xs" color="green">已完成 {Math.min(done, total)}/{total}</Tag> : null}
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {visibleTimeline.slice(-6).map((item, idx) => {
@@ -241,7 +250,7 @@ function TaskProgressTimeline({ task, title }) {
           const started = item.started_ts || item.at_ts;
           const elapsed = isRunning && started ? Math.max(0, nowSec - started) : 0;
           return (
-            <div key={`${item.variant_id || "step"}-${item.status || "done"}-${idx}`} style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+            <div key={`${item.stage || item.variant_id || item.unit_id || "step"}-${item.status || "done"}-${idx}`} style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
               <span style={{
                 width: 18, height: 18, borderRadius: "50%", flexShrink: 0,
                 display: "flex", alignItems: "center", justifyContent: "center",
@@ -256,6 +265,14 @@ function TaskProgressTimeline({ task, title }) {
                 {isRunning && item.version_index && item.total_versions ? (
                   <div style={{ fontSize: 10.5, color: T.muted2, marginTop: 2 }}>
                     正在写第 {item.version_index} / {item.total_versions} 版 · 已写 {fmtSec(elapsed)}
+                  </div>
+                ) : isRunning ? (
+                  <div style={{ fontSize: 10.5, color: T.muted2, marginTop: 2 }}>
+                    {item.label ? `${item.label} · ` : ""}已等 {fmtSec(elapsed)}
+                  </div>
+                ) : isFailed ? (
+                  <div style={{ fontSize: 10.5, color: T.red, marginTop: 2 }}>
+                    停在这里
                   </div>
                 ) : item.completed_versions && item.total_versions && (
                   <div style={{ fontSize: 10.5, color: T.muted2, marginTop: 2 }}>
@@ -287,13 +304,14 @@ function _friendlyErrorReason(raw) {
   return "通常重试一次就好";
 }
 
-function FailedRetry({ error, onRetry, onEdit, icon, title, hint }) {
+function FailedRetry({ error, onRetry, onEdit, icon, title, hint, task }) {
   const [showRaw, setShowRaw] = React.useState(false);
   const friendly = _friendlyErrorReason(error);
   return (
     <div style={{
-      maxWidth: 680, margin: "40px auto", background: "#fff",
-      border: `1.5px solid ${T.red}`, borderRadius: 16, padding: 28,
+      width: "clamp(230px, calc(100vw - 160px), 680px)", maxWidth: "calc(100% - 24px)",
+      boxSizing: "border-box", margin: "40px auto", background: "#fff",
+      border: `1.5px solid ${T.red}`, borderRadius: 16, padding: "clamp(18px, 4vw, 28px)",
       boxShadow: `0 0 0 5px ${T.redSoft}`, textAlign: "center",
     }}>
       <div style={{ fontSize: 32 }}>{icon || "😅"}</div>
@@ -303,7 +321,8 @@ function FailedRetry({ error, onRetry, onEdit, icon, title, hint }) {
       <div style={{ color: T.muted, fontSize: 13 }}>
         {hint || friendly || "大概率是临时波动, 通常重试一次就好"}
       </div>
-      <div style={{ display: "flex", gap: 10, justifyContent: "center", marginTop: 16 }}>
+      <TaskProgressTimeline task={task} title="停在哪一步" embedded />
+      <div style={{ display: "flex", gap: 10, justifyContent: "center", marginTop: 16, flexWrap: "wrap" }}>
         {onRetry && (
           <button
             onClick={onRetry}

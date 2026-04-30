@@ -19,10 +19,20 @@ import re
 import time
 from typing import Any
 
+from backend.services import copy_progress
 from backend.services import skill_loader
 from shortvideo.ai import get_ai_client
 
 SKILL_SLUG = "公众号文章"
+sanitize_result_for_display = copy_progress.sanitize_result_for_display
+friendly_error_for_display = copy_progress.friendly_error_for_display
+
+_WRITE_STAGES = [
+    {"id": "prepare", "label": "整理写作材料"},
+    {"id": "write", "label": "写长文正文"},
+    {"id": "check", "label": "三层自检"},
+    {"id": "finish", "label": "整理结果"},
+]
 
 
 def _extract_json(text: str, wrap: str = "array") -> Any:
@@ -180,12 +190,28 @@ def gen_outline(topic: str, title: str) -> dict[str, Any]:
 
 # ─── Phase 2 · 长文 2000-3000 字 + 三层自检 ────────────────────
 
-def write_article(topic: str, title: str, outline: dict[str, Any]) -> dict[str, Any]:
+def write_article(
+    topic: str,
+    title: str,
+    outline: dict[str, Any],
+    *,
+    progress_ctx: Any | None = None,
+) -> dict[str, Any]:
     """基于选题+标题+确认的大纲,写 2000-3000 字长文 + 输出三层自检报告。"""
-    skill = skill_loader.load_skill(SKILL_SLUG)
-    persona = skill["references"].get("who-is-qinghuage", "")
-    methodology = skill["references"].get("writing-methodology", "")
-    style = skill["references"].get("style-bible", "")
+    progress = copy_progress.StageTimeline(progress_ctx, _WRITE_STAGES, slow_hint_after_sec=45) if progress_ctx else None
+    if progress:
+        progress.start("prepare", "正在整理标题、大纲和写作规矩", pct=18)
+    try:
+        skill = skill_loader.load_skill(SKILL_SLUG)
+        persona = skill["references"].get("who-is-qinghuage", "")
+        methodology = skill["references"].get("writing-methodology", "")
+        style = skill["references"].get("style-bible", "")
+        if progress:
+            progress.done("prepare", "写作材料已整理", pct=25)
+    except Exception:
+        if progress:
+            progress.fail("prepare", "写作材料没整理好", pct=25)
+        raise
 
     system = f"""你在执行公众号文章 skill 的 Phase 2 · 写作主体。
 身份由下面人设定义,**每一句话都要像清华哥本人说的**。
@@ -225,7 +251,14 @@ def write_article(topic: str, title: str, outline: dict[str, Any]) -> dict[str, 
 直接输出 Markdown 长文(以 `# {title}` 开头,2000-3000 字)。不要任何前言、解释、说明。"""
 
     ai = get_ai_client(route_key="wechat.write")
-    write_r = ai.chat(write_prompt, system=system, deep=False, temperature=0.85, max_tokens=6000)
+    if progress:
+        progress.start("write", "正在写长文正文", pct=32)
+    try:
+        write_r = ai.chat(write_prompt, system=system, deep=False, temperature=0.85, max_tokens=6000)
+    except Exception:
+        if progress:
+            progress.fail("write", "长文正文没有写完", pct=45)
+        raise
     content = (write_r.text or "").strip()
 
     # D-088 fail-fast: content 空就不能进自检.
@@ -234,10 +267,14 @@ def write_article(topic: str, title: str, outline: dict[str, Any]) -> dict[str, 
     # 客户端层 (claude_opus.py / deepseek.py) D-088 已加 transient 重试; 这里兜底:
     # 实在重试都失败, 至少抛清楚的 RuntimeError 让 task 状态 = failed, UI 看到真实原因.
     if not content:
+        if progress:
+            progress.fail("write", "长文正文没有写出来", pct=45)
         raise RuntimeError(
             f"Claude Opus 写长文返回空内容 (write_tokens={write_r.total_tokens}). "
             f"上游可能 max_tokens 全烧 thinking 没出 text block. 请重试一次."
         )
+    if progress:
+        progress.done("write", "长文正文已完成", pct=72)
 
     # 三层自检 — 让 AI 对自己写的文章逐层打分
     check_system = f"""你在执行公众号文章 skill 的 Phase 2 末尾 · 三层自检。
@@ -281,15 +318,25 @@ def write_article(topic: str, title: str, outline: dict[str, Any]) -> dict[str, 
 {content}
 ---"""
     check_ai = get_ai_client(route_key="wechat.self-check")
-    check_r = check_ai.chat(check_prompt, system=check_system, deep=False, temperature=0.2, max_tokens=2000)
+    if progress:
+        progress.start("check", "正在做三层自检", pct=78)
+    try:
+        check_r = check_ai.chat(check_prompt, system=check_system, deep=False, temperature=0.2, max_tokens=2000)
+    except Exception:
+        if progress:
+            progress.fail("check", "三层自检没有跑完", pct=82)
+        raise
     self_check = _extract_json(check_r.text, "object") or {
         "pass": False,
         "summary": "自检解析失败,请人工审阅",
         "raw": check_r.text[:500],
     }
+    if progress:
+        progress.done("check", "三层自检已完成", pct=90)
+        progress.start("finish", "正在整理长文结果", pct=93)
 
     word_count = len(re.sub(r"[#*_`>\-\[\]()\s]", "", content))
-    return {
+    result = {
         "title": title,
         "content": content,
         "word_count": word_count,
@@ -299,6 +346,9 @@ def write_article(topic: str, title: str, outline: dict[str, Any]) -> dict[str, 
             "check": check_r.total_tokens,
         },
     }
+    if progress:
+        progress.done("finish", "长文已整理好", pct=95)
+    return result
 
 
 # ─── 局部重写 (D-036) — 只改选中段,其他不动 ──────────────
@@ -383,6 +433,6 @@ def write_article_async(topic: str, title: str, outline: dict) -> str:
         step="write",
         payload={"topic_preview": topic[:100], "title": title, "outline_keys": list((outline or {}).keys())},
         estimated_seconds=50,
-        progress_text="AI 写长文 (2000-3000 字) + 三层自检...",
-        sync_fn=lambda: write_article(topic, title, outline),
+        progress_text="小华正在写长文 (2000-3000 字) + 三层自检...",
+        sync_fn_with_ctx=lambda ctx: write_article(topic, title, outline, progress_ctx=ctx),
     )

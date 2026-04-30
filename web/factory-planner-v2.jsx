@@ -117,6 +117,7 @@ function PagePlanner({ onNav }) {
           ) : poller.isFailed || poller.isCancelled ? (
             <FailedRetry
               error={poller.error || err}
+              task={poller.task}
               onRetry={retry}
               onEdit={() => { setTaskId(null); setErr(""); setStep("levels"); }}
               icon="🗓️"

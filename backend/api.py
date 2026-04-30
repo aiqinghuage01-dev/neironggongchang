@@ -675,9 +675,13 @@ def _sanitize_task_for_display(task: dict[str, Any] | None) -> dict[str, Any] | 
         or kind.startswith("compliance.")
         or kind.startswith("baokuan.")
         or kind.startswith("touliu.")
+        or kind.startswith("wechat.write")
+        or kind.startswith("voicerewrite.")
+        or kind.startswith("planner.")
     ):
         return task
     from backend.services import hotrewrite_pipeline
+    from backend.services import copy_progress
     out = dict(task)
     if kind.startswith("hotrewrite.write"):
         out["result"] = hotrewrite_pipeline.sanitize_result_for_display(out.get("result"))
@@ -696,6 +700,24 @@ def _sanitize_task_for_display(task: dict[str, Any] | None) -> dict[str, Any] | 
         out["progress_data"] = touliu_pipeline.sanitize_result_for_display(out.get("progress_data"))
         if out.get("error"):
             out["error"] = touliu_pipeline.friendly_error_for_display(out.get("error"))
+    elif kind.startswith("wechat.write"):
+        out["result"] = wechat_pipeline.sanitize_result_for_display(out.get("result"))
+        out["partial_result"] = wechat_pipeline.sanitize_result_for_display(out.get("partial_result"))
+        out["progress_data"] = wechat_pipeline.sanitize_result_for_display(out.get("progress_data"))
+        if out.get("error"):
+            out["error"] = wechat_pipeline.friendly_error_for_display(out.get("error"))
+    elif kind.startswith("voicerewrite."):
+        out["result"] = voicerewrite_pipeline.sanitize_result_for_display(out.get("result"))
+        out["partial_result"] = voicerewrite_pipeline.sanitize_result_for_display(out.get("partial_result"))
+        out["progress_data"] = voicerewrite_pipeline.sanitize_result_for_display(out.get("progress_data"))
+        if out.get("error"):
+            out["error"] = voicerewrite_pipeline.friendly_error_for_display(out.get("error"))
+    elif kind.startswith("planner."):
+        out["result"] = copy_progress.sanitize_result_for_display(out.get("result"))
+        out["partial_result"] = copy_progress.sanitize_result_for_display(out.get("partial_result"))
+        out["progress_data"] = copy_progress.sanitize_result_for_display(out.get("progress_data"))
+        if out.get("error"):
+            out["error"] = copy_progress.friendly_error_for_display(out.get("error"))
     return out
 
 

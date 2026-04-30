@@ -16,11 +16,20 @@ import json
 import re
 from typing import Any
 
+from backend.services import copy_progress
 from backend.services import skill_loader
 from backend.services import tasks as tasks_service
 from shortvideo.ai import get_ai_client
 
 SKILL_SLUG = "content-planner"
+sanitize_result_for_display = copy_progress.sanitize_result_for_display
+friendly_error_for_display = copy_progress.friendly_error_for_display
+
+_WRITE_STAGES = [
+    {"id": "prepare", "label": "整理活动信息"},
+    {"id": "write", "label": "写 6 模块方案"},
+    {"id": "finish", "label": "整理执行清单"},
+]
 
 
 def _extract_json(text: str, wrap: str = "object") -> Any:
@@ -112,9 +121,25 @@ def analyze_event(brief: str) -> dict[str, Any]:
 
 # ─── Step 2 · 基于选定档次出 6 模块完整方案 ──────────────
 
-def write_plan(brief: str, detected: dict[str, Any], level: dict[str, Any]) -> dict[str, Any]:
+def write_plan(
+    brief: str,
+    detected: dict[str, Any],
+    level: dict[str, Any],
+    *,
+    progress_ctx: Any | None = None,
+) -> dict[str, Any]:
     """选定一档目标后,输出活动前/中/后 + 团队/清单/知识沉淀的完整 6 模块。"""
-    skill = skill_loader.load_skill(SKILL_SLUG)
+    progress = copy_progress.StageTimeline(progress_ctx, _WRITE_STAGES, slow_hint_after_sec=40) if progress_ctx else None
+    if progress:
+        progress.start("prepare", "正在整理活动信息和目标档次", pct=18)
+    try:
+        skill = skill_loader.load_skill(SKILL_SLUG)
+        if progress:
+            progress.done("prepare", "活动信息已整理", pct=28)
+    except Exception:
+        if progress:
+            progress.fail("prepare", "活动信息没整理好", pct=25)
+        raise
     system = f"""你在执行《content-planner》skill · 完整策划方案阶段。
 
 ⛔ 红线: 不提价格 · 不建议参会者现场动手
@@ -189,18 +214,33 @@ def write_plan(brief: str, detected: dict[str, Any], level: dict[str, Any]) -> d
   "summary": "一句话总结: 这次活动 N 天 → 总产出 X 条 · 关键稀缺素材是 Y · 节奏是 Z"
 }}"""
     ai = get_ai_client(route_key="planner.write")
-    r = ai.chat(prompt, system=system, deep=False, temperature=0.7, max_tokens=8000)
+    if progress:
+        progress.start("write", "正在写 6 模块完整方案", pct=36)
+    try:
+        r = ai.chat(prompt, system=system, deep=False, temperature=0.7, max_tokens=8000)
+    except Exception:
+        if progress:
+            progress.fail("write", "6 模块方案没有写完", pct=45)
+        raise
+    if progress:
+        progress.done("write", "6 模块方案已返回", pct=82)
+        progress.start("finish", "正在整理执行清单", pct=88)
     # D-094: 解析失败 → raise, 不让 plan={} 空对象当成功 (UI 显示空白方案 + 假绿勾).
     obj = _extract_json(r.text, "object")
     if obj is None or not obj:
+        if progress:
+            progress.fail("finish", "执行清单没有整理出来", pct=88)
         raise RuntimeError(
             f"内容策划·完整方案 LLM 输出非 JSON 或空对象 (tokens={r.total_tokens}). "
             f"输出头: {(r.text or '')[:200]!r}"
         )
-    return {
+    result = {
         "plan": obj,
         "tokens": {"total": r.total_tokens},
     }
+    if progress:
+        progress.done("finish", "策划方案已整理好", pct=94)
+    return result
 
 
 # ─── 异步 (D-037b5) ─────────────────────────────────────
@@ -216,8 +256,8 @@ def write_plan_async(brief: str, detected: dict[str, Any], level: dict[str, Any]
         step="write",
         payload={"brief_preview": brief[:100], "level_label": level_label},
         estimated_seconds=50,
-        progress_text="AI 写 6 模块完整方案...",
-        sync_fn=lambda: write_plan(brief, detected, level),
+        progress_text="小华正在写 6 模块完整方案...",
+        sync_fn_with_ctx=lambda ctx: write_plan(brief, detected, level, progress_ctx=ctx),
     )
 
 

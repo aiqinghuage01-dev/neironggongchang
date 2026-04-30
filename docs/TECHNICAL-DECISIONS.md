@@ -1356,3 +1356,24 @@ OpenAI SDK 默认 retry 与项目 `with_retry` 叠加, 会把 OpenClaw/DeepSeek 
 - `tests/test_touliu_progress.py` 覆盖 `n=1` 四阶段、内容回传不完整失败保留阶段、任务详情/列表清洗。
 - `scripts/e2e_touliu_progress.js` no-credit 浏览器闭环覆盖 slow、parse failed、task failed friendly、ok、
   390px 无横向裁切。
+
+
+## D-131 - 写文案长任务复用阶段时间线 (2026-05-01)
+
+**触发**: T-100 要求公众号长文、录音改写、内容策划不再黑箱等待。第一阶段只暴露真实阶段
+和失败停点, 不拆长文段落, 不改变 LLM 输出语义, 不增加 credits。
+
+**决策**:
+- 新增 `backend/services/copy_progress.py` 作为文字类长任务的阶段时间线 helper, 只写
+  `tasks.partial_result` / `progress_data`, 不参与 prompt、路由、模型输出。
+- 公众号长文、录音改写、内容策划写作阶段改用 `sync_fn_with_ctx`, 在原有串行调用前后写
+  prepare/write/check/finish 等阶段快照。
+- `/api/tasks` 和 `/api/tasks/{id}` 对 `wechat.write` / `voicerewrite.*` / `planner.*`
+  做展示清洗和错误白话化, 递归移除 `token/route/model/provider/prompt/raw/engine/api` 等内部字段。
+- 前端复用 `LoadingProgress` / `FailedRetry` / `TaskProgressTimeline`, running 显示阶段时间线,
+  failed 显示“停在哪一步”。公众号手动写长文改为保存 `wechat:write` task id, 切走后可恢复进度。
+
+**验证**:
+- `tests/test_copy_progress_timelines.py` 覆盖三条 pipeline 阶段时间线、失败停点、task 出口清洗。
+- `scripts/e2e_copy_timelines.js` no-credit 浏览器闭环覆盖 wechat/voicerewrite/planner 的
+  slow、failed、ok, 以及 390px 无横向裁切。

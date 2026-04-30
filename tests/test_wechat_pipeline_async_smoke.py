@@ -48,7 +48,7 @@ def mock_write_article(monkeypatch):
     """
     calls = []
 
-    def fake_write(topic, title, outline):
+    def fake_write(topic, title, outline, **_kwargs):
         calls.append({"topic": topic, "title": title, "outline": outline})
         return {
             "article_html": "<p>fake</p>",
@@ -66,13 +66,16 @@ def mock_write_article(monkeypatch):
 
     def fake_run_async(*, kind, label=None, ns=None, page_id=None, step=None,
                        payload=None, estimated_seconds=None,
-                       progress_text=None, sync_fn):
+                       progress_text=None, sync_fn=None, sync_fn_with_ctx=None):
         task_id = tasks_service.create_task(
             kind=kind, label=label, ns=ns, page_id=page_id, step=step,
             payload=payload, estimated_seconds=estimated_seconds,
         )
         try:
-            result = sync_fn()
+            if sync_fn_with_ctx is not None:
+                result = sync_fn_with_ctx(tasks_service.TaskContext(task_id))
+            else:
+                result = sync_fn()
             tasks_service.finish_task(task_id, result=result, status="ok")
         except Exception as e:
             tasks_service.finish_task(task_id, error=str(e), status="failed")

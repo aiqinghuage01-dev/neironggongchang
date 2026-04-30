@@ -45,6 +45,27 @@ function PageWechat({ onNav }) {
   // D-064 图引擎 chip
   const [imgEngine, setImgEngine, defaultImgEngine, isImgOverride] = useImageEngine();
 
+  const [writeTaskId, setWriteTaskId] = useTaskPersist("wechat:write");
+  const writePoller = useTaskPoller(writeTaskId, {
+    interval: 2500,
+    onComplete: (result) => {
+      if (_usableWechatArticle(result)) {
+        setArticle(result);
+        setErr("");
+      } else {
+        setErr("后台说写完了, 但正文是空的。请回到大纲后重新生成。");
+      }
+      setLoading(false);
+      setStep("write");
+      setWriteTaskId(null);
+    },
+    onError: (msg) => {
+      setErr(msg || "长文没写成");
+      setLoading(false);
+      setStep("write");
+    },
+  });
+
   // 统一模式: 立即跳 step + 清空目标数据 + loading=true, API 失败时 step 回退
   async function runStep({ nextStep, rollbackStep, clearSetter, apiCall }) {
     if (clearSetter) clearSetter(null);
@@ -136,7 +157,9 @@ function PageWechat({ onNav }) {
       });
       const writeR = await runStep_("write", async () => {
         // D-037b6: write 异步化, autoFlow 用 apiPostThenWait 自动轮询 task 完成
-        const r = await apiPostThenWait("/api/wechat/write", { topic: topic.trim(), title, outline: outlineR });
+        const r = await apiPostThenWait("/api/wechat/write", { topic: topic.trim(), title, outline: outlineR }, {
+          onProgress: (task) => update("write", { task, sub: task.progress_text || "长文正在写" }),
+        });
         setArticle(r); return r;
       });
 
@@ -153,7 +176,9 @@ function PageWechat({ onNav }) {
           try {
             const imgR = await runStep_(key, async () => {
               // D-037b6: section-image 异步化, autoFlow 用 apiPostThenWait 自动等任务完成
-              return await apiPostThenWait("/api/wechat/section-image", { prompt: finalPlans[i].image_prompt, size: "16:9", engine: imgEngine });
+              return await apiPostThenWait("/api/wechat/section-image", { prompt: finalPlans[i].image_prompt, size: "16:9", engine: imgEngine }, {
+                onProgress: (task) => update(key, { task, sub: task.progress_text || "配图正在生成" }),
+              });
             });
             finalPlans[i] = { ...finalPlans[i], status: "done", mmbiz_url: imgR.mmbiz_url, media_url: imgR.media_url, elapsed_sec: imgR.elapsed_sec };
             setImagePlans([...finalPlans]);
@@ -212,14 +237,20 @@ function PageWechat({ onNav }) {
   }
 
   function writeArticle() {
-    return runStep({
-      nextStep: "write", rollbackStep: "outline", clearSetter: setArticle,
-      apiCall: async () => {
-        // D-037b6: write 异步化, 用 apiPostThenWait 自动等任务完成 (后台真在 daemon thread 跑, 浏览器轻量轮询不会被节流断)
-        const r = await apiPostThenWait("/api/wechat/write", { topic: topic.trim(), title: pickedTitle, outline });
-        setArticle(r);
-      },
-    });
+    setArticle(null);
+    setStep("write");
+    setErr("");
+    setLoading(true);
+    setWriteTaskId(null);
+    return api.post("/api/wechat/write", { topic: topic.trim(), title: pickedTitle, outline })
+      .then((r) => {
+        setWriteTaskId(r.task_id);
+      })
+      .catch((e) => {
+        setErr(e.message);
+        setStep("outline");
+      })
+      .finally(() => setLoading(false));
   }
 
   function updateArticleContent(content) {
@@ -370,7 +401,7 @@ function PageWechat({ onNav }) {
   }
 
   // ─── 工作流持久化 (D-016) · 刷新浏览器不丢中间态 ───────
-  const wfState = { step, topic, titles, titleRound, pickedTitle, outline, article, imagePlans, htmlResult, coverResult, pushResult, autoMode, skipImages, autoSteps };
+  const wfState = { step, topic, titles, titleRound, pickedTitle, outline, article, imagePlans, htmlResult, coverResult, pushResult, autoMode, skipImages, autoSteps, writeTaskId };
   const wfRestore = (s) => {
     if (s.step) setStep(s.step === "auto" ? "topic" : s.step); // auto step 挂起不恢复(重跑成本高),回落到 topic
     if (s.topic != null) setTopic(s.topic);
@@ -389,8 +420,10 @@ function PageWechat({ onNav }) {
     if (s.pushResult) setPushResult(s.pushResult);
     // autoMode/autoSteps 不恢复 · pipeline 不能续跑
     if (s.skipImages != null) setSkipImages(s.skipImages);
+    if (s.writeTaskId) setWriteTaskId(s.writeTaskId);
   };
   const wf = useWorkflowPersist({ ns: "wechat", state: wfState, onRestore: wfRestore });
+  const showWechatError = err && !(step === "write" && (writePoller.isFailed || writePoller.isCancelled) && !article);
 
   function startAuto() {
     if (!topic.trim()) return;
@@ -410,7 +443,7 @@ function PageWechat({ onNav }) {
         <WfRestoreBanner show={wf.hasSnapshot} onDismiss={wf.dismissSnapshot}
           onClear={() => { reset(); wf.dismissSnapshot(); }}
           label="公众号工作流" />
-        {err && (
+        {showWechatError && (
           <div style={{ maxWidth: 820, margin: "16px auto 0" }}>
             <ErrorBanner err={err} />
           </div>
@@ -419,7 +452,8 @@ function PageWechat({ onNav }) {
         {step === "topic"   && <WxStepTopic topic={topic} setTopic={setTopic} onGo={genTitles} onAuto={startAuto} loading={loading} skillInfo={skillInfo} skipImages={skipImages} setSkipImages={setSkipImages} />}
         {step === "titles"  && <WxStepTitles titles={titles} loading={loading} onPick={genOutline} onPrev={() => setStep("topic")} onRegen={() => genTitles({ regen: true })} autoMode={autoMode} />}
         {step === "outline" && <WxStepOutline outline={outline} setOutline={setOutline} title={pickedTitle} topic={topic} loading={loading} onPrev={() => setStep("titles")} onNext={writeArticle} onRegen={() => genOutline(pickedTitle)} />}
-        {step === "write"   && <WxStepWrite article={article} loading={loading} onPrev={() => setStep("outline")} onNext={planImages} onRewrite={writeArticle} onRewriteSelection={rewriteSelection} onRecovered={setArticle} onArticleChange={updateArticleContent} onNav={onNav} pickedTitle={pickedTitle} topic={topic} outline={outline} />}
+        {step === "write"   && <WxStepWrite article={article} loading={loading} onPrev={() => setStep("outline")} onNext={planImages} onRewrite={writeArticle} onRewriteSelection={rewriteSelection} onRecovered={setArticle} onArticleChange={updateArticleContent} onNav={onNav} pickedTitle={pickedTitle} topic={topic} outline={outline}
+          progressTask={writePoller.task} progressTaskId={writeTaskId} writeFailed={writePoller.isFailed} writeCancelled={writePoller.isCancelled} writeError={writePoller.error || err} onCancelWrite={() => writePoller.cancel()} />}
         {step === "images"  && <WxStepImages plans={imagePlans} setPlans={setImagePlans} onGen={generateOneImage} loading={loading} onPrev={() => setStep("write")} onNext={() => assembleHtml()} onRegen={planImages}
           imgChip={{ engine: imgEngine, onChange: setImgEngine, defaultEngine: defaultImgEngine, isOverride: isImgOverride }} />}
         {step === "html"    && <WxStepHtml result={htmlResult} loading={loading} onPrev={() => setStep("images")} onNext={genCover} onSwitchTemplate={assembleHtml} />}
@@ -736,6 +770,18 @@ function WxStepWriteRecover({ topic, pickedTitle, outline, onRecovered, onPrev, 
       />
     );
   }
+  if (activeTaskId && poller.task && (poller.isFailed || poller.isCancelled)) {
+    return (
+      <FailedRetry
+        error={poller.error || recoverErr}
+        task={poller.task}
+        onRetry={onRewrite}
+        onEdit={onPrev}
+        icon="✍️"
+        title={poller.isCancelled ? "任务已取消" : "长文没写成功"}
+      />
+    );
+  }
 
   return (
     <div style={{ padding: "80px 40px 120px", maxWidth: 720, margin: "0 auto" }}>
@@ -776,7 +822,11 @@ function WxStepWriteRecover({ topic, pickedTitle, outline, onRecovered, onPrev, 
   );
 }
 
-function WxStepWrite({ article, loading, onPrev, onNext, onRewrite, onRewriteSelection, onRecovered, onArticleChange, onNav, pickedTitle, topic, outline }) {
+function WxStepWrite({
+  article, loading, onPrev, onNext, onRewrite, onRewriteSelection, onRecovered,
+  onArticleChange, onNav, pickedTitle, topic, outline,
+  progressTask, progressTaskId, writeFailed, writeCancelled, writeError, onCancelWrite,
+}) {
   const writePhases = [
     { text: "读完整人设 + 方法论 + 风格圣经", sub: "把清华哥常用表达和写作规矩带上" },
     { text: "铺开场判断", sub: "原则① 先定性再解释 · 避免「不此地无银」" },
@@ -827,6 +877,29 @@ function WxStepWrite({ article, loading, onPrev, onNext, onRewrite, onRewriteSel
     "口吻更口语", "去掉营销味", "加反差钩子",
   ];
 
+  if ((progressTaskId || progressTask) && !article && !writeFailed && !writeCancelled) {
+    return (
+      <LoadingProgress
+        task={progressTask}
+        icon="✍️"
+        title="长文正在写"
+        subtitle="写完后会自动显示正文"
+        onCancel={onCancelWrite}
+      />
+    );
+  }
+  if ((writeFailed || writeCancelled) && !article) {
+    return (
+      <FailedRetry
+        error={writeError}
+        task={progressTask}
+        onRetry={onRewrite}
+        onEdit={onPrev}
+        icon="✍️"
+        title={writeCancelled ? "任务已取消" : "长文没写成功"}
+      />
+    );
+  }
   if (loading) return <Spinning icon="✍️" phases={writePhases} />;
   if (!article) {
     return (
@@ -1449,7 +1522,7 @@ function WxStepPush({ result, loading, onPrev, onReset, onNav }) {
 }
 
 // ─── 🚀 全自动进度页 (P0) ───────────────────────────────
-// 显示整条 pipeline 的每步进度,用户不用再点"下一步",挂了可中断接管
+// 显示整条自动流程的每步进度,用户不用再点"下一步",挂了可中断接管
 function WxAutoProgress({ steps, title, err, onAbort, skipImages }) {
   const [now, setNow] = React.useState(Date.now());
   React.useEffect(() => {
@@ -1467,7 +1540,7 @@ function WxAutoProgress({ steps, title, err, onAbort, skipImages }) {
     <div style={{ padding: "32px 40px 120px", maxWidth: 820, margin: "0 auto" }}>
       <div style={{ marginBottom: 18 }}>
         <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 6, display: "flex", alignItems: "center", gap: 10 }}>
-          🚀 全自动跑 pipeline 中
+          🚀 全自动流程进行中
           {allDone && <span style={{ fontSize: 12, color: T.brand, background: T.brandSoft, padding: "3px 10px", borderRadius: 100 }}>✓ 已到封面</span>}
           {failed && <span style={{ fontSize: 12, color: T.red, background: T.redSoft, padding: "3px 10px", borderRadius: 100 }}>有步骤挂了</span>}
         </div>
@@ -1525,9 +1598,10 @@ function WxAutoProgress({ steps, title, err, onAbort, skipImages }) {
                 </div>
                 {(cur || s.err) && (
                   <div style={{ fontSize: 12, color: s.err ? T.red : T.muted, marginTop: 3, lineHeight: 1.6 }}>
-                    {s.err || s.sub}
+                    {s.err || s.task?.progress_text || s.sub}
                   </div>
                 )}
+                {s.task && <TaskProgressTimeline task={s.task} title="这一步进度" embedded />}
               </div>
             </div>
           );

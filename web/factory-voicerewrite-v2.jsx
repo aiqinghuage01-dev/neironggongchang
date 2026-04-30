@@ -216,6 +216,7 @@ function PageVoicerewrite({ onNav }) {
           ) : (poller.isFailed || poller.isCancelled) && versions.length === 0 ? (
             <FailedRetry
               error={poller.error || err}
+              task={poller.task}
               onRetry={retry}
               onEdit={() => { setTaskId(null); setErr(""); setStep("angles"); }}
               icon="🎙️"

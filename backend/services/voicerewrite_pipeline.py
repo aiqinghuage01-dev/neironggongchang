@@ -16,11 +16,20 @@ import json
 import re
 from typing import Any
 
+from backend.services import copy_progress
 from backend.services import skill_loader
 from backend.services import tasks as tasks_service
 from shortvideo.ai import get_ai_client
 
 SKILL_SLUG = "录音文案改写"
+sanitize_result_for_display = copy_progress.sanitize_result_for_display
+friendly_error_for_display = copy_progress.friendly_error_for_display
+
+_WRITE_STAGES = [
+    {"id": "prepare", "label": "整理录音骨架"},
+    {"id": "write", "label": "改写正文"},
+    {"id": "check", "label": "整理说明和自检"},
+]
 
 
 def _extract_json(text: str, wrap: str = "object") -> Any:
@@ -109,10 +118,26 @@ def analyze_recording(transcript: str) -> dict[str, Any]:
 
 # ─── Step 2-6 · 写正文 + 改写说明 + 自检 ─────────────────
 
-def write_script(transcript: str, skeleton: dict[str, Any], angle: dict[str, Any]) -> dict[str, Any]:
+def write_script(
+    transcript: str,
+    skeleton: dict[str, Any],
+    angle: dict[str, Any],
+    *,
+    progress_ctx: Any | None = None,
+) -> dict[str, Any]:
     """基于骨架和选定角度,按 Step 3-6 写正文 + 改写说明 + 自检清单。"""
-    skill = skill_loader.load_skill(SKILL_SLUG)
-    checklist = skill["references"].get("rewrite-checklist", "")
+    progress = copy_progress.StageTimeline(progress_ctx, _WRITE_STAGES, slow_hint_after_sec=40) if progress_ctx else None
+    if progress:
+        progress.start("prepare", "正在整理录音骨架和切入角度", pct=18)
+    try:
+        skill = skill_loader.load_skill(SKILL_SLUG)
+        checklist = skill["references"].get("rewrite-checklist", "")
+        if progress:
+            progress.done("prepare", "录音骨架已整理", pct=28)
+    except Exception:
+        if progress:
+            progress.fail("prepare", "录音骨架没整理好", pct=25)
+        raise
     system = f"""你在执行《录音文案改写》skill 的 Step 3-6 · 轻改写 + 自检。
 严格按下面 skill 方法论执行:观点不变、口吻不丢、经历保留、只删无效重复。
 严禁把录音改成广告语,严禁大段删除用户的经历和故事。
@@ -167,7 +192,17 @@ def write_script(transcript: str, skeleton: dict[str, Any], angle: dict[str, Any
 }}"""
 
     ai = get_ai_client(route_key="voicerewrite.write")
-    r = ai.chat(write_prompt, system=system, deep=False, temperature=0.7, max_tokens=5000)
+    if progress:
+        progress.start("write", "正在按选定角度改写正文", pct=36)
+    try:
+        r = ai.chat(write_prompt, system=system, deep=False, temperature=0.7, max_tokens=5000)
+    except Exception:
+        if progress:
+            progress.fail("write", "改写正文没有写完", pct=45)
+        raise
+    if progress:
+        progress.done("write", "改写正文已返回", pct=78)
+        progress.start("check", "正在整理改写说明和自检", pct=84)
     obj = _extract_json(r.text, "object") or {}
 
     content = (obj.get("script") or "").strip()
@@ -175,18 +210,23 @@ def write_script(transcript: str, skeleton: dict[str, Any], angle: dict[str, Any
     # voicerewrite 单次 LLM 就出 script+self_check, 即使 self_check 已退化到 overall_pass=False
     # 也别让 task 以 ok 状态结存空 script (UI 看 ok 不会去重跑).
     if not content:
+        if progress:
+            progress.fail("check", "正文没有整理出来", pct=84)
         raise RuntimeError(
             f"录音改写 LLM 返空 script (tokens={r.total_tokens}). "
             f"可能 JSON 解析失败或上游 thinking 没出 text. 请重试一次."
         )
     word_count = obj.get("word_count") or len(re.sub(r"\s+", "", content))
-    return {
+    result = {
         "content": content,
         "word_count": int(word_count) if isinstance(word_count, (int, str)) and str(word_count).isdigit() else len(content),
         "notes": obj.get("notes") or [],
         "self_check": obj.get("self_check") or {"overall_pass": False, "summary": "自检解析失败"},
         "tokens": {"total": r.total_tokens},
     }
+    if progress:
+        progress.done("check", "改写说明和自检已整理", pct=94)
+    return result
 
 
 # ─── 异步 (D-037b5) ─────────────────────────────────────
@@ -202,6 +242,6 @@ def write_script_async(transcript: str, skeleton: dict[str, Any], angle: dict[st
         step="write",
         payload={"transcript_len": len(transcript), "angle_label": angle_label},
         estimated_seconds=50,
-        progress_text="AI 改写 + 自检 (保留口吻和经历)...",
-        sync_fn=lambda: write_script(transcript, skeleton, angle),
+        progress_text="小华正在改写 + 自检 (保留口吻和经历)...",
+        sync_fn_with_ctx=lambda ctx: write_script(transcript, skeleton, angle, progress_ctx=ctx),
     )
