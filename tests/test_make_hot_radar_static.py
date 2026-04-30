@@ -15,11 +15,13 @@ def test_make_page_fetches_hot_radar_pool_and_batches_three():
 
 
 def test_hot_radar_card_matches_requested_action_card():
+    assert "function HotRadarFlameBadge" in SRC
     assert "function HotRadarCard" in SRC
     assert "做成视频" in SRC
     assert "✨ 匹配你定位" in SRC
     assert "今日最热" in SRC
     assert "🔥" in SRC
+    assert 'background: "#fff"' in SRC
     assert "linear-gradient(135deg, #ff8a1d" not in SRC
 
 

@@ -4,11 +4,12 @@
 
 ---
 
-## 当前状态 (2026-04-30 · T-072 研发部状态面板显示总控活动)
+## 当前状态 (2026-04-30 · T-073 做视频热点排行火焰视觉修正)
 
-**版本**: v0.8.11-agent-dashboard-controller — 研发部状态面板把 `NRG 总控` 作为第一张上岗卡显示, 同步展示总控接管审计; 老板能直接看见主控是否正在手动收口。
+**版本**: v0.8.12-hot-radar-visual — 做视频页热点排行火焰改为白底 emoji 热度 badge, 去掉生硬红橙块; 热点卡同样使用白底热度 badge, 整体颜色更收敛。
 
 ### 当前进行
+- T-073 总控已完成: 做视频页热点排行头部和热点卡热度区改为白底 + emoji `🔥` 的轻量 badge, 卡片背景与边框从偏橙改为白底/浅米灰, 避免红橙色块过生。验证: `pytest -q tests/test_make_hot_radar_static.py` 通过; Playwright 打开 `?page=make&v=t073-white-fire`, 截图已读确认红块消失; 点击“换一批”后仍正常切批, console error=0、pageerror=0。报告 `docs/agent-handoff/CONTROLLER_T073_HOT_RADAR_WHITE_FIRE_20260430.md`。
 - T-072 总控已完成: 研发部状态面板现在显示 `NRG 总控` 卡片; 主工作区有未提交改动或总控领取 controller 任务时显示“工作中”; `/api/status` 增加 `delegation` 总控接管审计, 页面新增“总控接管”区块并补内联 favicon 清掉 404 噪音。验证: `python3 -m py_compile scripts/agent_dashboard.py`; `curl http://127.0.0.1:8765/api/status` 可见 `slots[0].controller=true` 和 `delegation.total_takeovers=17`; Playwright 截图已读 `.playwright-cli/page-2026-04-30T08-32-13-976Z.png`, console error=0, network 仅 `/api/status`/`/api/log` 200。报告 `docs/agent-handoff/CONTROLLER_T072_DASHBOARD_CONTROLLER_VISIBILITY_20260430.md`。
 - T-071 总控已完成: 做视频页热点雷达不再用纯业务搜索保底当主结果, 后端按本地 `热点雷达-学员版` 逻辑抓 TopHub 百度/微博/抖音/知乎热榜, 交错输出“大新闻 / 行业相关 / 本地热点”; 外部热榜失败时才用同三类结构保底。前端去掉红色方块图标, 改成 `🔥91` 热度样式; 热点卡展示三类标签, “换一批”按 3 条一组轮换。验证: `curl /api/hot-topics?limit=6` 返回三类交错真实热点; Playwright 桌面/移动截图已读, 换批后仍保留三类; targeted pytest 通过; full pytest 通过。报告 `docs/agent-handoff/CONTROLLER_T071_HOT_RADAR_SKILL_CORRECTION_20260430.md`。
 - T-070 多 Agent 流程护栏已补: 正常功能开发默认派 content/media/qa/review, 总控只做拆分、收件箱、合并、最终验收; 总控若要关闭 `content/media/qa/review` 任务, 队列命令必须带 `--takeover-reason`, 并可用 `python3 scripts/agent_delegation_audit.py` 审计接管比例。
@@ -70,6 +71,7 @@
 - 额外 QA cmux 脚本已改为 socket 不可用时只准备 worktree, 不再强行 fallback 打开多个空白窗口。
 
 ### 总控审查证据
+- T-073 报告: `docs/agent-handoff/CONTROLLER_T073_HOT_RADAR_WHITE_FIRE_20260430.md`; Playwright 截图 `/tmp/nrg_hot_radar_t073/t073-make-hot-radar-white-fire.png` 和 `/tmp/nrg_hot_radar_t073/t073-make-hot-radar-white-fire-next.png` 已读, 可见白底 `🔥91/🔥79` badge; `换一批` 点击后正常进入第 2/4 批; console error=0, 仅 Babel 开发 warning。
 - T-072 报告: `docs/agent-handoff/CONTROLLER_T072_DASHBOARD_CONTROLLER_VISIBILITY_20260430.md`; `/api/status` 第一张上岗卡为 `NRG 总控`, 当前主工作区 dirty 时显示工作中; `delegation` 汇总历史接管 17 次; Playwright 截图 `.playwright-cli/page-2026-04-30T08-32-13-976Z.png` 已读, console error=0, network `/api/status`/`/api/log` 均 200。
 - T-071 报告: `docs/agent-handoff/CONTROLLER_T071_HOT_RADAR_SKILL_CORRECTION_20260430.md`; API live `limit=6` 返回 `大新闻/行业相关/本地热点` 交错结果, `fetched_from=hot-topic-radar`; Playwright 桌面截图 `/tmp/nrg_hot_radar_t071/make-hot-radar-final.png`, 换批截图 `/tmp/nrg_hot_radar_t071/make-hot-radar-next-final.png`, 移动截图 `/tmp/nrg_hot_radar_t071/make-hot-radar-mobile-final.png`; targeted pytest 和 full pytest 通过。
 - T-055 独立 QA 报告: `/Users/black.chen/Desktop/nrg-worktrees/qa/docs/agent-handoff/QA_T055_REPAIR_REGRESSION_20260430.md`, commit `606aea9`; 结果通过, 不烧 credits。

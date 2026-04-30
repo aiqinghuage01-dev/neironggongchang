@@ -771,20 +771,14 @@ function HotRankPanel({ topics, batch, batchIndex, batchCount, onTake, onRefresh
         display: "flex", alignItems: "center", gap: 12, marginBottom: 14,
         padding: "0 2px", flexWrap: "wrap",
       }}>
-        <div style={{
-          minWidth: 76, display: "flex", alignItems: "center", justifyContent: "center",
-          flexShrink: 0, gap: 3,
-        }}>
-          <span style={{ fontSize: 30, lineHeight: 1 }}>🔥</span>
-          <span style={{ fontSize: 31, lineHeight: 1, fontWeight: 900, color: "#b76816" }}>{topHeat}</span>
-        </div>
+        <HotRadarFlameBadge heat={topHeat} compact />
         <div style={{ flex: "1 1 240px", minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
-            <span style={{ fontSize: 17, fontWeight: 800, color: T.text }}>热点雷达</span>
-            <span style={{ fontSize: 11.5, color: T.muted2 }}>每批 3 条: 大新闻 / 行业相关 / 本地热点</span>
+            <span style={{ fontSize: 17, fontWeight: 800, color: T.text }}>热点排行</span>
+            <span style={{ fontSize: 11.5, color: T.muted2 }}>选一条, 直接进入热点文案改写</span>
           </div>
           <div style={{ fontSize: 11, color: T.muted2, marginTop: 2 }}>
-            来自热点雷达 · 不满意直接换一批 · 第 {batchIndex + 1}/{batchCount} 批
+            来自热点雷达 · 大新闻 / 行业 / 本地 · 不满意直接换一批 · 第 {batchIndex + 1}/{batchCount} 批
           </div>
         </div>
         <button onClick={onNextBatch}
@@ -836,6 +830,31 @@ function HotRankPanel({ topics, batch, batchIndex, batchCount, onTake, onRefresh
   );
 }
 
+function HotRadarFlameBadge({ heat, compact = false }) {
+  return (
+    <div style={{
+      flex: "0 0 auto",
+      display: "inline-flex", alignItems: "center", justifyContent: "center", gap: compact ? 6 : 8,
+      minWidth: compact ? 64 : 86, height: compact ? 48 : 54,
+      padding: compact ? "0 12px" : "0 16px",
+      borderRadius: compact ? 16 : 18,
+      background: "#fff",
+      border: "1px solid #eee5d8",
+      boxShadow: "0 10px 22px rgba(68, 48, 25, 0.08)",
+    }}>
+      <span style={{ fontSize: compact ? 24 : 26, lineHeight: 1 }}>🔥</span>
+      {typeof heat !== "undefined" && (
+        <span style={{
+          fontSize: compact ? 24 : 28, lineHeight: 1,
+          fontWeight: 900, color: "#765f39", letterSpacing: 0,
+        }}>
+          {heat}
+        </span>
+      )}
+    </div>
+  );
+}
+
 function HotRadarChip({ children, tone = "gray" }) {
   const palette = {
     pink: { bg: T.pinkSoft, fg: T.pink },
@@ -872,26 +891,25 @@ function HotRadarCard({ t, idx, onTake, onSeed }) {
   return (
     <div style={{
       padding: "22px 26px", borderRadius: 24,
-      background: "#fffdfa",
-      border: `1px solid ${idx === 0 ? "#f1d9bf" : "#f2e6d8"}`,
+      background: "#fff",
+      border: `1px solid ${idx === 0 ? "#e9ddd0" : "#eee7dc"}`,
       minHeight: 148, display: "flex", alignItems: "center", gap: 24,
-      flexWrap: "wrap", boxShadow: idx === 0 ? "0 14px 28px rgba(84, 52, 22, 0.07)" : "0 8px 20px rgba(84, 52, 22, 0.035)",
+      flexWrap: "wrap", boxShadow: idx === 0 ? "0 14px 28px rgba(68, 48, 25, 0.06)" : "0 8px 20px rgba(68, 48, 25, 0.03)",
       transition: "all 0.15s",
     }}
       onMouseEnter={e => {
-        e.currentTarget.style.borderColor = "#d8b58e";
-        e.currentTarget.style.boxShadow = "0 16px 34px rgba(84, 52, 22, 0.10)";
+        e.currentTarget.style.borderColor = "#d9cdbf";
+        e.currentTarget.style.boxShadow = "0 16px 34px rgba(68, 48, 25, 0.08)";
       }}
       onMouseLeave={e => {
-        e.currentTarget.style.borderColor = idx === 0 ? "#f1d9bf" : "#f2e6d8";
-        e.currentTarget.style.boxShadow = idx === 0 ? "0 14px 28px rgba(84, 52, 22, 0.07)" : "0 8px 20px rgba(84, 52, 22, 0.035)";
+        e.currentTarget.style.borderColor = idx === 0 ? "#e9ddd0" : "#eee7dc";
+        e.currentTarget.style.boxShadow = idx === 0 ? "0 14px 28px rgba(68, 48, 25, 0.06)" : "0 8px 20px rgba(68, 48, 25, 0.03)";
       }}>
       <div style={{
         width: "clamp(82px, 8vw, 108px)", flex: "0 1 108px", display: "flex",
         alignItems: "center", justifyContent: "center",
       }}>
-        <span style={{ fontSize: "clamp(28px, 3vw, 34px)", lineHeight: 1, marginRight: 4 }}>🔥</span>
-        <span style={{ fontSize: "clamp(30px, 3.2vw, 36px)", lineHeight: 1, fontWeight: 900, color: "#b76816" }}>{heat}</span>
+        <HotRadarFlameBadge heat={heat} />
       </div>
 
       <div style={{ flex: "1 1 360px", minWidth: 0 }}>
