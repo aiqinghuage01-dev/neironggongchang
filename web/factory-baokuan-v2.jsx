@@ -29,6 +29,7 @@ function PageBaokuan({ onNav }) {
   const [versions, setVersions] = React.useState([]);
   const [activeVersionIdx, setActiveVersionIdx] = React.useState(0);
   const [taskId, setTaskId] = useTaskPersist("baokuan");  // D-037b5
+  const partialSeenRef = React.useRef({});
 
   const [skillInfo, setSkillInfo] = React.useState(null);
   React.useEffect(() => { api.get("/api/baokuan/skill-info").then(setSkillInfo).catch(() => {}); }, []);
@@ -56,7 +57,7 @@ function PageBaokuan({ onNav }) {
       setActiveVersionIdx(0);
       setTaskId(null);
     },
-    onError: (e) => { setErr(e || "改写失败"); /* 留 taskId 让 FailedRetry 渲染 */ },
+    onError: (e) => { setErr(e || "改写失败"); setStep("result"); /* 留 taskId 让 FailedRetry/partial 渲染 */ },
   });
 
   // 检测 make 那边丢的 baokuan_seed_text, 自动填 textarea
@@ -142,6 +143,26 @@ function PageBaokuan({ onNav }) {
   };
   const wf = useWorkflowPersist({ ns: "baokuan", state: wfState, onRestore: wfRestore });
 
+  const partialResult = (poller.isRunning || poller.isFailed) ? (poller.task?.partial_result || null) : null;
+  const partialUnits = Array.isArray(partialResult?.versions) && partialResult.versions.length
+    ? partialResult.versions
+    : (Array.isArray(partialResult?.units) ? partialResult.units : []);
+  const liveVersions = partialUnits.map((v, idx) => ({
+    ...v,
+    key: v.key || v.unit_id || `V${idx + 1}`,
+    label: v.label || "",
+    gen_id: v.gen_id || `${v.key || v.unit_id || idx}-${idx}`,
+  }));
+  const displayVersions = liveVersions.length ? liveVersions : versions;
+  const showInlineError = err && !(step === "result" && (poller.isFailed || poller.isCancelled));
+
+  React.useEffect(() => {
+    if (!taskId || !liveVersions.length) return;
+    if (partialSeenRef.current[taskId]) return;
+    partialSeenRef.current[taskId] = true;
+    setActiveVersionIdx(0);
+  }, [taskId, liveVersions.length]);
+
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", background: T.bg, position: "relative", overflow: "hidden" }}>
       <BkHeader current={step} onBack={() => onNav("home")} skillInfo={skillInfo} />
@@ -154,7 +175,7 @@ function PageBaokuan({ onNav }) {
           onClear={() => { reset(); wf.dismissSnapshot(); }}
           label="爆款改写工作流" />
         {/* D-086: 走全站 InlineError */}
-        {err && <InlineError err={err} />}
+        {showInlineError && <InlineError err={err} />}
         {step === "input" && (
           <BkStepInput
             text={text} setText={setText}
@@ -165,7 +186,7 @@ function PageBaokuan({ onNav }) {
           />
         )}
         {step === "result" && (
-          poller.isRunning ? (
+          poller.isRunning && displayVersions.length === 0 ? (
             <React.Fragment>
               {dna && <BkDnaCard dna={dna} />}
               <LoadingProgress
@@ -177,18 +198,31 @@ function PageBaokuan({ onNav }) {
               />
             </React.Fragment>
           ) : poller.isFailed || poller.isCancelled ? (
-            <FailedRetry
-              error={poller.error || err}
-              onRetry={retry}
-              onEdit={() => { setTaskId(null); setErr(""); setStep("input"); }}
-              icon="💥"
-              title={poller.isCancelled ? "任务已取消" : "这次没改写出来"}
-            />
+            displayVersions.length === 0 ? (
+              <FailedRetry
+                error={poller.error || err}
+                onRetry={retry}
+                onEdit={() => { setTaskId(null); setErr(""); setStep("input"); }}
+                icon="💥"
+                title={poller.isCancelled ? "任务已取消" : "这次没改写出来"}
+                hint={poller.isCancelled ? "页面已停止等待，不会继续自动追加版本。" : null}
+              />
+            ) : (
+              <BkStepResult
+                dna={dna} versions={displayVersions} loading={false}
+                activeVersionIdx={activeVersionIdx} setActiveVersionIdx={setActiveVersionIdx}
+                onPrev={() => setStep("input")} onReset={reset} onNav={onNav}
+                progressTask={poller.task}
+                onCancelProgress={() => { poller.cancel(); }}
+              />
+            )
           ) : (
             <BkStepResult
-              dna={dna} versions={versions} loading={false}
+              dna={dna} versions={displayVersions} loading={false}
               activeVersionIdx={activeVersionIdx} setActiveVersionIdx={setActiveVersionIdx}
               onPrev={() => setStep("input")} onReset={reset} onNav={onNav}
+              progressTask={poller.isRunning ? poller.task : null}
+              onCancelProgress={() => { poller.cancel(); }}
             />
           )
         )}
@@ -199,10 +233,10 @@ function PageBaokuan({ onNav }) {
 
 function BkHeader({ current, onBack, skillInfo }) {
   return (
-    <div style={{ padding: "12px 24px", background: "#fff", borderBottom: `1px solid ${T.border}`, display: "flex", alignItems: "center", gap: 14, flexShrink: 0 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <div style={{ width: 26, height: 26, borderRadius: 7, background: T.text, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13 }}>✍️</div>
-        <div style={{ fontSize: 13.5, fontWeight: 600 }}>爆款改写 · 2 步</div>
+    <div style={{ padding: "10px clamp(12px, 4vw, 24px)", background: "#fff", borderBottom: `1px solid ${T.border}`, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", flexShrink: 0 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flex: "1 1 250px", minWidth: 0, flexWrap: "wrap" }}>
+        <div style={{ width: 26, height: 26, borderRadius: 7, background: T.text, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, flexShrink: 0 }}>✍️</div>
+        <div style={{ fontSize: 13.5, fontWeight: 600, whiteSpace: "nowrap" }}>爆款改写 · 2 步</div>
         {skillInfo && (
           <span title="本页方法已加载"
             style={{ fontSize: 10.5, color: T.brand, background: T.brandSoft, padding: "2px 8px", borderRadius: 100, marginLeft: 6 }}>
@@ -210,7 +244,7 @@ function BkHeader({ current, onBack, skillInfo }) {
           </span>
         )}
       </div>
-      <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 8, marginLeft: 8 }}>
+      <div style={{ flex: "999 1 360px", minWidth: 0, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
         {BK_STEPS.map((s, i) => {
           const active = s.id === current;
           const done = BK_STEPS.findIndex(x => x.id === current) > i;
@@ -220,7 +254,7 @@ function BkHeader({ current, onBack, skillInfo }) {
                 display: "flex", alignItems: "center", gap: 5, padding: "4px 10px 4px 5px", borderRadius: 100, fontSize: 11.5, fontWeight: 500,
                 background: active ? T.text : "transparent",
                 color: active ? "#fff" : done ? T.brand : T.muted,
-                whiteSpace: "nowrap",
+                whiteSpace: "nowrap", maxWidth: "100%",
               }}>
                 <div style={{
                   width: 18, height: 18, borderRadius: "50%",
@@ -236,7 +270,7 @@ function BkHeader({ current, onBack, skillInfo }) {
         })}
       </div>
       <ApiStatusLight />
-      <button onClick={onBack} style={{ background: "transparent", border: "none", color: T.muted, fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}>← 返回</button>
+      <button onClick={onBack} style={{ background: "transparent", border: "none", color: T.muted, fontSize: 12, cursor: "pointer", fontFamily: "inherit", flexShrink: 0 }}>← 返回</button>
     </div>
   );
 }
@@ -250,7 +284,7 @@ function BkStepInput({ text, setText, mode, setMode, industry, setIndustry, targ
   const needsProfile = !!m?.needsProfile;
 
   return (
-    <div style={{ padding: "40px 40px 60px", maxWidth: 820, margin: "0 auto" }}>
+    <div style={{ padding: "clamp(24px, 6vw, 40px) clamp(14px, 5vw, 40px) 60px", maxWidth: 820, margin: "0 auto" }}>
       <div style={{ textAlign: "center", marginBottom: 24 }}>
         <div style={{ fontSize: 30, fontWeight: 700, color: T.text, marginBottom: 8, letterSpacing: "-0.02em" }}>哪条爆款想改? ✍️</div>
         <div style={{ fontSize: 14, color: T.muted, lineHeight: 1.6 }}>整段贴进来 · 前 5 秒不动 · 换说法不换意思 · 出可念稿的版本</div>
@@ -278,7 +312,7 @@ function BkStepInput({ text, setText, mode, setMode, industry, setIndustry, targ
       {/* 模式选 (radio 风格大卡) */}
       <div style={{ marginBottom: needsProfile ? 14 : 18 }}>
         <div style={{ fontSize: 13, fontWeight: 600, color: T.text, marginBottom: 10 }}>选改写模式</div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 220px), 1fr))", gap: 10 }}>
           {BK_MODES.map(x => {
             const on = mode === x.id;
             return (
@@ -315,7 +349,7 @@ function BkStepInput({ text, setText, mode, setMode, industry, setIndustry, targ
           <div style={{ fontSize: 12.5, fontWeight: 600, color: T.text, marginBottom: 10 }}>
             🎯 业务画像 <span style={{ color: T.muted2, fontWeight: 400, fontSize: 11 }}>(业务钩子版必填 · 不然结尾植入会硬接)</span>
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 220px), 1fr))", gap: 10 }}>
             <input value={industry} onChange={e => setIndustry(e.target.value)}
               placeholder="行业 (例: 餐饮老板 / 大健康)"
               style={{ padding: "9px 12px", border: `1px solid ${T.borderSoft}`, borderRadius: 8, fontSize: 13, fontFamily: "inherit", outline: "none" }} />
@@ -353,13 +387,13 @@ function BkVersionCard({ version, onMakeVideo }) {
     <div style={{
       background: "#fff", border: `1.5px solid ${T.brand}`, borderRadius: 14,
       padding: 16, boxShadow: `0 0 0 4px ${T.brandSoft}`,
-      display: "flex", flexDirection: "column",
+      display: "flex", flexDirection: "column", minWidth: 0,
     }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10, paddingBottom: 10, borderBottom: `1px dashed ${T.borderSoft}` }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10, paddingBottom: 10, borderBottom: `1px dashed ${T.borderSoft}`, flexWrap: "wrap" }}>
         <span style={{ fontSize: 11.5, padding: "3px 8px", borderRadius: 4, background: T.brandSoft, color: T.brand, fontWeight: 600 }}>
           {version.key}
         </span>
-        <span style={{ fontSize: 13, fontWeight: 600, color: T.text, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        <span style={{ fontSize: 13, fontWeight: 600, color: T.text, flex: "1 1 120px", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {version.label}
         </span>
         <Tag size="xs" color="gray">{version.word_count || 0} 字</Tag>
@@ -391,7 +425,7 @@ function BkVersionCard({ version, onMakeVideo }) {
 function BkDnaCard({ dna }) {
   if (!dna) return null;
   return (
-    <div style={{ maxWidth: 820, margin: "20px auto 16px", padding: "0 40px" }}>
+    <div style={{ maxWidth: 820, margin: "20px auto 16px", padding: "0 clamp(14px, 5vw, 40px)" }}>
       <div style={{ background: "#fff", border: `1px solid ${T.brand}33`, borderLeft: `4px solid ${T.brand}`, borderRadius: 12, padding: "14px 18px" }}>
         <div style={{ fontSize: 12.5, fontWeight: 600, color: T.brand, marginBottom: 8 }}>💡 爆款基因分析</div>
         <div style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 12.5, color: T.text, lineHeight: 1.6 }}>
@@ -406,10 +440,17 @@ function BkDnaCard({ dna }) {
 
 // ─── Step 2 · 结果 (DNA 卡 + 多版 tab) ────────────────────
 
-function BkStepResult({ dna, versions, loading, activeVersionIdx, setActiveVersionIdx, onPrev, onReset, onNav }) {
+function BkStepResult({ dna, versions, loading, activeVersionIdx, setActiveVersionIdx, onPrev, onReset, onNav, progressTask, onCancelProgress }) {
   // D-037 主次反转 (2026-04-26): 多版从 tab 改成网格并排, N 版同框对比拷贝
   return (
-    <div style={{ padding: "32px 40px 60px", maxWidth: 1280, margin: "0 auto" }}>
+    <div style={{ padding: "clamp(22px, 5vw, 32px) clamp(14px, 5vw, 40px) 60px", maxWidth: 1280, margin: "0 auto" }}>
+      {progressTask && ((progressTask?.partial_result?.versions || progressTask?.partial_result?.units || []).length > 0) && (
+        <BkLiveProgress
+          task={progressTask}
+          onCancel={onCancelProgress}
+        />
+      )}
+
       {/* DNA 卡 (顶部薄薄一条, 80px) */}
       {dna && (
         <div style={{ background: "#fff", border: `1px solid ${T.brand}33`, borderLeft: `4px solid ${T.brand}`, borderRadius: 12, padding: "14px 18px", marginBottom: 16 }}>
@@ -432,7 +473,7 @@ function BkStepResult({ dna, versions, loading, activeVersionIdx, setActiveVersi
       {versions.length > 0 && (
         <div style={{
           display: "grid",
-          gridTemplateColumns: versions.length === 1 ? "1fr" : "repeat(auto-fit, minmax(420px, 1fr))",
+          gridTemplateColumns: versions.length === 1 ? "1fr" : "repeat(auto-fit, minmax(min(100%, 420px), 1fr))",
           gap: 16, marginBottom: 16,
         }}>
           {versions.map((v, i) => <BkVersionCard key={v.gen_id || i} version={v} onMakeVideo={onNav ? () => {
@@ -462,6 +503,82 @@ function BkStepResult({ dna, versions, loading, activeVersionIdx, setActiveVersi
           <span style={{ fontSize: 12, color: T.muted2 }}>💡 每张卡都能独立"做视频" / "复制"</span>
         </div>
       )}
+    </div>
+  );
+}
+
+function BkLiveProgress({ task, onCancel }) {
+  const partial = task?.partial_result || {};
+  const units = Array.isArray(partial.versions) && partial.versions.length
+    ? partial.versions
+    : (Array.isArray(partial.units) ? partial.units : []);
+  const done = partial.completed_versions || units.length || 0;
+  const total = partial.total_versions || task?.progress_data?.total_versions || done;
+  const remaining = Math.max(0, total - done);
+  const running = task?.status === "running";
+  const failed = task?.status === "failed";
+  const elapsed = task?.elapsed_sec || 0;
+  const progressText = task?.progress_text || (remaining > 0 ? `正在写第 ${done + 1}/${total} 版` : "已完成");
+  const slow = running && remaining > 0 && elapsed > Math.max(75, Math.round((task?.estimated_seconds || 120) * 0.75));
+  const statusText = failed
+    ? `后面 ${remaining} 版没有跑完，前面 ${done} 版已保留`
+    : remaining > 0
+      ? `后面 ${remaining} 版继续在后台写`
+      : "这一组已经全部生成";
+  return (
+    <div style={{
+      marginBottom: 16,
+      padding: 14,
+      background: "linear-gradient(135deg, #f6fbf7, #fff)",
+      border: `1.5px solid ${T.brand}`,
+      boxShadow: `0 0 0 4px ${T.brandSoft}`,
+      borderRadius: 12,
+      display: "grid",
+      gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 260px), 1fr))",
+      gap: 14,
+      alignItems: "stretch",
+    }}>
+      <div style={{ minWidth: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+          <span style={{ fontSize: 14, fontWeight: 800, color: T.text }}>先出的版本已经能看</span>
+          <Tag size="xs" color="green">已完成 {done}/{total}</Tag>
+          {remaining > 0 && <span style={{ fontSize: 12, color: T.muted }}>{statusText}</span>}
+        </div>
+        <div style={{
+          marginBottom: 10,
+          padding: "9px 10px",
+          borderRadius: 8,
+          background: failed ? "#fff7ed" : slow ? "#fef3c7" : T.bg2,
+          border: `1px solid ${failed || slow ? "#f59e0b55" : T.borderSoft}`,
+          color: failed ? "#9a3412" : T.text,
+          fontSize: 12.5,
+          lineHeight: 1.55,
+        }}>
+          <b>{progressText}</b>
+          <span style={{ color: failed ? "#9a3412" : T.muted }}> · 已等 {fmtSec(elapsed)} · {statusText}</span>
+          {slow && !failed && <span style={{ color: "#92400e" }}> · 比预期慢，正在等这一版</span>}
+        </div>
+        {running && remaining > 0 && onCancel && (
+          <div>
+            <button onClick={onCancel} style={{
+              padding: "7px 10px",
+              borderRadius: 8,
+              border: `1px solid ${T.border}`,
+              background: "#fff",
+              color: T.muted,
+              fontSize: 12,
+              cursor: "pointer",
+              fontFamily: "inherit",
+            }}>
+              取消剩余生成
+            </button>
+            <div style={{ marginTop: 6, fontSize: 11.5, color: T.muted2, lineHeight: 1.45 }}>
+              已发起的生成可能仍会消耗额度；取消后页面会停止等待剩余版本。
+            </div>
+          </div>
+        )}
+      </div>
+      <TaskProgressTimeline task={task} title="生成现场" />
     </div>
   );
 }

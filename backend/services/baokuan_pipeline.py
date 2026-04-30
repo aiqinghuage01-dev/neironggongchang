@@ -19,6 +19,7 @@ from __future__ import annotations
 import json
 import re
 import time
+from copy import deepcopy
 from typing import Any
 
 from backend.services import skill_loader
@@ -37,6 +38,82 @@ def _extract_json(text: str, wrap: str = "object") -> Any:
         return json.loads(m.group(0))
     except Exception:
         return None
+
+
+def _clean_script_content(text: str) -> str:
+    """去掉模型偶发吐出的执行说明/后续操作建议,只保留可念稿正文。"""
+    content = (text or "").strip()
+    content = re.sub(
+        r"\n{1,2}\s*已(?:经)?走(?:完)?(?:技能|skill)[:：][\s\S]*$",
+        "",
+        content,
+        flags=re.IGNORECASE,
+    ).strip()
+    content = re.sub(
+        r"^\s*(?:已(?:经)?走(?:完)?(?:技能|skill)[:：].*?)(?:\n{1,2}|$)",
+        "",
+        content,
+        flags=re.IGNORECASE,
+    ).strip()
+    content = re.sub(
+        r"^\s*(?:以下是(?:正文|文案|口播正文|改写版本)|正文如下)[:：]?\s*(?:\n{1,2}|$)",
+        "",
+        content,
+        flags=re.IGNORECASE,
+    ).strip()
+    content = re.sub(
+        r"\n\s*-{3,}\s*\n\s*需要进一步操作吗[？?]?[\s\S]*$",
+        "",
+        content,
+    ).strip()
+    content = re.sub(
+        r"\n\s*需要进一步操作吗[？?]?[\s\S]*$",
+        "",
+        content,
+    ).strip()
+    content = re.sub(
+        r"\n{1,2}\s*(?:prompt|tokens?|api|route|model|provider|submit_id|/Users)\b[\s\S]*$",
+        "",
+        content,
+        flags=re.IGNORECASE,
+    ).strip()
+    return content
+
+
+def _count_script_chars(content: str) -> int:
+    return len(re.sub(r"[#*_`>\-\[\]()\s]", "", content or ""))
+
+
+_INTERNAL_DISPLAY_KEY_PARTS = ("token", "route", "model", "provider", "prompt", "submit_id", "api")
+
+
+def _is_internal_display_key(key: Any) -> bool:
+    k = str(key or "").lower()
+    return str(key or "").startswith("_") or any(part in k for part in _INTERNAL_DISPLAY_KEY_PARTS)
+
+
+def sanitize_result_for_display(result: Any) -> Any:
+    """清洗 baokuan task 的 result/partial_result, 防内部字段和执行菜单进前端。"""
+    def _clean(value: Any) -> Any:
+        if isinstance(value, dict):
+            out: dict[str, Any] = {}
+            for k, v in value.items():
+                if _is_internal_display_key(k):
+                    continue
+                cleaned_v = _clean(v)
+                if k == "content" and isinstance(cleaned_v, str):
+                    cleaned_v = _clean_script_content(cleaned_v)
+                out[k] = cleaned_v
+            if isinstance(out.get("content"), str):
+                out["word_count"] = _count_script_chars(out["content"])
+            return out
+        if isinstance(value, list):
+            return [_clean(v) for v in value]
+        if isinstance(value, str):
+            return _clean_script_content(value)
+        return value
+
+    return _clean(deepcopy(result))
 
 
 # ─── Step 1 · 爆款基因分析 ──────────────────────────────
@@ -135,51 +212,29 @@ def _mode_versions(mode: str) -> list[str]:
     return ["V1", "V2"]
 
 
-def rewrite(
-    text: str,
-    mode: str = "pure",
-    industry: str = "",
-    target_action: str = "",
-    dna: dict[str, Any] | None = None,
-) -> dict[str, Any]:
-    """按模式生成对应版本数组。
+def _estimated_seconds(mode: str) -> int:
+    return 55 * len(_mode_versions(mode))
 
-    mode: "pure" / "business" / "all"
-    business 和 all 需要 industry + target_action (画像)
-    返回 {versions: [{key, label, content}, ...], tokens}
-    """
-    versions_to_gen = _mode_versions(mode)
+
+def _validate_profile(versions_to_gen: list[str], industry: str, target_action: str) -> str | None:
     needs_profile = any(VERSION_DEFS[v].get("needs_profile") for v in versions_to_gen)
     if needs_profile and (not industry.strip() or not target_action.strip()):
-        return {
-            "versions": [],
-            "error": "业务钩子模式需要填行业和转化动作 (例: 餐饮老板 + 加微信)",
-            "tokens": {"total": 0},
-        }
+        return "业务钩子模式需要填行业和转化动作 (例: 餐饮老板 + 加微信)"
+    return None
 
-    skill = skill_loader.load_skill(SKILL_SLUG)
-    dna = dna or {}
-    profile_block = ""
-    if needs_profile:
-        profile_block = f"""
-【用户画像 (业务钩子版必用)】
-- 行业: {industry.strip()}
-- 转化动作: {target_action.strip()}
-"""
 
-    rules_block = "\n".join(
-        f"### {v} · {VERSION_DEFS[v]['label']}\n{VERSION_DEFS[v]['rule']}"
-        for v in versions_to_gen
-    )
-
-    system = f"""你在执行《爆款改写》skill 的 Step 3 · 改写。
+def _build_system(skill: dict[str, Any], version_key: str) -> str:
+    rule = VERSION_DEFS[version_key]["rule"]
+    label = VERSION_DEFS[version_key]["label"]
+    return f"""你在执行《爆款改写》skill 的 Step 3 · 改写。
 严格按下面 skill 方法论执行, 严禁项一条不能违反。
 
 ===== skill 完整方法论 =====
 {skill['skill_md']}
 
-===== 本轮要出的版本 =====
-{rules_block}
+===== 本轮只写 1 个完整版本 =====
+### {version_key} · {label}
+{rule}
 
 ===== 硬规矩 =====
 - 改写不超原文 30% 长度
@@ -188,76 +243,275 @@ def rewrite(
 - 严禁前 5 秒 (前 2-3 句) 改动
 - 输出纯文案正文 (可念稿那种), 不要标题/前言/markdown 符号"""
 
-    dna_block = ""
-    if dna.get("why_hot") or dna.get("emotion_hook") or dna.get("structure"):
-        dna_block = f"""
+
+def _dna_block(dna: dict[str, Any]) -> str:
+    if not (dna.get("why_hot") or dna.get("emotion_hook") or dna.get("structure")):
+        return ""
+    return f"""
 【已分析的爆款基因 (必须保住)】
 - 为什么火: {dna.get('why_hot', '')}
 - 情绪钩子: {dna.get('emotion_hook', '')}
 - 结构节奏: {dna.get('structure', '')}
 """
 
-    example_items = ",\n    ".join(
-        '{"key": "%s", "label": "%s", "content": "完整文案 (纯文本可念稿)"}' % (v, VERSION_DEFS[v]["label"])
-        for v in versions_to_gen
-    )
-    keys_arr = ", ".join(f'"{v}"' for v in versions_to_gen)
+
+def _profile_block(version_key: str, industry: str, target_action: str) -> str:
+    if not VERSION_DEFS[version_key].get("needs_profile"):
+        return ""
+    return f"""
+【用户画像 (业务钩子版必用)】
+- 行业: {industry.strip()}
+- 转化动作: {target_action.strip()}
+"""
+
+
+def _write_single_version(
+    text: str,
+    *,
+    version_key: str,
+    industry: str,
+    target_action: str,
+    dna: dict[str, Any],
+    skill: dict[str, Any],
+) -> dict[str, Any]:
+    """写一个完整版本。逐版输出需要拆开调用, 但仍走 baokuan.rewrite 关卡层。"""
+    label = VERSION_DEFS[version_key]["label"]
     prompt = f"""【原爆款文案】
 ---
 {text.strip()}
 ---
-{dna_block}{profile_block}
-按【本轮要出的版本】里每个版本的规则改写。
-严格 JSON, 不加前言。每个版本的 content 是完整可念稿的纯文案 (不要 markdown 符号):
+{_dna_block(dna)}{_profile_block(version_key, industry, target_action)}
+按 {version_key} · {label} 的规则改写。
+严格 JSON, 不加前言。content 是完整可念稿的纯文案 (不要 markdown 符号):
 
 {{
-  "versions": [
-    {example_items}
-  ]
-}}
-
-注意: versions 数组必须正好包含这些 key, 顺序: {keys_arr}"""
+  "key": "{version_key}",
+  "label": "{label}",
+  "content": "完整文案 (纯文本可念稿)"
+}}"""
 
     ai = get_ai_client(route_key="baokuan.rewrite")
-    r = ai.chat(prompt, system=system, deep=False, temperature=0.85, max_tokens=6000)
-    # D-094: 解析失败 → raise. 不让 versions=[] 流出去 (UI 看 V1/V2/V3 卡片但点开是空文).
+    r = ai.chat(prompt, system=_build_system(skill, version_key), deep=False, temperature=0.85, max_tokens=2400)
     obj = _extract_json(r.text, "object")
     if obj is None:
         raise RuntimeError(
-            f"爆款改写 LLM 输出非 JSON (tokens={r.total_tokens}). 输出头: {(r.text or '')[:200]!r}"
+            f"爆款改写 {version_key} LLM 输出非 JSON (tokens={r.total_tokens}). 输出头: {(r.text or '')[:200]!r}"
         )
-    raw_versions = obj.get("versions")
-    if not isinstance(raw_versions, list) or not raw_versions:
+    if isinstance(obj.get("versions"), list):
+        by_key = {
+            (v.get("key") or "").upper(): v
+            for v in obj["versions"]
+            if isinstance(v, dict)
+        }
+        obj = by_key.get(version_key) or (obj["versions"][0] if obj["versions"] else {})
+    content = _clean_script_content((obj.get("content") or "").strip())
+    if not content:
         raise RuntimeError(
-            f"爆款改写 LLM 没出 versions 数组 (tokens={r.total_tokens}). 输出头: {(r.text or '')[:200]!r}"
+            f"爆款改写 {version_key} LLM 返空 content (tokens={r.total_tokens}). 输出头: {(r.text or '')[:200]!r}"
+        )
+    return {
+        "key": version_key,
+        "label": label,
+        "content": content,
+        "word_count": _count_script_chars(content),
+        "gen_id": f"{version_key}-{int(time.time())}",
+        "_tokens": r.total_tokens,
+    }
+
+
+def _public_version(version: dict[str, Any], version_index: int) -> dict[str, Any]:
+    cleaned = sanitize_result_for_display(version)
+    if not isinstance(cleaned, dict):
+        cleaned = {}
+    key = str(cleaned.get("key") or "").upper()
+    return {
+        "unit_id": key or f"V{version_index}",
+        "key": key or f"V{version_index}",
+        "label": cleaned.get("label") or VERSION_DEFS.get(key, {}).get("label") or "",
+        "content": cleaned.get("content") or "",
+        "word_count": cleaned.get("word_count") or _count_script_chars(cleaned.get("content") or ""),
+        "gen_id": cleaned.get("gen_id") or f"{key or version_index}-{int(time.time())}",
+        "version_index": version_index,
+    }
+
+
+def _progress_snapshot(
+    *,
+    versions_to_gen: list[str],
+    completed_by_key: dict[str, dict[str, Any]],
+    timeline: list[dict[str, Any]],
+) -> tuple[dict[str, Any] | None, dict[str, Any]]:
+    public_versions = [
+        _public_version(completed_by_key[key], idx + 1)
+        for idx, key in enumerate(versions_to_gen)
+        if key in completed_by_key
+    ]
+    progress_data = sanitize_result_for_display({
+        "completed_versions": len(public_versions),
+        "total_versions": len(versions_to_gen),
+        "timeline": deepcopy(timeline),
+    })
+    if not public_versions:
+        return None, progress_data
+    first = public_versions[0]
+    partial = {
+        "content": first.get("content", ""),
+        "word_count": first.get("word_count", 0),
+        "versions": public_versions,
+        "units": public_versions,
+        "completed_versions": len(public_versions),
+        "total_versions": len(versions_to_gen),
+    }
+    return sanitize_result_for_display(partial), progress_data
+
+
+def _emit_partial(
+    ctx: tasks_service.TaskContext | None,
+    *,
+    versions_to_gen: list[str],
+    completed_by_key: dict[str, dict[str, Any]],
+    timeline: list[dict[str, Any]],
+    progress_text: str,
+    pct: int | None,
+) -> None:
+    partial, progress_data = _progress_snapshot(
+        versions_to_gen=versions_to_gen,
+        completed_by_key=completed_by_key,
+        timeline=timeline,
+    )
+    if partial and ctx:
+        ctx.update_partial_result(
+            partial_result=partial,
+            progress_data=progress_data,
+            progress_text=progress_text,
+            pct=pct,
+        )
+    elif ctx:
+        ctx.update_progress(progress_text, pct=pct)
+
+
+def rewrite(
+    text: str,
+    mode: str = "pure",
+    industry: str = "",
+    target_action: str = "",
+    dna: dict[str, Any] | None = None,
+    ctx: tasks_service.TaskContext | None = None,
+) -> dict[str, Any]:
+    """按模式生成对应版本数组。
+
+    mode: "pure" / "business" / "all"
+    business 和 all 需要 industry + target_action (画像)
+    返回 {versions: [{key, label, content}, ...], tokens}
+    """
+    versions_to_gen = _mode_versions(mode)
+    profile_error = _validate_profile(versions_to_gen, industry, target_action)
+    if profile_error:
+        return {
+            "versions": [],
+            "error": profile_error,
+            "tokens": {"total": 0},
+        }
+
+    skill = skill_loader.load_skill(SKILL_SLUG)
+    dna = dna or {}
+    completed_by_key: dict[str, dict[str, Any]] = {}
+    timeline: list[dict[str, Any]] = []
+    tokens_total = 0
+    total = len(versions_to_gen)
+
+    for idx, key in enumerate(versions_to_gen):
+        if ctx and ctx.is_cancelled():
+            break
+        version_no = idx + 1
+        label = VERSION_DEFS[key]["label"]
+        running_text = f"正在写第 {version_no}/{total} 版 · {key} · {label}..."
+        timeline.append({
+            "at_ts": int(time.time()),
+            "text": f"开始写第 {version_no}/{total} 版 · {key} · {label}",
+            "completed_versions": len(completed_by_key),
+            "total_versions": total,
+            "version_index": version_no,
+            "unit_id": key,
+            "status": "running",
+        })
+        _emit_partial(
+            ctx,
+            versions_to_gen=versions_to_gen,
+            completed_by_key=completed_by_key,
+            timeline=timeline,
+            progress_text=running_text,
+            pct=18 + int(len(completed_by_key) * 70 / max(1, total)),
+        )
+        try:
+            version = _write_single_version(
+                text,
+                version_key=key,
+                industry=industry,
+                target_action=target_action,
+                dna=dna,
+                skill=skill,
+            )
+        except Exception:
+            timeline[:] = [
+                item for item in timeline
+                if not (item.get("status") == "running" and item.get("unit_id") == key)
+            ]
+            timeline.append({
+                "at_ts": int(time.time()),
+                "text": f"第 {version_no} 版暂时没跑完",
+                "completed_versions": len(completed_by_key),
+                "total_versions": total,
+                "version_index": version_no,
+                "unit_id": key,
+                "status": "failed",
+            })
+            _emit_partial(
+                ctx,
+                versions_to_gen=versions_to_gen,
+                completed_by_key=completed_by_key,
+                timeline=timeline,
+                progress_text=f"第 {version_no} 版暂时没跑完",
+                pct=18 + int(len(completed_by_key) * 70 / max(1, total)),
+            )
+            raise
+
+        tokens_total += int(version.pop("_tokens", 0) or 0)
+        completed_by_key[key] = version
+        timeline[:] = [
+            item for item in timeline
+            if not (item.get("status") == "running" and item.get("unit_id") == key)
+        ]
+        timeline.append({
+            "at_ts": int(time.time()),
+            "text": f"{key} · {label}完成",
+            "completed_versions": len(completed_by_key),
+            "total_versions": total,
+            "version_index": version_no,
+            "unit_id": key,
+            "status": "done",
+        })
+        _emit_partial(
+            ctx,
+            versions_to_gen=versions_to_gen,
+            completed_by_key=completed_by_key,
+            timeline=timeline,
+            progress_text=f"已完成 {len(completed_by_key)}/{total} 版",
+            pct=20 + int(len(completed_by_key) * 70 / max(1, total)),
         )
 
-    # 兜底: 按预期 key 顺序对齐, 缺的填空
-    by_key = {(v.get("key") or "").upper(): v for v in raw_versions if isinstance(v, dict)}
-    out_versions = []
-    empty_count = 0
-    for k in versions_to_gen:
-        v = by_key.get(k, {})
-        content = (v.get("content") or "").strip()
-        if not content:
-            empty_count += 1
-        out_versions.append({
-            "key": k,
-            "label": VERSION_DEFS[k]["label"],
-            "content": content,
-            "word_count": len(re.sub(r"\s+", "", content)),
-            "gen_id": f"{k}-{int(time.time())}",
-        })
-    if empty_count == len(versions_to_gen):
-        # 全部空 = LLM 返了 versions 数组但 content 全空, 同样是伪成功
-        raise RuntimeError(
-            f"爆款改写 LLM versions 全部 content 空 (tokens={r.total_tokens}). 输出头: {(r.text or '')[:200]!r}"
-        )
+    out_versions = [completed_by_key[k] for k in versions_to_gen if k in completed_by_key]
+    if not out_versions:
+        raise RuntimeError("爆款改写没有生成可用版本")
+    first = out_versions[0]
 
     return {
         "versions": out_versions,
+        "content": first.get("content", ""),
+        "word_count": first.get("word_count", 0),
+        "version_count": len(out_versions),
         "mode": mode,
-        "tokens": {"total": r.total_tokens},
+        "tokens": {"total": tokens_total},
     }
 
 
@@ -270,7 +524,7 @@ def rewrite_async(
     target_action: str = "",
     dna: dict[str, Any] | None = None,
 ) -> str:
-    """异步触发 rewrite, 立即返 task_id. 真跑 30-60s."""
+    """异步触发 rewrite, 立即返 task_id. 每个完整版本完成后写 partial_result."""
     return tasks_service.run_async(
         kind="baokuan.rewrite",
         label=f"爆款改写 · {mode} · {len(text)}字",
@@ -278,7 +532,7 @@ def rewrite_async(
         page_id="baokuan",
         step="rewrite",
         payload={"text_preview": text[:200], "mode": mode, "text_len": len(text)},
-        estimated_seconds=45,
-        progress_text="AI 写改写文案 (V1/V2/V3/V4)...",
-        sync_fn=lambda: rewrite(text, mode, industry, target_action, dna),
+        estimated_seconds=_estimated_seconds(mode),
+        progress_text="小华写改写文案 (V1/V2/V3/V4)...",
+        sync_fn_with_ctx=lambda ctx: rewrite(text, mode, industry, target_action, dna, ctx=ctx),
     )

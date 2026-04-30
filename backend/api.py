@@ -670,7 +670,7 @@ def _sanitize_task_for_display(task: dict[str, Any] | None) -> dict[str, Any] | 
     if not task:
         return task
     kind = str(task.get("kind") or "")
-    if not (kind.startswith("hotrewrite.write") or kind.startswith("compliance.")):
+    if not (kind.startswith("hotrewrite.write") or kind.startswith("compliance.") or kind.startswith("baokuan.")):
         return task
     from backend.services import hotrewrite_pipeline
     out = dict(task)
@@ -681,6 +681,10 @@ def _sanitize_task_for_display(task: dict[str, Any] | None) -> dict[str, Any] | 
         out["result"] = compliance_pipeline.sanitize_result_for_display(out.get("result"))
         out["partial_result"] = compliance_pipeline.sanitize_result_for_display(out.get("partial_result"))
         out["progress_data"] = compliance_pipeline.sanitize_result_for_display(out.get("progress_data"))
+    elif kind.startswith("baokuan."):
+        out["result"] = baokuan_pipeline.sanitize_result_for_display(out.get("result"))
+        out["partial_result"] = baokuan_pipeline.sanitize_result_for_display(out.get("partial_result"))
+        out["progress_data"] = baokuan_pipeline.sanitize_result_for_display(out.get("progress_data"))
     return out
 
 
@@ -3078,7 +3082,14 @@ def baokuan_rewrite(req: BaokuanRewriteReq):
         industry=req.industry, target_action=req.target_action,
         dna=req.dna,
     )
-    return {"task_id": task_id, "status": "running", "estimated_seconds": 45, "page_id": "baokuan"}
+    version_count = len(baokuan_pipeline._mode_versions(req.mode))
+    return {
+        "task_id": task_id,
+        "status": "running",
+        "estimated_seconds": baokuan_pipeline._estimated_seconds(req.mode),
+        "page_id": "baokuan",
+        "version_count": version_count,
+    }
 
 
 # ═══════════════════════════════════════════════════════════════════
