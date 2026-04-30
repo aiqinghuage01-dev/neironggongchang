@@ -26,6 +26,14 @@
 >
 > **两轮增补共同点:** 不改任何机制/schema/验收,只把"实施分阶段策略"和"物理迁移路径"显式化
 >
+> **v1.1 修订(2026-04-30 · Phase 2 完成后,用户洞察触发的路线变更):**
+> - **新增 §0.8「干净迁移路线」**——Phase 3 历史路径迁移**取消**,改走"Mac mini 全新空 DB"
+> - 触发原因:用户提出"我本来就要重建素材库,旧 DB 是混乱档案,不需要搬"
+> - 这一变更绕过了前 11 轮 review 的隐含前提("如何安全迁移")
+> - **Phase 1 + Phase 2 已做 5 笔 commit 全部保留**——防腐层在新机器上更刚需
+> - 总工时 13.5 d → ~13 d,**总风险降级**(无 DB 改写动作)
+> - v1.0 旧路线降级为 fallback,文档保留作为"如未来真要迁数据"参考
+>
 > **11 轮收敛轨迹:**
 >
 > | 版本 | 增量 | 总行数 | 主修 |
@@ -405,6 +413,157 @@ M1 实施 Mac mini 时本来就要起 Caddy,提前在本地起一份当于做了
 - **M1 前置:admin 自装 Tailscale + Mac mini 入 tailnet(30 分钟,不计入 M1 主工时)**
 
 这一步在 v1.0 §3 没单列,但实操上必须最先做(否则 M1 day 1 第一行命令"`git clone`"该怎么跑?Mac mini 摆在那儿没法 SSH 过去)。
+
+### 0.8 干净迁移路线(v1.1 修订 · 2026-04-30 Phase 2 完成后决策)
+
+> **本节性质:** 用户在 Phase 2 完成后提出关键洞察——
+> **"我本来就要重建素材库,旧 DB 是混乱档案,不需要搬。"**
+>
+> 这一洞察直接绕过了前 11 轮 review 的隐含前提("如何安全迁移历史 DB")。
+> 经三方对齐(Opus 4.7 + gpt-5.5 + 清华哥):**Phase 3 历史路径迁移取消**,
+> 改走"干净迁移"路线。本节固化新路线,旧路线作为 fallback 保留。
+
+#### 0.8.1 触发与决策
+
+**用户洞察(原话):**
+> "我能在那台电脑上面重建一个空的数据库吗?现在其实也只是一个我电脑里面比较混乱的一个数据。
+>  我到另外一台电脑呢,我就把我需要的素材都迁移过去,然后用 ai 给他去打标签,
+>  放入知识库,放入数据库……我本身就要重建这个素材库的。"
+
+**前 11 轮 review 的盲区:** 一直在优化"如何更安全地迁移 411 条污染路径 + 1633 条素材记录",
+但**没人质疑过"是否需要迁移这些数据"**。这个前提一旦质疑,Phase 3 失去存在意义。
+
+**决策:**
+- ✅ **Phase 3 历史路径迁移**:取消(降级为 fallback)
+- ✅ **Mac mini 上启动 = 全新空 DB**:`apply_migrations()` 自动建空表 + placeholder admin
+- ✅ **旧电脑保留 6 个月作为档案柜**:有需要参考某条历史作品时手动去拿
+- ✅ **Phase 1 + Phase 2 已做工作全部保留**:防腐层在新机器上更刚需
+
+#### 0.8.2 新路线总览(干净迁移)
+
+| 类别 | 内容 | 走什么通道 |
+|---|---|---|
+| **迁过去**(生产资料) | 代码 | GitHub Private clone |
+| | `~/Desktop/skills/` | rsync via Tailscale |
+| | `~/Desktop/清华哥知识库/` | rsync via Tailscale |
+| | 精选素材(用户筛选过的) | rsync via Tailscale |
+| | `.env` | 手工新建,照 `.env.example` 配 |
+| | 浏览器登录态(Dreamina/微信公众号) | 在 Mac mini 上**重新扫码**,不能 rsync |
+| **不迁过去**(历史档案) | `data/works.db` (4.1M, 397 条作品记录) | 留旧电脑 |
+| | `data/main.db` (空文件) | 留旧电脑 |
+| | `data/_audit/` 报告 | 留旧电脑 |
+| | 旧 `data/videos/`、`data/wechat-images/` 等媒体 | 留旧电脑(用户筛选后部分搬) |
+| | 各种 `*.log`、`screenshots/`、`demo_videos/` | 留旧电脑 |
+| | `material_assets` 索引(1633 条) | 留旧电脑,Mac mini 重扫生成 |
+
+**Mac mini 启动后第一周做的事:**
+1. `git clone` + `pip install -e .` + `apply_migrations()` → 空 DB + placeholder admin
+2. `bootstrap_admin.py` 激活真实 admin
+3. 通过素材库扫描功能,把搬过去的精选素材重新入库
+4. 用 AI 给素材打标签、归类
+5. 知识库自动接入(`KB_ROOT` env 指向搬过去的目录)
+
+#### 0.8.3 与旧路线的差异(快速对照)
+
+| 维度 | 旧路线(完整迁移) | 新路线(干净迁移 v1.1) |
+|---|---|---|
+| **Phase 3 历史路径迁移** | 0.5 d,迁 411 条作品路径 | ❌ 取消 |
+| **DB 历史数据风险** | UPDATE 字段值,1% 硬盘炸时丢 | ✅ 0 风险(新空 DB,没历史数据可丢) |
+| **总工时** | 13.5 d | **~13 d**(省 0.5 d) |
+| **placeholder admin** | 占位让 owner_id 回填命中 | 仍要,但**纯粹用于 bootstrap_admin.py 激活流程** |
+| **owner_id 回填** | UPDATE works/tasks/materials SET owner_id=1 | **0 行可回填**(空表),migration 仍跑但是 noop |
+| **material_assets.user_id 'qinghua' 回填** | 1633 行 UPDATE | ❌ 取消(空表) |
+| **rollback drill** | 必做 | ❌ 取消(没东西可 rollback) |
+| **备份要求** | Phase 3 启动前必须有 works.db 备份 | ❌ 取消(没历史 DB 可丢) |
+| **skill / 知识库迁移** | rsync 必做 | rsync 必做(生产资料) |
+| **精选素材迁移** | 隐含包含 | **显式列为必做**,但只迁文件不迁索引 |
+
+#### 0.8.4 Phase 1 + Phase 2 已做工作的适用性
+
+**全部保留,且新机器上更需要。** 理由:防腐层防的是"未来代码继续滚出脏数据",
+新机器上你正要建空 DB,绝对不能让新 DB 第一周又脏。
+
+| 已做(GitHub commit) | 在 v1.1 路线下的作用 |
+|---|---|
+| GitHub Private 代码备份 (`2bb7566`) | ✅ Mac mini clone 代码靠它 |
+| `.gitignore` 收紧 (`2bb7566`) | ✅ Mac mini 同样需要 |
+| v1.0 设计文档 (`6755d16`) | ✅ 仍是架构基准,本 §0.8 是其修订 |
+| `path_resolver.py` (`d5ff212`) | ✅ 新 DB 写入也走它,**防止新 DB 又出绝对路径** |
+| `audit_data_paths.py` (`d5ff212`) | 🟡 降级为"旧电脑历史盘点工具",Mac mini 不需再跑 |
+| `_normalize_path_for_db` (`57ee1fa`) | ✅ 新机器上比旧机器更刚 — 第一条新作品就 normalize |
+| `factory-api.jsx` smart default (`57ee1fa`) | ✅ Mac mini Caddy 同源 + 本机 8001 兜底,直接复用 |
+| `wechat_scripts.py` env 化 (`57ee1fa`) | ✅ Mac mini 通过 `.env` 配 `MEDIA_PUBLIC_BASE` |
+| `.env.example` 全清单 (`57ee1fa`) | ✅ Mac mini 第一次启动时照着配 |
+
+**结论:11 轮 review 没白做。船的航向变了,船本身仍在。**
+
+#### 0.8.5 关键修订点(细节落地)
+
+**§4.0 placeholder admin 含义微调:**
+- v1.0:placeholder 是为了让 owner_id 回填 FK 命中
+- v1.1:placeholder 是为了让 `bootstrap_admin.py` 有"激活"对象,流程更优雅
+- migration SQL 不变(仍 INSERT id=1 placeholder)
+
+**§4.1 owner migration 行为变更:**
+- v1.0:`UPDATE works SET owner_id = 1 WHERE owner_id IS NULL` 影响 397 行
+- v1.1:同 SQL,但**影响 0 行**(空 DB),migration 仍跑但是 noop
+- 这是设计上的零成本兼容——同样代码同样跑,只是新机器上没历史数据
+
+**§5.6 M3 验收清单不变:**
+- M3 验收里"知道 URL 的非 owner 用户访问 `/media/<work>.mp4` 返回 403" 这条仍要测
+- 测试方法变成"member 创建一条新作品,另一 member 试着访问"——本来就该这么测
+
+**`audit_data_paths.py` 角色变更:**
+- v1.0:Phase 1 必跑,生成报告供 Phase 3 migrate 消费
+- v1.1:**保留代码作为档案盘点工具**,旧电脑跑过的报告仍有参考价值
+- Mac mini 上不需要再跑(空 DB 跑出来全是 0)
+
+**`migrate_work_paths.py` 命运:**
+- v1.0:计划 Phase 3 写
+- v1.1:**永不写,从设计文档里降级到 "fallback 方案" 章节**
+
+#### 0.8.6 风险提示
+
+🟡 **风险 1:旧电脑里可能有"金矿"**
+
+旧 `data/works.db` 里有你过去半年的:
+- 写过的爆款选题(`title` / `original_text`)
+- 改写过的好文案(`final_text`)
+- AI 帮你改稿的历史(`ai_calls` 表)
+- 微信公众号已发文章的草稿(`source_skill='wechat'`)
+
+**缓解措施:**
+- 旧电脑**保留 6 个月**作为档案柜,不清 `data/`
+- 如果某天想参考某条历史作品,**手动**去旧电脑找(不需要"系统迁移")
+- 6 个月后如果一次都没用到,就可以放心擦除
+
+🟡 **风险 2:浏览器登录态不能 rsync,必须手动重做**
+
+Dreamina/即梦/微信公众号 cookie 跟设备指纹绑定,rsync 过去也用不了。
+Mac mini 上必须**重新扫码登录每个外部服务**。这是一次性动作,但要在 M1 day 1 安排时间。
+
+🟡 **风险 3:精选素材的"精选"标准要你自己定**
+
+旧 `data/wechat-images/` (115M)、`data/dreamina/` (33M) 这些都是历史素材。
+**只搬你确认要保留的**,不要全 rsync 过去——否则等于把"混乱"原样搬过去,
+违背了本路线"重新开干净工作室"的初心。
+
+#### 0.8.7 Fallback 条件:何时回到旧路线
+
+如果未来出现以下情况,可以回退到 v1.0 旧路线(完整迁移):
+- 你发现历史作品库里有大量需要日常引用的内容
+- 团队成员要求看到 admin 历史产出
+- 业务流程上有"作品时间序列"分析需求
+
+回退方法:`migrate_work_paths.py` 仍可按 v1.0 §2.3 规约写出来,Phase 1 audit 报告
+还在(旧电脑 `data/_audit/`),想做迁移仍有完整路径。
+
+#### 0.8.8 总账(v1.1)
+
+- 总工时:**13.5 d → ~13 d**(省 0.5 d Phase 3)
+- 总风险:**降级**(无 DB 改写动作,无历史数据丢失风险)
+- 已做 commit:**全部保留**(d5ff212 / 57ee1fa / 6755d16 / 2bb7566 / 9a409b3)
+- 文档版本:**v1.0 主体保留,§0.8 作为修订增补,旧路线降级为 fallback**
 
 ---
 
