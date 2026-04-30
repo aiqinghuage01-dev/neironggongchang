@@ -427,15 +427,29 @@ def write_script_batch(
             return
         with done_lock:
             variant_id = spec["variant_id"]
+            version_no = next((i + 1 for i, v in enumerate(variants) if v["variant_id"] == variant_id), done + 1)
             completed_by_id[variant_id] = result
             done += 1
             pct = 20 + int(done * 70 / max(1, total))
             text = f"已完成 {done}/{total} 版"
+            timeline[:] = [
+                item for item in timeline
+                if not (
+                    item.get("status") == "running"
+                    and (
+                        item.get("variant_id") == variant_id
+                        or item.get("version_index") == version_no
+                    )
+                )
+            ]
             timeline.append({
                 "at_ts": int(time.time()),
                 "text": f"{spec.get('mode_label') or '这一版'}完成",
                 "completed_versions": done,
                 "total_versions": total,
+                "version_index": version_no,
+                "variant_id": variant_id,
+                "status": "done",
             })
             partial_result, progress_data = _snapshot_locked()
         if partial_result:
@@ -472,6 +486,7 @@ def write_script_batch(
                     "completed_versions": done,
                     "total_versions": total,
                     "version_index": version_no,
+                    "variant_id": spec.get("variant_id"),
                     "status": "running",
                 })
             progress_text = f"正在写第 {version_no}/{total} 版 · {label}..."

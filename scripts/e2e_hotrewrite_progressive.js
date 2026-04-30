@@ -2,7 +2,7 @@ const fs = require("fs");
 const { chromium } = require("/Users/black.chen/.npm-global/lib/node_modules/playwright");
 
 const APP = process.env.APP_URL || "http://127.0.0.1:8001/?page=hotrewrite";
-const TASK_ID = "t085-progressive";
+const TASK_ID = "t094-progressive";
 const SHOT_DIR = "/tmp/_ui_shots";
 const forbiddenRe = /(已走技能|需要进一步操作吗|prompt|tokens|API|route|model|provider|submit_id|本机路径|\/Users)/i;
 
@@ -58,15 +58,15 @@ function publicVersion(v) {
   return rest;
 }
 
-function taskResponse(state) {
+function taskResponse(state, taskId = TASK_ID) {
   const common = {
-    id: TASK_ID,
+    id: taskId,
     kind: "hotrewrite.write",
     ns: "hotrewrite",
     page_id: "hotrewrite",
     step: "write",
     estimated_seconds: 360,
-    elapsed_sec: state === "v1" ? 34 : state === "v2" ? 72 : state === "slow" ? 421 : 438,
+    elapsed_sec: state === "v1" ? 34 : state === "v2" ? 72 : state === "slow" ? 421 : state === "failed" ? 438 : 446,
   };
   if (state === "v1") {
     return {
@@ -118,7 +118,7 @@ function taskResponse(state) {
       ...common,
       status: "running",
       progress_pct: 78,
-      progress_text: "第 4 版比预期慢，正在重试兜底",
+      progress_text: "正在写第 4/4 版 · 结合业务 V4 · 圈人版...",
       partial_result: {
         content: allVersions[0].content,
         word_count: allVersions[0].word_count,
@@ -133,10 +133,51 @@ function taskResponse(state) {
         timeline: [
           { text: "纯改写 V1 · 换皮版完成", completed_versions: 1, total_versions: 4 },
           { text: "纯改写 V2 · 狠劲版完成", completed_versions: 2, total_versions: 4 },
+          { text: "开始写第 3/4 版 · 结合业务 V3 · 翻转版", completed_versions: 2, total_versions: 4, version_index: 3, status: "running", at_ts: Math.floor(Date.now() / 1000) - 160 },
           { text: "结合业务 V3 · 翻转版完成", completed_versions: 3, total_versions: 4 },
-          { text: "第 4 版比预期慢，正在重试兜底", completed_versions: 3, total_versions: 4, version_index: 4, status: "running", at_ts: Math.floor(Date.now() / 1000) - 421 },
+          { text: "开始写第 4/4 版 · 结合业务 V4 · 圈人版", completed_versions: 3, total_versions: 4, version_index: 4, status: "running", at_ts: Math.floor(Date.now() / 1000) - 421 },
         ],
       },
+    };
+  }
+  if (state === "failed") {
+    return {
+      ...common,
+      status: "failed",
+      progress_pct: 78,
+      progress_text: "第 4 版暂时没跑完",
+      error: "剩余版本暂时没跑完",
+      partial_result: {
+        content: allVersions[0].content,
+        word_count: allVersions[0].word_count,
+        self_check: allVersions[0].self_check,
+        versions: allVersions.slice(0, 3).map(publicVersion),
+        completed_versions: 3,
+        total_versions: 4,
+      },
+      progress_data: {
+        completed_versions: 3,
+        total_versions: 4,
+        timeline: [
+          { text: "纯改写 V1 · 换皮版完成", completed_versions: 1, total_versions: 4, version_index: 1, status: "done" },
+          { text: "纯改写 V2 · 狠劲版完成", completed_versions: 2, total_versions: 4, version_index: 2, status: "done" },
+          { text: "开始写第 3/4 版 · 结合业务 V3 · 翻转版", completed_versions: 2, total_versions: 4, version_index: 3, status: "running", at_ts: Math.floor(Date.now() / 1000) - 180 },
+          { text: "结合业务 V3 · 翻转版完成", completed_versions: 3, total_versions: 4, version_index: 3, status: "done" },
+          { text: "第 4 版暂时没跑完", completed_versions: 3, total_versions: 4, version_index: 4, status: "failed" },
+        ],
+      },
+    };
+  }
+  if (state === "cancelled") {
+    return {
+      ...common,
+      status: "cancelled",
+      progress_pct: 78,
+      progress_text: "已取消",
+      error: "已取消",
+      partial_result: null,
+      progress_data: null,
+      result: null,
     };
   }
   return {
@@ -156,7 +197,9 @@ function taskResponse(state) {
   };
 }
 
-async function installRoutes(page, timeline) {
+async function installRoutes(page, timeline, options = {}) {
+  const taskId = options.taskId || TASK_ID;
+  const states = options.states || ["v1", "v2", "slow", "ok"];
   await page.route("**/favicon.ico", route => route.fulfill({ status: 204, body: "" }));
   await page.route("**/api/stats/home", route => route.fulfill({
     contentType: "application/json",
@@ -183,14 +226,27 @@ async function installRoutes(page, timeline) {
     timeline.writeBody = route.request().postDataJSON();
     await route.fulfill({
       contentType: "application/json",
-      body: JSON.stringify({ task_id: TASK_ID, status: "running", estimated_seconds: 360, page_id: "hotrewrite", version_count: 4 }),
+      body: JSON.stringify({ task_id: taskId, status: "running", estimated_seconds: 360, page_id: "hotrewrite", version_count: 4 }),
     });
   });
-  await page.route(`**/api/tasks/${TASK_ID}`, async route => {
+  await page.route(`**/api/tasks/${taskId}/cancel`, async route => {
+    timeline.cancelPosts += 1;
+    timeline.cancelled = true;
+    await route.fulfill({ contentType: "application/json", body: JSON.stringify({ ok: true }) });
+  });
+  await page.route(`**/api/tasks/${taskId}`, async route => {
+    if (route.request().method() === "POST") {
+      timeline.cancelPosts += 1;
+      timeline.cancelled = true;
+      await route.fulfill({ contentType: "application/json", body: JSON.stringify({ ok: true }) });
+      return;
+    }
     timeline.taskPolls += 1;
-    const state = timeline.taskPolls === 1 ? "v1" : timeline.taskPolls === 2 ? "v2" : timeline.taskPolls === 3 ? "slow" : "ok";
+    const state = timeline.cancelled
+      ? "cancelled"
+      : (states[Math.min(timeline.taskPolls - 1, states.length - 1)] || states[states.length - 1] || "ok");
     timeline.states.push(state);
-    await route.fulfill({ contentType: "application/json", body: JSON.stringify(taskResponse(state)) });
+    await route.fulfill({ contentType: "application/json", body: JSON.stringify(taskResponse(state, taskId)) });
   });
 }
 
@@ -226,6 +282,57 @@ async function mobileMetrics(page) {
       boxes,
     };
   });
+}
+
+function attachTelemetry(page) {
+  const telemetry = { consoleErrors: [], pageErrors: [], failedRequests: [], httpErrors: [] };
+  page.on("console", m => { if (m.type() === "error") telemetry.consoleErrors.push(m.text()); });
+  page.on("pageerror", e => telemetry.pageErrors.push(e.message));
+  page.on("requestfailed", req => telemetry.failedRequests.push(`${req.method()} ${req.url()} ${req.failure()?.errorText || ""}`));
+  page.on("response", res => { if (res.status() >= 400) telemetry.httpErrors.push(`${res.status()} ${res.url()}`); });
+  return telemetry;
+}
+
+async function resetBrowserState(page) {
+  await page.addInitScript(() => {
+    localStorage.removeItem("wf:hotrewrite");
+    localStorage.removeItem("task:hotrewrite");
+    localStorage.removeItem("from_make_anchor");
+    localStorage.removeItem("show_api_status");
+    sessionStorage.clear();
+  });
+}
+
+async function driveToWrite(page) {
+  await page.goto(APP, { waitUntil: "domcontentloaded", timeout: 30000 });
+  await page.waitForSelector("text=什么热点要改写?", { timeout: 12000 });
+  await page.getByPlaceholder(/最近某平台头部主播/).fill("本地餐饮老板直播间突然爆单, 复盘只改了三句话");
+  await page.getByRole("button", { name: /开始拆解/ }).click();
+  await page.waitForSelector("text=拆解完毕", { timeout: 10000 });
+  await page.waitForSelector("text=本次会出 4 篇", { timeout: 10000 });
+  await page.getByText("三句话背后的信任链").click();
+}
+
+async function runScenario(browser, name, options, assertion) {
+  const ctx = await browser.newContext({ viewport: options.viewport || { width: 1440, height: 980 } });
+  const page = await ctx.newPage();
+  const telemetry = attachTelemetry(page);
+  const timeline = { taskPolls: 0, states: [], analyzeBody: null, writeBody: null, cancelPosts: 0, cancelled: false };
+  await resetBrowserState(page);
+  await installRoutes(page, timeline, options);
+  await driveToWrite(page);
+  await assertion(page, timeline, telemetry);
+  await assertClean(page, telemetry);
+  await ctx.close();
+  return {
+    name,
+    states: timeline.states,
+    cancelPosts: timeline.cancelPosts,
+    consoleErrors: telemetry.consoleErrors.length,
+    pageErrors: telemetry.pageErrors.length,
+    failedRequests: telemetry.failedRequests.length,
+    httpErrors: telemetry.httpErrors.length,
+  };
 }
 
 (async () => {
@@ -267,9 +374,14 @@ async function mobileMetrics(page) {
   await page.waitForSelector("text=已完成 2/4", { timeout: 1000 });
   await page.screenshot({ path: `${SHOT_DIR}/t085_hotrewrite_running_v2.png`, fullPage: true });
 
-  await page.waitForSelector("text=第 4 版比预期慢，正在重试兜底", { timeout: 7000 });
+  await page.waitForSelector("text=正在写第 4/4 版", { timeout: 7000 });
+  await page.waitForSelector("text=比预期慢，正在等模型返回", { timeout: 1000 });
   await page.waitForSelector("text=已等 7 分 1 秒", { timeout: 1000 });
   await page.waitForSelector("text=取消剩余生成", { timeout: 1000 });
+  await page.waitForSelector("text=已发起的生成可能仍会消耗额度", { timeout: 1000 });
+  if ((await page.locator("body").innerText()).includes("正在写第 3 / 4 版")) {
+    throw new Error("已完成的第 3 版仍显示为进行中");
+  }
   await page.screenshot({ path: `${SHOT_DIR}/t085_hotrewrite_slow_v4.png`, fullPage: true });
 
   await page.waitForSelector("text=4 版文案", { timeout: 7000 });
@@ -298,6 +410,39 @@ async function mobileMetrics(page) {
     if (box.height > box.width * 0.9) throw new Error(`390px 文本疑似竖排: ${JSON.stringify(box)}`);
   }
 
+  const failedScenario = await runScenario(
+    browser,
+    "failed-partial",
+    { taskId: "t094-failed", states: ["failed"] },
+    async (failedPage, failedTimeline) => {
+      await failedPage.waitForSelector("text=后面 1 版没有跑完，前面 3 版已保留", { timeout: 10000 });
+      await failedPage.getByRole("button", { name: /第 3 版/ }).first().click();
+      await failedPage.waitForSelector("text=V3 最终正文", { timeout: 3000 });
+      await failedPage.waitForSelector("text=复制正文", { timeout: 1000 });
+      if ((await failedPage.locator("body").innerText()).includes("正在写第 3 / 4 版")) {
+        throw new Error("failed partial 中第 3 版完成后仍显示进行中");
+      }
+      if (!failedTimeline.states.includes("failed")) throw new Error("failed partial 状态未出现");
+      await failedPage.screenshot({ path: `${SHOT_DIR}/t094_hotrewrite_failed_partial.png`, fullPage: true });
+    }
+  );
+
+  const cancelScenario = await runScenario(
+    browser,
+    "cancelled",
+    { taskId: "t094-cancel", states: ["slow"] },
+    async (cancelPage, cancelTimeline) => {
+      await cancelPage.waitForSelector("text=取消剩余生成", { timeout: 10000 });
+      await cancelPage.waitForSelector("text=已发起的生成可能仍会消耗额度", { timeout: 1000 });
+      await cancelPage.getByRole("button", { name: /取消剩余生成/ }).click();
+      await cancelPage.waitForSelector("text=任务已取消", { timeout: 5000 });
+      await cancelPage.waitForSelector("text=页面已停止等待，不会继续自动追加版本", { timeout: 1000 });
+      if (cancelTimeline.cancelPosts !== 1) throw new Error(`取消请求次数异常: ${cancelTimeline.cancelPosts}`);
+      if (!cancelTimeline.states.includes("cancelled")) throw new Error("cancelled 状态未出现");
+      await cancelPage.screenshot({ path: `${SHOT_DIR}/t094_hotrewrite_cancelled.png`, fullPage: true });
+    }
+  );
+
   await browser.close();
   console.log(JSON.stringify({
     ok: true,
@@ -310,12 +455,15 @@ async function mobileMetrics(page) {
     failedRequests: telemetry.failedRequests.length,
     httpErrors: telemetry.httpErrors.length,
     mobile,
+    scenarios: [failedScenario, cancelScenario],
     screenshots: [
       `${SHOT_DIR}/t085_hotrewrite_running_v1.png`,
       `${SHOT_DIR}/t085_hotrewrite_running_v2.png`,
       `${SHOT_DIR}/t085_hotrewrite_slow_v4.png`,
       `${SHOT_DIR}/t085_hotrewrite_done_4versions.png`,
       `${SHOT_DIR}/t085_hotrewrite_mobile_390.png`,
+      `${SHOT_DIR}/t094_hotrewrite_failed_partial.png`,
+      `${SHOT_DIR}/t094_hotrewrite_cancelled.png`,
     ],
   }, null, 2));
 })().catch(err => {

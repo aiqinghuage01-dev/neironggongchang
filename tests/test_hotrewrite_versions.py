@@ -139,6 +139,40 @@ def test_write_script_batch_emits_sanitized_partial_versions(monkeypatch):
     assert isinstance(pct, int)
 
 
+def test_write_script_batch_does_not_leave_done_version_running(monkeypatch):
+    def fake_write_script(_hotspot, _breakdown, _angle, *, variant=None):
+        return {
+            "content": f"{variant['mode_label']} 正文" * 80,
+            "word_count": 800,
+            "self_check": {"pass": True},
+            "variant_id": variant["variant_id"],
+            "mode_label": variant["mode_label"],
+        }
+
+    seen = []
+    monkeypatch.setattr(hotrewrite_pipeline, "write_script", fake_write_script)
+    hotrewrite_pipeline.write_script_batch(
+        "热点",
+        {"event_core": "x", "conflict": "y", "emotion": "z"},
+        {"label": "A"},
+        {"with_biz": True},
+        on_version=lambda partial, progress, text, pct: seen.append(progress),
+    )
+
+    assert seen
+    final_timeline = seen[-1]["timeline"]
+    done_versions = {
+        item.get("version_index")
+        for item in final_timeline
+        if item.get("status") != "running" and item.get("version_index")
+    }
+    stale_running = [
+        item for item in final_timeline
+        if item.get("status") == "running" and item.get("version_index") in done_versions
+    ]
+    assert stale_running == []
+
+
 def test_write_script_falls_back_to_fast_route(monkeypatch):
     primary_ai = MagicMock()
     primary_ai.chat = MagicMock(side_effect=RuntimeError("Request timed out"))

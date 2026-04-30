@@ -203,6 +203,26 @@ function TaskProgressTimeline({ task, title }) {
     ? data.completed_versions
     : (typeof data.completed === "number" ? data.completed : timeline.filter(item => item.status !== "running").length);
   const nowSec = Math.floor(Date.now() / 1000);
+  function unitKey(item) {
+    if (!item) return null;
+    if (item.unit_id) return `unit:${item.unit_id}`;
+    if (item.variant_id) return `variant:${item.variant_id}`;
+    if (item.version_index) return `version:${item.version_index}`;
+    if (item.completed_versions && item.total_versions) return `version:${item.completed_versions}`;
+    return null;
+  }
+  const doneKeys = new Set();
+  timeline.forEach((item) => {
+    if (item?.status === "running") return;
+    const key = unitKey(item);
+    if (key) doneKeys.add(key);
+  });
+  const visibleTimeline = timeline.filter((item) => {
+    if (item?.status !== "running") return true;
+    const key = unitKey(item);
+    if (key && doneKeys.has(key)) return false;
+    return true;
+  });
   return (
     <div style={{
       background: "#fff",
@@ -215,7 +235,7 @@ function TaskProgressTimeline({ task, title }) {
         {total ? <Tag size="xs" color="green">已完成 {done}/{total}</Tag> : null}
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        {timeline.slice(-6).map((item, idx) => {
+        {visibleTimeline.slice(-6).map((item, idx) => {
           const isRunning = item.status === "running";
           const isFailed = item.status === "failed";
           const started = item.started_ts || item.at_ts;
@@ -267,7 +287,7 @@ function _friendlyErrorReason(raw) {
   return "通常重试一次就好";
 }
 
-function FailedRetry({ error, onRetry, onEdit, icon, title }) {
+function FailedRetry({ error, onRetry, onEdit, icon, title, hint }) {
   const [showRaw, setShowRaw] = React.useState(false);
   const friendly = _friendlyErrorReason(error);
   return (
@@ -281,7 +301,7 @@ function FailedRetry({ error, onRetry, onEdit, icon, title }) {
         {title || "这次没跑成"}
       </div>
       <div style={{ color: T.muted, fontSize: 13 }}>
-        {friendly || "大概率是临时波动, 通常重试一次就好"}
+        {hint || friendly || "大概率是临时波动, 通常重试一次就好"}
       </div>
       <div style={{ display: "flex", gap: 10, justifyContent: "center", marginTop: 16 }}>
         {onRetry && (

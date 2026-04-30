@@ -285,6 +285,7 @@ function PageHotrewrite({ onNav }) {
                 onEdit={() => { setTaskId(null); setErr(""); setStep("angles"); }}
                 icon="🔥"
                 title={poller.isCancelled ? "任务已取消" : "改写没跑成功"}
+                hint={poller.isCancelled ? "已发起的生成可能仍会消耗额度；页面已停止等待，不会继续自动追加版本。" : null}
               />
             ) : (
               // 已有版本时, 失败的 retry 按钮挂在底部 HotStepWrite 里 (用现成 onAddSameAngle)
@@ -765,19 +766,23 @@ function HotLiveProgress({ task, versions, activeVersionIdx, onSwitchVersion, st
           })}
         </div>
         {running && remaining > 0 && onCancel && (
-          <button onClick={onCancel} style={{
-            marginTop: 10,
-            padding: "7px 10px",
-            borderRadius: 8,
-            border: `1px solid ${T.border}`,
-            background: "#fff",
-            color: T.muted,
-            fontSize: 12,
-            cursor: "pointer",
-            fontFamily: "inherit",
-          }}>
-            取消剩余生成
-          </button>
+          <div style={{ marginTop: 10 }}>
+            <button onClick={onCancel} style={{
+              padding: "7px 10px",
+              borderRadius: 8,
+              border: `1px solid ${T.border}`,
+              background: "#fff",
+              color: T.muted,
+              fontSize: 12,
+              cursor: "pointer",
+              fontFamily: "inherit",
+            }}>
+              取消剩余生成
+            </button>
+            <div style={{ marginTop: 6, fontSize: 11.5, color: T.muted2, lineHeight: 1.45 }}>
+              已发起的生成可能仍会消耗额度；取消后页面会停止等待剩余版本。
+            </div>
+          </div>
         )}
       </div>
       <TaskProgressTimeline task={task} title="生成现场" />
