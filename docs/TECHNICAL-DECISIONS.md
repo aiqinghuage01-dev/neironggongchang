@@ -1296,3 +1296,23 @@ OpenAI SDK 默认 retry 与项目 `with_retry` 叠加, 会把 OpenClaw/DeepSeek 
   `delegation.total_takeovers=17`.
 - Playwright 打开 `http://127.0.0.1:8765/`, 截图可见 `NRG 总控` 第一张卡和“总控接管审计”;
   console error=0, network 只有 `/api/status` 和 `/api/log` 200。
+
+
+## D-128 - 用户可见页面变更必须有 QA 证据 (2026-04-30)
+
+**触发**: 老板明确要求: 涉及页面变化就需要测试, 这是必须项。此前总控对小型前端改动
+容易自己实现并自己验收, 会让副 Agent 并发价值下降, 也会让“完成”缺少独立证据。
+
+**决策**:
+- 任何用户可见页面、文案、布局、交互、状态展示变更, 不论大小, 都必须有 QA 证据后
+  才能说页面完成。
+- 默认流程为开发 Agent 改、QA Agent 测、总控合并; 总控不默认直接写页面代码。
+- 总控直接小修页面只允许用于紧急止血、跨模块收口、worker 卡死或最终收口, 但仍要提供
+  同等级 QA 证据。
+- QA 证据最低包括截图、console/pageerror/requestfailed/http error 统计、真实点击/填写/切换;
+  布局风险需要桌面 + 窄屏; 数据/API 风险需要 curl 或接口返回证据。
+
+**验证**:
+- `docs/MULTI_AGENT_WORKFLOW.md` 新增“用户可见页面变更门禁”。
+- `docs/agents/ROLE_CONTROLLER.md` 新增“页面变更测试门禁”。
+- 本次为流程文档变更, `git diff --check` 通过。

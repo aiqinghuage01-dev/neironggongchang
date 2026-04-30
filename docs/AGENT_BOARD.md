@@ -8,7 +8,7 @@
 
 | 角色 | 状态 | 工作区 | 当前任务 |
 |---|---|---|---|
-| 总控 Agent | 自动派工已接入 | `~/Desktop/neironggongchang` | T-073 做视频热点排行火焰视觉修正已完成, 等下一轮队列任务 |
+| 总控 Agent | 自动派工已接入 | `~/Desktop/neironggongchang` | T-074 页面变更强制 QA 证据流程已完成, 等下一轮队列任务 |
 | 内容开发 Agent | 空闲 | `~/Desktop/nrg-worktrees/content-dev` | T-021/T-022 已合入 main; 等新内容任务 |
 | 媒体开发 Agent | 空闲 | `~/Desktop/nrg-worktrees/media-dev` | T-047 已完成并合入 main; 等新媒体任务 |
 | QA 测试 Agent | 待领取 | `~/Desktop/nrg-worktrees/qa`, `~/Desktop/nrg-worktrees/qa-1`, `~/Desktop/nrg-worktrees/qa-2` | T-066 已通过; 等后续 QA |
@@ -79,11 +79,13 @@
 | T-071 | 做视频热点雷达按 `热点雷达-学员版` 三类修正 | 总控 Agent | done | `shortvideo/works.py`, `backend/api.py`, `web/factory-make-v2.jsx`, `tests/test_works_api.py`, `tests/test_make_hot_radar_static.py` | 后端按 TopHub 百度/微博/抖音/知乎输出大新闻/行业相关/本地热点; 做视频页去红色方块火焰, 每批三类各 1 条, “换一批”切下一批; curl/Playwright/full pytest 通过 |
 | T-072 | 研发部状态面板显示总控活动 + 接管审计 | 总控 Agent | done | `scripts/agent_dashboard.py` | `/api/status` 第一张上岗卡为 `NRG 总控`; 主工作区 dirty 或 controller 任务 claimed 时显示总控工作中; 页面有“总控接管审计”; Playwright 截图/console/network 通过 |
 | T-073 | 做视频热点排行白底 emoji 火焰视觉修正 | 总控 Agent | done | `web/factory-make-v2.jsx`, `tests/test_make_hot_radar_static.py` | 热点排行头部和卡片热度区均为白底 + emoji `🔥` badge, 无红橙方块; 换一批正常; 静态测试 + Playwright 截图通过 |
+| T-074 | 页面变更强制 QA 证据流程 | 总控 Agent | done | `docs/MULTI_AGENT_WORKFLOW.md`, `docs/agents/ROLE_CONTROLLER.md` | 用户可见页面/文案/布局/交互/状态展示变更必须有 QA 截图、console、真实操作证据; 没有证据不能说页面完成 |
 
 ---
 
 ## 最近证据
 
+- T-074 页面变更强制 QA 证据流程: `docs/MULTI_AGENT_WORKFLOW.md` 和 `docs/agents/ROLE_CONTROLLER.md` 已写明用户可见页面变化必须 QA; 没有截图/console/真实操作证据只能说待测, 不能说完成。
 - T-073 做视频热点排行视觉修正: Playwright 截图 `/tmp/nrg_hot_radar_t073/t073-make-hot-radar-white-fire.png` 和 `/tmp/nrg_hot_radar_t073/t073-make-hot-radar-white-fire-next.png` 已读, 可见白底 `🔥91/🔥79` badge; `换一批` 后正常第 2/4 批; console error=0。
 - T-072 状态面板显示总控活动: `/api/status` 返回 `slots[0].controller=true`, `delegation.total_takeovers=17`; Playwright 截图 `.playwright-cli/page-2026-04-30T08-32-13-976Z.png` 已读, 可见 `NRG 总控` 第一张卡和“总控接管审计”; console error=0, network 仅 200。
 - T-071 做视频热点雷达修正: API live `limit=6` 返回 `大新闻/行业相关/本地热点` 交错结果, `fetched_from=hot-topic-radar`; Playwright 桌面截图 `/tmp/nrg_hot_radar_t071/make-hot-radar-final.png`, 换批截图 `/tmp/nrg_hot_radar_t071/make-hot-radar-next-final.png`, 移动截图 `/tmp/nrg_hot_radar_t071/make-hot-radar-mobile-final.png`; targeted pytest 和 full pytest 通过。
