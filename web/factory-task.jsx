@@ -354,7 +354,7 @@ function FailedRetry({ error, onRetry, onEdit, icon, title, hint, task }) {
             onClick={() => setShowRaw(!showRaw)}
             style={{ background: "transparent", border: "none", color: T.muted2, cursor: "pointer", fontSize: 11.5, padding: 0, fontFamily: "inherit" }}
           >
-            {showRaw ? "收起技术详情" : "看技术详情"}
+            {showRaw ? "收起原因" : "查看原因"}
           </button>
           {showRaw && (
             <div style={{
