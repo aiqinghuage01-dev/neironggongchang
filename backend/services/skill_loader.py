@@ -19,7 +19,9 @@ import time
 from pathlib import Path
 from typing import Any
 
-SKILL_ROOT = Path(os.path.expanduser("~/Desktop/skills"))
+# v1.1: SKILL_ROOT 走 env,默认 ~/Desktop/skills(开发机行为不变)
+# Mac mini 上设 SKILL_ROOT=~/Desktop/skills/团队版 走 symlink 视图(团队版指向 ~/skills-source)
+SKILL_ROOT = Path(os.path.expanduser(os.getenv("SKILL_ROOT", "~/Desktop/skills")))
 
 _CACHE_TTL = 600
 _cache: dict[str, tuple[dict[str, Any], float]] = {}
