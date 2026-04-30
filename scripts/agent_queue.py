@@ -20,6 +20,7 @@ from typing import Any
 DEFAULT_QUEUE_DIR = Path.home() / "Desktop" / "nrg-agent-queue"
 VALID_STATUSES = {"queued", "claimed", "done", "blocked", "cancelled"}
 VALID_ROLES = {"controller", "content", "media", "qa", "review", "any"}
+DELEGATED_ROLES = {"content", "media", "qa", "review"}
 
 
 def now() -> str:
@@ -130,6 +131,11 @@ def task_prompt(task: dict[str, Any]) -> str:
 """
 
 
+def is_controller_agent(agent: str) -> bool:
+    normalized = (agent or "").lower()
+    return "总控" in agent or "controller" in normalized
+
+
 def print_task(task: dict[str, Any], fmt: str) -> None:
     if fmt == "json":
         print(json.dumps(task, ensure_ascii=False, indent=2))
@@ -143,6 +149,8 @@ def print_task(task: dict[str, Any], fmt: str) -> None:
             print(f"  claimed_by: {task.get('claimed_by')}")
         if task.get("summary"):
             print(f"  summary: {task.get('summary')}")
+        if task.get("takeover_reason"):
+            print(f"  takeover_reason: {task.get('takeover_reason')}")
         if task.get("owner_decision"):
             print(f"  owner_decision: {task.get('owner_decision')}")
 
@@ -180,6 +188,8 @@ def cmd_add(args: argparse.Namespace) -> int:
             "commit": "",
             "summary": "",
             "owner_decision": "",
+            "takeover_reason": "",
+            "takeover_at": "",
         }
         if existing:
             tasks[tasks.index(existing)] = task
@@ -253,6 +263,14 @@ def update_terminal_task(args: argparse.Namespace, status: str) -> int:
         task = find_task(tasks, args.id)
         if not task:
             raise SystemExit(f"Task not found: {args.id}")
+        takeover_reason = getattr(args, "takeover_reason", "") or ""
+        task_role = str(task.get("role") or "")
+        if is_controller_agent(args.agent or "") and task_role in DELEGATED_ROLES and not takeover_reason:
+            raise SystemExit(
+                "Controller takeover of a delegated task requires --takeover-reason. "
+                "Delegate normal work to content/media/qa/review; use takeover only for stuck workers, "
+                "cross-module conflicts, urgent hotfixes, or final verification closure."
+            )
         task["status"] = status
         task["updated_at"] = now()
         if args.agent:
@@ -267,8 +285,13 @@ def update_terminal_task(args: argparse.Namespace, status: str) -> int:
             task["summary"] = args.reason
         if getattr(args, "owner_decision", False):
             task["owner_decision"] = args.reason or "需要老板确认"
+        if takeover_reason:
+            task["takeover_reason"] = takeover_reason
+            task["takeover_at"] = now()
 
     event = {"event": status, "task_id": args.id, "agent": args.agent or ""}
+    if getattr(args, "takeover_reason", ""):
+        event["takeover_reason"] = args.takeover_reason
     append_event(event)
     title = "内容工厂任务完成" if status == "done" else "内容工厂任务阻塞"
     notify(title, f"{args.id} · {args.agent or ''}")
@@ -286,6 +309,8 @@ def cmd_reset(args: argparse.Namespace) -> int:
         task["claimed_at"] = ""
         task["updated_at"] = now()
         task["owner_decision"] = ""
+        task["takeover_reason"] = ""
+        task["takeover_at"] = ""
     append_event({"event": "reset", "task_id": args.id})
     print(f"{args.id} -> queued")
     return 0
@@ -328,6 +353,11 @@ def build_parser() -> argparse.ArgumentParser:
     done.add_argument("--report", default="")
     done.add_argument("--commit", default="")
     done.add_argument("--summary", default="")
+    done.add_argument(
+        "--takeover-reason",
+        default="",
+        help="Required when a controller closes a content/media/qa/review task.",
+    )
     done.set_defaults(func=lambda args: update_terminal_task(args, "done"))
 
     block = sub.add_parser("block")
@@ -335,6 +365,11 @@ def build_parser() -> argparse.ArgumentParser:
     block.add_argument("--agent", default="")
     block.add_argument("--reason", required=True)
     block.add_argument("--owner-decision", action="store_true")
+    block.add_argument(
+        "--takeover-reason",
+        default="",
+        help="Required when a controller blocks a content/media/qa/review task.",
+    )
     block.set_defaults(func=lambda args: update_terminal_task(args, "blocked"))
 
     reset = sub.add_parser("reset")

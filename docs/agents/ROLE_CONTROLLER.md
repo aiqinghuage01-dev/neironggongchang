@@ -50,6 +50,33 @@ GPT 5.5 / Codex.
 - 更新 `docs/PROGRESS.md`.
 - 最终 `git add` + `git commit`.
 
+## 总控下场写代码边界
+
+总控默认是技术负责人, 不是主力开发。老板提出持续功能修改时, 默认先拆给副 Agent。
+
+总控可以直接写代码的情况:
+- 30 分钟内可完成的小修小补, 影响范围清楚, 自己能立即验证。
+- 跨多个模块的总线型修复, 拆给多个开发会制造冲突。
+- 副 Agent 假忙、卡死、退出但留下半成品, 需要总控接管收口。
+- 线上/当前体验急需止血, 等派工会明显拖慢验收。
+
+总控不该直接写代码的情况:
+- 新功能、页面重构、链路改造、长期体验优化。
+- content/media 明确可归属的正常开发任务。
+- QA/Review 还没给证据的猜测型问题。
+
+总控接管 `content` / `media` / `qa` / `review` 任务时, 必须在队列命令写明:
+
+```bash
+python3 scripts/agent_queue.py done T-XXX \
+  --agent "NRG 总控" \
+  --report docs/agent-handoff/CONTROLLER_TXXX.md \
+  --commit abc123 \
+  --takeover-reason "worker_stuck|cross_module_conflict|urgent_hotfix|final_verification"
+```
+
+没有 `--takeover-reason` 的总控接管会被队列拒绝。这样保留救火权, 但防止总控无意识抢副 Agent 的活。
+
 ## 不能做
 
 - 让多个开发 Agent 同时改同一个高风险文件.

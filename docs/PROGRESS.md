@@ -9,6 +9,7 @@
 **版本**: v0.8.9-hot-radar — 做视频页热点区改为 3 条横向大卡视觉; `/api/hot-topics` 真实库优先并保底 3 条、为“换一批”提供 9 条候选池; 页面“换一批”可切下一组, “做成视频”保持直进热点改写。
 
 ### 当前进行
+- T-070 多 Agent 流程护栏已补: 正常功能开发默认派 content/media/qa/review, 总控只做拆分、收件箱、合并、最终验收; 总控若要关闭 `content/media/qa/review` 任务, 队列命令必须带 `--takeover-reason`, 并可用 `python3 scripts/agent_delegation_audit.py` 审计接管比例。
 - T-069 总控已完成: 做视频页默认热点区和“今天的热点”tab 改为热点雷达三条大横卡, 展示热度/平台/匹配定位/趋势标签/做成视频按钮; 前端一次拉取 24 条候选并按 3 条一组轮换; 后端 `list_hot_topics_for_radar()` 保证真实热点库优先, 不足时补清华哥业务相关候选。验证: `curl /api/hot-topics?limit=3` 返回 3 条; Playwright 桌面显示 3 个“做成视频”按钮, 点击“换一批”后切到下一组; 移动宽度无横向滚动; `.venv/bin/pytest -q -x` 通过。报告 `docs/agent-handoff/CONTROLLER_T069_MAKE_HOT_RADAR_20260430.md`。
 - T-042/T-044/T-045 阻塞项已由总控返修并自测通过: 新增 `/api/tasks/counts`; 作品库只暴露 `/media` 可服务文件; 前端 `api.media()` 阻断 `/private`/`/Users`; 投流失败页只显示友好失败卡; 直接出图/作品库/图片预览按钮将 `prompt/apimart/URL` 改成“画面描述/快速出图/链接”; 数字人 picker 只列视频作品并校验 `.mp4`; 页面补内联 favicon 清掉 404 console 噪音。
 - T-055 已由 QA 通过: 正式 `8000/8001` 端口复测战略部、投流失败恢复、直接出图、作品库、数字人 picker; console/pageerror/requestfailed/http error 均 0; 无 `/private` 或 `/Users` 媒体请求; 投流失败恢复禁词不可见; 数字人 picker 只列视频。

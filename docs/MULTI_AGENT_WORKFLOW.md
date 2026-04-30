@@ -8,6 +8,12 @@
 
 **多 Agent 可以并行, 但只有总控 Agent 能合并进主目录.**
 
+补充原则:
+- **正常功能开发默认派副 Agent, 总控不默认下场写代码.**
+- 总控可以救火, 但接管 `content` / `media` / `qa` / `review` 任务必须在队列写 `--takeover-reason`.
+- 接管理由只允许用于: worker 卡死/假忙、跨模块冲突、紧急止血、最终验收收口.
+- 每轮复盘可运行 `python3 scripts/agent_delegation_audit.py`, 看总控是否接管过多。
+
 每个会写代码的 Agent 必须满足:
 - 一个独立 AI 会话
 - 一个独立 git worktree
@@ -125,6 +131,24 @@ Agent 完成时只需要给老板一句收据:
 T-013 已写交接: docs/agent-handoff/QA_T013_20260429.md
 commit: abc1234
 请总控收件箱处理。
+```
+
+### 总控接管审计
+
+总控接管副 Agent 任务不是禁区, 但必须留痕:
+
+```bash
+python3 scripts/agent_queue.py done T-XXX \
+  --agent "NRG 总控" \
+  --report docs/agent-handoff/CONTROLLER_TXXX.md \
+  --commit abc123 \
+  --takeover-reason "worker_stuck"
+```
+
+不带 `--takeover-reason` 会被队列拒绝。查看接管情况:
+
+```bash
+python3 scripts/agent_delegation_audit.py
 ```
 
 如果 2-3 个 QA 完成时间不同, 总控不要等老板逐条转发; 直接按收件箱里已有报告先处理, 后到的报告下一轮再扫.
