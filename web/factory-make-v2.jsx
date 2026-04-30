@@ -394,20 +394,20 @@ function MakeV2StepScript({ script, setScript, onNext, onNav, seedFrom, onDismis
         </div>
       )}
 
-      <div style={{ textAlign: "center", margin: "30px 0 18px" }}>
-        <div style={{ fontSize: "clamp(28px, 3vw, 34px)", fontWeight: 900, color: T.text, letterSpacing: 0, lineHeight: 1.2 }}>
+      <div style={{ textAlign: "center", margin: "24px 0 22px" }}>
+        <div style={{ fontSize: "clamp(28px, 3vw, 32px)", fontWeight: 800, color: T.text, letterSpacing: "-0.01em", lineHeight: 1.2 }}>
           把素材丢进来 ↓
         </div>
-        <div style={{ marginTop: 8, fontSize: 14, color: T.muted, fontWeight: 600 }}>
+        <div style={{ marginTop: 10, fontSize: 13, color: T.muted, fontWeight: 500 }}>
           链接 · 文案 · 录音 一律识别
         </div>
       </div>
 
       <div style={{
         background: "#fff", border: `2px solid ${T.brand}`,
-        boxShadow: `0 0 0 7px ${T.brandSoft}`,
-        borderRadius: 20, padding: "28px 32px 20px",
-        marginBottom: 36,
+        boxShadow: `0 0 0 6px ${T.brandSoft}`,
+        borderRadius: 18, padding: "26px 30px 16px",
+        marginBottom: 32,
       }}>
         <textarea
           value={script}
@@ -415,12 +415,12 @@ function MakeV2StepScript({ script, setScript, onNext, onNav, seedFrom, onDismis
           placeholder={"粘抖音 / 小红书 / B 站链接...\n或者把已经写好的文案贴进来\n或者上传一段录音"}
           rows={10}
           style={{
-            width: "100%", minHeight: 290, padding: 0, border: "none",
-            fontSize: 18, fontWeight: 600, fontFamily: "inherit", outline: "none",
-            resize: "vertical", lineHeight: 1.7, background: "transparent",
+            width: "100%", minHeight: 280, padding: 0, border: "none",
+            fontSize: 17, fontWeight: 500, fontFamily: "inherit", outline: "none",
+            resize: "vertical", lineHeight: 1.75, background: "transparent",
             color: T.text,
           }} />
-        <div style={{ borderTop: `1px solid ${T.border}`, paddingTop: 14, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+        <div style={{ borderTop: `1px solid ${T.border}`, paddingTop: 16, marginTop: 4, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
           <input ref={uploadInputRef} type="file" accept="audio/*,video/*,.txt,.md" onChange={handleUploadPick} style={{ display: "none" }} />
           <MakeInputToolButton onClick={() => onNav("voicerewrite")}>🎙 录音</MakeInputToolButton>
           <MakeInputToolButton onClick={() => uploadInputRef.current && uploadInputRef.current.click()}>📎 上传</MakeInputToolButton>
@@ -435,10 +435,10 @@ function MakeV2StepScript({ script, setScript, onNext, onNav, seedFrom, onDismis
             </span>
           )}
           <button onClick={startFromComposer} disabled={!composerReady} style={{
-            marginLeft: "auto", minWidth: 132, height: 50, padding: "0 28px",
-            borderRadius: 12, border: "none",
+            marginLeft: "auto", minWidth: 120, height: 44, padding: "0 24px",
+            borderRadius: 10, border: "none",
             background: composerReady ? T.brand : T.muted3,
-            color: "#fff", fontSize: 17, fontWeight: 900,
+            color: "#fff", fontSize: 15, fontWeight: 700,
             fontFamily: "inherit", cursor: composerReady ? "pointer" : "not-allowed",
           }}>
             {extracting ? "处理中..." : "开始 →"}
@@ -864,9 +864,9 @@ function MakeV2StepScript({ script, setScript, onNext, onNav, seedFrom, onDismis
 function MakeInputToolButton({ children, onClick }) {
   return (
     <button onClick={onClick} type="button" style={{
-      height: 34, padding: "0 14px", borderRadius: 100,
+      height: 32, padding: "0 13px", borderRadius: 100,
       border: `1px solid ${T.border}`, background: "#fffdfa",
-      color: T.muted, fontSize: 13, fontWeight: 800,
+      color: T.text2, fontSize: 12.5, fontWeight: 500,
       fontFamily: "inherit", cursor: "pointer",
       display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6,
       boxShadow: "0 2px 8px rgba(54, 43, 27, 0.035)",
@@ -894,7 +894,7 @@ function HotRankPanel({ topics, batch, batchIndex, batchCount, onTake, onRefresh
   return (
     <div style={{ margin: "0 0 20px" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12, flexWrap: "wrap" }}>
-        <div style={{ fontSize: 17, fontWeight: 900, color: T.text, display: "inline-flex", alignItems: "center", gap: 6 }}>
+        <div style={{ fontSize: 15.5, fontWeight: 800, color: T.text, display: "inline-flex", alignItems: "center", gap: 6 }}>
           <span>🔥</span>
           <span>没思路？从热点开始</span>
         </div>
@@ -914,7 +914,7 @@ function HotRankPanel({ topics, batch, batchIndex, batchCount, onTake, onRefresh
                 height: 28, padding: "0 13px", borderRadius: 100,
                 border: "none", background: filter === t.id ? T.amberSoft : "transparent",
                 color: filter === t.id ? T.amber : T.muted,
-                fontSize: 12.5, fontWeight: 900, fontFamily: "inherit", cursor: "pointer",
+                fontSize: 12, fontWeight: 700, fontFamily: "inherit", cursor: "pointer",
               }}>
               {t.label}
             </button>
@@ -922,7 +922,7 @@ function HotRankPanel({ topics, batch, batchIndex, batchCount, onTake, onRefresh
         </div>
         <button onClick={onNextBatch} style={{
           marginLeft: "auto", border: "none", background: "transparent",
-          color: T.muted2, fontSize: 12.5, fontWeight: 800,
+          color: T.muted2, fontSize: 12, fontWeight: 500,
           fontFamily: "inherit", cursor: "pointer",
         }}>
           换一批 ↻
@@ -994,13 +994,13 @@ function HotRadarListRow({ t, idx, onTake, isLast }) {
       </div>
       <div style={{ minWidth: 0 }}>
         <div style={{
-          fontSize: 16, lineHeight: 1.35, fontWeight: 900, color: T.text,
+          fontSize: 14.5, lineHeight: 1.4, fontWeight: 700, color: T.text,
           overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
         }}>
           {t.title}
         </div>
         <div style={{
-          marginTop: 3, fontSize: 13, color: T.muted, lineHeight: 1.45,
+          marginTop: 3, fontSize: 12.5, color: T.muted, lineHeight: 1.5,
           overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
         }}>
           {reason}
@@ -1008,7 +1008,7 @@ function HotRadarListRow({ t, idx, onTake, isLast }) {
       </div>
       <button onClick={onTake} style={{
         justifySelf: "end", border: "none", background: "transparent",
-        color: T.amber, fontSize: 14, fontWeight: 900,
+        color: T.amber, fontSize: 13, fontWeight: 700,
         fontFamily: "inherit", cursor: "pointer",
       }}>
         用 →
