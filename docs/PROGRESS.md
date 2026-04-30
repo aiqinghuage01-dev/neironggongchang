@@ -4,13 +4,14 @@
 
 ---
 
-## 当前状态 (2026-05-01 · 写文案渐进输出第三页落地)
+## 当前状态 (2026-05-01 · 写文案渐进输出继续铺开)
 
-**版本**: v0.8.20-baokuan-progressive — 热点改写、违规审查、爆款改写已跑通“先出先看”: 热点/爆款按版本逐个展示, 违规审查按阶段展示扫描与改写结果; 慢版本/慢阶段有真实等待说明, failed 保留已完成内容。自动派工器与自动返修主管继续运行, 后续写文案页按队列继续铺开。
+**版本**: v0.8.21-touliu-progressive — 热点改写、违规审查、爆款改写、投流 n=1 已跑通“先出先看/先知进度”: 热点/爆款按版本逐个展示, 违规审查按阶段展示扫描与改写结果, 投流显示准备风格/生成正文/解析结果/自检整理。慢版本/慢阶段有真实等待说明, failed 保留已完成内容或失败阶段。自动派工器与自动返修主管继续运行, 后续公众号/录音/内容策划/首页任务摘要按队列继续铺开。
 
 ### 当前进行
+- T-100「公众号/录音/内容策划阶段时间线统一」已重置旧空领后由新的内容开发进程领取, 当前正在跑。T-108/T-109 等 T-100 完成后自动做 QA/Review; T-101 写文案首页进行中任务摘要排在其后。
+- T-099/T-106/T-107 已合入 main 并由总控在正式 `8000/8001` 补验: 投流 n=1 页面 no-credit Playwright 跑通 slow-ok、parse failed、timeout failed、ok 与 390px 移动端; console/pageerror/requestfailed/http error 全 0, 390px `maxOverflow=0`。截图已读: `/tmp/_ui_shots/t099_touliu_slow_wait.png`, `/tmp/_ui_shots/t099_touliu_ok.png`, `/tmp/_ui_shots/t099_touliu_parse_failed.png`, `/tmp/_ui_shots/t099_touliu_task_failed_friendly.png`, `/tmp/_ui_shots/t099_touliu_mobile_390.png`。靶向 pytest 30 passed; 报告 `docs/agent-handoff/DEV_CONTENT_T099_TOULIU_N1_PROGRESS_20260501.md`, `docs/agent-handoff/QA_T106_TOULIU_N1_PROGRESS_20260501.md`, `docs/agent-handoff/REVIEW_T107_TOULIU_N1_PROGRESS_20260501.md`, `docs/agent-handoff/CONTROLLER_T099_TOULIU_PROGRESS_MERGE_20260501.md`。
 - T-098/T-104/T-105 已合入 main 并由总控在正式 `8000/8001` 补验: 爆款改写页面 no-credit Playwright 跑通 running V1、running V2、slow V4、ok、failed partial 与 390px 移动端; console/pageerror/requestfailed/http error 全 0, 390px `maxOverflow=0`。截图已读: `/tmp/_ui_shots/t098_baokuan_running_v1.png`, `/tmp/_ui_shots/t098_baokuan_slow_v4.png`, `/tmp/_ui_shots/t098_baokuan_failed_partial.png`, `/tmp/_ui_shots/t098_baokuan_mobile_390.png`。靶向 pytest 20 passed; 报告 `docs/agent-handoff/DEV_CONTENT_T098_BAOKUAN_PROGRESSIVE_20260501.md`, `docs/agent-handoff/QA_T104_BAOKUAN_PROGRESSIVE_20260501.md`, `docs/agent-handoff/REVIEW_T105_BAOKUAN_PROGRESSIVE_20260501.md`。
-- T-099「投流 n=1 慢等待解释与失败可读化」已被内容开发自动领取并在跑; 后续 T-106 QA 与 T-107 Review 排队。T-100/T-101 仍排队, 等前序 QA/Review 证据回来后继续自动推进。
 - T-095/T-096/T-097 已合入 main 并由总控在正式 `8000/8001` 补验: 违规审查页面 no-credit Playwright 跑通 `scan -> conservative -> slow -> ok` 与 `scan -> conservative -> failed`, console/pageerror/requestfailed/http error 全 0, 390px `maxOverflow=0`。截图已读: `/tmp/_ui_shots/t095_compliance_conservative_visible.png`, `/tmp/_ui_shots/t095_compliance_marketing_slow.png`, `/tmp/_ui_shots/t095_compliance_failed_preserve.png`, `/tmp/_ui_shots/t095_compliance_mobile_390.png`。报告 `docs/agent-handoff/CONTROLLER_T095_COMPLIANCE_PROGRESSIVE_MERGE_20260501.md`。
 - T-088 已由总控接管并在 main 收口: content-dev 第一轮 T-085 patch 已摘入主线, 随后补齐 T-086/T-087 阻塞点。正式 `8000/8001` 已重启并通过 mock/no-credit Playwright: `v1 -> v2 -> slow V4 -> ok`, console/pageerror/requestfailed/http error 全 0, 390px `maxOverflow=0`。报告 `docs/agent-handoff/CONTROLLER_T088_HOTREWRITE_PROGRESSIVE_FINAL_20260501.md`。
 - T-086/T-087 的旧阻塞点已在 T-088 中处理: 正文后部“已走技能/需要进一步操作吗”会被展示层清洗; task failed 不再清空 partial; 慢 V4 页面显示 `progress_text`、已等时间、剩余版本说明和取消按钮。T-089/T-090 用于返修后独立 QA/Review, 通过后继续 T-084“所有写文案功能举一反三方案”。
