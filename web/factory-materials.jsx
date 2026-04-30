@@ -113,7 +113,6 @@ function PageMaterials({ onNav }) {
           {tab === "clip" && <EmptyTabHint tip={MATERIAL_TABS.find(t => t.id === "clip").emptyTip} onAdd={() => {}} />}
         </div>
       </div>
-      <LiDock context="素材库" />
     </div>
   );
 }

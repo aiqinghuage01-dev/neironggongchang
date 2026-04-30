@@ -366,7 +366,6 @@ function PageSettingsInner({ onNav, setUnlocked }) {
 
         </div>
       </div>
-      <LiDock context="设置" />
     </div>
   );
 }

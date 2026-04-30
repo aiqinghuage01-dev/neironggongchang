@@ -4,9 +4,9 @@
 
 ---
 
-## 当前状态 (2026-04-30 · T-048/T-065/T-066 全站文案返修闭环)
+## 当前状态 (2026-04-30 · T-068 全站常驻小华浮层)
 
-**版本**: v0.8.7-frameaware-closed — T-048/T-065 找到的内容页技术词和 `beta` iframe 本机路径外露已由总控返修; T-066 独立 QA 用 frame-aware 口径复测 21 页 + LiDock 即梦失败任务, 禁止词和浏览器错误均为 0; T-067 手动审查补强 beta 标题脱敏后旧阻塞已关闭。
+**版本**: v0.8.8-global-lidock — 小华浮层已从单页手动挂载改为 `FactoryApp` 顶层全站常驻; 23 个路由页面均只有 1 个小华按钮, 点击后上下文标题正确, 浏览器错误为 0。
 
 ### 当前进行
 - T-042/T-044/T-045 阻塞项已由总控返修并自测通过: 新增 `/api/tasks/counts`; 作品库只暴露 `/media` 可服务文件; 前端 `api.media()` 阻断 `/private`/`/Users`; 投流失败页只显示友好失败卡; 直接出图/作品库/图片预览按钮将 `prompt/apimart/URL` 改成“画面描述/快速出图/链接”; 数字人 picker 只列视频作品并校验 `.mp4`; 页面补内联 favicon 清掉 404 console 噪音。
@@ -34,6 +34,7 @@
 - T-048/T-065 总控自验: `tests/test_frontend_copy_static.py tests/test_kb_display.py tests/test_ai_routing.py` -> 15 passed; `.venv/bin/pytest -q -x` -> 通过; Playwright `wechat/voicerewrite` 靶向扫描 0 命中; frame-aware 全站 21 页扫描 21/21 OK, forbiddenHits/console/pageerror/requestfailed/http/nonGET 均为 0; `beta` 靶向确认 frames 仅主页面 1 个。
 - T-066 独立 QA 已通过并关闭 T-048/T-065: 正式 `8000/8001` 未停启; 21 页 + 所有 frame forbidden hits=0; `beta` frame count=1/iframeElements=0; LiDock 即梦失败任务假数据 special hits=0; console/pageerror/requestfailed/http>=400=0; 唯一 non-GET 为 Playwright route 拦截的 fake recover; 未烧 credits。报告 `docs/agent-handoff/QA_T066_FRAMEAWARE_RETEST_20260430.md`。
 - T-067 总控手动审查已完成: 自动 review worker 领取后 6 分钟 0 字节日志, 总控停止假忙并同范围审查; 发现 `beta` 任务标题 `/Users` 脱敏正则不严和 `submit_id=...` 残值风险, 已修复并补静态回归; Playwright 假状态接口塞入 `/Users`、`/private`、`submit_id=abc`、`status=500`、`OpenClaw/DeepSeek/Opus/LLM/API` 后页面命中 0。报告 `docs/agent-handoff/CONTROLLER_T067_MANUAL_REVIEW_BETA_SANITIZER_20260430.md`。
+- T-068 总控已完成: 右下角小华从页面内手动挂载改为 `FactoryApp` 顶层统一挂载, 删除各页面重复 `<LiDock />`; 新增 `tests/test_lidock_global_static.py` 锁住“只挂一次 + 所有路由有上下文”。Playwright 全站 23 页逐页点击小华, `buttonCount=1/openButtonCount=1`, 上下文正确, console/pageerror/requestfailed/http/nonGET 均为 0。报告 `docs/agent-handoff/CONTROLLER_T068_GLOBAL_LIDOCK_20260430.md`。
 - 全站优化 8 小时定时巡检已启动: `bash scripts/start_site_optimization_watch.sh` 运行 LaunchAgent `com.neironggongchang.site-optimization-watch`, 窗口 2026-04-30 00:11~08:11, 每 2 小时检查一次工作台. 若没有 claimed/queued 任务, 自动补下一批全站优化任务; 当前首轮发现 T-041/T-042/T-043/T-044 正在跑、T-045 queued, 因此没有重复塞任务.
 - D-125 素材库验收补强已由总控在 main 实装: 新增 `/api/material-lib/featured`, 首页先展示可直接预览的业务素材卡片, 主分类只显示 7 个业务大类, `00 待整理` 单独降级为整理入口; 解决「网页显示全是 0 / 看不到业务分类 / 没有素材预览」的验收体感问题。
 - 正式端口已重启并验证: `http://127.0.0.1:8000/api/material-lib/featured?limit=18` 返回 18 条非待整理、带缩略图、已画像素材; `/categories` 返回业务素材 55 条、可直接预览 42 条、待整理 1563 条。

@@ -115,7 +115,6 @@ function PageHome({ onNav }) {
           {catalog && catalog.length > 0 && <SkillCenter catalog={catalog} onNav={onNav} />}
         </div>
       </div>
-      <LiDock context="首页" />
     </div>
   );
 }

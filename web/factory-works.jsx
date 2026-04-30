@@ -229,7 +229,6 @@ function PageWorks({ onNav }) {
         onNav("make");
       }} />}
 
-      <LiDock context="作品库" />
     </div>
   );
 }

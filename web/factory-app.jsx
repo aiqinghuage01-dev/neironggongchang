@@ -1,5 +1,31 @@
 // factory-app.jsx — 顶级路由
 
+const PAGE_CONTEXT_LABELS = {
+  home: "首页",
+  strategy: "战略部",
+  make: "做视频",
+  ad: "投流文案",
+  wechat: "公众号",
+  moments: "朋友圈",
+  hotrewrite: "热点改写",
+  voicerewrite: "录音改写",
+  baokuan: "爆款改写",
+  planner: "内容策划",
+  compliance: "违规审查",
+  write: "写文案",
+  image: "出图片",
+  imagegen: "直接出图",
+  dreamina: "即梦图片/视频",
+  dhv5: "数字人",
+  beta: "科技与狠活",
+  materials: "素材库",
+  "materials-legacy": "素材库",
+  works: "作品库",
+  knowledge: "知识库",
+  nightshift: "小华夜班",
+  settings: "设置",
+};
+
 function FactoryApp() {
   // D-065: 支持 ?page=works 这类 URL 深链(便于截图验证 + 直接分享)
   const [page, setPage] = React.useState(() => {
@@ -58,6 +84,7 @@ function FactoryApp() {
       default:           return <PageHome onNav={setPage} />;
     }
   };
+  const pageContext = PAGE_CONTEXT_LABELS[page] || "这一页";
   return (
     <div style={{
       display: "flex", height: "100vh", width: "100vw", background: T.bg,
@@ -88,6 +115,7 @@ function FactoryApp() {
         )}
         {render()}
       </div>
+      <LiDock context={pageContext} />
       {/* D-069: 顶栏 TaskBar 已删, 任务状态全部融入小华按钮徽章 + LiDock 任务 tab */}
     </div>
   );

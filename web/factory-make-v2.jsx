@@ -109,7 +109,6 @@ function PageMakeV2({ onNav }) {
                                     onNewMp4={() => gotoStep("script")} />}
         </div>
       </div>
-      <LiDock context="做视频" />
     </div>
   );
 }

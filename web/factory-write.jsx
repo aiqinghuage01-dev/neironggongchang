@@ -101,8 +101,6 @@ function PageWrite({ onNav }) {
           )}
         </div>
       </div>
-
-      <LiDock context="写文案" />
     </div>
   );
 }

@@ -11,7 +11,6 @@ function _PageShell({ title, subtitle, children, context }) {
       <div style={{ flex: 1, overflow: "auto", padding: "20px 32px" }}>
         {children}
       </div>
-      <LiDock context={context || title} />
     </div>
   );
 }

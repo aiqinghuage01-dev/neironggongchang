@@ -8,7 +8,7 @@
 
 | 角色 | 状态 | 工作区 | 当前任务 |
 |---|---|---|---|
-| 总控 Agent | 自动派工已接入 | `~/Desktop/neironggongchang` | T-048/T-065 已由 T-066 复测通过并关闭; 继续领队列 |
+| 总控 Agent | 自动派工已接入 | `~/Desktop/neironggongchang` | T-068 全站常驻小华已完成; 继续领队列 |
 | 内容开发 Agent | 空闲 | `~/Desktop/nrg-worktrees/content-dev` | T-021/T-022 已合入 main; 等新内容任务 |
 | 媒体开发 Agent | 空闲 | `~/Desktop/nrg-worktrees/media-dev` | T-047 已完成并合入 main; 等新媒体任务 |
 | QA 测试 Agent | 待领取 | `~/Desktop/nrg-worktrees/qa`, `~/Desktop/nrg-worktrees/qa-1`, `~/Desktop/nrg-worktrees/qa-2` | T-066 已通过; 等后续 QA |
@@ -73,6 +73,7 @@
 | T-065 | T-063/T-064 返修后全站只读复测 | QA 测试 Agent / 总控关闭 | done | 只读 QA; 禁止停启 8000/8001; 不调用 `/api/health` 当门禁; 不烧 credits | QA 主页面通过但 frame-aware 扫描发现 `beta` iframe 外露本机路径/工程词; 总控移除 iframe 后由 T-066 复测通过 |
 | T-066 | T-048/T-065 返修后 frame-aware 全站复测 | QA 测试 Agent | done | 只读 QA; 禁止停启 8000/8001; 不调用 `/api/health` 当门禁; 不烧 credits | 21 页 + 所有 frame 禁止词 0; `wechat/voicerewrite/beta` 通过; Dreamina 失败任务假数据不露 `id/submit_id/watcher/status=`; 报告 `docs/agent-handoff/QA_T066_FRAMEAWARE_RETEST_20260430.md` |
 | T-067 | T-048/T-065/T-066 返修后代码只读审查 | 审查 Agent / 总控接管 | done | `web/factory-beta.jsx`, `tests/test_frontend_copy_static.py`; 只读审查后小修 | 自动 review worker 假忙 0 字节日志; 总控手动审查发现 beta 标题脱敏正则不严并已修复; 目标测试/full pytest/Playwright 假状态通过 |
+| T-068 | 全站常驻小华浮层 | 总控 Agent | done | `web/factory-app.jsx`, 页面内旧 `<LiDock />`, `tests/test_lidock_global_static.py` | 小华改为顶层统一挂载; 23 个路由逐页点击验证只有 1 个小华且上下文正确; console/pageerror/requestfailed/http/nonGET 均 0 |
 
 ---
 

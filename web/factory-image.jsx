@@ -108,8 +108,6 @@ function PageImage({ onNav }) {
 
         </div>
       </div>
-
-      <LiDock context="出图片" />
     </div>
   );
 }

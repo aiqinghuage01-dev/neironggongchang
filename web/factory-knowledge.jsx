@@ -76,7 +76,6 @@ function PageKnowledge({ onNav }) {
       </div>
 
       {doc && <DocDrawer doc={doc} onClose={() => setDoc(null)} />}
-      <LiDock context="知识库" />
     </div>
   );
 }
