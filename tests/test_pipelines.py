@@ -277,7 +277,10 @@ def test_touliu_generate_async_maps_target_action_to_lint_choice(monkeypatch):
 
     def fake_run_async(**kwargs):
         captured["estimated_seconds"] = kwargs["estimated_seconds"]
-        captured["result"] = kwargs["sync_fn"]()
+        if kwargs.get("sync_fn_with_ctx"):
+            captured["result"] = kwargs["sync_fn_with_ctx"](MagicMock())
+        else:
+            captured["result"] = kwargs["sync_fn"]()
         return "task-id"
 
     monkeypatch.setattr(touliu_pipeline, "generate_batch", fake_generate_batch)

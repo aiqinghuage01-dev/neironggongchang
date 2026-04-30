@@ -18,6 +18,8 @@ import json
 import re
 import subprocess
 import tempfile
+import time
+from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
@@ -163,6 +165,152 @@ def _route_key_for_batch(n: int) -> str:
     return "touliu.generate.quick" if n <= 2 else "touliu.generate"
 
 
+_INTERNAL_DISPLAY_KEY_PARTS = ("token", "route", "engine", "model", "provider", "prompt", "submit_id", "api", "raw")
+
+
+def _is_internal_display_key(key: Any) -> bool:
+    k = str(key or "").lower()
+    return str(key or "").startswith("_") or any(part in k for part in _INTERNAL_DISPLAY_KEY_PARTS)
+
+
+def _clean_copy_text(text: str) -> str:
+    s = str(text or "").strip()
+    if not s:
+        return ""
+    s = re.sub(r"^\s*(?:已走技能|以下是|输出内容|结果)[:：][\s\S]*?\n{1,2}", "", s, flags=re.IGNORECASE).strip()
+    s = re.sub(r"\n\s*-{3,}\s*\n\s*需要进一步操作吗[？?]?[\s\S]*$", "", s).strip()
+    s = re.sub(r"\n\s*需要进一步操作吗[？?]?[\s\S]*$", "", s).strip()
+    return s
+
+
+def sanitize_result_for_display(result: Any) -> Any:
+    """清洗投流 task 的展示数据, 避免内部字段和模型菜单进前端。"""
+    def _clean(value: Any) -> Any:
+        if isinstance(value, dict):
+            out: dict[str, Any] = {}
+            for k, v in value.items():
+                if _is_internal_display_key(k):
+                    continue
+                out[k] = _clean(v)
+            return out
+        if isinstance(value, list):
+            return [_clean(v) for v in value]
+        if isinstance(value, str):
+            return _clean_copy_text(value)
+        return value
+
+    return _clean(deepcopy(result))
+
+
+def friendly_error_for_display(error: Any) -> str:
+    """把投流 task.error 翻成页面可读文案, 不把内部错误串给用户。"""
+    s = str(error or "")
+    if re.search(r"json|截断|未闭合|格式|batch|解析", s, re.IGNORECASE):
+        return "内容回传不完整，已经停下。改短一点或重试一次。"
+    if re.search(r"timeout|timed out|超时|request timed", s, re.IGNORECASE):
+        return "外部服务这次等太久，已经停下。稍后重试一次。"
+    if re.search(r"auth|401|403|openclaw|claude|deepseek|provider|api|连接", s, re.IGNORECASE):
+        return "连接这次没跑通，稍后重试一次。"
+    return "这次没生成出来，通常重试一次就好。"
+
+
+_SINGLE_STAGES = [
+    ("style", "准备风格"),
+    ("write", "生成正文"),
+    ("parse", "解析结果"),
+    ("check", "自检/整理"),
+]
+
+
+def _stage_label(stage_id: str) -> str:
+    for sid, label in _SINGLE_STAGES:
+        if sid == stage_id:
+            return label
+    return "处理中"
+
+
+def _public_batch(batch: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    cleaned = sanitize_result_for_display(batch)
+    return cleaned if isinstance(cleaned, list) else []
+
+
+def _single_progress_snapshot(state: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    timeline = sanitize_result_for_display(state.get("timeline") or [])
+    if not isinstance(timeline, list):
+        timeline = []
+    completed = sum(1 for item in timeline if isinstance(item, dict) and item.get("status") == "done")
+    current = next((item for item in reversed(timeline) if isinstance(item, dict)), {}) or {}
+    public_batch = _public_batch(state.get("batch") or [])
+    partial = {
+        "mode": "single",
+        "n": 1,
+        "inputs": sanitize_result_for_display(state.get("inputs") or {}),
+        "style_summary": sanitize_result_for_display(state.get("style_summary") or {}),
+        "batch": public_batch,
+        "completed_stages": completed,
+        "total_stages": len(_SINGLE_STAGES),
+        "current_stage": current.get("stage"),
+        "current_label": current.get("label") or _stage_label(str(current.get("stage") or "")),
+        "friendly_message": state.get("friendly_message") or "",
+    }
+    progress_data = {
+        "completed_stages": completed,
+        "total_stages": len(_SINGLE_STAGES),
+        "current_stage": partial["current_stage"],
+        "current_label": partial["current_label"],
+        "slow_hint_after_sec": 40,
+        "timeline": timeline,
+    }
+    return sanitize_result_for_display(partial), sanitize_result_for_display(progress_data)
+
+
+def _emit_single_progress(
+    ctx: Any,
+    state: dict[str, Any],
+    *,
+    stage: str,
+    status: str,
+    text: str,
+    pct: int,
+    style_summary: dict[str, Any] | None = None,
+    batch: list[dict[str, Any]] | None = None,
+    friendly_message: str | None = None,
+) -> None:
+    if not ctx:
+        return
+    if style_summary is not None:
+        state["style_summary"] = style_summary
+    if batch is not None:
+        state["batch"] = batch
+    if friendly_message is not None:
+        state["friendly_message"] = friendly_message
+
+    timeline = state.setdefault("timeline", [])
+    timeline[:] = [
+        item for item in timeline
+        if not (item.get("status") == "running" and item.get("stage") == stage)
+    ]
+    now = int(time.time())
+    item = {
+        "unit_id": stage,
+        "stage": stage,
+        "label": _stage_label(stage),
+        "text": text,
+        "status": status,
+        "at_ts": now,
+    }
+    if status == "running":
+        item["started_ts"] = now
+    timeline.append(item)
+    partial, progress_data = _single_progress_snapshot(state)
+    ctx.update_partial_result(
+        partial_result=partial,
+        progress_data=progress_data,
+        progress_text=text,
+        pct=pct,
+    )
+
+
 # ─── 批量生成 ────────────────────────────────────────────
 
 DEFAULT_STRUCTURE_ALLOC = {
@@ -198,11 +346,33 @@ def generate_batch(
     target_action: str = "点头像进直播间",
     n: int = 10,
     channel: str = "直播间",
+    progress_ctx: Any | None = None,
 ) -> dict[str, Any]:
     """一次生成 n 条投流文案 + 风格对齐摘要 + lint 结果。"""
     # D-068c: 之前 max(3, ...) 让前端 n=1 实际生成 3 条 → 用户被骗。改 max(1, ...)
     n = max(1, min(int(n or 1), 15))
     quick_mode = n <= 2
+    progress_ctx = progress_ctx if n == 1 else None
+    progress_state = {
+        "inputs": {
+            "pitch": pitch,
+            "industry": industry,
+            "target_action": target_action,
+            "n": n,
+            "channel": channel,
+        },
+        "timeline": [],
+        "style_summary": {},
+        "batch": [],
+    }
+    _emit_single_progress(
+        progress_ctx,
+        progress_state,
+        stage="style",
+        status="running",
+        text="准备风格和结构",
+        pct=20,
+    )
     context = _load_prompt_context(compact=quick_mode)
     alloc = _alloc_for(n)
     alloc_desc = " + ".join(f"{v}条{k}" for k, v in alloc.items() if v > 0)
@@ -272,19 +442,69 @@ def generate_batch(
   ]
 }}"""
 
+    _emit_single_progress(
+        progress_ctx,
+        progress_state,
+        stage="style",
+        status="done",
+        text="风格和结构准备好了",
+        pct=30,
+    )
     route_key = _route_key_for_batch(n)
     ai = get_ai_client(route_key=route_key)
     engine = getattr(ai, "engine_name", "unknown")
+    _emit_single_progress(
+        progress_ctx,
+        progress_state,
+        stage="write",
+        status="running",
+        text="正在生成正文",
+        pct=40,
+    )
     r = ai.chat(prompt, system=system, deep=False, temperature=0.85, max_tokens=_max_tokens_for_batch(n))
+    _emit_single_progress(
+        progress_ctx,
+        progress_state,
+        stage="write",
+        status="done",
+        text="正文已返回，正在整理",
+        pct=65,
+    )
     # D-094: 不让 JSON 解析失败 fallback 成 batch=[] 假成功 (前端看 0 条投流文案以为正常).
+    _emit_single_progress(
+        progress_ctx,
+        progress_state,
+        stage="parse",
+        status="running",
+        text="解析结果",
+        pct=72,
+    )
     obj = _extract_json(r.text, "object")
     if obj is None:
+        _emit_single_progress(
+            progress_ctx,
+            progress_state,
+            stage="parse",
+            status="failed",
+            text="结果没整理完整",
+            pct=72,
+            friendly_message="内容回传不完整，已经停下。改短一点或重试一次。",
+        )
         raise RuntimeError(
             f"投流文案 LLM 输出非 JSON: {_json_failure_hint(r.text, 'object')} "
             f"(tokens={r.total_tokens}). 输出头: {(r.text or '')[:200]!r}"
         )
     raw_batch = obj.get("batch")
     if not isinstance(raw_batch, list) or not raw_batch:
+        _emit_single_progress(
+            progress_ctx,
+            progress_state,
+            stage="parse",
+            status="failed",
+            text="结果没整理完整",
+            pct=72,
+            friendly_message="内容回传不完整，已经停下。改短一点或重试一次。",
+        )
         raise RuntimeError(
             f"投流文案 LLM 没出 batch 数组 (tokens={r.total_tokens}). 输出头: {(r.text or '')[:200]!r}"
         )
@@ -305,9 +525,48 @@ def generate_batch(
         if isinstance(item, dict)
     ][:n]
     if not batch:
+        _emit_single_progress(
+            progress_ctx,
+            progress_state,
+            stage="parse",
+            status="failed",
+            text="结果没整理完整",
+            pct=72,
+            friendly_message="内容回传不完整，已经停下。改短一点或重试一次。",
+        )
         raise RuntimeError(
             f"投流文案 LLM batch 解析后 0 条有效, 全部不是 dict. 输出头: {(r.text or '')[:200]!r}"
         )
+    _emit_single_progress(
+        progress_ctx,
+        progress_state,
+        stage="parse",
+        status="done",
+        text="结果已整理",
+        pct=82,
+        style_summary=obj.get("style_summary") or {},
+        batch=batch,
+    )
+    _emit_single_progress(
+        progress_ctx,
+        progress_state,
+        stage="check",
+        status="running",
+        text="自检和整理",
+        pct=90,
+        style_summary=obj.get("style_summary") or {},
+        batch=batch,
+    )
+    _emit_single_progress(
+        progress_ctx,
+        progress_state,
+        stage="check",
+        status="done",
+        text="投流文案已整理好",
+        pct=94,
+        style_summary=obj.get("style_summary") or {},
+        batch=batch,
+    )
 
     return {
         "style_summary": obj.get("style_summary") or {},
@@ -388,8 +647,15 @@ def generate_batch_async(
     target_map = {"点头像进直播间": "live", "留资": "lead", "加私域": "dm", "到店": "lead"}
     ta = target_map.get(target_action, "live")
 
-    def _run():
-        result = generate_batch(pitch=pitch, industry=industry, target_action=target_action, n=n, channel=channel)
+    def _run(ctx: tasks_service.TaskContext):
+        result = generate_batch(
+            pitch=pitch,
+            industry=industry,
+            target_action=target_action,
+            n=n,
+            channel=channel,
+            progress_ctx=ctx if n == 1 else None,
+        )
         if run_lint and result.get("batch"):
             try:
                 result["lint"] = lint_batch(result["batch"], target_action=ta)
@@ -406,5 +672,5 @@ def generate_batch_async(
         payload={"pitch_preview": pitch[:200], "industry": industry, "n": n, "channel": channel},
         estimated_seconds=60 if n <= 2 else 150,
         progress_text=f"AI 写 {n} 条投流文案 (按结构分配 + 6 维终检)...",
-        sync_fn=_run,
+        sync_fn_with_ctx=_run,
     )

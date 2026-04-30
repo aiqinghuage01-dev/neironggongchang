@@ -103,20 +103,20 @@ function PageTouliu({ onNav }) {
           loading={loading} onGo={generate} skillInfo={skillInfo} />}
         {step === "result" && (
           poller.isRunning ? (
-            <LoadingProgress
+            <TLTaskProgress
               task={poller.task}
-              icon="💰"
-              title="小华正在批量出投流..."
-              subtitle={`${pitch.slice(0, 40)} · ${n} 条 · ${industry}`}
-              onCancel={() => { poller.cancel(); setStep("input"); }}
+              pitch={pitch}
+              n={n}
+              industry={industry}
+              onCancel={() => { poller.cancel(); setTaskId(null); setStep("input"); }}
             />
           ) : poller.isFailed || poller.isCancelled ? (
-            <FailedRetry
+            <TLTaskFailed
+              task={poller.task}
               error={poller.error || err}
               onRetry={retry}
               onEdit={() => { setTaskId(null); setErr(""); setStep("input"); }}
-              icon="💰"
-              title={poller.isCancelled ? "任务已取消" : "投流没生成出来"}
+              cancelled={poller.isCancelled}
             />
           ) : (
             <TLStepResult result={result} n={n} loading={false} onPrev={() => setStep("input")} onRegen={generate} onReset={reset} onNav={onNav} pitch={pitch} />
@@ -129,8 +129,8 @@ function PageTouliu({ onNav }) {
 
 function TLHeader({ current, onBack, skillInfo }) {
   return (
-    <div style={{ padding: "12px 24px", background: "#fff", borderBottom: `1px solid ${T.border}`, display: "flex", alignItems: "center", gap: 14, flexShrink: 0 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+    <div style={{ padding: "12px 24px", background: "#fff", borderBottom: `1px solid ${T.border}`, display: "flex", alignItems: "center", gap: 14, flexShrink: 0, flexWrap: "wrap" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, flexWrap: "wrap" }}>
         <div style={{ width: 26, height: 26, borderRadius: 7, background: T.text, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13 }}>💰</div>
         <div style={{ fontSize: 13.5, fontWeight: 600 }}>投流文案 · 批量生成</div>
         {skillInfo && (
@@ -140,7 +140,7 @@ function TLHeader({ current, onBack, skillInfo }) {
           </span>
         )}
       </div>
-      <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 8, marginLeft: 8 }}>
+      <div style={{ flex: "1 1 260px", display: "flex", alignItems: "center", gap: 8, marginLeft: 8, flexWrap: "wrap", minWidth: 0 }}>
         {TL_STEPS.map((s, i) => {
           const active = s.id === current;
           const done = TL_STEPS.findIndex(x => x.id === current) > i;
@@ -206,6 +206,157 @@ const TARGETS = [
   { id: "到店", label: "到店", hint: "线下导流" },
 ];
 const CHANNELS = ["直播间", "短视频投放", "信息流", "混合"];
+
+const TL_STAGE_DEFS = [
+  { id: "style", label: "准备风格" },
+  { id: "write", label: "生成正文" },
+  { id: "parse", label: "解析结果" },
+  { id: "check", label: "自检/整理" },
+];
+
+function TLStageTimeline({ task }) {
+  const progress = task?.progress_data || {};
+  const timeline = Array.isArray(progress.timeline) ? progress.timeline : [];
+  const byStage = {};
+  timeline.forEach(item => {
+    if (item && item.stage) byStage[item.stage] = item;
+  });
+  const nowSec = Math.floor(Date.now() / 1000);
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(132px, 1fr))", gap: 10, marginTop: 14 }}>
+      {TL_STAGE_DEFS.map(def => {
+        const item = byStage[def.id] || {};
+        const status = item.status || "pending";
+        const isDone = status === "done";
+        const isRunning = status === "running";
+        const isFailed = status === "failed";
+        const started = item.started_ts || item.at_ts;
+        const elapsed = isRunning && started ? Math.max(0, nowSec - started) : 0;
+        return (
+          <div key={def.id} style={{
+            border: `1px solid ${isFailed ? T.red + "66" : isRunning ? T.brand + "66" : T.borderSoft}`,
+            background: isFailed ? T.redSoft : isRunning ? T.brandSoft : "#fff",
+            borderRadius: 10,
+            padding: 10,
+            minWidth: 0,
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+              <span style={{
+                width: 18, height: 18, borderRadius: "50%",
+                background: isDone ? T.brand : isFailed ? T.red : isRunning ? T.text : T.bg3,
+                color: isDone || isFailed || isRunning ? "#fff" : T.muted,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontSize: 10, fontWeight: 800, flexShrink: 0,
+              }}>{isDone ? "✓" : isFailed ? "!" : isRunning ? "…" : "·"}</span>
+              <span style={{ fontSize: 12.5, fontWeight: 700, color: isFailed ? T.red : T.text, minWidth: 0 }}>
+                {def.label}
+              </span>
+            </div>
+            <div style={{ fontSize: 10.5, color: isFailed ? T.red : T.muted2, marginTop: 5, lineHeight: 1.45 }}>
+              {isRunning ? `已等 ${fmtSec(elapsed)}` : isDone ? "已完成" : isFailed ? "没整理完整" : "待开始"}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function TLTaskProgress({ task, pitch, n, industry, onCancel }) {
+  const pct = task && typeof task.progress_pct === "number" ? task.progress_pct : 15;
+  const elapsed = task?.elapsed_sec || 0;
+  const est = task?.estimated_seconds || 60;
+  const progress = task?.progress_data || {};
+  const currentLabel = progress.current_label || task?.partial_result?.current_label || "准备中";
+  const slow = elapsed >= (progress.slow_hint_after_sec || 40);
+  return (
+    <div style={{ padding: "24px 18px 90px" }}>
+      <div style={{
+        maxWidth: 760, margin: "20px auto", background: "#fff",
+        border: `1.5px solid ${T.brand}`, borderRadius: 14, padding: 22,
+        boxShadow: `0 0 0 5px ${T.brandSoft}`,
+      }}>
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
+          <div style={{ fontSize: 30, lineHeight: 1 }}>💰</div>
+          <div style={{ flex: 1, minWidth: 220 }}>
+            <div style={{ fontSize: 18, fontWeight: 700, color: T.text }}>小华正在写投流文案</div>
+            <div style={{ fontSize: 12.5, color: T.muted, marginTop: 4, lineHeight: 1.5 }}>
+              {pitch.slice(0, 42)}{pitch.length > 42 ? "…" : ""} · {n} 条 · {industry}
+            </div>
+          </div>
+          <Tag size="xs" color="green">{currentLabel}</Tag>
+        </div>
+
+        <div style={{ height: 8, background: T.bg3, borderRadius: 4, overflow: "hidden", margin: "18px 0 12px" }}>
+          <div style={{ height: "100%", width: `${Math.max(5, Math.min(98, pct))}%`, background: T.brand, borderRadius: 4, transition: "width 0.35s ease" }} />
+        </div>
+
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", fontSize: 12, color: T.muted }}>
+          <span><b style={{ color: T.text }}>{fmtSec(elapsed)}</b> 已等</span>
+          <span><b style={{ color: T.text }}>约 {fmtSec(est)}</b> 预计</span>
+          <span><b style={{ color: T.brand }}>{pct}%</b> 进度</span>
+        </div>
+
+        <TLStageTimeline task={task} />
+
+        {slow && (
+          <div style={{
+            marginTop: 14, padding: "10px 12px", borderRadius: 10,
+            background: T.amberSoft, color: T.amber, fontSize: 12.5, lineHeight: 1.6,
+          }}>
+            比预期慢，正在等正文回传。投流文案要按风格和成交结构整理，已等 {fmtSec(elapsed)}，可以继续等或取消后重试。
+          </div>
+        )}
+
+        <div style={{ marginTop: 14, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 11.5, color: T.muted2 }}>切走干别的也行，回来还能继续看进度。</span>
+          {onCancel && <Btn size="sm" variant="outline" onClick={onCancel}>取消任务</Btn>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TLTaskFailed({ task, error, onRetry, onEdit, cancelled }) {
+  const partial = task?.partial_result || {};
+  const batch = Array.isArray(partial.batch) ? partial.batch : [];
+  const message = cancelled ? "这次已经取消。" : (partial.friendly_message || error || "这次没生成出来，通常重试一次就好。");
+  return (
+    <div style={{ padding: "24px 18px 100px" }}>
+      <div style={{
+        maxWidth: 820, margin: "20px auto", background: "#fff",
+        border: `1.5px solid ${cancelled ? T.border : T.red}`, borderRadius: 14, padding: 22,
+        boxShadow: `0 0 0 5px ${cancelled ? T.bg2 : T.redSoft}`,
+      }}>
+        <div style={{ display: "flex", gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}>
+          <div style={{ fontSize: 30, lineHeight: 1 }}>💰</div>
+          <div style={{ flex: 1, minWidth: 220 }}>
+            <div style={{ fontSize: 18, fontWeight: 700, color: cancelled ? T.text : T.red }}>
+              {cancelled ? "投流任务已取消" : "投流没生成出来"}
+            </div>
+            <div style={{ fontSize: 13, color: T.muted, marginTop: 5, lineHeight: 1.6 }}>
+              {message}
+            </div>
+          </div>
+        </div>
+
+        <TLStageTimeline task={task} />
+
+        {batch.length > 0 && (
+          <div style={{ marginTop: 16 }}>
+            <div style={{ fontSize: 12, color: T.muted, marginBottom: 8 }}>已保留能看的文案</div>
+            {batch.map((item, idx) => <TLBatchCard key={idx} item={item} />)}
+          </div>
+        )}
+
+        <div style={{ display: "flex", gap: 10, marginTop: 18, flexWrap: "wrap" }}>
+          {onRetry && <Btn variant="primary" onClick={onRetry}>再试一次</Btn>}
+          {onEdit && <Btn variant="outline" onClick={onEdit}>改一下再试</Btn>}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function TLStepInput({ pitch, setPitch, industry, setIndustry, targetAction, setTargetAction, n, setN, channel, setChannel, loading, onGo, skillInfo }) {
   const ready = !!pitch.trim() && !loading;

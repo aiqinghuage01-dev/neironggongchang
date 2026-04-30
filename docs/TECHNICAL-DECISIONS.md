@@ -1336,3 +1336,23 @@ OpenAI SDK 默认 retry 与项目 `with_retry` 叠加, 会把 OpenClaw/DeepSeek 
 - `tests/test_compliance_progressive.py` 覆盖 scan → 保守版 → 营销版 running/failed/ok 和 API 清洗。
 - `scripts/e2e_compliance_progressive.js` 用 mock API 做 no-credit 浏览器闭环, 覆盖 scan visible、
   保守版 visible、营销版 slow、failed 保留、390px 无横向裁切。
+
+
+## D-130 - 投流 n=1 展示真实等待阶段 (2026-05-01)
+
+**触发**: T-099 要求投流 `n=1` 不再黑箱等待, 模型慢或内容回传不完整时, 页面要能看到
+准备风格、生成正文、解析结果、自检/整理等真实阶段, 且失败态不能露内部错误。
+
+**决策**:
+- 不增加 LLM 调用, `n=1` 仍只走一次 `touliu.generate.quick`; 仅在同一次调用前后写入
+  `tasks.partial_result` / `progress_data` 阶段快照。
+- `n>1` 不拆 item, 继续沿用原批量生成路径。
+- `/api/tasks` 和 `/api/tasks/{id}` 对 `touliu.*` 做展示清洗, 递归移除内部字段, 并把
+  解析失败、截断、超时等错误翻成用户能读懂的失败说明。
+- 前端投流结果页 running/failed 使用专用阶段卡, 展示已等时间、慢等待解释和失败阶段,
+  不再直接渲染底层错误串。
+
+**验证**:
+- `tests/test_touliu_progress.py` 覆盖 `n=1` 四阶段、内容回传不完整失败保留阶段、任务详情/列表清洗。
+- `scripts/e2e_touliu_progress.js` no-credit 浏览器闭环覆盖 slow、parse failed、task failed friendly、ok、
+  390px 无横向裁切。

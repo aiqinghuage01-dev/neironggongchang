@@ -670,7 +670,12 @@ def _sanitize_task_for_display(task: dict[str, Any] | None) -> dict[str, Any] | 
     if not task:
         return task
     kind = str(task.get("kind") or "")
-    if not (kind.startswith("hotrewrite.write") or kind.startswith("compliance.") or kind.startswith("baokuan.")):
+    if not (
+        kind.startswith("hotrewrite.write")
+        or kind.startswith("compliance.")
+        or kind.startswith("baokuan.")
+        or kind.startswith("touliu.")
+    ):
         return task
     from backend.services import hotrewrite_pipeline
     out = dict(task)
@@ -685,6 +690,12 @@ def _sanitize_task_for_display(task: dict[str, Any] | None) -> dict[str, Any] | 
         out["result"] = baokuan_pipeline.sanitize_result_for_display(out.get("result"))
         out["partial_result"] = baokuan_pipeline.sanitize_result_for_display(out.get("partial_result"))
         out["progress_data"] = baokuan_pipeline.sanitize_result_for_display(out.get("progress_data"))
+    elif kind.startswith("touliu."):
+        out["result"] = touliu_pipeline.sanitize_result_for_display(out.get("result"))
+        out["partial_result"] = touliu_pipeline.sanitize_result_for_display(out.get("partial_result"))
+        out["progress_data"] = touliu_pipeline.sanitize_result_for_display(out.get("progress_data"))
+        if out.get("error"):
+            out["error"] = touliu_pipeline.friendly_error_for_display(out.get("error"))
     return out
 
 
