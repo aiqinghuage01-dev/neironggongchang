@@ -2282,6 +2282,7 @@ def hot_topics_list(limit: int = 50):
         "title": h.title, "heat_score": h.heat_score,
         "match_persona": bool(h.match_persona), "match_reason": h.match_reason,
         "source_url": h.source_url, "fetched_from": h.fetched_from, "status": h.status,
+        "radar_category": h.radar_category,
     } for h in items]
 
 

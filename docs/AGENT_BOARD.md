@@ -8,7 +8,7 @@
 
 | 角色 | 状态 | 工作区 | 当前任务 |
 |---|---|---|---|
-| 总控 Agent | 自动派工已接入 | `~/Desktop/neironggongchang` | 正在收紧“总控不默认下场”机制: 接管副 Agent 任务必须写接管理由 |
+| 总控 Agent | 自动派工已接入 | `~/Desktop/neironggongchang` | T-071 热点雷达按 skill 三类修正已完成, 等下一轮队列任务 |
 | 内容开发 Agent | 空闲 | `~/Desktop/nrg-worktrees/content-dev` | T-021/T-022 已合入 main; 等新内容任务 |
 | 媒体开发 Agent | 空闲 | `~/Desktop/nrg-worktrees/media-dev` | T-047 已完成并合入 main; 等新媒体任务 |
 | QA 测试 Agent | 待领取 | `~/Desktop/nrg-worktrees/qa`, `~/Desktop/nrg-worktrees/qa-1`, `~/Desktop/nrg-worktrees/qa-2` | T-066 已通过; 等后续 QA |
@@ -76,11 +76,13 @@
 | T-068 | 全站常驻小华浮层 | 总控 Agent | done | `web/factory-app.jsx`, 页面内旧 `<LiDock />`, `tests/test_lidock_global_static.py` | 小华改为顶层统一挂载; 23 个路由逐页点击验证只有 1 个小华且上下文正确; console/pageerror/requestfailed/http/nonGET 均 0 |
 | T-069 | 做视频页热点雷达三条大卡 + 换一批 | 总控 Agent | done | `web/factory-make-v2.jsx`, `web/factory-materials.jsx`, `shortvideo/works.py`, `backend/api.py`, `tests/test_works_api.py`, `tests/test_make_hot_radar_static.py` | `/api/hot-topics?limit=3` 至少返回 3 条; 做视频页显示 3 条大卡和 3 个“做成视频”; “换一批”切到下一组; full pytest + Playwright 通过 |
 | T-070 | 总控接管护栏 + 副 Agent 优先机制 | 总控 Agent | done | `scripts/agent_queue.py`, `scripts/agent_delegation_audit.py`, `docs/agents/ROLE_CONTROLLER.md`, `docs/MULTI_AGENT_WORKFLOW.md`, `tests/test_agent_queue.py` | 总控关闭 content/media/qa/review 任务必须写 `--takeover-reason`; 可审计历史接管; 队列回归测试通过 |
+| T-071 | 做视频热点雷达按 `热点雷达-学员版` 三类修正 | 总控 Agent | done | `shortvideo/works.py`, `backend/api.py`, `web/factory-make-v2.jsx`, `tests/test_works_api.py`, `tests/test_make_hot_radar_static.py` | 后端按 TopHub 百度/微博/抖音/知乎输出大新闻/行业相关/本地热点; 做视频页去红色方块火焰, 每批三类各 1 条, “换一批”切下一批; curl/Playwright/full pytest 通过 |
 
 ---
 
 ## 最近证据
 
+- T-071 做视频热点雷达修正: API live `limit=6` 返回 `大新闻/行业相关/本地热点` 交错结果, `fetched_from=hot-topic-radar`; Playwright 桌面截图 `/tmp/nrg_hot_radar_t071/make-hot-radar-final.png`, 换批截图 `/tmp/nrg_hot_radar_t071/make-hot-radar-next-final.png`, 移动截图 `/tmp/nrg_hot_radar_t071/make-hot-radar-mobile-final.png`; targeted pytest 和 full pytest 通过。
 - T-069 做视频热点雷达: API `limit=3` 返回 3 条; API `limit=24` 返回 9 条候选池; Playwright 桌面截图 `/tmp/nrg_hot_radar_make/make-hot-radar-final.png`, 换一批截图 `/tmp/nrg_hot_radar_make/make-hot-radar-after-change.png`, 移动截图 `/tmp/nrg_hot_radar_make/make-hot-radar-mobile-2.png`; `pytest -q -x` 通过。
 - T-070 多 Agent 流程护栏: 总控接管 delegated task 需要 `--takeover-reason`; 新增 `scripts/agent_delegation_audit.py`; 角色文档明确总控只在 worker 卡死/跨模块冲突/紧急止血/最终收口时下场。
 - D-125 素材库验收补强: 首页新增可预览业务素材精选, `00 待整理` 降级为单独整理入口, KPI 区分总素材/业务素材/未入业务类/已识别; 新增 API `/api/material-lib/featured`.

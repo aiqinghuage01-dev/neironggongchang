@@ -49,7 +49,8 @@ def test_works_search_filters_before_limit(client):
     assert ids == [target]
 
 
-def test_hot_topics_list_fills_radar_floor(client):
+def test_hot_topics_list_fills_radar_floor(client, monkeypatch):
+    from shortvideo import works
     from shortvideo.works import insert_hot_topic
 
     insert_hot_topic(
@@ -60,24 +61,34 @@ def test_hot_topics_list_fills_radar_floor(client):
         match_reason="真实库数据应优先展示",
         fetched_from="manual",
     )
+    monkeypatch.setattr(works, "_fetch_hot_radar_live_topics", lambda: [
+        works._RadarRawTopic("百度", "跨平台大新闻", "800万", 1, "https://example.com/global"),
+        works._RadarRawTopic("知乎", "AI 进入企业经营", "600万", 3, "https://example.com/industry"),
+        works._RadarRawTopic("本地", "上海商圈客流升温", "500万", 5, "https://example.com/local"),
+    ])
 
     r = client.get("/api/hot-topics", params={"limit": 3})
     assert r.status_code == 200
     body = r.json()
     assert len(body) == 3
-    assert body[0]["title"] == "真实热点一条"
-    assert body[0]["fetched_from"] == "manual"
-    assert all(item["match_persona"] for item in body)
+    assert [item["radar_category"] for item in body] == ["大新闻", "行业相关", "本地热点"]
+    assert [item["title"] for item in body] == ["跨平台大新闻", "AI 进入企业经营", "上海商圈客流升温"]
+    assert all(item["fetched_from"] == "hot-topic-radar" for item in body)
 
 
-def test_hot_topics_list_gives_batch_pool_for_make_page(client):
+def test_hot_topics_list_gives_batch_pool_for_make_page(client, monkeypatch):
+    from shortvideo import works
+
+    monkeypatch.setattr(works, "_fetch_hot_radar_live_topics", lambda: [])
     r = client.get("/api/hot-topics", params={"limit": 24})
     assert r.status_code == 200
     body = r.json()
     assert len(body) >= 9
+    assert [item["radar_category"] for item in body[:3]] == ["大新闻", "行业相关", "本地热点"]
     titles = {item["title"] for item in body}
-    assert "老板开始用 AI 盯经营日报" in titles
-    assert "出差路上用 AI 拆客户需求" in titles
+    assert "五一假期各大景点客流升温" in titles
+    assert "AI 工具进入企业日常办公" in titles
+    assert "上海五一消费和出行升温" in titles
 
 
 def test_works_detail_reads_work_outside_current_list(client):

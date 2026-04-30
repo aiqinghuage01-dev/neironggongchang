@@ -596,7 +596,7 @@ function MakeV2StepScript({ script, setScript, onNext, onNav, seedFrom, onDismis
             <div style={{ marginBottom: 16 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
                 <span style={{ fontSize: 15, fontWeight: 700, color: T.text }}>
-                  热点雷达 · 今天先拍这 3 条
+                  热点雷达 · 大新闻 / 行业 / 本地
                 </span>
                 <span style={{ fontSize: 11, color: T.muted2 }}>
                   第 {hotBatchIndex + 1}/{hotBatchCount} 批 · 来自热点库
@@ -764,6 +764,7 @@ function MakeV2StepScript({ script, setScript, onNext, onNav, seedFrom, onDismis
 function HotRankPanel({ topics, batch, batchIndex, batchCount, onTake, onRefresh, onNextBatch, onNight }) {
   const ready = Array.isArray(topics);
   const top = ready ? (batch || []) : [];
+  const topHeat = top[0]?.heat_score || 98;
   return (
     <div style={{ margin: "6px 0 20px" }}>
       <div style={{
@@ -771,19 +772,19 @@ function HotRankPanel({ topics, batch, batchIndex, batchCount, onTake, onRefresh
         padding: "0 2px", flexWrap: "wrap",
       }}>
         <div style={{
-          width: 38, height: 38, borderRadius: 12,
-          background: "linear-gradient(135deg, #ff8a1d 0%, #b54a19 100%)",
-          color: "#fff", display: "flex", alignItems: "center", justifyContent: "center",
-          fontSize: 18, fontWeight: 800, flexShrink: 0,
-          boxShadow: "0 10px 20px rgba(181,74,25,0.18)",
-        }}>🔥</div>
+          minWidth: 76, display: "flex", alignItems: "center", justifyContent: "center",
+          flexShrink: 0, gap: 3,
+        }}>
+          <span style={{ fontSize: 30, lineHeight: 1 }}>🔥</span>
+          <span style={{ fontSize: 31, lineHeight: 1, fontWeight: 900, color: "#b76816" }}>{topHeat}</span>
+        </div>
         <div style={{ flex: "1 1 240px", minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
             <span style={{ fontSize: 17, fontWeight: 800, color: T.text }}>热点雷达</span>
-            <span style={{ fontSize: 11.5, color: T.muted2 }}>每天至少 3 条 · 不满意直接换一批</span>
+            <span style={{ fontSize: 11.5, color: T.muted2 }}>每批 3 条: 大新闻 / 行业相关 / 本地热点</span>
           </div>
           <div style={{ fontSize: 11, color: T.muted2, marginTop: 2 }}>
-            按热度和清华哥定位匹配度排序 · 第 {batchIndex + 1}/{batchCount} 批
+            来自热点雷达 · 不满意直接换一批 · 第 {batchIndex + 1}/{batchCount} 批
           </div>
         </div>
         <button onClick={onNextBatch}
@@ -840,6 +841,7 @@ function HotRadarChip({ children, tone = "gray" }) {
     pink: { bg: T.pinkSoft, fg: T.pink },
     green: { bg: T.brandSoft, fg: T.brand },
     amber: { bg: T.amberSoft, fg: T.amber },
+    blue: { bg: T.blueSoft, fg: T.blue },
     gray: { bg: T.bg3, fg: T.muted },
   };
   const p = palette[tone] || palette.gray;
@@ -861,10 +863,12 @@ function HotRadarCard({ t, idx, onTake, onSeed }) {
     : Math.min(82, 58 + (heat % 24));
   const fromNight = t.fetched_from === "night-shift";
   const platform = t.platform || "热点";
-  const trendLabel = idx === 0 ? "今日最热" : idx === 1 ? "上升很快" : "值得拍";
+  const category = t.radar_category || (idx === 0 ? "大新闻" : idx === 1 ? "行业相关" : "本地热点");
+  const categoryTone = category === "大新闻" ? "amber" : category === "行业相关" ? "green" : "blue";
+  const trendLabel = idx === 0 ? "今日最热" : idx === 1 ? "行业可借势" : "本地可用";
   const reason = t.match_reason || (t.match_persona
     ? "和你 AI × 中年老板 人设很搭"
-    : "适合拆成老板能听懂的业务短视频");
+    : "适合拆成老板能听懂的短视频切入点");
   return (
     <div style={{
       padding: "22px 26px", borderRadius: 24,
@@ -892,12 +896,15 @@ function HotRadarCard({ t, idx, onTake, onSeed }) {
 
       <div style={{ flex: "1 1 360px", minWidth: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+          <HotRadarChip tone={categoryTone}>{category}</HotRadarChip>
           <HotRadarChip tone="pink">{platform}</HotRadarChip>
-          <HotRadarChip tone="green">✨ 匹配你定位</HotRadarChip>
+          {t.match_persona ? <HotRadarChip tone="green">✨ 匹配你定位</HotRadarChip> : <HotRadarChip tone="gray">可借势</HotRadarChip>}
           <span style={{ color: T.muted2, fontSize: 18, lineHeight: 1 }}>·</span>
           <HotRadarChip tone={idx === 0 ? "amber" : "gray"}>{trendLabel}</HotRadarChip>
           {fromNight && <HotRadarChip tone="amber">夜班</HotRadarChip>}
-          <span style={{ fontSize: 11.5, color: T.brand, fontWeight: 800 }}>匹配 {matchPct}%</span>
+          <span style={{ fontSize: 11.5, color: t.match_persona ? T.brand : T.muted2, fontWeight: 800 }}>
+            {t.match_persona ? `匹配 ${matchPct}%` : "雷达推荐"}
+          </span>
         </div>
         <div style={{
           fontSize: 21, fontWeight: 900, color: T.text, lineHeight: 1.35,
