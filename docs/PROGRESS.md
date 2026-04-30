@@ -9,6 +9,7 @@
 **版本**: v0.8.16-beta-refresh-60s — 「科技与狠活」作战室和独立研发部面板自动刷新从高频改为 60 秒一次, 页面打开仍立即加载一次状态。
 
 ### 当前进行
+- 本轮同步: 迁移手册 `docs/design/MAC_MINI_TEAM_BETA_ARCHITECTURE.md` 已补 v1.2「第二台 Mac mini 复用 runbook」,把本次 Tailscale 实测、GitHub/rsync 同步策略、`SKILL_ROOT` symlink、空库验收、运行时依赖 sanity、loopback 服务与 SSH tunnel 浏览器验收写成未来迁移清单。下一台 Mac mini 可直接按 §0.8.9 执行。
 - 本轮完成: 通过 Tailscale 验证 Mac mini `poju-mini`。`tailscale ping poju-mini` 8ms direct; SSH MagicDNS 可登录; 远端 commit 为最新 `a4c16a7/43c4a6e`; skill symlink 视图可读公众号 skill (`SKILL.md` 13994 字符, 5 refs); 空库 17 张表。验证中发现远端后端缺运行时依赖 `jieba` / `python-multipart`, 已补进 `pyproject.toml` / `requirements.txt` / `uv.lock` 并在 Mac mini `.venv` 安装。远端 backend/web 分别以 127.0.0.1:8000/8001 临时运行; 通过 SSH tunnel Playwright 打开 make/hotrewrite 页面, console error=0, 国家领导人相关词命中 0; 直连 Tailscale IP:8000 被拒绝,符合后端仅 loopback 暴露预期。
 - 本轮完成: 国家领导人相关信息不展示红线已落地。`/api/hot-topics` 实时热榜/手动热点/夜班抓热点均走后端过滤; 做视频热点雷达、热点改写今日热点、素材库老热点 tab 继承过滤结果; 已补 SYSTEM-CONSTRAINTS §13 和回归测试。验证: targeted pytest 7 passed; `tests/test_works_api.py tests/test_night_runners.py tests/test_frontend_copy_static.py` -> 33 passed; curl GET 热点命中 0, POST 禁止样例返回 400; Playwright 打开 make/hotrewrite/materials 页面命中 0、console error=0。
 - 本次同步: 迁移防腐层继续开发红线已进入主控规则层: `docs/SYSTEM-CONSTRAINTS.md` 新增 §0.5; `AGENTS.md` / `CLAUDE.md` 已同步索引。后续前端开发必须守: 不新增写死 `127.0.0.1:8000`, 不写 `/Users/...` 入库, 新 API 走统一客户端, 新表提前明确 owner 策略。
