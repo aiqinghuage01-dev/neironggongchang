@@ -140,6 +140,26 @@ def _row_to_work(row: sqlite3.Row) -> Work:
     )
 
 
+def _normalize_path_for_db(value: str | None) -> str | None:
+    """v0.6.3 修订:写库前自动转相对路径。
+
+    锁住未来 DB 不再脏(R2 红线)。在 DATA_DIR 内 → 相对 POSIX;
+    在 DATA_DIR 外 / URL / None / 跳出 → 保留原值(让 Phase 3 audit 看到)。
+
+    注意:跟 path_resolver.normalize_for_db 不同,这里**保留 None / 跳出值**,
+    而不是丢弃。理由:数据完整性优先于规范性 — 旧脏值要让 Phase 3 migrate 处理。
+    """
+    if not value:
+        return value
+    try:
+        from backend.services.path_resolver import normalize_for_db as _nfd
+        normalized = _nfd(value)
+    except Exception:
+        return value
+    # normalize 失败(脏值)→ 原样保留,让 Phase 3 audit 处理
+    return normalized if normalized is not None else value
+
+
 def insert_work(
     *,
     final_text: str = "",
@@ -164,8 +184,12 @@ def insert_work(
     D-093: tokens_used 参数加了 — schema 一直有这列 + dataclass 也读这列, 但函数签名漏
     暴露, 调用方传 tokens_used=N 会抛 TypeError 被上游 except 静默吞 → 13 条文字 task
     完成 0 条入库. 现在合法.
+    v0.6.3: local_path / thumb_path 写入前自动 normalize 成相对路径(R2 红线锁)。
     """
     init_db()
+    # v0.6.3 修订:写入前 normalize
+    local_path = _normalize_path_for_db(local_path)
+    thumb_path = _normalize_path_for_db(thumb_path)
     with closing(_conn()) as c:
         cur = c.execute(
             """INSERT INTO works
@@ -187,6 +211,11 @@ def insert_work(
 def update_work(work_id: int, **fields: Any) -> None:
     if not fields:
         return
+    # v0.6.3 修订:更新 local_path / thumb_path 前自动 normalize(R2 红线锁)
+    if "local_path" in fields:
+        fields["local_path"] = _normalize_path_for_db(fields["local_path"])
+    if "thumb_path" in fields:
+        fields["thumb_path"] = _normalize_path_for_db(fields["thumb_path"])
     cols = ", ".join(f"{k}=?" for k in fields)
     values = list(fields.values()) + [work_id]
     with closing(_conn()) as c:

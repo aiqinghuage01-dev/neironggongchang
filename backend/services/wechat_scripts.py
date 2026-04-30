@@ -496,7 +496,11 @@ def assemble_html(
     }
 
 
-_MEDIA_PREVIEW_BASE = "http://127.0.0.1:8000"  # 路线 B 部署改 env (LH 本机够用)
+import os as _os
+# v0.6.3 修订:Phase 2(b) 媒体 base env 化 — 历史 TODO("路线 B 部署改 env")收尾
+# 默认空串 = 相对路径(同源场景下浏览器自动以当前域名加载),团队部署 / 本机调试
+# 都通过 .env 的 MEDIA_PUBLIC_BASE 覆盖。
+_MEDIA_PREVIEW_BASE = _os.getenv("MEDIA_PUBLIC_BASE", "")
 
 
 def _media_preview_url_for_path(path: Path) -> str:

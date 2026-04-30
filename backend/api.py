@@ -1643,20 +1643,26 @@ def _work_media_url(p: Path) -> str | None:
 
 
 def _work_to_api_dict(w, *, full_text: bool = False) -> dict[str, Any]:
-    """Serialize a Work row for the works UI with media URLs and asset state."""
+    """Serialize a Work row for the works UI with media URLs and asset state.
+
+    v0.6.3 修订:用 backend.services.path_resolver.resolve_data_path() 兼容
+    7 种历史/未来路径格式(相对/绝对/丢失/URL/path-traversal/查询参数等),
+    出错或跳出 DATA_DIR 一律返回 None → 视为 missing_file。
+    """
+    from backend.services.path_resolver import resolve_data_path
     local_url = None
     thumb_url = None
     local_missing = False
     thumb_missing = False
     if w.local_path:
-        p = Path(w.local_path)
-        if p.exists():
+        p = resolve_data_path(w.local_path)
+        if p is not None and p.exists():
             local_url = _work_media_url(p)
         else:
             local_missing = True
     if w.thumb_path:
-        p2 = Path(w.thumb_path)
-        if p2.exists():
+        p2 = resolve_data_path(w.thumb_path)
+        if p2 is not None and p2.exists():
             thumb_url = _work_media_url(p2)
         else:
             thumb_missing = True

@@ -1,6 +1,17 @@
 // factory-api.jsx — API 客户端 + 最近调用追踪(ApiStatusLight 用)
-
-const API_BASE = (typeof localStorage !== "undefined" && localStorage.getItem("api_base")) || "http://127.0.0.1:8000";
+//
+// v0.6.3 修订(Phase 2(a) smart default):
+//   优先级:localStorage.api_base > 本地 8001 → 8000 自动回退 > 同源(空串)
+//   - 本地开发(localhost:8001)→ 仍走 http://127.0.0.1:8000(不打断当前开发)
+//   - 生产 Caddy(gongchang.poju.ai)→ 同源 /api/...(浏览器自动加当前域)
+//   - localStorage 仍可覆盖,保留开发者切环境能力
+// 这一行是 v0.6 红线 R1 ("禁止写 127.0.0.1:8000") 的唯一豁免点。
+const _stored = (typeof localStorage !== "undefined") ? localStorage.getItem("api_base") : null;
+const _isLocalWeb = typeof location !== "undefined" && (
+  location.hostname === "127.0.0.1" || location.hostname === "localhost"
+);
+const API_BASE = _stored
+  || (_isLocalWeb && location.port === "8001" ? "http://127.0.0.1:8000" : "");
 
 // D-070: 访客模式 — 各 fetch 自动带 X-Guest-Mode header, 后端 middleware 接收并写 contextvar
 function _isGuestMode() {
