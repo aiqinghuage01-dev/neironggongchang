@@ -4,11 +4,13 @@
 
 ---
 
-## 当前状态 (2026-05-01 · 热点改写逐版可见收口)
+## 当前状态 (2026-05-01 · 写文案渐进输出第二页落地)
 
-**版本**: v0.8.18-hotrewrite-progressive — 热点改写 4 版生成已在正式端口跑通“先出先看”: V1/V2/V3 写完即可在页面读正文, V4 慢时显示已等时间、重试兜底说明和取消剩余生成; failed 保留已完成版本。自动返修主管继续运行, 后续 QA/Review 新阻塞会自动生成返修链路。
+**版本**: v0.8.19-compliance-progressive — 热点改写与违规审查已跑通“先出先看”: 热点改写 V1/V2/V3 写完即可读正文, 违规审查先显示扫描结果和保守版, 营销版继续生成时页面可见真实等待状态; failed 保留已完成内容。自动派工器与自动返修主管继续运行, 后续写文案页按队列继续铺开。
 
 ### 当前进行
+- T-095/T-096/T-097 已合入 main 并由总控在正式 `8000/8001` 补验: 违规审查页面 no-credit Playwright 跑通 `scan -> conservative -> slow -> ok` 与 `scan -> conservative -> failed`, console/pageerror/requestfailed/http error 全 0, 390px `maxOverflow=0`。截图已读: `/tmp/_ui_shots/t095_compliance_conservative_visible.png`, `/tmp/_ui_shots/t095_compliance_marketing_slow.png`, `/tmp/_ui_shots/t095_compliance_failed_preserve.png`, `/tmp/_ui_shots/t095_compliance_mobile_390.png`。报告 `docs/agent-handoff/CONTROLLER_T095_COMPLIANCE_PROGRESSIVE_MERGE_20260501.md`。
+- T-098「爆款改写版本级实时输出 MVP」已被内容开发自动领取, 当前正在 `~/Desktop/nrg-worktrees/content-dev` 修改 `backend/services/baokuan_pipeline.py`; 后续依赖 T-104 QA 与 T-105 Review 通过后, 总控再合并。T-099/T-100/T-101 仍排队, 等前序 QA/Review 证据回来后继续自动推进。
 - T-088 已由总控接管并在 main 收口: content-dev 第一轮 T-085 patch 已摘入主线, 随后补齐 T-086/T-087 阻塞点。正式 `8000/8001` 已重启并通过 mock/no-credit Playwright: `v1 -> v2 -> slow V4 -> ok`, console/pageerror/requestfailed/http error 全 0, 390px `maxOverflow=0`。报告 `docs/agent-handoff/CONTROLLER_T088_HOTREWRITE_PROGRESSIVE_FINAL_20260501.md`。
 - T-086/T-087 的旧阻塞点已在 T-088 中处理: 正文后部“已走技能/需要进一步操作吗”会被展示层清洗; task failed 不再清空 partial; 慢 V4 页面显示 `progress_text`、已等时间、剩余版本说明和取消按钮。T-089/T-090 用于返修后独立 QA/Review, 通过后继续 T-084“所有写文案功能举一反三方案”。
 - 自动返修主管已启动: `bash scripts/start_agent_repair_supervisor.sh --status` 显示 LaunchAgent running, 初次启动已忽略 16 条历史阻塞, 后续新增 QA/Review `blocked` 且不需要老板决策时, 会自动生成下一轮返修任务、QA 任务和 Review 任务。回归测试 `python3 -m pytest -q tests/test_agent_repair_supervisor.py tests/test_agent_queue.py` -> 7 passed。
