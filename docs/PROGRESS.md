@@ -4,11 +4,12 @@
 
 ---
 
-## 当前状态 (2026-04-30 · T-075 做视频首屏按参考图重构)
+## 当前状态 (2026-04-30 · T-075 科技与狠活研发部作战室升级)
 
-**版本**: v0.8.14-make-drop-material — 做视频 Step 1 按参考图重构为“把素材丢进来”大输入框 + 底部工具按钮 + 紧凑热点列表; 热点池扩到 15 条, 支持全网/行业/本地各 5 条。
+**版本**: v0.8.15-beta-warroom — 「科技与狠活」升级为研发部作战室, 可见具体 Agent、领取任务、现场时间线、日志摘要、代码动向和交接证据; 已按页面变更门禁完成开发 Agent、QA Agent、审查 Agent 与总控最终验证。
 
 ### 当前进行
+- 队列 T-075「科技与狠活 · 研发部作战室」已合入待提交: 内容开发 Agent 完成页面升级; T-076 QA 首轮发现窄屏不可读并 block; T-077 审查发现静态守则被覆盖与脱敏范围不足并 block; 总控修复响应式与脱敏后, T-078 QA 复测通过, T-079 审查无 P0/P1。页面现在展示「谁在干活」「当前任务」「研发现场时间线」「日志与代码证据」, 日志按钮可点击并展示脱敏摘要, 明确显示 `agent_name` / `claimed_by`, 不再用「有人在跟」。主线验证: `python3 -m pytest -q tests/test_frontend_copy_static.py` -> 7 passed; `node --check scripts/e2e_beta_warroom.js` -> pass; `BETA_WEB_URL='http://127.0.0.1:8001/?page=beta' node scripts/e2e_beta_warroom.js` -> pass, `violations=[]`, console/pageerror/requestfailed/http error 全 0; 390x900 正式端口补测无横向滚动 (`bodyScrollWidth=390`, `offRightCount=0`)。报告 `docs/agent-handoff/CONTROLLER_T075_BETA_WARROOM_FINAL_20260430.md`。
 - T-075 总控已完成: 做视频 Step 1 严格按老板截图方向重构, 去掉四 tab 大入口和大热点卡首屏, 改为居中标题“把素材丢进来↓”、单一大输入框、底部“录音/上传/选题库/我的素材”工具按钮、右下“开始→”; 下方热点区改成“没思路？从热点开始”紧凑列表, 带“全网 5 / 行业 5 / 本地 5”和“换一批↻”。后端热点雷达池从 12 扩到 15 条, 保证三类各 5 条。验证: `pytest -q tests/test_make_hot_radar_static.py tests/test_works_api.py::test_hot_topics_list_gives_batch_pool_for_make_page tests/test_works_api.py::test_hot_topics_list_fills_radar_floor` 通过; `curl /api/hot-topics?limit=30` 返回 15 条且三类各 5; Playwright 截图已读, 真填文案后“开始”变可用, 点击“行业”和“换一批”正常, console/pageerror/requestfailed 均 0。报告 `docs/agent-handoff/CONTROLLER_T075_MAKE_DROP_MATERIAL_REDESIGN_20260430.md`。
 - T-074 总控已完成: 把“页面变化必须测试”固化进 `docs/MULTI_AGENT_WORKFLOW.md` 和 `docs/agents/ROLE_CONTROLLER.md`。后续任何用户可见页面/前端体验变化, 默认派开发 Agent + QA Agent; 总控直接小修也必须交付同等级 QA 证据, 没有截图/console/真实操作证据只能说“待测”, 不能说“完成”。报告 `docs/agent-handoff/CONTROLLER_T074_UI_QA_GATE_20260430.md`。
 - T-073 总控已完成: 做视频页热点排行头部和热点卡热度区改为白底 + emoji `🔥` 的轻量 badge, 卡片背景与边框从偏橙改为白底/浅米灰, 避免红橙色块过生。验证: `pytest -q tests/test_make_hot_radar_static.py` 通过; Playwright 打开 `?page=make&v=t073-white-fire`, 截图已读确认红块消失; 点击“换一批”后仍正常切批, console error=0、pageerror=0。报告 `docs/agent-handoff/CONTROLLER_T073_HOT_RADAR_WHITE_FIRE_20260430.md`。
@@ -73,6 +74,7 @@
 - 额外 QA cmux 脚本已改为 socket 不可用时只准备 worktree, 不再强行 fallback 打开多个空白窗口。
 
 ### 总控审查证据
+- 队列 T-075 科技与狠活作战室: 报告 `docs/agent-handoff/CONTROLLER_T075_BETA_WARROOM_FINAL_20260430.md`; 开发报告 `docs/agent-handoff/DEV_CONTENT_T075_BETA_WARROOM_20260430.md`; QA 复测 `docs/agent-handoff/QA_T078_BETA_WARROOM_RESPONSIVE_20260430.md`; 最终审查 `docs/agent-handoff/REVIEW_T079_BETA_WARROOM_FINAL_20260430.md`; Playwright 桌面截图 `/tmp/_ui_shots/t075_beta_warroom.png` 已读, 日志摘要按钮可点且脱敏命中 0; 390x900 截图 `/tmp/_ui_shots/t075_beta_mobile_final.png` 已读, `hasHorizontalScroll=false`, `offRightCount=0`, console/pageerror/requestfailed/http error 全 0。
 - T-075 报告: `docs/agent-handoff/CONTROLLER_T075_MAKE_DROP_MATERIAL_REDESIGN_20260430.md`; Playwright 截图 `/tmp/nrg_make_t074/t074-make-full-tall-final.png` 已读, 首屏结构与参考图一致: 大输入框、底部工具按钮、紧凑热点列表 5 行; 真填文案后“开始”可点, 点击“行业”和“换一批”正常; console error=0, network 全 200。
 - T-074 报告: `docs/agent-handoff/CONTROLLER_T074_UI_QA_GATE_20260430.md`; 多 Agent 工作流和总控角色文档均写入页面变更 QA 门禁; `git diff --check` 通过。
 - T-073 报告: `docs/agent-handoff/CONTROLLER_T073_HOT_RADAR_WHITE_FIRE_20260430.md`; Playwright 截图 `/tmp/nrg_hot_radar_t073/t073-make-hot-radar-white-fire.png` 和 `/tmp/nrg_hot_radar_t073/t073-make-hot-radar-white-fire-next.png` 已读, 可见白底 `🔥91/🔥79` badge; `换一批` 点击后正常进入第 2/4 批; console error=0, 仅 Babel 开发 warning。
