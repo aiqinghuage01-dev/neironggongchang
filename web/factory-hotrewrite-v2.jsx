@@ -63,7 +63,8 @@ function PageHotrewrite({ onNav }) {
 
   // D-037b5: write 异步任务. ref 存当前 task 的 angle/modeLabel 给 onComplete 用.
   const [taskId, setTaskId] = useTaskPersist("hotrewrite");
-  const taskMetaRef = React.useRef({ angle: null, modeLabel: "" });
+  const taskMetaRef = React.useRef({ angle: null, modeLabel: "", baseCount: 0 });
+  const partialSeenRef = React.useRef({});
   const poller = useTaskPoller(taskId, {
     onComplete: (r) => {
       const meta = taskMetaRef.current;
@@ -77,8 +78,9 @@ function PageHotrewrite({ onNav }) {
         }))
         : [{ ...r, angle: meta.angle, mode_label: meta.modeLabel, ts: now }];
       setVersions((vs) => {
-        const startIdx = vs.length;
-        const next = [...vs, ...incoming];
+        const baseCount = Math.min(meta.baseCount || 0, vs.length);
+        const startIdx = baseCount;
+        const next = [...vs.slice(0, baseCount), ...incoming];
         setActiveVersionIdx(startIdx);
         setScript(next[startIdx]);
         return next;
@@ -155,8 +157,9 @@ function PageHotrewrite({ onNav }) {
   }
 
   // D-037b5: callWrite 改异步, 返 task_id (不再返结果). 结果走 useTaskPoller onComplete.
-  async function callWrite(angle, modeLabel) {
-    taskMetaRef.current = { angle, modeLabel };
+  async function callWrite(angle, modeLabel, baseCountOverride) {
+    const baseCount = typeof baseCountOverride === "number" ? baseCountOverride : versions.length;
+    taskMetaRef.current = { angle, modeLabel, baseCount };
     const r = await api.post("/api/hotrewrite/write", {
       hotspot: hotspot.trim(),
       breakdown: analyze?.breakdown || {},
@@ -172,7 +175,7 @@ function PageHotrewrite({ onNav }) {
     setStep("write");
     try {
       const modeLabel = withBiz ? (pureRewrite ? "结合业务+纯改写" : "结合业务") : "纯改写";
-      await callWrite(angle, modeLabel);
+      await callWrite(angle, modeLabel, 0);
     } catch (e) { setErr(e.message); setStep("angles"); }
   }
 
@@ -185,7 +188,7 @@ function PageHotrewrite({ onNav }) {
     setErr("");
     try {
       const modeLabel = withBiz ? (pureRewrite ? "结合业务+纯改写" : "结合业务") : "纯改写";
-      await callWrite(angle, modeLabel + (sameAngle ? " · 再来一版" : " · 换角度"));
+      await callWrite(angle, modeLabel + (sameAngle ? " · 再来一版" : " · 换角度"), versions.length);
     } catch (e) { setErr(e.message); }
   }
 
@@ -197,7 +200,7 @@ function PageHotrewrite({ onNav }) {
 
   function switchVersion(idx) {
     setActiveVersionIdx(idx);
-    setScript(versions[idx]);
+    setScript(versions[idx] || null);
   }
 
   function reset() {
@@ -217,11 +220,35 @@ function PageHotrewrite({ onNav }) {
     if (s.script) setScript(s.script);
     if (Array.isArray(s.versions)) setVersions(s.versions);
     if (typeof s.activeVersionIdx === "number") setActiveVersionIdx(s.activeVersionIdx);
-    if (s.taskId) setTaskId(s.taskId);
+    if (s.taskId) {
+      taskMetaRef.current = { angle: s.pickedAngle || null, modeLabel: "", baseCount: Array.isArray(s.versions) ? s.versions.length : 0 };
+      setTaskId(s.taskId);
+    }
     if (s.step) setStep(s.step);
   };
   const wf = useWorkflowPersist({ ns: "hotrewrite", state: wfState, onRestore: wfRestore });
-  const showInlineError = err && !(step === "write" && (poller.isFailed || poller.isCancelled) && versions.length === 0);
+
+  const partialResult = (poller.isRunning || poller.isFailed) ? (poller.task?.partial_result || null) : null;
+  const liveVersions = Array.isArray(partialResult?.versions) && partialResult.versions.length
+    ? partialResult.versions.map((v, idx) => ({
+      ...v,
+      angle: taskMetaRef.current.angle || pickedAngle,
+      mode_label: v.mode_label || taskMetaRef.current.modeLabel,
+      ts: Date.now() + idx,
+    }))
+    : [];
+  const liveBaseCount = Math.min(taskMetaRef.current.baseCount || 0, versions.length);
+  const displayVersions = liveVersions.length ? [...versions.slice(0, liveBaseCount), ...liveVersions] : versions;
+  const displayScript = displayVersions[activeVersionIdx] || displayVersions[liveBaseCount] || script;
+  const showInlineError = err && !(step === "write" && (poller.isFailed || poller.isCancelled) && displayVersions.length === 0);
+
+  React.useEffect(() => {
+    if (!taskId || !liveVersions.length) return;
+    if (partialSeenRef.current[taskId]) return;
+    partialSeenRef.current[taskId] = true;
+    const idx = Math.min(taskMetaRef.current.baseCount || 0, displayVersions.length - 1);
+    setActiveVersionIdx(idx);
+  }, [taskId, liveVersions.length, displayVersions.length]);
 
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", background: T.bg, position: "relative", overflow: "hidden" }}>
@@ -240,7 +267,7 @@ function PageHotrewrite({ onNav }) {
         {step === "angles" && <HotStepAngles analyze={analyze} loading={loading} onPick={pickAngle} onPrev={() => setStep("input")} onRegen={doAnalyze}
           withBiz={withBiz} setWithBiz={setWithBiz} pureRewrite={pureRewrite} setPureRewrite={setPureRewrite} />}
         {step === "write"  && (
-          poller.isRunning && versions.length === 0 ? (
+          poller.isRunning && displayVersions.length === 0 ? (
             // 第一次写, 没有任何版本, 单独显 LoadingProgress
             <LoadingProgress
               task={poller.task}
@@ -251,7 +278,7 @@ function PageHotrewrite({ onNav }) {
             />
           ) : poller.isFailed || poller.isCancelled ? (
             // 第一次失败 (versions 为空) 时单独显 FailedRetry
-            versions.length === 0 ? (
+            displayVersions.length === 0 ? (
               <FailedRetry
                 error={poller.error || err}
                 onRetry={retry}
@@ -261,22 +288,28 @@ function PageHotrewrite({ onNav }) {
               />
             ) : (
               // 已有版本时, 失败的 retry 按钮挂在底部 HotStepWrite 里 (用现成 onAddSameAngle)
-              <HotStepWrite script={script} hotspot={hotspot} angle={pickedAngle} loading={false} onPrev={() => setStep("angles")} onRewrite={retry} onReset={reset} onNav={onNav}
-                versions={versions} activeVersionIdx={activeVersionIdx} onSwitchVersion={switchVersion}
+              <HotStepWrite script={displayScript} hotspot={hotspot} angle={pickedAngle} loading={false} onPrev={() => setStep("angles")} onRewrite={retry} onReset={reset} onNav={onNav}
+                versions={displayVersions} activeVersionIdx={activeVersionIdx} onSwitchVersion={switchVersion}
                 allAngles={analyze?.angles || []}
                 onAddSameAngle={() => addAnotherVersion(true)}
                 onAddOtherAngle={(a) => addAnotherVersion(false, a)}
                 appendingVersion={false}
+                progressTask={poller.task}
+                progressStartIdx={liveBaseCount}
+                onCancelProgress={() => { poller.cancel(); }}
               />
             )
           ) : (
             // 已有版本 (running 追加版本 / ok 完成)
-            <HotStepWrite script={script} hotspot={hotspot} angle={pickedAngle} loading={false} onPrev={() => setStep("angles")} onRewrite={() => pickAngle(pickedAngle)} onReset={reset} onNav={onNav}
-              versions={versions} activeVersionIdx={activeVersionIdx} onSwitchVersion={switchVersion}
+            <HotStepWrite script={displayScript} hotspot={hotspot} angle={pickedAngle} loading={false} onPrev={() => setStep("angles")} onRewrite={() => pickAngle(pickedAngle)} onReset={reset} onNav={onNav}
+              versions={displayVersions} activeVersionIdx={activeVersionIdx} onSwitchVersion={switchVersion}
               allAngles={analyze?.angles || []}
               onAddSameAngle={() => addAnotherVersion(true)}
               onAddOtherAngle={(a) => addAnotherVersion(false, a)}
               appendingVersion={poller.isRunning}
+              progressTask={poller.task}
+              progressStartIdx={liveBaseCount}
+              onCancelProgress={() => { poller.cancel(); }}
             />
           )
         )}
@@ -288,25 +321,25 @@ function PageHotrewrite({ onNav }) {
 // ─── 顶栏 ────────────────────────────────────────────────
 function HotHeader({ current, onBack, skillInfo }) {
   return (
-    <div style={{ padding: "12px 24px", background: "#fff", borderBottom: `1px solid ${T.border}`, display: "flex", alignItems: "center", gap: 14, flexShrink: 0 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <div style={{ width: 26, height: 26, borderRadius: 7, background: T.text, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13 }}>🔥</div>
-        <div style={{ fontSize: 13.5, fontWeight: 600 }}>热点文案改写 · 3 步</div>
+    <div style={{ padding: "10px clamp(12px, 4vw, 24px)", background: "#fff", borderBottom: `1px solid ${T.border}`, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", flexShrink: 0 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flex: "1 1 250px", minWidth: 0, flexWrap: "wrap" }}>
+        <div style={{ width: 26, height: 26, borderRadius: 7, background: T.text, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, flexShrink: 0 }}>🔥</div>
+        <div style={{ fontSize: 13.5, fontWeight: 600, whiteSpace: "nowrap" }}>热点文案改写 · 3 步</div>
         {skillInfo && (
           <span title="本页方法已加载"
-            style={{ fontSize: 10.5, color: T.brand, background: T.brandSoft, padding: "2px 8px", borderRadius: 100, marginLeft: 6 }}>
+            style={{ fontSize: 10.5, color: T.brand, background: T.brandSoft, padding: "2px 8px", borderRadius: 100, whiteSpace: "nowrap" }}>
             方法已加载
           </span>
         )}
       </div>
-      <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 8, marginLeft: 8 }}>
+      <div style={{ flex: "999 1 330px", display: "flex", alignItems: "center", gap: 6, minWidth: 0, flexWrap: "wrap" }}>
         {HOT_STEPS.map((s, i) => {
           const active = s.id === current;
           const done = HOT_STEPS.findIndex(x => x.id === current) > i;
           return (
             <React.Fragment key={s.id}>
               <div style={{
-                display: "flex", alignItems: "center", gap: 5, padding: "4px 10px 4px 5px", borderRadius: 100, fontSize: 11.5, fontWeight: 500,
+                display: "flex", alignItems: "center", gap: 5, padding: "4px 9px 4px 5px", borderRadius: 100, fontSize: 11.5, fontWeight: 500,
                 background: active ? T.text : "transparent",
                 color: active ? "#fff" : done ? T.brand : T.muted,
                 whiteSpace: "nowrap",
@@ -319,13 +352,13 @@ function HotHeader({ current, onBack, skillInfo }) {
                 }}>{done ? "✓" : s.n}</div>
                 {s.label}
               </div>
-              {i < HOT_STEPS.length - 1 && <span style={{ color: T.muted3 }}>—</span>}
+              {i < HOT_STEPS.length - 1 && <span style={{ color: T.muted3, flexShrink: 0 }}>—</span>}
             </React.Fragment>
           );
         })}
       </div>
       <ApiStatusLight />
-      <button onClick={onBack} style={{ background: "transparent", border: "none", color: T.muted, fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}>← 返回</button>
+      <button onClick={onBack} style={{ background: "transparent", border: "none", color: T.muted, fontSize: 12, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap", marginLeft: "auto" }}>← 返回</button>
     </div>
   );
 }
@@ -519,7 +552,8 @@ function HotStepAngles({ analyze, loading, onPick, onPrev, onRegen, withBiz, set
 
 // ─── Step 3 · 正文 + 六维自检 ───────────────────────────
 function HotStepWrite({ script, hotspot, angle, loading, onPrev, onRewrite, onReset, onNav,
-  versions, activeVersionIdx, onSwitchVersion, allAngles, onAddSameAngle, onAddOtherAngle, appendingVersion }) {
+  versions, activeVersionIdx, onSwitchVersion, allAngles, onAddSameAngle, onAddOtherAngle, appendingVersion,
+  progressTask, progressStartIdx, onCancelProgress }) {
   if (loading || !script) return <Spinning icon="✍️" phases={[
     { text: "理顺方法论", sub: "流量骨架 + 人设 + 业务植入" },
     { text: "3 秒判词开场", sub: "直接态度,不先背景" },
@@ -549,6 +583,17 @@ function HotStepWrite({ script, hotspot, angle, loading, onPrev, onRewrite, onRe
 
   return (
     <div style={{ padding: "32px 40px 120px", maxWidth: 1080, margin: "0 auto" }}>
+      {(progressTask?.status === "running" || progressTask?.status === "failed") && progressTask?.partial_result?.versions?.length > 0 && (
+        <HotLiveProgress
+          task={progressTask}
+          versions={versions}
+          activeVersionIdx={activeVersionIdx}
+          onSwitchVersion={onSwitchVersion}
+          startIdx={progressStartIdx || 0}
+          onCancel={onCancelProgress}
+        />
+      )}
+
       {/* D-062nn-C4: 多版 tab 切换 (versions 数组 > 1 时显) */}
       {versions && versions.length > 1 && (
         <HotVersionSwitcher versions={versions} activeVersionIdx={activeVersionIdx}
@@ -640,6 +685,102 @@ function HotStepWrite({ script, hotspot, angle, loading, onPrev, onRewrite, onRe
           }}>🎬 做成数字人视频 →</Btn>
         </div>
       )}
+    </div>
+  );
+}
+
+function HotLiveProgress({ task, versions, activeVersionIdx, onSwitchVersion, startIdx, onCancel }) {
+  const partial = task?.partial_result || {};
+  const done = partial.completed_versions || (partial.versions || []).length || 0;
+  const total = partial.total_versions || task?.progress_data?.total_versions || done;
+  const remaining = Math.max(0, total - done);
+  const offset = startIdx || 0;
+  const taskVersions = (versions || []).slice(offset, offset + done);
+  const running = task?.status === "running";
+  const failed = task?.status === "failed";
+  const progressText = task?.progress_text || (remaining > 0 ? `正在写第 ${done + 1}/${total} 版` : "已完成");
+  const elapsed = task?.elapsed_sec || 0;
+  const slow = running && remaining > 0 && elapsed > Math.max(180, Math.round((task?.estimated_seconds || 360) * 0.75));
+  const statusText = failed
+    ? `后面 ${remaining} 版没有跑完，前面 ${done} 版已保留`
+    : remaining > 0
+      ? `正在处理剩余 ${remaining} 版，先出的版本可以直接看`
+      : "这一组已经全部生成";
+  return (
+    <div style={{
+      marginBottom: 16,
+      padding: 14,
+      background: "linear-gradient(135deg, #f6fbf7, #fff)",
+      border: `1.5px solid ${T.brand}`,
+      boxShadow: `0 0 0 4px ${T.brandSoft}`,
+      borderRadius: 12,
+      display: "grid",
+      gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+      gap: 14,
+      alignItems: "stretch",
+    }}>
+      <div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+          <span style={{ fontSize: 14, fontWeight: 800, color: T.text }}>先出的版本已经能看</span>
+          <Tag size="xs" color="green">已完成 {done}/{total}</Tag>
+          {remaining > 0 && <span style={{ fontSize: 12, color: T.muted }}>后面 {remaining} 版继续在后台写</span>}
+        </div>
+        <div style={{
+          marginBottom: 10,
+          padding: "9px 10px",
+          borderRadius: 8,
+          background: failed ? "#fff7ed" : slow ? "#fef3c7" : T.bg2,
+          border: `1px solid ${failed || slow ? "#f59e0b55" : T.borderSoft}`,
+          color: failed ? "#9a3412" : T.text,
+          fontSize: 12.5,
+          lineHeight: 1.55,
+        }}>
+          <b>{progressText}</b>
+          <span style={{ color: failed ? "#9a3412" : T.muted }}> · 已等 {fmtSec(elapsed)} · {statusText}</span>
+          {slow && !failed && <span style={{ color: "#92400e" }}> · 比预期慢，正在等模型返回</span>}
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 8 }}>
+          {taskVersions.map((v, i) => {
+            const versionIdx = offset + i;
+            const on = versionIdx === activeVersionIdx;
+            return (
+              <button key={`${v.variant_id || "v"}-${versionIdx}`} onClick={() => onSwitchVersion(versionIdx)}
+                style={{
+                  textAlign: "left",
+                  padding: 10,
+                  background: on ? T.brand : "#fff",
+                  color: on ? "#fff" : T.text,
+                  border: `1px solid ${on ? T.brand : T.borderSoft}`,
+                  borderRadius: 8,
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                  boxShadow: on ? `0 0 0 3px ${T.brandSoft}` : "none",
+                }}>
+                <div style={{ fontSize: 12.5, fontWeight: 800, marginBottom: 4 }}>第 {v.version_index || (versionIdx + 1)} 版</div>
+                <div style={{ fontSize: 11.5, opacity: on ? 0.9 : 0.72, lineHeight: 1.35 }}>
+                  {v.mode_label || "已完成"} · {v.word_count || 0} 字
+                </div>
+              </button>
+            );
+          })}
+        </div>
+        {running && remaining > 0 && onCancel && (
+          <button onClick={onCancel} style={{
+            marginTop: 10,
+            padding: "7px 10px",
+            borderRadius: 8,
+            border: `1px solid ${T.border}`,
+            background: "#fff",
+            color: T.muted,
+            fontSize: 12,
+            cursor: "pointer",
+            fontFamily: "inherit",
+          }}>
+            取消剩余生成
+          </button>
+        )}
+      </div>
+      <TaskProgressTimeline task={task} title="生成现场" />
     </div>
   );
 }

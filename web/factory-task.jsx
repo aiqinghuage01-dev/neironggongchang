@@ -193,6 +193,64 @@ function LoadingProgress({ task, icon, title, subtitle, onCancel }) {
   );
 }
 
+// 结构化任务时间线: 给一批结果分段产出的页面复用。
+function TaskProgressTimeline({ task, title }) {
+  const data = task?.progress_data || {};
+  const timeline = Array.isArray(data.timeline) ? data.timeline : [];
+  if (!timeline.length) return null;
+  const total = data.total_versions || data.total || null;
+  const done = typeof data.completed_versions === "number"
+    ? data.completed_versions
+    : (typeof data.completed === "number" ? data.completed : timeline.filter(item => item.status !== "running").length);
+  const nowSec = Math.floor(Date.now() / 1000);
+  return (
+    <div style={{
+      background: "#fff",
+      border: `1px solid ${T.borderSoft}`,
+      borderRadius: 10,
+      padding: 12,
+    }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
+        <span style={{ fontSize: 13, fontWeight: 700, color: T.text }}>{title || "生成现场"}</span>
+        {total ? <Tag size="xs" color="green">已完成 {done}/{total}</Tag> : null}
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {timeline.slice(-6).map((item, idx) => {
+          const isRunning = item.status === "running";
+          const isFailed = item.status === "failed";
+          const started = item.started_ts || item.at_ts;
+          const elapsed = isRunning && started ? Math.max(0, nowSec - started) : 0;
+          return (
+            <div key={`${item.variant_id || "step"}-${item.status || "done"}-${idx}`} style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+              <span style={{
+                width: 18, height: 18, borderRadius: "50%", flexShrink: 0,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                background: isFailed ? T.redSoft : (isRunning ? T.bg3 : T.brandSoft),
+                color: isFailed ? T.red : (isRunning ? T.muted : T.brand),
+                fontSize: 11, fontWeight: 800,
+              }}>{isFailed ? "!" : (isRunning ? "..." : "✓")}</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 12.5, color: T.text, fontWeight: 600, lineHeight: 1.45 }}>
+                  {item.text || "完成一项"}
+                </div>
+                {isRunning && item.version_index && item.total_versions ? (
+                  <div style={{ fontSize: 10.5, color: T.muted2, marginTop: 2 }}>
+                    正在写第 {item.version_index} / {item.total_versions} 版 · 已写 {fmtSec(elapsed)}
+                  </div>
+                ) : item.completed_versions && item.total_versions && (
+                  <div style={{ fontSize: 10.5, color: T.muted2, marginTop: 2 }}>
+                    第 {item.completed_versions} / {item.total_versions} 版
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ─── FailedRetry 组件 ────────────────────────────────────
 // D-086: _friendlyErrorReason 改调 humanizeError (factory-errors.jsx 是全站事实源),
 //        不再维护本文件第二套 if/elif 规则. 任何错误模式新加只在 factory-errors.jsx 改.

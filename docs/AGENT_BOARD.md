@@ -8,11 +8,11 @@
 
 | 角色 | 状态 | 工作区 | 当前任务 |
 |---|---|---|---|
-| 总控 Agent | 自动派工 + 自动返修主管已接入 | `~/Desktop/neironggongchang` | 已排 T-085/T-086/T-087/T-084 热点改写实时进度链路, 正在监控 |
-| 内容开发 Agent | 工作中 | `~/Desktop/nrg-worktrees/content-dev` | T-085 热点改写实时输出返修 |
+| 总控 Agent | 自动派工 + 自动返修主管已接入 | `~/Desktop/neironggongchang` | T-088 已接管收口并完成正式端口验证; 等 T-089/T-090 独立复测/复审 |
+| 内容开发 Agent | 空闲/待新任务 | `~/Desktop/nrg-worktrees/content-dev` | T-088 旧 worker 已停止, 避免重复覆盖主线 |
 | 媒体开发 Agent | 空闲 | `~/Desktop/nrg-worktrees/media-dev` | T-047 已完成并合入 main; 等新媒体任务 |
-| QA 测试 Agent | 待领取 | `~/Desktop/nrg-worktrees/qa`, `~/Desktop/nrg-worktrees/qa-1`, `~/Desktop/nrg-worktrees/qa-2` | T-086 等 T-085 完成后复测 |
-| 审查 Agent | 待领取 | `~/Desktop/nrg-worktrees/review` | T-087 等 T-085 完成后复审 |
+| QA 测试 Agent | 待领取 | `~/Desktop/nrg-worktrees/qa`, `~/Desktop/nrg-worktrees/qa-1`, `~/Desktop/nrg-worktrees/qa-2` | T-089 等 T-088 完成后复测 |
+| 审查 Agent | 待领取 | `~/Desktop/nrg-worktrees/review` | T-090 等 T-088 完成后复审 |
 
 ---
 
@@ -84,10 +84,13 @@
 | T-081 | 热点改写版本级实时输出 MVP | 内容开发 Agent | done(不合入) | `backend/services/hotrewrite_pipeline.py`, `backend/services/tasks.py`, `web/factory-hotrewrite-v2.jsx`, `web/factory-task.jsx` | 开发交付后被 T-082/T-083 block, 不能合入 |
 | T-082 | T-081 热点改写实时输出真实浏览器 QA | QA 测试 Agent | blocked | 桌面 + 390px 浏览器复测 | 不通过: 390px 顶部标题/步骤条裁切 |
 | T-083 | T-081 热点改写实时输出代码审查 | 审查 Agent | blocked | 只读 T-081 diff/report | 不通过: 分支落后 main 70 commit, partial_result 绕过热点清洗防线 |
-| T-084 | 写文案功能实时进度举一反三方案 | 内容开发 Agent | queued | 所有写文案功能清单和推广方案 | 等 T-086/T-087 通过后再执行 |
-| T-085 | 返修 T-081 热点改写实时输出阻塞项 | 内容开发 Agent | claimed | 热点改写 pipeline/tasks/frontend/tests | 需实现已完成版本即时展示、partial_result 清洗、慢 V4 可解释、390px header 正常 |
-| T-086 | T-085 热点改写实时输出返修后真实浏览器复测 | QA 测试 Agent | queued | desktop + 390px + mock/no-credit | V1 running 中已可读; V4 不黑箱长卡; final 4 版可见 |
-| T-087 | T-085 热点改写实时输出返修代码复审 | 审查 Agent | queued | 只读 T-085 | 无 P0/P1 才可通过 |
+| T-084 | 写文案功能实时进度举一反三方案 | 内容开发 Agent | queued | 所有写文案功能清单和推广方案 | 等 T-089/T-090 通过后再执行 |
+| T-085 | 返修 T-081 热点改写实时输出阻塞项 | 内容开发 Agent | done | 热点改写 pipeline/tasks/frontend/tests | 第一轮开发已交付; 后续阻塞点由 T-088 总控接管收口 |
+| T-086 | T-085 热点改写实时输出返修后真实浏览器复测 | QA 测试 Agent | blocked | desktop + 390px + mock/no-credit | 已发现慢 V4 黑箱和 partial 清洗边界问题, 由 T-088 处理 |
+| T-087 | T-085 热点改写实时输出返修代码复审 | 审查 Agent | blocked | 只读 T-085 | 已发现 failed 清 partial、慢 V4、测试缺口 P1, 由 T-088 处理 |
+| T-088 | 返修 T-085: 处理 QA/审查阻塞 | 总控 Agent | done | `backend/services/hotrewrite_pipeline.py`, `backend/services/tasks.py`, `web/factory-hotrewrite-v2.jsx`, `web/factory-task.jsx`, tests/e2e | 已完成: V1/V2/V3 先出先看; 慢 V4 显示重试兜底/已等时间/取消; failed 保留 partial; 正式 8001 Playwright 通过 |
+| T-089 | T-088 返修后真实 QA | QA 测试 Agent | queued | desktop + 390px + mock/no-credit | 验证 T-088 正式端口逐版展示、慢 V4 说明、最终 4 版、console/network 干净 |
+| T-090 | T-088 返修后代码复审 | 审查 Agent | queued | 只读 T-088 diff/report | 无 P0/P1; 关注任务 partial 语义、清洗边界、取消/失败行为、测试覆盖 |
 
 ---
 

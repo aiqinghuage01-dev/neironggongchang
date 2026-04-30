@@ -674,6 +674,7 @@ def _sanitize_task_for_display(task: dict[str, Any] | None) -> dict[str, Any] | 
     from backend.services import hotrewrite_pipeline
     out = dict(task)
     out["result"] = hotrewrite_pipeline.sanitize_result_for_display(out.get("result"))
+    out["partial_result"] = hotrewrite_pipeline.sanitize_result_for_display(out.get("partial_result"))
     return out
 
 

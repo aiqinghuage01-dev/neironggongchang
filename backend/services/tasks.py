@@ -14,8 +14,10 @@
   step         任务涉及的 step ("write" / "cover")
   payload      JSON 入参(用于恢复状态 / 展示给用户)
   result       JSON 结果(成功后)
+  partial_result JSON 运行中可先展示的局部结果
   error        错误文本
   progress_text 最近阶段文案("写第 3 段" · 2s 覆盖一次也 OK)
+  progress_data JSON 结构化进度(时间线/已完成数等)
   started_ts / finished_ts / updated_ts  unix 秒
 
 数据落 主项目 SQLite (works.db) 共享连接。
@@ -64,6 +66,8 @@ def _row_to_dict(r: sqlite3.Row) -> dict[str, Any]:
     d = dict(r)
     d["payload"] = _loads(d.get("payload"))
     d["result"] = _loads(d.get("result"))
+    d["partial_result"] = _loads(d.get("partial_result"))
+    d["progress_data"] = _loads(d.get("progress_data"))
     started = d.get("started_ts") or 0
     finished = d.get("finished_ts") or 0
     now = int(time.time())
@@ -158,6 +162,49 @@ def update_progress(task_id: str, progress_text: str, *, pct: int | None = None)
         con.commit()
 
 
+def update_partial_result(
+    task_id: str,
+    *,
+    partial_result: Any | None = None,
+    progress_data: Any | None = None,
+    progress_text: str | None = None,
+    pct: int | None = None,
+) -> None:
+    """写入运行中的局部结果和结构化进度。
+
+    只更新 running 任务。任务进入 ok/failed/cancelled 后, partial 不再能覆盖
+    终态 result 或失败/取消语义。
+    """
+    _ensure_schema()
+    now = int(time.time())
+    updates: list[str] = []
+    args: list[Any] = []
+    if partial_result is not None:
+        updates.append("partial_result=?")
+        args.append(_dumps(partial_result))
+    if progress_data is not None:
+        updates.append("progress_data=?")
+        args.append(_dumps(progress_data))
+    if progress_text is not None:
+        updates.append("progress_text=?")
+        args.append((progress_text or "")[:200])
+    if pct is not None:
+        pct = max(0, min(100, int(pct)))
+        updates.append("progress_pct=?")
+        args.append(pct)
+    if not updates:
+        return
+    updates.append("updated_ts=?")
+    args.append(now)
+    args.append(task_id)
+    with closing(get_connection()) as con:
+        con.execute(
+            f"UPDATE tasks SET {', '.join(updates)} WHERE id=? AND status='running'",
+            tuple(args),
+        )
+        con.commit()
+
+
 def finish_task(
     task_id: str,
     *,
@@ -179,8 +226,14 @@ def finish_task(
         if status == "ok":
             con.execute(
                 "UPDATE tasks SET status=?, result=?, error=?, finished_ts=?, updated_ts=?, "
-                "progress_text=?, progress_pct=100 WHERE id=?",
+                "progress_text=?, progress_pct=100, partial_result=NULL, progress_data=NULL WHERE id=?",
                 (status, _dumps(result), None, now, now, done_text, task_id),
+            )
+        elif status == "cancelled":
+            con.execute(
+                "UPDATE tasks SET status=?, result=?, error=?, finished_ts=?, updated_ts=?, "
+                "partial_result=NULL, progress_data=NULL WHERE id=?",
+                (status, _dumps(result), (error or "")[:500] if error else None, now, now, task_id),
             )
         else:
             con.execute(
@@ -241,7 +294,8 @@ def cancel_task(task_id: str) -> bool:
     now = int(time.time())
     with closing(get_connection()) as con:
         cur = con.execute(
-            "UPDATE tasks SET status='cancelled', finished_ts=?, updated_ts=? "
+            "UPDATE tasks SET status='cancelled', finished_ts=?, updated_ts=?, "
+            "partial_result=NULL, progress_data=NULL "
             "WHERE id=? AND status IN ('pending','running')",
             (now, now, task_id),
         )
@@ -506,6 +560,22 @@ class TaskContext:
 
     def update_progress(self, text: str, pct: int | None = None) -> None:
         update_progress(self.task_id, text, pct=pct)
+
+    def update_partial_result(
+        self,
+        *,
+        partial_result: Any | None = None,
+        progress_data: Any | None = None,
+        progress_text: str | None = None,
+        pct: int | None = None,
+    ) -> None:
+        update_partial_result(
+            self.task_id,
+            partial_result=partial_result,
+            progress_data=progress_data,
+            progress_text=progress_text,
+            pct=pct,
+        )
 
     def is_cancelled(self) -> bool:
         return is_cancelled(self.task_id)

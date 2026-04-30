@@ -32,8 +32,9 @@ EXPECTED_TABLES = {
 
 # 跟 backend.services.migrations._MIGRATIONS 同步:
 # v1 = D-084 baseline, v2 = D-087 素材库 5 表, v3 = B'-3 pending_moves 加 confidence/no_move/version/reviewed,
-# v4 = B'-4 material_assets 加 content_hash/last_seen_at/missing_at, v5 = D-124 结构化画像字段
-EXPECTED_VERSION = 5
+# v4 = B'-4 material_assets 加 content_hash/last_seen_at/missing_at, v5 = D-124 结构化画像字段,
+# v6 = T-085 tasks 运行中局部结果字段
+EXPECTED_VERSION = 6
 
 
 @pytest.fixture
@@ -112,6 +113,17 @@ def test_apply_migrations_creates_material_profile_columns(tmp_db):
     assert "idx_material_assets_category" in idx
 
 
+def test_apply_migrations_creates_task_partial_columns(tmp_db):
+    """T-085: tasks 应有运行中局部结果和结构化进度字段."""
+    from backend.services import migrations
+    migrations.apply_migrations()
+
+    with sqlite3.connect(str(tmp_db)) as con:
+        cols = {r[1] for r in con.execute("PRAGMA table_info(tasks)").fetchall()}
+    expected = {"partial_result", "progress_data"}
+    assert expected <= cols, f"tasks 缺局部结果字段: {expected - cols}"
+
+
 # ─── legacy fixups 双覆盖 (P2-2) ──────────────────────────────
 
 
@@ -145,7 +157,8 @@ def test_legacy_fixup_works_old_db_missing_4_columns(tmp_db):
 
 def test_legacy_fixup_tasks_old_db_missing_4_columns(tmp_db):
     """模拟 D-037b1/T9/T13 之前的 tasks 表 (D-037a 时代 13 列, 缺 4 个 ALTER 列).
-    apply 后应自动 ALTER 补齐 progress_pct/estimated_seconds/retry_count/user_id."""
+    apply 后应自动 ALTER 补齐 progress_pct/estimated_seconds/retry_count/user_id,
+    并经 v6 补齐 partial_result/progress_data."""
     # Step 1: 手动建 D-037a 完整的老 tasks 表 (含 ns/page_id 等 v1 核心列, 缺 4 ALTER 列)
     with sqlite3.connect(str(tmp_db)) as con:
         con.execute("""
@@ -172,10 +185,10 @@ def test_legacy_fixup_tasks_old_db_missing_4_columns(tmp_db):
     from backend.services import migrations
     migrations.apply_migrations()
 
-    # Step 3: 验 4 列补齐
+    # Step 3: 验列补齐
     with sqlite3.connect(str(tmp_db)) as con:
         cols = {r[1] for r in con.execute("PRAGMA table_info(tasks)").fetchall()}
-    expected = {"progress_pct", "estimated_seconds", "retry_count", "user_id"}
+    expected = {"progress_pct", "estimated_seconds", "retry_count", "user_id", "partial_result", "progress_data"}
     assert expected <= cols, f"tasks 缺列: {expected - cols}"
 
 

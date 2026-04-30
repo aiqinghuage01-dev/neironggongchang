@@ -4,13 +4,13 @@
 
 ---
 
-## 当前状态 (2026-05-01 · 热点改写实时进度返修 + 自动返修主管)
+## 当前状态 (2026-05-01 · 热点改写逐版可见收口)
 
-**版本**: v0.8.17-agent-repair-supervisor — 热点改写“逐版可见”仍在返修中; 多 Agent 队列新增自动返修主管, 后续 QA/Review 新阻塞会自动生成返修开发 + 复测 + 复审链路, 不再停在 blocked 等人工转派。
+**版本**: v0.8.18-hotrewrite-progressive — 热点改写 4 版生成已在正式端口跑通“先出先看”: V1/V2/V3 写完即可在页面读正文, V4 慢时显示已等时间、重试兜底说明和取消剩余生成; failed 保留已完成版本。自动返修主管继续运行, 后续 QA/Review 新阻塞会自动生成返修链路。
 
 ### 当前进行
-- T-081 热点改写版本级实时输出第一轮开发已完成, 但 T-082 QA 和 T-083 审查均正确 block: 390px 头部裁切、content-dev 落后 main、partial_result 未接展示清洗、终态 partial 语义不清。T-085 已由内容开发自动领取返修, T-086/T-087 已排队做返修后真实浏览器复测和代码复审; T-084“所有写文案功能举一反三方案”已改为依赖 T-086/T-087 通过后再执行。
-- 老板实测补充验收已写入 T-086/T-087/T-084: 热点改写不能只显示“正在写第 N/4 版”, 必须每完成一版立刻在页面展示可读正文; V4 等长尾步骤不能黑箱长卡, 必须有单版耗时/重试/兜底/失败可解释状态。
+- T-088 已由总控接管并在 main 收口: content-dev 第一轮 T-085 patch 已摘入主线, 随后补齐 T-086/T-087 阻塞点。正式 `8000/8001` 已重启并通过 mock/no-credit Playwright: `v1 -> v2 -> slow V4 -> ok`, console/pageerror/requestfailed/http error 全 0, 390px `maxOverflow=0`。报告 `docs/agent-handoff/CONTROLLER_T088_HOTREWRITE_PROGRESSIVE_FINAL_20260501.md`。
+- T-086/T-087 的旧阻塞点已在 T-088 中处理: 正文后部“已走技能/需要进一步操作吗”会被展示层清洗; task failed 不再清空 partial; 慢 V4 页面显示 `progress_text`、已等时间、剩余版本说明和取消按钮。T-089/T-090 用于返修后独立 QA/Review, 通过后继续 T-084“所有写文案功能举一反三方案”。
 - 自动返修主管已启动: `bash scripts/start_agent_repair_supervisor.sh --status` 显示 LaunchAgent running, 初次启动已忽略 16 条历史阻塞, 后续新增 QA/Review `blocked` 且不需要老板决策时, 会自动生成下一轮返修任务、QA 任务和 Review 任务。回归测试 `python3 -m pytest -q tests/test_agent_repair_supervisor.py tests/test_agent_queue.py` -> 7 passed。
 - 本轮同步: 迁移手册已补 v1.3,收紧 Mac mini skill 架构边界:`~/skills-source/` 是真实 skill 仓库,`~/Desktop/skills/团队版` 是 symlink 视图;未来迁移只能 rsync 到 `~/skills-source/`,禁止覆盖 Mac mini 的 `~/Desktop/skills/` 三视图层(团队版/自用版/学员版)。
 - 本轮同步: 迁移手册 `docs/design/MAC_MINI_TEAM_BETA_ARCHITECTURE.md` 已补 v1.2「第二台 Mac mini 复用 runbook」,把本次 Tailscale 实测、GitHub/rsync 同步策略、`SKILL_ROOT` symlink、空库验收、运行时依赖 sanity、loopback 服务与 SSH tunnel 浏览器验收写成未来迁移清单。下一台 Mac mini 可直接按 §0.8.9 执行。
@@ -83,6 +83,7 @@
 - 额外 QA cmux 脚本已改为 socket 不可用时只准备 worktree, 不再强行 fallback 打开多个空白窗口。
 
 ### 总控审查证据
+- T-088 热点改写逐版可见最终收口: 报告 `docs/agent-handoff/CONTROLLER_T088_HOTREWRITE_PROGRESSIVE_FINAL_20260501.md`; 验证 `python3 -m pytest -q tests/test_hotrewrite_versions.py tests/test_tasks.py tests/test_tasks_api.py tests/test_migrations.py` -> 51 passed; `APP_URL='http://127.0.0.1:8001/?page=hotrewrite' node scripts/e2e_hotrewrite_progressive.js` -> `states=["v1","v2","slow","ok"]`, consoleErrors/pageErrors/failedRequests/httpErrors 均 0, 390px `maxOverflow=0`; 截图 `/tmp/_ui_shots/t085_hotrewrite_running_v1.png`, `/tmp/_ui_shots/t085_hotrewrite_running_v2.png`, `/tmp/_ui_shots/t085_hotrewrite_slow_v4.png`, `/tmp/_ui_shots/t085_hotrewrite_done_4versions.png`, `/tmp/_ui_shots/t085_hotrewrite_mobile_390.png` 已读。全量 `python3 -m pytest -q` 仍有 8 个既有非本任务失败(apimart local_path、beta LiDock、wechat media URL), 已在报告登记。
 - 队列 T-075 科技与狠活作战室: 报告 `docs/agent-handoff/CONTROLLER_T075_BETA_WARROOM_FINAL_20260430.md`; 开发报告 `docs/agent-handoff/DEV_CONTENT_T075_BETA_WARROOM_20260430.md`; QA 复测 `docs/agent-handoff/QA_T078_BETA_WARROOM_RESPONSIVE_20260430.md`; 最终审查 `docs/agent-handoff/REVIEW_T079_BETA_WARROOM_FINAL_20260430.md`; Playwright 桌面截图 `/tmp/_ui_shots/t075_beta_warroom.png` 已读, 日志摘要按钮可点且脱敏命中 0; 390x900 截图 `/tmp/_ui_shots/t075_beta_mobile_final.png` 已读, `hasHorizontalScroll=false`, `offRightCount=0`, console/pageerror/requestfailed/http error 全 0。
 - T-075 报告: `docs/agent-handoff/CONTROLLER_T075_MAKE_DROP_MATERIAL_REDESIGN_20260430.md`; Playwright 截图 `/tmp/nrg_make_t074/t074-make-full-tall-final.png` 已读, 首屏结构与参考图一致: 大输入框、底部工具按钮、紧凑热点列表 5 行; 真填文案后“开始”可点, 点击“行业”和“换一批”正常; console error=0, network 全 200。
 - T-074 报告: `docs/agent-handoff/CONTROLLER_T074_UI_QA_GATE_20260430.md`; 多 Agent 工作流和总控角色文档均写入页面变更 QA 门禁; `git diff --check` 通过。

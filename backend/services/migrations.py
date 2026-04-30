@@ -420,6 +420,23 @@ def _v5_material_asset_profiles(con: sqlite3.Connection) -> None:
     con.execute("CREATE INDEX IF NOT EXISTS idx_material_assets_quality ON material_assets(quality_score)")
 
 
+# ──────────────────────────────────────────
+# V6: T-085 — tasks 支持运行中局部结果和结构化进度
+# ──────────────────────────────────────────
+
+
+def _v6_task_partial_progress(con: sqlite3.Connection) -> None:
+    rows = con.execute("PRAGMA table_info(tasks)").fetchall()
+    existing = {r[1] for r in rows}
+    new_cols = [
+        ("partial_result", "TEXT"),
+        ("progress_data", "TEXT"),
+    ]
+    for col, typ in new_cols:
+        if col not in existing:
+            con.execute(f"ALTER TABLE tasks ADD COLUMN {col} {typ}")
+
+
 # 每条 migration: (version, note, sql_or_callable)
 # 类型为 str 时走 executescript; 为 callable 时调用 fn(conn) 执行 (适合幂等 ALTER 等情况).
 _MIGRATIONS: list[tuple[int, str, str | "callable"]] = [
@@ -427,6 +444,7 @@ _MIGRATIONS: list[tuple[int, str, str | "callable"]] = [
     (3, "B'-3 pending_moves 加 confidence/no_move/suggestion_version/reviewed_at, 旧条目标 stale", _v3_pending_moves_review),
     (4, "B'-4 material_assets 加 content_hash/last_seen_at/missing_at + index", _v4_asset_identity),
     (5, "D-124 material_assets 加精品原片库结构化画像字段 + index", _v5_material_asset_profiles),
+    (6, "T-085 tasks 加 partial_result/progress_data 运行中局部结果字段", _v6_task_partial_progress),
 ]
 
 

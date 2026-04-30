@@ -11,6 +11,9 @@ from __future__ import annotations
 
 import json
 import re
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from copy import deepcopy
 from typing import Any
 
@@ -35,6 +38,12 @@ def _extract_json(text: str, wrap: str = "object") -> Any:
 def _clean_script_content(text: str) -> str:
     """去掉模型偶发吐出的执行说明/后续操作建议,只保留口播正文。"""
     content = (text or "").strip()
+    content = re.sub(
+        r"\n{1,2}\s*已(?:经)?走(?:完)?(?:技能|skill)[:：][\s\S]*$",
+        "",
+        content,
+        flags=re.IGNORECASE,
+    ).strip()
     content = re.sub(
         r"^\s*(?:已(?:经)?走(?:完)?(?:技能|skill)[:：].*?)(?:\n{1,2}|$)",
         "",
@@ -64,20 +73,29 @@ def _count_script_chars(content: str) -> int:
     return len(re.sub(r"[#*_`>\-\[\]()\s]", "", content or ""))
 
 
-def sanitize_result_for_display(result: Any) -> Any:
-    """清洗旧任务里已落库的内部提示,避免历史结果打开时继续露出系统菜单。"""
+_INTERNAL_DISPLAY_KEYS = {
+    "tokens", "route_key", "used_route_key", "primary_error",
+    "model", "provider", "submit_id",
+}
+
+
+def _clean_result_copy(result: Any, *, drop_internal: bool = False) -> Any:
     if not isinstance(result, dict):
         return result
     cleaned = deepcopy(result)
 
     def _clean_item(item: Any) -> None:
-        if not isinstance(item, dict) or not isinstance(item.get("content"), str):
+        if not isinstance(item, dict):
             return
-        before = item.get("content") or ""
-        after = _clean_script_content(before)
-        if after != before:
-            item["content"] = after
-            item["word_count"] = _count_script_chars(after)
+        if isinstance(item.get("content"), str):
+            before = item.get("content") or ""
+            after = _clean_script_content(before)
+            if after != before:
+                item["content"] = after
+                item["word_count"] = _count_script_chars(after)
+        if drop_internal:
+            for key in _INTERNAL_DISPLAY_KEYS:
+                item.pop(key, None)
 
     _clean_item(cleaned)
     versions = cleaned.get("versions")
@@ -85,6 +103,26 @@ def sanitize_result_for_display(result: Any) -> Any:
         for version in versions:
             _clean_item(version)
     return cleaned
+
+
+def sanitize_result_for_display(result: Any) -> Any:
+    """清洗旧任务里已落库的内部提示,避免历史结果打开时继续露出系统菜单。"""
+    return _clean_result_copy(result, drop_internal=True)
+
+
+def _public_partial_version(version: dict[str, Any], version_index: int) -> dict[str, Any]:
+    """partial_result 只放前端展示需要的字段, 并强制再清洗正文。"""
+    cleaned = sanitize_result_for_display(version)
+    if not isinstance(cleaned, dict):
+        cleaned = {}
+    return {
+        "content": cleaned.get("content", ""),
+        "word_count": cleaned.get("word_count", 0),
+        "self_check": cleaned.get("self_check", {}),
+        "variant_id": cleaned.get("variant_id"),
+        "mode_label": cleaned.get("mode_label") or "",
+        "version_index": version_index,
+    }
 
 
 # ─── Step 1 · 热点拆解 + 3 个切入角度 ──────────────────────
@@ -343,19 +381,147 @@ def write_script_batch(
     angle: dict[str, Any],
     modes: dict[str, Any] | None = None,
     ctx: tasks_service.TaskContext | None = None,
+    on_progress=None,
+    on_version=None,
 ) -> dict[str, Any]:
     """按前端勾选模式一次任务生成 2/4 个版本, 返回 versions[]."""
     variants = build_write_variants(modes)
-    versions: list[dict[str, Any]] = []
     total = len(variants)
-    for idx, spec in enumerate(variants, start=1):
-        if ctx:
-            pct = 15 + int((((idx - 1) * 2) / max(1, total * 2)) * 75)
-            ctx.update_progress(f"正在写第 {idx}/{total} 版 · {spec.get('mode_label')}", pct=pct)
-        versions.append(write_script(hotspot, breakdown, angle, variant=spec))
-        if ctx:
-            pct = 15 + int((((idx * 2) - 1) / max(1, total * 2)) * 75)
-            ctx.update_progress(f"已完成第 {idx}/{total} 版", pct=pct)
+
+    from backend.services import guest_mode
+    captured_guest = guest_mode.capture()
+    done = 0
+    done_lock = threading.Lock()
+    completed_by_id: dict[str, dict[str, Any]] = {}
+    timeline: list[dict[str, Any]] = []
+
+    def _is_cancelled() -> bool:
+        return bool(ctx and hasattr(ctx, "is_cancelled") and ctx.is_cancelled())
+
+    def _snapshot_locked() -> tuple[dict[str, Any] | None, dict[str, Any]]:
+        completed_versions = [
+            _public_partial_version(completed_by_id[v["variant_id"]], idx + 1)
+            for idx, v in enumerate(variants)
+            if v["variant_id"] in completed_by_id
+        ]
+        progress_data = {
+            "completed_versions": done,
+            "total_versions": total,
+            "timeline": deepcopy(timeline),
+        }
+        if not completed_versions:
+            return None, progress_data
+        first = completed_versions[0]
+        return {
+            "content": first.get("content", ""),
+            "word_count": first.get("word_count", 0),
+            "self_check": first.get("self_check", {}),
+            "versions": completed_versions,
+            "completed_versions": len(completed_versions),
+            "total_versions": total,
+        }, progress_data
+
+    def _emit_version(result: dict[str, Any], spec: dict[str, str]) -> None:
+        nonlocal done
+        if not on_version or _is_cancelled():
+            return
+        with done_lock:
+            variant_id = spec["variant_id"]
+            completed_by_id[variant_id] = result
+            done += 1
+            pct = 20 + int(done * 70 / max(1, total))
+            text = f"已完成 {done}/{total} 版"
+            timeline.append({
+                "at_ts": int(time.time()),
+                "text": f"{spec.get('mode_label') or '这一版'}完成",
+                "completed_versions": done,
+                "total_versions": total,
+            })
+            partial_result, progress_data = _snapshot_locked()
+        if partial_result:
+            on_version(partial_result, progress_data, text, pct)
+
+    def _emit_progress_snapshot(text: str, pct: int | None = None) -> None:
+        if not on_version or _is_cancelled():
+            return
+        with done_lock:
+            partial_result, progress_data = _snapshot_locked()
+        if partial_result:
+            on_version(partial_result, progress_data, text, pct)
+
+    def _progress(text: str, pct: int | None = None) -> None:
+        if on_progress:
+            on_progress(text, pct)
+        elif ctx:
+            ctx.update_progress(text, pct=pct)
+
+    _progress(f"准备生成 {total} 版...", 18)
+
+    def _run_one(spec: dict[str, str], idx: int) -> dict[str, Any] | None:
+        nonlocal done
+        if _is_cancelled():
+            return None
+        token = guest_mode.set_guest(captured_guest)
+        try:
+            version_no = idx + 1
+            label = spec.get("mode_label") or spec.get("variant_id") or "这一版"
+            with done_lock:
+                timeline.append({
+                    "at_ts": int(time.time()),
+                    "text": f"开始写第 {version_no}/{total} 版 · {label}",
+                    "completed_versions": done,
+                    "total_versions": total,
+                    "version_index": version_no,
+                    "status": "running",
+                })
+            progress_text = f"正在写第 {version_no}/{total} 版 · {label}..."
+            _emit_progress_snapshot(progress_text)
+            _progress(progress_text, None)
+            result = write_script(hotspot, breakdown, angle, variant=spec)
+            result = _clean_result_copy(result)
+            if _is_cancelled():
+                return result
+            _emit_version(result, spec)
+            if not on_version:
+                with done_lock:
+                    done += 1
+                    pct = 20 + int(done * 70 / max(1, total))
+                _progress(f"已完成 {done}/{total} 版", pct)
+            return result
+        finally:
+            guest_mode.reset(token)
+
+    versions_by_idx: dict[int, dict[str, Any]] = {}
+    if len(variants) <= 1:
+        result = _run_one(variants[0], 0) if variants else None
+        if result is not None:
+            versions_by_idx[0] = result
+    else:
+        max_workers = min(2, len(variants))
+        with ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="hotrewrite") as ex:
+            next_idx = 0
+            futures = {}
+
+            def submit_next() -> None:
+                nonlocal next_idx
+                if next_idx >= len(variants) or _is_cancelled():
+                    return
+                fut = ex.submit(_run_one, variants[next_idx], next_idx)
+                futures[fut] = next_idx
+                next_idx += 1
+
+            for _ in range(max_workers):
+                submit_next()
+            while futures:
+                for fut in as_completed(list(futures)):
+                    idx = futures.pop(fut)
+                    result = fut.result()
+                    if result is not None:
+                        versions_by_idx[idx] = result
+                    submit_next()
+                    break
+
+    versions = [versions_by_idx[i] for i in range(len(variants)) if i in versions_by_idx]
     first = versions[0] if versions else write_script(hotspot, breakdown, angle)
     return {
         "content": first.get("content", ""),
@@ -383,6 +549,26 @@ def write_script_async(
     """异步触发 write_script_batch, 立即返 task_id. 真跑 2/4 版 (write + self-check 多次 AI)."""
     angle_label = (angle or {}).get("label") or (angle or {}).get("angle_id") or ""
     version_count = len(build_write_variants(modes))
+
+    def _run(ctx: tasks_service.TaskContext) -> dict[str, Any]:
+        def _on_version(partial_result, progress_data, text, pct):
+            ctx.update_partial_result(
+                partial_result=partial_result,
+                progress_data=progress_data,
+                progress_text=text,
+                pct=pct,
+            )
+
+        return write_script_batch(
+            hotspot,
+            breakdown,
+            angle,
+            modes,
+            ctx=ctx,
+            on_progress=lambda text, pct=None: ctx.update_progress(text, pct=pct),
+            on_version=_on_version,
+        )
+
     return tasks_service.run_async(
         kind="hotrewrite.write",
         label=f"热点改写 · {angle_label}" if angle_label else "热点改写",
@@ -392,5 +578,5 @@ def write_script_async(
         payload={"hotspot_preview": hotspot[:100], "angle_label": angle_label, "version_count": version_count},
         estimated_seconds=max(120, 90 * version_count),
         progress_text=f"小华写 {version_count} 版口播文案 + 自检...",
-        sync_fn_with_ctx=lambda ctx: write_script_batch(hotspot, breakdown, angle, modes, ctx=ctx),
+        sync_fn_with_ctx=_run,
     )

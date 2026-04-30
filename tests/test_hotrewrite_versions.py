@@ -5,6 +5,8 @@
 """
 from __future__ import annotations
 
+import tempfile
+from pathlib import Path
 from fastapi.testclient import TestClient
 from unittest.mock import MagicMock
 
@@ -49,7 +51,7 @@ def test_write_script_batch_returns_switchable_versions(monkeypatch):
         {"with_biz": True, "pure_rewrite": True},
     )
 
-    assert calls == ["pure_v1", "pure_v2", "biz_v3", "biz_v4"]
+    assert set(calls) == {"pure_v1", "pure_v2", "biz_v3", "biz_v4"}
     assert r["version_count"] == 4
     assert len(r["versions"]) == 4
     assert r["content"] == "正文 pure_v1"
@@ -86,9 +88,55 @@ def test_write_script_batch_reports_per_version_progress(monkeypatch):
         ctx=ctx,
     )
 
-    assert ctx.calls[0][0].startswith("正在写第 1/4 版")
-    assert any(text.startswith("已完成第 4/4 版") for text, _ in ctx.calls)
-    assert [pct for _, pct in ctx.calls] == sorted(pct for _, pct in ctx.calls)
+    assert ctx.calls[0] == ("准备生成 4 版...", 18)
+    assert any(text.startswith("正在写第") for text, _ in ctx.calls)
+    assert any(text.startswith("已完成 4/4 版") for text, _ in ctx.calls)
+    pct_values = [pct for _, pct in ctx.calls if pct is not None]
+    assert pct_values == sorted(pct_values)
+
+
+def test_write_script_batch_emits_sanitized_partial_versions(monkeypatch):
+    leaked = (
+        "这是一版能先看的正文。" * 20
+        + "\n\n已走技能：热点文案改写V2\nprompt tokens API route model provider submit_id /Users/black.chen"
+        + "\n\n---\n需要进一步操作吗？\n1. prompt\n2. tokens"
+    )
+
+    def fake_write_script(_hotspot, _breakdown, _angle, *, variant=None):
+        return {
+            "content": leaked,
+            "word_count": 9999,
+            "self_check": {"pass": True},
+            "variant_id": variant["variant_id"],
+            "mode_label": variant["mode_label"],
+            "tokens": {"write": 10, "check": 2},
+            "route_key": "hotrewrite.write.fast",
+        }
+
+    seen = []
+    monkeypatch.setattr(hotrewrite_pipeline, "write_script", fake_write_script)
+    hotrewrite_pipeline.write_script_batch(
+        "热点",
+        {"event_core": "x", "conflict": "y", "emotion": "z"},
+        {"label": "A"},
+        {"with_biz": True},
+        on_version=lambda partial, progress, text, pct: seen.append((partial, progress, text, pct)),
+    )
+
+    assert seen
+    partial, progress, text, pct = seen[0]
+    first = partial["versions"][0]
+    assert "已走技能" not in first["content"]
+    assert "需要进一步操作吗" not in first["content"]
+    assert "tokens" not in first
+    assert "route_key" not in first
+    assert first["word_count"] == hotrewrite_pipeline._count_script_chars(first["content"])
+    assert partial["completed_versions"] >= 1
+    assert partial["total_versions"] == 2
+    assert progress["completed_versions"] >= 1
+    assert progress["total_versions"] == 2
+    assert "已完成" in text
+    assert isinstance(pct, int)
 
 
 def test_write_script_falls_back_to_fast_route(monkeypatch):
@@ -182,6 +230,56 @@ def test_hotrewrite_write_api_passes_modes_to_async(monkeypatch):
     assert r.json()["version_count"] == 4
     assert r.json()["estimated_seconds"] == 360
     assert captured["modes"] == {"with_biz": True, "pure_rewrite": True}
+
+
+def test_running_hotrewrite_task_exposes_sanitized_partial_versions(monkeypatch):
+    tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+    tmp.close()
+    db_path = Path(tmp.name)
+    monkeypatch.setattr("shortvideo.config.DB_PATH", db_path)
+    try:
+        from backend.services import migrations
+        from backend.services import tasks as tasks_service
+        migrations.reset_for_test()
+        tid = tasks_service.create_task("hotrewrite.write", ns="hotrewrite", page_id="hotrewrite")
+        tasks_service.update_partial_result(
+            tid,
+            partial_result={
+                "content": "已走技能：热点文案改写V2\n\n先出的正文",
+                "word_count": 999,
+                "versions": [
+                    {
+                        "content": "先出的正文\n\n已走技能：热点文案改写V2\n需要进一步操作吗？\nprompt tokens API route model provider submit_id /Users/black.chen",
+                        "word_count": 999,
+                        "mode_label": "纯改写 V1 · 换皮版",
+                        "tokens": {"write": 1},
+                    }
+                ],
+                "completed_versions": 1,
+                "total_versions": 4,
+            },
+            progress_data={"completed_versions": 1, "total_versions": 4},
+        )
+
+        from backend.api import app
+        client = TestClient(app)
+        r = client.get(f"/api/tasks/{tid}")
+
+        assert r.status_code == 200
+        body = r.json()
+        partial = body["partial_result"]
+        assert partial["completed_versions"] == 1
+        assert partial["total_versions"] == 4
+        text = partial["versions"][0]["content"]
+        assert "已走技能" not in text
+        assert "需要进一步操作吗" not in text
+        assert "tokens" not in partial["versions"][0]
+        assert partial["versions"][0]["word_count"] == hotrewrite_pipeline._count_script_chars(text)
+    finally:
+        try:
+            db_path.unlink()
+        except Exception:
+            pass
 
 
 def test_write_script_async_uses_context_progress(monkeypatch):

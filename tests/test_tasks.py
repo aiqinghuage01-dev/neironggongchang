@@ -242,6 +242,97 @@ def test_update_progress_without_pct_keeps_old(tmp_db):
     assert rec["progress_pct"] == 40  # 旧值保留
 
 
+def test_update_partial_result_roundtrip_running_task(tmp_db):
+    from backend.services import tasks as t
+
+    tid = t.create_task("hotrewrite.write")
+    partial = {
+        "versions": [{"content": "先出的版本", "word_count": 6}],
+        "completed_versions": 1,
+        "total_versions": 4,
+    }
+    progress_data = {
+        "completed_versions": 1,
+        "total_versions": 4,
+        "timeline": [{"text": "第一版完成", "completed_versions": 1, "total_versions": 4}],
+    }
+
+    t.update_partial_result(
+        tid,
+        partial_result=partial,
+        progress_data=progress_data,
+        progress_text="已完成 1/4 版",
+        pct=33,
+    )
+
+    rec = t.get_task(tid)
+    assert rec["partial_result"] == partial
+    assert rec["progress_data"] == progress_data
+    assert rec["progress_text"] == "已完成 1/4 版"
+    assert rec["progress_pct"] == 33
+
+
+def test_partial_result_cleared_when_task_finishes_ok_or_cancels(tmp_db):
+    from backend.services import tasks as t
+
+    tid = t.create_task("hotrewrite.ok")
+    t.update_partial_result(tid, partial_result={"versions": [{"content": "旧 partial"}]}, progress_data={"completed_versions": 1})
+    t.finish_task(tid, result={"content": "最终 result"})
+    rec = t.get_task(tid)
+    assert rec["status"] == "ok"
+    assert rec["result"] == {"content": "最终 result"}
+    assert rec["partial_result"] is None
+    assert rec["progress_data"] is None
+
+    tid = t.create_task("hotrewrite.cancel")
+    t.update_partial_result(tid, partial_result={"versions": [{"content": "旧 partial"}]}, progress_data={"completed_versions": 1})
+    assert t.cancel_task(tid) is True
+    rec = t.get_task(tid)
+    assert rec["status"] == "cancelled"
+    assert rec["partial_result"] is None
+    assert rec["progress_data"] is None
+
+
+def test_partial_result_preserved_when_task_fails(tmp_db):
+    from backend.services import tasks as t
+
+    partial = {"versions": [{"content": "先出的可用版本"}], "completed_versions": 1, "total_versions": 4}
+    progress = {"completed_versions": 1, "total_versions": 4}
+    tid = t.create_task("hotrewrite.failed")
+    t.update_partial_result(tid, partial_result=partial, progress_data=progress, progress_text="已完成 1/4 版", pct=37)
+
+    t.finish_task(tid, error="第 4 版超时", status="failed")
+
+    rec = t.get_task(tid)
+    assert rec["status"] == "failed"
+    assert rec["error"] == "第 4 版超时"
+    assert rec["partial_result"] == partial
+    assert rec["progress_data"] == progress
+    assert rec["progress_text"] == "已完成 1/4 版"
+    assert rec["progress_pct"] == 37
+
+
+def test_update_partial_result_ignores_finished_task(tmp_db):
+    from backend.services import tasks as t
+
+    tid = t.create_task("hotrewrite.write")
+    t.finish_task(tid, result={"content": "最终 result"})
+    t.update_partial_result(
+        tid,
+        partial_result={"versions": [{"content": "不应写入"}]},
+        progress_data={"completed_versions": 1},
+        progress_text="不应写入",
+        pct=55,
+    )
+
+    rec = t.get_task(tid)
+    assert rec["result"] == {"content": "最终 result"}
+    assert rec["partial_result"] is None
+    assert rec["progress_data"] is None
+    assert rec["progress_text"] == "完成"
+    assert rec["progress_pct"] == 100
+
+
 # ─── D-037b5 run_async helper ────────────────────────────
 
 def test_run_async_happy_path(tmp_db):
