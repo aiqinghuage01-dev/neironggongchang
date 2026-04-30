@@ -49,6 +49,37 @@ def test_works_search_filters_before_limit(client):
     assert ids == [target]
 
 
+def test_hot_topics_list_fills_radar_floor(client):
+    from shortvideo.works import insert_hot_topic
+
+    insert_hot_topic(
+        title="真实热点一条",
+        platform="douyin",
+        heat_score=99,
+        match_persona=True,
+        match_reason="真实库数据应优先展示",
+        fetched_from="manual",
+    )
+
+    r = client.get("/api/hot-topics", params={"limit": 3})
+    assert r.status_code == 200
+    body = r.json()
+    assert len(body) == 3
+    assert body[0]["title"] == "真实热点一条"
+    assert body[0]["fetched_from"] == "manual"
+    assert all(item["match_persona"] for item in body)
+
+
+def test_hot_topics_list_gives_batch_pool_for_make_page(client):
+    r = client.get("/api/hot-topics", params={"limit": 24})
+    assert r.status_code == 200
+    body = r.json()
+    assert len(body) >= 9
+    titles = {item["title"] for item in body}
+    assert "老板开始用 AI 盯经营日报" in titles
+    assert "出差路上用 AI 拆客户需求" in titles
+
+
 def test_works_detail_reads_work_outside_current_list(client):
     from shortvideo.works import insert_work, upsert_metric
 

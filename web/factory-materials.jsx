@@ -352,8 +352,8 @@ function HotTab({ list, onReload, onDel, onUse }) {
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          {visibleList.map(h => (
-            <HotRow key={h.id} h={h} onUse={() => onUse(h)} onDel={() => onDel(h.id)} />
+          {visibleList.map((h, idx) => (
+            <HotRow key={h.id || `${h.title}-${idx}`} h={h} onUse={() => onUse(h)} onDel={h.id ? () => onDel(h.id) : null} />
           ))}
         </div>
       )}
@@ -499,7 +499,7 @@ function TopicRow({ t, onUse, onDel }) {
         </div>
       </div>
       <Btn size="sm" variant="primary" onClick={onUse}>做成视频</Btn>
-      <Btn size="sm" onClick={onDel}>🗑</Btn>
+      {onDel && <Btn size="sm" onClick={onDel}>🗑</Btn>}
     </div>
   );
 }

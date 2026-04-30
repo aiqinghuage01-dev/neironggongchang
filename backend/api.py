@@ -62,7 +62,7 @@ from shortvideo.cosyvoice import CosyVoiceLocal, CosyVoiceNotReady
 from shortvideo.works import (
     init_db, insert_work, update_work, get_work, list_works, delete_work,
     insert_material, list_materials, delete_material,
-    insert_hot_topic, list_hot_topics, delete_hot_topic,
+    insert_hot_topic, list_hot_topics, list_hot_topics_for_radar, delete_hot_topic,
     insert_topic, list_topics, delete_topic,
     upsert_metric, list_metrics, list_all_metrics, delete_metric,
 )
@@ -2276,7 +2276,7 @@ class HotTopicReq(BaseModel):
 
 @app.get("/api/hot-topics", tags=["档案部"], summary="热点列表")
 def hot_topics_list(limit: int = 50):
-    items = list_hot_topics(limit=limit)
+    items = list_hot_topics_for_radar(limit=limit)
     return [{
         "id": h.id, "created_at": h.created_at, "platform": h.platform,
         "title": h.title, "heat_score": h.heat_score,

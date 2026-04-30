@@ -8,7 +8,7 @@
 
 | 角色 | 状态 | 工作区 | 当前任务 |
 |---|---|---|---|
-| 总控 Agent | 自动派工已接入 | `~/Desktop/neironggongchang` | T-068 全站常驻小华已完成; 继续领队列 |
+| 总控 Agent | 自动派工已接入 | `~/Desktop/neironggongchang` | T-069 做视频热点雷达三条大卡已完成; 继续领队列 |
 | 内容开发 Agent | 空闲 | `~/Desktop/nrg-worktrees/content-dev` | T-021/T-022 已合入 main; 等新内容任务 |
 | 媒体开发 Agent | 空闲 | `~/Desktop/nrg-worktrees/media-dev` | T-047 已完成并合入 main; 等新媒体任务 |
 | QA 测试 Agent | 待领取 | `~/Desktop/nrg-worktrees/qa`, `~/Desktop/nrg-worktrees/qa-1`, `~/Desktop/nrg-worktrees/qa-2` | T-066 已通过; 等后续 QA |
@@ -74,11 +74,13 @@
 | T-066 | T-048/T-065 返修后 frame-aware 全站复测 | QA 测试 Agent | done | 只读 QA; 禁止停启 8000/8001; 不调用 `/api/health` 当门禁; 不烧 credits | 21 页 + 所有 frame 禁止词 0; `wechat/voicerewrite/beta` 通过; Dreamina 失败任务假数据不露 `id/submit_id/watcher/status=`; 报告 `docs/agent-handoff/QA_T066_FRAMEAWARE_RETEST_20260430.md` |
 | T-067 | T-048/T-065/T-066 返修后代码只读审查 | 审查 Agent / 总控接管 | done | `web/factory-beta.jsx`, `tests/test_frontend_copy_static.py`; 只读审查后小修 | 自动 review worker 假忙 0 字节日志; 总控手动审查发现 beta 标题脱敏正则不严并已修复; 目标测试/full pytest/Playwright 假状态通过 |
 | T-068 | 全站常驻小华浮层 | 总控 Agent | done | `web/factory-app.jsx`, 页面内旧 `<LiDock />`, `tests/test_lidock_global_static.py` | 小华改为顶层统一挂载; 23 个路由逐页点击验证只有 1 个小华且上下文正确; console/pageerror/requestfailed/http/nonGET 均 0 |
+| T-069 | 做视频页热点雷达三条大卡 + 换一批 | 总控 Agent | done | `web/factory-make-v2.jsx`, `web/factory-materials.jsx`, `shortvideo/works.py`, `backend/api.py`, `tests/test_works_api.py`, `tests/test_make_hot_radar_static.py` | `/api/hot-topics?limit=3` 至少返回 3 条; 做视频页显示 3 条大卡和 3 个“做成视频”; “换一批”切到下一组; full pytest + Playwright 通过 |
 
 ---
 
 ## 最近证据
 
+- T-069 做视频热点雷达: API `limit=3` 返回 3 条; API `limit=24` 返回 9 条候选池; Playwright 桌面截图 `/tmp/nrg_hot_radar_make/make-hot-radar-final.png`, 换一批截图 `/tmp/nrg_hot_radar_make/make-hot-radar-after-change.png`, 移动截图 `/tmp/nrg_hot_radar_make/make-hot-radar-mobile-2.png`; `pytest -q -x` 通过。
 - D-125 素材库验收补强: 首页新增可预览业务素材精选, `00 待整理` 降级为单独整理入口, KPI 区分总素材/业务素材/未入业务类/已识别; 新增 API `/api/material-lib/featured`.
 - 全站优化定时巡检已启动: `bash scripts/start_site_optimization_watch.sh`; 当前窗口 2026-04-30 00:11~08:11, 每 2 小时检查一次. 首轮识别 T-041/T-042/T-043/T-044 running、T-045 queued, 未重复补任务.
 - D-125 验证: `git diff --check` -> clean; `.venv/bin/pytest -q tests/test_materials_lib_api.py tests/test_materials_service.py tests/test_materials_pipeline.py` -> 172 passed; `.venv/bin/pytest -q -x` -> 通过; 正式 `8000/8001` curl + Playwright 首页/预览/分类/剪辑检索/移动视口通过, console/pageerror/requestfailed/http error=0.

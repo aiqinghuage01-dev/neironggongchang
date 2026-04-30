@@ -269,6 +269,66 @@ class HotTopic:
     status: str
 
 
+HOT_RADAR_MIN_COUNT = 3
+HOT_RADAR_DEFAULT_POOL = 9
+HOT_RADAR_FALLBACK_TOPICS: list[dict[str, Any]] = [
+    {
+        "platform": "douyin",
+        "title": "AI 客服集体下岗?一线从业者发声",
+        "heat_score": 98,
+        "match_reason": "和你 AI × 中年老板 人设很搭",
+    },
+    {
+        "platform": "weibo",
+        "title": "老板开始用 AI 盯经营日报",
+        "heat_score": 94,
+        "match_reason": "适合讲 AI 怎样变成老板每天用得上的管理动作",
+    },
+    {
+        "platform": "xiaohongshu",
+        "title": "线下课学员用 AI 改业务流程",
+        "heat_score": 91,
+        "match_reason": "能接你的上课、陪跑和真实案例素材",
+    },
+    {
+        "platform": "shipinhao",
+        "title": "研发团队把会议纪要变工单",
+        "heat_score": 88,
+        "match_reason": "适合讲研发提效, 也能自然带到你做课的系统方法",
+    },
+    {
+        "platform": "douyin",
+        "title": "出差路上用 AI 拆客户需求",
+        "heat_score": 86,
+        "match_reason": "适合配出差空镜, 讲老板如何把碎片时间变成方案",
+    },
+    {
+        "platform": "xiaohongshu",
+        "title": "AI 课不是学工具而是改业务",
+        "heat_score": 84,
+        "match_reason": "和你的课程定位更贴, 能区分工具课和老板课",
+    },
+    {
+        "platform": "weibo",
+        "title": "老板亲自拍视频讲 AI 案例",
+        "heat_score": 82,
+        "match_reason": "适合引导老板用真人经历建立信任",
+    },
+    {
+        "platform": "douyin",
+        "title": "小团队用 AI 省掉重复汇报",
+        "heat_score": 80,
+        "match_reason": "适合讲中小企业立刻能落地的效率账",
+    },
+    {
+        "platform": "shipinhao",
+        "title": "一场课后老板把 SOP 重写了",
+        "heat_score": 78,
+        "match_reason": "适合把教学成果讲成具体业务变化",
+    },
+]
+
+
 def insert_hot_topic(
     *, title: str, platform: str | None = None, heat_score: int = 0,
     match_persona: bool = False, match_reason: str | None = None,
@@ -300,6 +360,50 @@ def list_hot_topics(limit: int = 50) -> list[HotTopic]:
             fetched_from=r["fetched_from"],
             status=r["status"] or "unused",
         ) for r in rows]
+
+
+def list_hot_topics_for_radar(limit: int = 50) -> list[HotTopic]:
+    """做视频页用的热点雷达列表.
+
+    真实库数据永远优先；当本机还没跑满夜班/手动热点时，用业务相关候选补足
+    3 条起步，并在大 limit 下给前端足够候选做「换一批」。
+    """
+    try:
+        n = int(limit)
+    except (TypeError, ValueError):
+        n = 50
+    n = max(0, n)
+    if n == 0:
+        return []
+
+    items = list_hot_topics(limit=n)
+    floor = HOT_RADAR_MIN_COUNT if n <= HOT_RADAR_MIN_COUNT else min(n, HOT_RADAR_DEFAULT_POOL)
+    if len(items) >= floor:
+        return items[:n]
+
+    existing_titles = {h.title.strip() for h in items if h.title}
+    now = int(time.time())
+    extras: list[HotTopic] = []
+    for seed in HOT_RADAR_FALLBACK_TOPICS:
+        title = str(seed["title"]).strip()
+        if not title or title in existing_titles:
+            continue
+        extras.append(HotTopic(
+            id=None,
+            created_at=now - len(extras),
+            platform=str(seed.get("platform") or "hot-radar"),
+            title=title,
+            heat_score=int(seed.get("heat_score") or 0),
+            match_persona=1,
+            match_reason=str(seed.get("match_reason") or ""),
+            source_url=None,
+            fetched_from="hot-radar",
+            status="unused",
+        ))
+        existing_titles.add(title)
+        if len(items) + len(extras) >= floor:
+            break
+    return (items + extras)[:n]
 
 
 def delete_hot_topic(topic_id: int) -> None:
