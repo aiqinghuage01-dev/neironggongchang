@@ -669,12 +669,18 @@ def skills_catalog():
 def _sanitize_task_for_display(task: dict[str, Any] | None) -> dict[str, Any] | None:
     if not task:
         return task
-    if not str(task.get("kind") or "").startswith("hotrewrite.write"):
+    kind = str(task.get("kind") or "")
+    if not (kind.startswith("hotrewrite.write") or kind.startswith("compliance.")):
         return task
     from backend.services import hotrewrite_pipeline
     out = dict(task)
-    out["result"] = hotrewrite_pipeline.sanitize_result_for_display(out.get("result"))
-    out["partial_result"] = hotrewrite_pipeline.sanitize_result_for_display(out.get("partial_result"))
+    if kind.startswith("hotrewrite.write"):
+        out["result"] = hotrewrite_pipeline.sanitize_result_for_display(out.get("result"))
+        out["partial_result"] = hotrewrite_pipeline.sanitize_result_for_display(out.get("partial_result"))
+    elif kind.startswith("compliance."):
+        out["result"] = compliance_pipeline.sanitize_result_for_display(out.get("result"))
+        out["partial_result"] = compliance_pipeline.sanitize_result_for_display(out.get("partial_result"))
+        out["progress_data"] = compliance_pipeline.sanitize_result_for_display(out.get("progress_data"))
     return out
 
 
@@ -3234,7 +3240,7 @@ class ComplianceAnalyzeReq(BaseModel):
 @app.post("/api/compliance/analyze", tags=["违规审查"], summary="(兼容 add_skill 范式) analyze")
 def compliance_analyze(req: ComplianceAnalyzeReq):
     """跟 /check 等价 · 留这条路径让 add_skill 模板统一. 优先用 /check."""
-    return compliance_pipeline.analyze_input(req.input)
+    return compliance_pipeline.sanitize_result_for_display(compliance_pipeline.analyze_input(req.input))
 
 
 class ComplianceWriteReq(BaseModel):
@@ -3246,7 +3252,9 @@ class ComplianceWriteReq(BaseModel):
 @app.post("/api/compliance/write", tags=["违规审查"], summary="(兼容 add_skill 范式) write")
 def compliance_write(req: ComplianceWriteReq):
     """add_skill 范式留的 step 2 路径. 实际 /check 已一步到位."""
-    return compliance_pipeline.write_output(req.input, req.analysis, req.angle)
+    return compliance_pipeline.sanitize_result_for_display(
+        compliance_pipeline.write_output(req.input, req.analysis, req.angle)
+    )
 
 
 # ═══════════════════════════════════════════════════════════════════

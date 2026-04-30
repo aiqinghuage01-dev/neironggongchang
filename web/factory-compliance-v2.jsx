@@ -32,6 +32,8 @@ function PageCompliance({ onNav }) {
     onComplete: (r) => { setResult(r); setStep("result"); setTaskId(null); },
     onError: (e) => { setErr(e || "任务失败"); setStep("result"); /* 留 taskId 让 FailedRetry 渲染 */ },
   });
+  const partialResult = (poller.isRunning || poller.isFailed) ? (poller.task?.partial_result || null) : null;
+  const displayResult = result || partialResult;
 
   async function check() {
     if (!text.trim()) return;
@@ -82,7 +84,24 @@ function PageCompliance({ onNav }) {
         {err && step === "input" && <InlineError err={err} />}
         {step === "input"  && <CStepInput text={text} setText={setText} industry={industry} setIndustry={setIndustry} onGo={check} loading={false} />}
         {step === "result" && (
-          poller.isRunning ? (
+          displayResult ? (
+            <React.Fragment>
+              {(poller.isRunning || poller.isFailed) && (
+                <ComplianceLiveStatus
+                  task={poller.task}
+                  result={displayResult}
+                  onCancel={poller.isRunning ? () => { poller.cancel(); setStep("input"); } : null}
+                />
+              )}
+              <CStepResult
+                result={displayResult}
+                task={poller.task}
+                isPartial={!!partialResult}
+                onPrev={() => setStep("input")}
+                onReset={reset}
+              />
+            </React.Fragment>
+          ) : poller.isRunning ? (
             <LoadingProgress
               task={poller.task}
               icon="🛡️"
@@ -107,19 +126,30 @@ function PageCompliance({ onNav }) {
   );
 }
 
+function useComplianceNarrow() {
+  const [narrow, setNarrow] = React.useState(() => typeof window !== "undefined" && window.innerWidth < 760);
+  React.useEffect(() => {
+    const onResize = () => setNarrow(window.innerWidth < 760);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+  return narrow;
+}
+
 function CStepInput({ text, setText, industry, setIndustry, onGo, loading }) {
   const ready = !!text.trim() && !loading;
+  const narrow = useComplianceNarrow();
   return (
-    <div style={{ padding: "40px 40px 60px", maxWidth: 820, margin: "0 auto" }}>
+    <div style={{ padding: narrow ? "24px 14px 60px" : "40px 40px 60px", maxWidth: 820, margin: "0 auto", boxSizing: "border-box" }}>
       <div style={{ textAlign: "center", marginBottom: 24 }}>
-        <div style={{ fontSize: 28, fontWeight: 700, color: T.text, marginBottom: 8 }}>什么文案要查违规? 🛡️</div>
+        <div style={{ fontSize: narrow ? 22 : 28, fontWeight: 700, color: T.text, marginBottom: 8 }}>什么文案要查违规? 🛡️</div>
         <div style={{ fontSize: 14, color: T.muted }}>两层审核(通用 + 敏感行业) · **必出** 2 版改写(保守 + 营销)</div>
       </div>
 
-      <div style={{ background: "#fff", border: `1.5px solid ${T.brand}`, boxShadow: `0 0 0 5px ${T.brandSoft}`, borderRadius: 16, padding: 18, marginBottom: 14 }}>
+      <div style={{ background: "#fff", border: `1.5px solid ${T.brand}`, boxShadow: `0 0 0 5px ${T.brandSoft}`, borderRadius: 16, padding: narrow ? 14 : 18, marginBottom: 14, boxSizing: "border-box" }}>
         <textarea rows={9} value={text} onChange={e => setText(e.target.value)}
           placeholder="贴文案进来(短视频口播 / 朋友圈 / 投流 / 直播话术都可)...&#10;&#10;会扫通用违禁词 + 行业敏感词,输出:&#10;1. 高/中/低危分级报告&#10;2. 保守版(100% 合规,牺牲营销)&#10;3. 营销版(高危必改,保留营销力)"
-          style={{ width: "100%", border: "none", outline: "none", background: "transparent", fontSize: 14, fontFamily: "inherit", resize: "vertical", lineHeight: 1.7, color: T.text }}
+          style={{ width: "100%", border: "none", outline: "none", background: "transparent", fontSize: 14, fontFamily: "inherit", resize: "vertical", lineHeight: 1.7, color: T.text, boxSizing: "border-box" }}
         />
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10, paddingTop: 12, borderTop: `1px solid ${T.borderSoft}` }}>
           <div style={{ fontSize: 11.5, color: T.muted2 }}>🛡️ 文案长度 {text.length} 字</div>
@@ -150,9 +180,74 @@ function CStepInput({ text, setText, industry, setIndustry, onGo, loading }) {
   );
 }
 
-function CStepResult({ result, onPrev, onReset }) {
+function ComplianceLiveStatus({ task, result, onCancel }) {
+  const running = task?.status === "running" || task?.status === "pending";
+  const failed = task?.status === "failed";
+  const elapsed = task?.elapsed_sec || 0;
+  const hasA = !!result?.version_a?.content;
+  const hasB = !!result?.version_b?.content;
+  const completed = result?.completed_stages || (hasB ? 3 : hasA ? 2 : result?.stats ? 1 : 0);
+  const total = result?.total_stages || 3;
+  const slow = running && hasA && !hasB && elapsed > Math.max(70, Math.round((task?.estimated_seconds || 90) * 0.75));
+  const message = failed
+    ? (hasA && !hasB ? "营销版暂时没跑完，扫描和保守版已保留" : "这次没完整跑完，已保留能看的部分")
+    : hasB
+      ? "两版都已写完，正在整理"
+      : hasA
+        ? "保守版已能复制，营销版继续写"
+        : "扫描结果已出，保守版正在写";
+  return (
+    <div style={{
+      margin: "18px auto 0",
+      maxWidth: 1280,
+      padding: "0 40px",
+      boxSizing: "border-box",
+    }}>
+      <div style={{
+        padding: 14,
+        borderRadius: 12,
+        background: failed ? "#fff7ed" : slow ? "#fef3c7" : "linear-gradient(135deg, #f6fbf7, #fff)",
+        border: `1.5px solid ${failed || slow ? "#f59e0b66" : T.brand}`,
+        boxShadow: failed || slow ? "none" : `0 0 0 4px ${T.brandSoft}`,
+        display: "flex",
+        alignItems: "center",
+        gap: 12,
+        flexWrap: "wrap",
+      }}>
+        <div style={{ flex: 1, minWidth: 220 }}>
+          <div style={{ fontSize: 14, fontWeight: 800, color: failed ? "#9a3412" : T.text, marginBottom: 4 }}>
+            先出的内容已经能看
+          </div>
+          <div style={{ fontSize: 12.5, color: failed ? "#9a3412" : T.muted, lineHeight: 1.55 }}>
+            {message} · 已等 {fmtSec(elapsed)}
+            {slow && !failed ? " · 比预期慢，继续等结果" : ""}
+          </div>
+        </div>
+        <Tag size="xs" color={failed ? "amber" : "green"}>已完成 {completed}/{total}</Tag>
+        {running && onCancel && (
+          <button onClick={onCancel} style={{
+            padding: "7px 10px",
+            borderRadius: 8,
+            border: `1px solid ${T.border}`,
+            background: "#fff",
+            color: T.muted,
+            fontSize: 12,
+            cursor: "pointer",
+            fontFamily: "inherit",
+          }}>
+            取消剩余生成
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function CStepResult({ result, task, isPartial, onPrev, onReset }) {
   // D-037b3: loading 状态由外层 LoadingProgress 显示, 这里只负责渲染完成态.
   // 主次反转 (A 方案 · 2026-04-26): 改写 hero 顶部并排 + 违规清单可折叠
+  const [foldOpen, setFoldOpen] = React.useState(true);  // 默认展开 (有信息价值, 但能折叠)
+  const narrow = useComplianceNarrow();
   if (!result) return null;
 
   const stats = result.stats || {};
@@ -160,21 +255,25 @@ function CStepResult({ result, onPrev, onReset }) {
   const hasAny = (stats.total || 0) > 0;
   const versionA = result.version_a || {};
   const versionB = result.version_b || {};
-  const [foldOpen, setFoldOpen] = React.useState(true);  // 默认展开 (有信息价值, 但能折叠)
+  const hasA = !!versionA.content;
+  const hasB = !!versionB.content;
+  const failed = task?.status === "failed";
 
   return (
-    <div style={{ padding: "32px 40px 120px", maxWidth: 1280, margin: "0 auto" }}>
+    <div style={{ padding: narrow ? "20px 14px 120px" : "32px 40px 120px", maxWidth: 1280, margin: "0 auto", boxSizing: "border-box" }}>
       {/* Hero (薄薄一条) */}
-      <div style={{ marginBottom: 16, display: "flex", alignItems: "flex-start", gap: 16, paddingBottom: 14, borderBottom: `1px solid ${T.borderSoft}` }}>
+      <div style={{ marginBottom: 16, display: "flex", alignItems: narrow ? "stretch" : "flex-start", gap: 16, paddingBottom: 14, borderBottom: `1px solid ${T.borderSoft}`, flexDirection: narrow ? "column" : "row" }}>
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 4 }}>
-            {hasAny ? `🛡️ 审查完成 · 发现 ${stats.total || 0} 处违规` : "✅ 审查完成 · 无违规"}
+            {isPartial
+              ? (hasAny ? `🛡️ 扫描完成 · 发现 ${stats.total || 0} 处风险` : "✅ 扫描完成 · 暂未发现风险")
+              : (hasAny ? `🛡️ 审查完成 · 发现 ${stats.total || 0} 处违规` : "✅ 审查完成 · 无违规")}
           </div>
           <div style={{ fontSize: 12, color: T.muted }}>
             扫描范围: {result.scan_scope || "通用审查"}
           </div>
         </div>
-        <div style={{ display: "flex", gap: 6 }}>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
           <StatBadge color={T.red}   count={stats.high || 0}   label="高危" />
           <StatBadge color={T.amber} count={stats.medium || 0} label="中危" />
           <StatBadge color={T.brand} count={stats.low || 0}    label="低危" />
@@ -188,9 +287,15 @@ function CStepResult({ result, onPrev, onReset }) {
       )}
 
       {/* 2 版改写并排 (A 方案核心: hero 双卡, 主行动) */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
-        <RewriteCard variant="A" version={versionA} />
-        <RewriteCard variant="B" version={versionB} />
+      <div style={{ display: "grid", gridTemplateColumns: narrow ? "1fr" : "1fr 1fr", gap: 16, marginBottom: 16 }}>
+        <RewriteCard variant="A" version={versionA} pending={!hasA} pendingText={result.stats ? "保守版正在写..." : "等扫描结束后开始"} />
+        <RewriteCard
+          variant="B"
+          version={versionB}
+          pending={!hasB}
+          failed={failed && hasA && !hasB}
+          pendingText={hasA ? (failed ? "营销版暂时没跑完" : "营销版继续写...") : "保守版完成后开始"}
+        />
       </div>
 
       {/* 违规清单 (可折叠, 默认展开) */}
@@ -224,7 +329,7 @@ function CStepResult({ result, onPrev, onReset }) {
 }
 
 // 改写卡 (并排 hero · A 方案 2026-04-26)
-function RewriteCard({ variant, version }) {
+function RewriteCard({ variant, version, pending, failed, pendingText }) {
   const isA = variant === "A";
   const accent = isA ? T.brand : T.amber;
   const accentSoft = isA ? T.brandSoft : T.amberSoft;
@@ -232,7 +337,11 @@ function RewriteCard({ variant, version }) {
   const subtitle = isA ? "100% 合规 / 怕封号选这个" : "保留吸引力 / 有权重号选这个";
   const [copied, setCopied] = React.useState(false);
   function copy() {
-    navigator.clipboard?.writeText(version.content || "");
+    if (!version?.content) return;
+    try {
+      const p = navigator.clipboard?.writeText(version.content || "");
+      if (p && typeof p.catch === "function") p.catch(() => {});
+    } catch (_) {}
     setCopied(true); setTimeout(() => setCopied(false), 1500);
   }
   const compliance = version.compliance || 0;
@@ -241,32 +350,56 @@ function RewriteCard({ variant, version }) {
     <div style={{
       background: "#fff", border: `1.5px solid ${accent}`, borderRadius: 14,
       padding: 18, boxShadow: `0 0 0 4px ${accentSoft}`,
-      display: "flex", flexDirection: "column",
+      display: "flex", flexDirection: "column", minWidth: 0, boxSizing: "border-box",
+      opacity: pending ? 0.82 : 1,
     }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10, paddingBottom: 10, borderBottom: `1px dashed ${T.borderSoft}`, marginBottom: 12 }}>
         <span style={{ fontSize: 11.5, padding: "3px 8px", borderRadius: 4, background: accentSoft, color: accent, fontWeight: 600 }}>
-          {title} · {compliance} 分
+          {pending ? title : `${title} · ${compliance} 分`}
         </span>
         <span style={{ fontSize: 13, fontWeight: 600, color: T.text, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {subtitle}
         </span>
-        <button onClick={copy} style={{
+        <button onClick={copy} disabled={!version?.content} style={{
           background: copied ? accentSoft : "#fff", border: `1px solid ${copied ? accent : T.border}`,
-          color: copied ? accent : T.muted, padding: "4px 10px", borderRadius: 6,
-          fontSize: 11.5, cursor: "pointer", fontFamily: "inherit", fontWeight: 500,
-        }}>{copied ? "✓ 已复制" : `📋 复制 ${variant}`}</button>
+          color: copied ? accent : (!version?.content ? T.muted2 : T.muted), padding: "4px 10px", borderRadius: 6,
+          fontSize: 11.5, cursor: version?.content ? "pointer" : "not-allowed", fontFamily: "inherit", fontWeight: 500,
+          whiteSpace: "nowrap",
+        }}>{copied ? "✓ 已复制" : (version?.content ? `📋 复制 ${variant}` : "待完成")}</button>
       </div>
-      <div style={{ fontSize: 11, color: T.muted, marginBottom: 8 }}>
-        {wc} 字 · {version.description || ""}
+      <div style={{ fontSize: 11, color: failed ? T.red : T.muted, marginBottom: 8 }}>
+        {pending ? (pendingText || "继续生成中...") : `${wc} 字 · ${version.description || ""}`}
       </div>
-      <textarea value={version.content || ""} readOnly
-        style={{
-          width: "100%", border: "none", outline: "none",
-          background: T.bg2, borderRadius: 6, padding: 12,
-          fontSize: 13.5, fontFamily: "inherit", resize: "vertical",
-          lineHeight: 1.9, color: T.text, minHeight: 220, flex: 1,
-        }}
-      />
+      {pending ? (
+        <div style={{
+          width: "100%",
+          minHeight: 220,
+          boxSizing: "border-box",
+          background: failed ? T.redSoft : T.bg2,
+          borderRadius: 6,
+          padding: 12,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          color: failed ? T.red : T.muted,
+          fontSize: 13,
+          lineHeight: 1.7,
+          textAlign: "center",
+          flex: 1,
+        }}>
+          {pendingText || "继续生成中..."}
+        </div>
+      ) : (
+        <textarea value={version.content || ""} readOnly
+          style={{
+            width: "100%", border: "none", outline: "none",
+            background: T.bg2, borderRadius: 6, padding: 12,
+            fontSize: 13.5, fontFamily: "inherit", resize: "vertical",
+            lineHeight: 1.9, color: T.text, minHeight: 220, flex: 1,
+            boxSizing: "border-box",
+          }}
+        />
+      )}
       {!isA && version.kept_marketing?.length > 0 && (
         <div style={{ fontSize: 11.5, color: accent, background: accentSoft, padding: "6px 10px", borderRadius: 5, marginTop: 8, lineHeight: 1.6 }}>
           ✨ 保留: {version.kept_marketing.join(" · ")}

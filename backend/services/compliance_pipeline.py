@@ -19,6 +19,7 @@ from __future__ import annotations
 import json
 import re
 import threading
+from copy import deepcopy
 from typing import Any
 
 from backend.services import skill_loader
@@ -26,6 +27,29 @@ from backend.services import tasks as tasks_service
 from shortvideo.ai import get_ai_client
 
 SKILL_SLUG = "违禁违规审查-学员版"
+
+_INTERNAL_DISPLAY_KEY_PARTS = ("token", "route", "model", "provider", "prompt")
+
+
+def _is_internal_display_key(key: Any) -> bool:
+    k = str(key or "").lower()
+    return any(part in k for part in _INTERNAL_DISPLAY_KEY_PARTS)
+
+
+def sanitize_result_for_display(result: Any) -> Any:
+    """清洗 compliance task 的 result/partial_result, 防内部路由和耗量字段进前端."""
+    def _clean(value: Any) -> Any:
+        if isinstance(value, dict):
+            return {
+                k: _clean(v)
+                for k, v in value.items()
+                if not _is_internal_display_key(k) and not str(k).startswith("_")
+            }
+        if isinstance(value, list):
+            return [_clean(v) for v in value]
+        return value
+
+    return _clean(deepcopy(result))
 
 
 def _extract_json(text: str, wrap: str = "object") -> Any:
@@ -205,6 +229,71 @@ def _merge_result(scan: dict, version_a: dict, version_b: dict) -> dict[str, Any
     }
 
 
+def _public_scan(scan: dict[str, Any]) -> dict[str, Any]:
+    return sanitize_result_for_display({
+        "industry": scan.get("industry"),
+        "scan_scope": scan.get("scan_scope"),
+        "violations": scan.get("violations") or [],
+        "stats": scan.get("stats") or {"high": 0, "medium": 0, "low": 0, "total": 0},
+        "summary": scan.get("summary") or "",
+    })
+
+
+def _public_version(version: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not isinstance(version, dict):
+        return None
+    allowed = {
+        "content": version.get("content") or "",
+        "word_count": version.get("word_count") or len(version.get("content") or ""),
+        "compliance": version.get("compliance"),
+        "description": version.get("description") or "",
+    }
+    if "kept_marketing" in version:
+        allowed["kept_marketing"] = version.get("kept_marketing") or []
+    return sanitize_result_for_display(allowed)
+
+
+def _partial_result(
+    scan: dict[str, Any],
+    *,
+    version_a: dict[str, Any] | None = None,
+    version_b: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    partial = _public_scan(scan)
+    completed = 1
+    public_a = _public_version(version_a)
+    public_b = _public_version(version_b)
+    if public_a:
+        partial["version_a"] = public_a
+        completed = 2
+    if public_b:
+        partial["version_b"] = public_b
+        completed = 3
+    partial["completed_stages"] = completed
+    partial["total_stages"] = 3
+    return sanitize_result_for_display(partial)
+
+
+def _progress_data(stage: str, completed: int, total: int = 3) -> dict[str, Any]:
+    labels = {
+        "scan": "扫描结果完成",
+        "conservative": "保守版完成",
+        "marketing": "营销版完成",
+    }
+    return sanitize_result_for_display({
+        "stage": stage,
+        "completed_stages": completed,
+        "total_stages": total,
+        "timeline": [
+            {"stage": k, "status": "done", "text": v}
+            for k, v in labels.items()
+            if (k == "scan" and completed >= 1)
+            or (k == "conservative" and completed >= 2)
+            or (k == "marketing" and completed >= 3)
+        ],
+    })
+
+
 # ─── 异步 (D-037b3) ─────────────────────────────────────
 
 def check_compliance_async(text: str, industry: str = "通用") -> str:
@@ -231,6 +320,13 @@ def check_compliance_async(text: str, industry: str = "通用") -> str:
                 return
             tasks_service.update_progress(task_id, "扫通用违禁词 + 行业敏感词...", pct=15)
             scan = _scan_violations(text, industry, skill)
+            tasks_service.update_partial_result(
+                task_id,
+                partial_result=_partial_result(scan),
+                progress_data=_progress_data("scan", 1),
+                progress_text=f"扫描完成: {scan.get('stats', {}).get('total', 0)} 处风险, 正在写保守版...",
+                pct=45,
+            )
 
             if tasks_service.is_cancelled(task_id):
                 return
@@ -240,11 +336,25 @@ def check_compliance_async(text: str, industry: str = "通用") -> str:
                 pct=50,
             )
             version_a = _write_version(text, industry, scan, mode="保守", skill=skill)
+            tasks_service.update_partial_result(
+                task_id,
+                partial_result=_partial_result(scan, version_a=version_a),
+                progress_data=_progress_data("conservative", 2),
+                progress_text="保守版已完成, 营销版继续写...",
+                pct=72,
+            )
 
             if tasks_service.is_cancelled(task_id):
                 return
             tasks_service.update_progress(task_id, "写营销版 (保留吸引力)...", pct=80)
             version_b = _write_version(text, industry, scan, mode="营销", skill=skill)
+            tasks_service.update_partial_result(
+                task_id,
+                partial_result=_partial_result(scan, version_a=version_a, version_b=version_b),
+                progress_data=_progress_data("marketing", 3),
+                progress_text="营销版已完成, 正在整理结果...",
+                pct=92,
+            )
 
             if tasks_service.is_cancelled(task_id):
                 return

@@ -1317,3 +1317,22 @@ OpenAI SDK 默认 retry 与项目 `with_retry` 叠加, 会把 OpenClaw/DeepSeek 
 - `docs/MULTI_AGENT_WORKFLOW.md` 新增“用户可见页面变更门禁”。
 - `docs/agents/ROLE_CONTROLLER.md` 新增“页面变更测试门禁”。
 - 本次为流程文档变更, `git diff --check` 通过。
+
+
+## D-129 - 违规审查按阶段公开 partial_result (2026-05-01)
+
+**触发**: T-095 要求违规审查“先出先看”: 扫描完成后先看风险清单, 保守版完成后可复制,
+营销版继续跑; 营销版失败时不能盖掉已完成的扫描和保守版。
+
+**决策**:
+- 不增加 LLM 调用, 仍保持扫违规 → 保守版 → 营销版三段串行。
+- 扫描完成、保守版完成、营销版完成后分别写入 `tasks.partial_result` / `progress_data`;
+  `failed` 终态保留 partial, `ok` 终态仍由 tasks 层清空 partial 并返回完整 result。
+- `/api/tasks` 和 `/api/tasks/{id}` 对 `compliance.*` 做 kind 级清洗, 递归移除
+  `tokens/route/model/provider/prompt` 相关字段; 兼容的 `/api/compliance/analyze|write`
+  也返回清洗后的结果。
+
+**验证**:
+- `tests/test_compliance_progressive.py` 覆盖 scan → 保守版 → 营销版 running/failed/ok 和 API 清洗。
+- `scripts/e2e_compliance_progressive.js` 用 mock API 做 no-credit 浏览器闭环, 覆盖 scan visible、
+  保守版 visible、营销版 slow、failed 保留、390px 无横向裁切。
