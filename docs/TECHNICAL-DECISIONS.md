@@ -1276,3 +1276,23 @@ OpenAI SDK 默认 retry 与项目 `with_retry` 叠加, 会把 OpenClaw/DeepSeek 
 **验证**:
 - `tests/test_health_api.py` 覆盖 `/api/health` 调用短探活参数.
 - `tests/test_ai_routing.py` 覆盖 `get_ai_info(timeout=3.0, llm_max_retries=0)` 传参.
+
+
+## D-127 - 研发部状态面板必须显示总控活动 (2026-04-30)
+
+**触发**: 老板指出主控在主工作区干活时, 研发部状态面板只显示副 Agent 槽位,
+看起来像后台没人知道总控正在收口。
+
+**决策**:
+- `/api/status` 的 `slots` 第一项固定返回 `controller` 槽位, 名称为 `NRG 总控`.
+- 总控槽位不靠 LaunchAgent pid 判断, 而是看主工作区 significant git status 或 controller
+  任务是否 claimed; 有未提交改动时显示“工作中”, 并列出关键 dirty 文件。
+- 面板新增 `delegation` 汇总, 显示副 Agent 任务被总控关闭的历史接管次数和最近记录。
+- dashboard HTML 使用内联 favicon, 避免浏览器请求 `/favicon.ico` 造成 console 404 噪音。
+
+**验证**:
+- `python3 -m py_compile scripts/agent_dashboard.py`.
+- `curl http://127.0.0.1:8765/api/status` 返回 `slots[0].controller=true` 和
+  `delegation.total_takeovers=17`.
+- Playwright 打开 `http://127.0.0.1:8765/`, 截图可见 `NRG 总控` 第一张卡和“总控接管审计”;
+  console error=0, network 只有 `/api/status` 和 `/api/log` 200。

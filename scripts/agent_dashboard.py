@@ -24,6 +24,7 @@ PROJECT_NAME = os.environ.get("AGENT_PROJECT_NAME", REPO_ROOT.name)
 MONITOR_LABEL = os.environ.get("AGENT_MONITOR_LABEL", "com.neironggongchang.agent-monitor")
 DISPATCHER_LABEL = os.environ.get("AGENT_DISPATCHER_LABEL", "com.neironggongchang.agent-dispatcher")
 DASHBOARD_LABEL = os.environ.get("AGENT_DASHBOARD_LABEL", "com.neironggongchang.agent-dashboard")
+DELEGATED_ROLES = {"content", "media", "qa", "review"}
 
 
 def now() -> str:
@@ -112,6 +113,96 @@ def log_files(limit: int = 20) -> list[dict[str, Any]]:
     return out
 
 
+def is_controller_agent(agent: str) -> bool:
+    normalized = (agent or "").lower()
+    return "总控" in agent or "controller" in normalized
+
+
+def recent_controller_task(tasks: list[dict[str, Any]]) -> dict[str, Any] | None:
+    items = [
+        task
+        for task in tasks
+        if is_controller_agent(str(task.get("claimed_by") or "")) or str(task.get("role") or "") == "controller"
+    ]
+    items.sort(key=lambda task: str(task.get("updated_at") or task.get("created_at") or ""), reverse=True)
+    return items[0] if items else None
+
+
+def latest_commit(repo: Path) -> str:
+    result = subprocess.run(
+        ["git", "-C", str(repo), "log", "-1", "--pretty=%h %s"],
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        check=False,
+    )
+    return result.stdout.strip()
+
+
+def controller_slot(tasks: list[dict[str, Any]]) -> dict[str, Any]:
+    dirty_details = agent_dispatcher.significant_git_status(REPO_ROOT)
+    active_task = next(
+        (
+            task
+            for task in tasks
+            if task.get("status") == "claimed"
+            and (is_controller_agent(str(task.get("claimed_by") or "")) or task.get("role") == "controller")
+        ),
+        None,
+    )
+    task = active_task or recent_controller_task(tasks)
+    status = "running" if dirty_details or active_task else "idle"
+    if dirty_details and not active_task:
+        task = {
+            "id": "controller",
+            "status": "claimed",
+            "title": "主工作区有未提交改动, 总控可能在手动收口",
+            "claimed_by": "NRG 总控",
+        }
+    return {
+        "slot_id": "controller",
+        "agent_name": "NRG 总控",
+        "role": "controller",
+        "tool": "codex",
+        "workdir": str(REPO_ROOT),
+        "status": status,
+        "pid": "",
+        "elapsed": "",
+        "log": "",
+        "dirty": bool(dirty_details),
+        "dirty_details": dirty_details[:8],
+        "missing": False,
+        "task": task,
+        "controller": True,
+        "latest_commit": latest_commit(REPO_ROOT),
+    }
+
+
+def delegation_summary(tasks: list[dict[str, Any]]) -> dict[str, Any]:
+    takeovers = [
+        task
+        for task in tasks
+        if str(task.get("role") or "") in DELEGATED_ROLES
+        and is_controller_agent(str(task.get("claimed_by") or ""))
+    ]
+    missing = [task for task in takeovers if not task.get("takeover_reason")]
+    takeovers.sort(key=lambda task: str(task.get("updated_at") or task.get("created_at") or ""), reverse=True)
+    return {
+        "total_takeovers": len(takeovers),
+        "missing_takeover_reason": len(missing),
+        "recent": [
+            {
+                "id": task.get("id"),
+                "role": task.get("role"),
+                "status": task.get("status"),
+                "title": task.get("title"),
+                "takeover_reason": task.get("takeover_reason") or "",
+            }
+            for task in takeovers[:8]
+        ],
+    }
+
+
 def tail_log(path_text: str, limit: int = 16000) -> str:
     path = Path(path_text).expanduser()
     logs_root = (agent_queue.queue_dir() / "logs").resolve()
@@ -129,7 +220,7 @@ def tail_log(path_text: str, limit: int = 16000) -> str:
 
 def slot_status() -> list[dict[str, Any]]:
     tasks = task_items()
-    slots = []
+    slots = [controller_slot(tasks)]
     for slot in agent_dispatcher.DEFAULT_SLOTS:
         state = agent_dispatcher.read_state(slot)
         status = "idle"
@@ -201,6 +292,7 @@ def dashboard_payload() -> dict[str, Any]:
             "dashboard": launch_status(DASHBOARD_LABEL),
         },
         "slots": slot_status(),
+        "delegation": delegation_summary(tasks),
         "tasks": tasks,
         "counts": counts,
         "events": event_items(),
@@ -214,6 +306,7 @@ HTML = """<!doctype html>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Agent 工作台</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='7' fill='%2355d187'/%3E%3C/svg%3E" />
   <style>
     :root {
       --bg: #111317;
@@ -338,6 +431,10 @@ HTML = """<!doctype html>
       <div class="grid" id="slots"></div>
     </section>
     <section>
+      <h2>总控接管</h2>
+      <div id="delegation"></div>
+    </section>
+    <section>
       <h2>任务队列</h2>
       <div id="tasks"></div>
     </section>
@@ -372,18 +469,41 @@ HTML = """<!doctype html>
         const cls = slot.status === 'running' ? 'running' : (slot.status === 'stale' ? 'stale' : '');
         const task = slot.task;
         const logButton = slot.log ? `<button onclick="loadLog('${esc(slot.log)}')">看日志</button>` : '';
+        const dirtyText = slot.controller
+          ? (slot.dirty ? '主控工作区有未提交改动，说明总控正在手动收口或等待提交。' : '主控工作区干净，当前没有手动收口。')
+          : (slot.dirty ? '工作区有未提交改动，自动派工会谨慎跳过。' : '工作区干净或当前可用。');
+        const commitLine = slot.controller && slot.latest_commit
+          ? `<div class="small">最近主线提交: ${esc(slot.latest_commit)}</div>`
+          : '';
         return `<div class="card ${cls}">
           <div class="row">
             <div class="name">${esc(slot.agent_name)}</div>
             <span class="badge ${slot.status}"><span class="dot"></span>${statusText(slot.status)}</span>
           </div>
           <div class="meta">${esc(slot.role)} · ${esc(slot.tool)}${slot.elapsed ? ' · ' + esc(slot.elapsed) : ''}</div>
-          <div class="meta">${slot.dirty ? '工作区有未提交改动，自动派工会谨慎跳过。' : '工作区干净或当前可用。'}</div>
+          <div class="meta">${dirtyText}</div>
           ${slot.dirty_details && slot.dirty_details.length ? `<div class="small">${esc(slot.dirty_details.join(' · '))}</div>` : ''}
+          ${commitLine}
           ${task ? `<div class="task"><div class="task-title">${esc(task.id)} · ${esc(task.title)}</div><div class="small">${taskStatus(task.status)} · ${esc(task.claimed_by || '-')}</div></div>` : '<div class="meta">当前没有任务。</div>'}
           ${logButton}
         </div>`;
       }).join('');
+
+      const delegation = data.delegation || {total_takeovers: 0, missing_takeover_reason: 0, recent: []};
+      const recentTakeovers = (delegation.recent || []).map(t => `<tr>
+        <td><code>${esc(t.id)}</code></td>
+        <td>${esc(t.role)}</td>
+        <td>${taskStatus(t.status)}</td>
+        <td>${esc(t.title || '-')}<div class="small">${esc(t.takeover_reason || '历史记录未写接管理由')}</div></td>
+      </tr>`).join('');
+      document.getElementById('delegation').innerHTML = `<div class="card">
+        <div class="row">
+          <div class="name">总控接管审计</div>
+          <span class="badge ${delegation.missing_takeover_reason ? 'warn' : 'ok'}"><span class="dot"></span>${esc(delegation.total_takeovers)} 次接管</span>
+        </div>
+        <div class="meta">副 Agent 任务被总控关闭时, 新规则要求写接管理由。历史缺少接管理由: ${esc(delegation.missing_takeover_reason)}。</div>
+        ${recentTakeovers ? `<table style="margin-top:12px"><thead><tr><th>ID</th><th>角色</th><th>状态</th><th>说明</th></tr></thead><tbody>${recentTakeovers}</tbody></table>` : '<div class="meta">暂无接管记录。</div>'}
+      </div>`;
 
       const rows = data.tasks.map(t => `<tr>
         <td><code>${esc(t.id)}</code></td>

@@ -4,11 +4,12 @@
 
 ---
 
-## 当前状态 (2026-04-30 · T-071 做视频热点雷达按 skill 三类修正)
+## 当前状态 (2026-04-30 · T-072 研发部状态面板显示总控活动)
 
-**版本**: v0.8.10-hot-radar-skill — 做视频页热点雷达改按 `热点雷达-学员版` 三类输出: 大新闻 / 行业相关 / 本地热点; 默认每批 3 条, “换一批”直接切下一批; 红色方块火焰改为 `🔥热度` 视觉。
+**版本**: v0.8.11-agent-dashboard-controller — 研发部状态面板把 `NRG 总控` 作为第一张上岗卡显示, 同步展示总控接管审计; 老板能直接看见主控是否正在手动收口。
 
 ### 当前进行
+- T-072 总控已完成: 研发部状态面板现在显示 `NRG 总控` 卡片; 主工作区有未提交改动或总控领取 controller 任务时显示“工作中”; `/api/status` 增加 `delegation` 总控接管审计, 页面新增“总控接管”区块并补内联 favicon 清掉 404 噪音。验证: `python3 -m py_compile scripts/agent_dashboard.py`; `curl http://127.0.0.1:8765/api/status` 可见 `slots[0].controller=true` 和 `delegation.total_takeovers=17`; Playwright 截图已读 `.playwright-cli/page-2026-04-30T08-32-13-976Z.png`, console error=0, network 仅 `/api/status`/`/api/log` 200。报告 `docs/agent-handoff/CONTROLLER_T072_DASHBOARD_CONTROLLER_VISIBILITY_20260430.md`。
 - T-071 总控已完成: 做视频页热点雷达不再用纯业务搜索保底当主结果, 后端按本地 `热点雷达-学员版` 逻辑抓 TopHub 百度/微博/抖音/知乎热榜, 交错输出“大新闻 / 行业相关 / 本地热点”; 外部热榜失败时才用同三类结构保底。前端去掉红色方块图标, 改成 `🔥91` 热度样式; 热点卡展示三类标签, “换一批”按 3 条一组轮换。验证: `curl /api/hot-topics?limit=6` 返回三类交错真实热点; Playwright 桌面/移动截图已读, 换批后仍保留三类; targeted pytest 通过; full pytest 通过。报告 `docs/agent-handoff/CONTROLLER_T071_HOT_RADAR_SKILL_CORRECTION_20260430.md`。
 - T-070 多 Agent 流程护栏已补: 正常功能开发默认派 content/media/qa/review, 总控只做拆分、收件箱、合并、最终验收; 总控若要关闭 `content/media/qa/review` 任务, 队列命令必须带 `--takeover-reason`, 并可用 `python3 scripts/agent_delegation_audit.py` 审计接管比例。
 - T-069 总控已完成: 做视频页默认热点区和“今天的热点”tab 改为热点雷达三条大横卡, 展示热度/平台/匹配定位/趋势标签/做成视频按钮; 前端一次拉取 24 条候选并按 3 条一组轮换; 后端 `list_hot_topics_for_radar()` 保证真实热点库优先, 不足时补清华哥业务相关候选。验证: `curl /api/hot-topics?limit=3` 返回 3 条; Playwright 桌面显示 3 个“做成视频”按钮, 点击“换一批”后切到下一组; 移动宽度无横向滚动; `.venv/bin/pytest -q -x` 通过。报告 `docs/agent-handoff/CONTROLLER_T069_MAKE_HOT_RADAR_20260430.md`。
@@ -69,6 +70,7 @@
 - 额外 QA cmux 脚本已改为 socket 不可用时只准备 worktree, 不再强行 fallback 打开多个空白窗口。
 
 ### 总控审查证据
+- T-072 报告: `docs/agent-handoff/CONTROLLER_T072_DASHBOARD_CONTROLLER_VISIBILITY_20260430.md`; `/api/status` 第一张上岗卡为 `NRG 总控`, 当前主工作区 dirty 时显示工作中; `delegation` 汇总历史接管 17 次; Playwright 截图 `.playwright-cli/page-2026-04-30T08-32-13-976Z.png` 已读, console error=0, network `/api/status`/`/api/log` 均 200。
 - T-071 报告: `docs/agent-handoff/CONTROLLER_T071_HOT_RADAR_SKILL_CORRECTION_20260430.md`; API live `limit=6` 返回 `大新闻/行业相关/本地热点` 交错结果, `fetched_from=hot-topic-radar`; Playwright 桌面截图 `/tmp/nrg_hot_radar_t071/make-hot-radar-final.png`, 换批截图 `/tmp/nrg_hot_radar_t071/make-hot-radar-next-final.png`, 移动截图 `/tmp/nrg_hot_radar_t071/make-hot-radar-mobile-final.png`; targeted pytest 和 full pytest 通过。
 - T-055 独立 QA 报告: `/Users/black.chen/Desktop/nrg-worktrees/qa/docs/agent-handoff/QA_T055_REPAIR_REGRESSION_20260430.md`, commit `606aea9`; 结果通过, 不烧 credits。
 - T-056 总控体验清理: 素材库默认页面截图 `/tmp/_ui_shots/materials_root_hidden_before_20260430.png`, 点击“更换”后可编辑 `/tmp/_ui_shots/materials_root_edit_after_20260430.png`, 战略部观察台 `/tmp/_ui_shots/strategy_friendly_observatory_20260430.png`, 首页 `/tmp/_ui_shots/home_prompt_fixed_20260430.png`; 23 个页面可见文案扫描均无 `/Users`、`/private`、`prompt`、`apimart`、`tokens`、`API`、内部错误词命中, console/pageerror/requestfailed/http error=0。
