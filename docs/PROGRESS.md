@@ -4,11 +4,12 @@
 
 ---
 
-## 当前状态 (2026-04-30 · T-074 页面变更强制 QA 证据流程)
+## 当前状态 (2026-04-30 · T-075 做视频首屏按参考图重构)
 
-**版本**: v0.8.13-ui-qa-gate — 多 Agent 流程新增页面变更测试门禁: 用户可见页面、文案、布局、交互、状态展示只要变更, 必须有 QA 截图/console/真实操作证据后才能说完成。
+**版本**: v0.8.14-make-drop-material — 做视频 Step 1 按参考图重构为“把素材丢进来”大输入框 + 底部工具按钮 + 紧凑热点列表; 热点池扩到 15 条, 支持全网/行业/本地各 5 条。
 
 ### 当前进行
+- T-075 总控已完成: 做视频 Step 1 严格按老板截图方向重构, 去掉四 tab 大入口和大热点卡首屏, 改为居中标题“把素材丢进来↓”、单一大输入框、底部“录音/上传/选题库/我的素材”工具按钮、右下“开始→”; 下方热点区改成“没思路？从热点开始”紧凑列表, 带“全网 5 / 行业 5 / 本地 5”和“换一批↻”。后端热点雷达池从 12 扩到 15 条, 保证三类各 5 条。验证: `pytest -q tests/test_make_hot_radar_static.py tests/test_works_api.py::test_hot_topics_list_gives_batch_pool_for_make_page tests/test_works_api.py::test_hot_topics_list_fills_radar_floor` 通过; `curl /api/hot-topics?limit=30` 返回 15 条且三类各 5; Playwright 截图已读, 真填文案后“开始”变可用, 点击“行业”和“换一批”正常, console/pageerror/requestfailed 均 0。报告 `docs/agent-handoff/CONTROLLER_T075_MAKE_DROP_MATERIAL_REDESIGN_20260430.md`。
 - T-074 总控已完成: 把“页面变化必须测试”固化进 `docs/MULTI_AGENT_WORKFLOW.md` 和 `docs/agents/ROLE_CONTROLLER.md`。后续任何用户可见页面/前端体验变化, 默认派开发 Agent + QA Agent; 总控直接小修也必须交付同等级 QA 证据, 没有截图/console/真实操作证据只能说“待测”, 不能说“完成”。报告 `docs/agent-handoff/CONTROLLER_T074_UI_QA_GATE_20260430.md`。
 - T-073 总控已完成: 做视频页热点排行头部和热点卡热度区改为白底 + emoji `🔥` 的轻量 badge, 卡片背景与边框从偏橙改为白底/浅米灰, 避免红橙色块过生。验证: `pytest -q tests/test_make_hot_radar_static.py` 通过; Playwright 打开 `?page=make&v=t073-white-fire`, 截图已读确认红块消失; 点击“换一批”后仍正常切批, console error=0、pageerror=0。报告 `docs/agent-handoff/CONTROLLER_T073_HOT_RADAR_WHITE_FIRE_20260430.md`。
 - T-072 总控已完成: 研发部状态面板现在显示 `NRG 总控` 卡片; 主工作区有未提交改动或总控领取 controller 任务时显示“工作中”; `/api/status` 增加 `delegation` 总控接管审计, 页面新增“总控接管”区块并补内联 favicon 清掉 404 噪音。验证: `python3 -m py_compile scripts/agent_dashboard.py`; `curl http://127.0.0.1:8765/api/status` 可见 `slots[0].controller=true` 和 `delegation.total_takeovers=17`; Playwright 截图已读 `.playwright-cli/page-2026-04-30T08-32-13-976Z.png`, console error=0, network 仅 `/api/status`/`/api/log` 200。报告 `docs/agent-handoff/CONTROLLER_T072_DASHBOARD_CONTROLLER_VISIBILITY_20260430.md`。
@@ -72,6 +73,7 @@
 - 额外 QA cmux 脚本已改为 socket 不可用时只准备 worktree, 不再强行 fallback 打开多个空白窗口。
 
 ### 总控审查证据
+- T-075 报告: `docs/agent-handoff/CONTROLLER_T075_MAKE_DROP_MATERIAL_REDESIGN_20260430.md`; Playwright 截图 `/tmp/nrg_make_t074/t074-make-full-tall-final.png` 已读, 首屏结构与参考图一致: 大输入框、底部工具按钮、紧凑热点列表 5 行; 真填文案后“开始”可点, 点击“行业”和“换一批”正常; console error=0, network 全 200。
 - T-074 报告: `docs/agent-handoff/CONTROLLER_T074_UI_QA_GATE_20260430.md`; 多 Agent 工作流和总控角色文档均写入页面变更 QA 门禁; `git diff --check` 通过。
 - T-073 报告: `docs/agent-handoff/CONTROLLER_T073_HOT_RADAR_WHITE_FIRE_20260430.md`; Playwright 截图 `/tmp/nrg_hot_radar_t073/t073-make-hot-radar-white-fire.png` 和 `/tmp/nrg_hot_radar_t073/t073-make-hot-radar-white-fire-next.png` 已读, 可见白底 `🔥91/🔥79` badge; `换一批` 点击后正常进入第 2/4 批; console error=0, 仅 Babel 开发 warning。
 - T-072 报告: `docs/agent-handoff/CONTROLLER_T072_DASHBOARD_CONTROLLER_VISIBILITY_20260430.md`; `/api/status` 第一张上岗卡为 `NRG 总控`, 当前主工作区 dirty 时显示工作中; `delegation` 汇总历史接管 17 次; Playwright 截图 `.playwright-cli/page-2026-04-30T08-32-13-976Z.png` 已读, console error=0, network `/api/status`/`/api/log` 均 200。

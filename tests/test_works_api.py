@@ -80,10 +80,10 @@ def test_hot_topics_list_gives_batch_pool_for_make_page(client, monkeypatch):
     from shortvideo import works
 
     monkeypatch.setattr(works, "_fetch_hot_radar_live_topics", lambda: [])
-    r = client.get("/api/hot-topics", params={"limit": 24})
+    r = client.get("/api/hot-topics", params={"limit": 30})
     assert r.status_code == 200
     body = r.json()
-    assert len(body) >= 9
+    assert len(body) >= 15
     assert [item["radar_category"] for item in body[:3]] == ["大新闻", "行业相关", "本地热点"]
     titles = {item["title"] for item in body}
     assert "五一假期各大景点客流升温" in titles

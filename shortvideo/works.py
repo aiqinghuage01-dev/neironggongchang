@@ -273,7 +273,7 @@ class HotTopic:
 
 
 HOT_RADAR_MIN_COUNT = 3
-HOT_RADAR_DEFAULT_POOL = 12
+HOT_RADAR_DEFAULT_POOL = 15
 HOT_RADAR_CATEGORY_GLOBAL = "大新闻"
 HOT_RADAR_CATEGORY_INDUSTRY = "行业相关"
 HOT_RADAR_CATEGORY_LOCAL = "本地热点"
@@ -332,6 +332,12 @@ HOT_RADAR_FALLBACK_TOPICS: list[dict[str, Any]] = [
     {"radar_category": HOT_RADAR_CATEGORY_GLOBAL, "platform": "百度", "title": "社会民生话题登上热搜", "heat_score": 82, "match_reason": "适合从普通人的真实感受切入"},
     {"radar_category": HOT_RADAR_CATEGORY_INDUSTRY, "platform": "微博", "title": "企业开始重算 AI 投入产出", "heat_score": 80, "match_reason": "适合讲老板视角下的效率账和投入账"},
     {"radar_category": HOT_RADAR_CATEGORY_LOCAL, "platform": "本地", "title": f"{HOT_RADAR_DEFAULT_CITY}交通与文旅服务迎来高峰", "heat_score": 78, "match_reason": "适合配城市空镜, 讲服务业机会"},
+    {"radar_category": HOT_RADAR_CATEGORY_GLOBAL, "platform": "百度", "title": "高考倒计时家长焦虑指南", "heat_score": 75, "match_reason": "大众情绪强, 适合拆普通人焦虑与选择"},
+    {"radar_category": HOT_RADAR_CATEGORY_INDUSTRY, "platform": "抖音", "title": "中小企业用短视频找增量", "heat_score": 73, "match_reason": "适合讲老板如何把内容变成获客动作"},
+    {"radar_category": HOT_RADAR_CATEGORY_LOCAL, "platform": "本地", "title": f"{HOT_RADAR_DEFAULT_CITY}展会和培训活动升温", "heat_score": 71, "match_reason": "适合接上课、会场和商务出差素材"},
+    {"radar_category": HOT_RADAR_CATEGORY_GLOBAL, "platform": "微博", "title": "假期消费账单引发讨论", "heat_score": 69, "match_reason": "适合从普通人的花钱压力切入"},
+    {"radar_category": HOT_RADAR_CATEGORY_INDUSTRY, "platform": "知乎", "title": "老板开始要求团队会用 AI", "heat_score": 67, "match_reason": "适合讲 AI 不只是工具, 而是团队能力标准"},
+    {"radar_category": HOT_RADAR_CATEGORY_LOCAL, "platform": "本地", "title": f"{HOT_RADAR_DEFAULT_CITY}企业沙龙和线下课排期增加", "heat_score": 65, "match_reason": "适合配课程、学员和活动现场画面"},
 ]
 
 

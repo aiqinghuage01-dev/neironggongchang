@@ -6,12 +6,15 @@ MATERIALS_SRC = Path("web/factory-materials.jsx").read_text(encoding="utf-8")
 
 
 def test_make_page_fetches_hot_radar_pool_and_batches_three():
-    assert "const HOT_RADAR_BATCH_SIZE = 3" in SRC
-    assert "const HOT_RADAR_FETCH_LIMIT = 24" in SRC
+    assert "const HOT_RADAR_BATCH_SIZE = 5" in SRC
+    assert "const HOT_RADAR_FETCH_LIMIT = 30" in SRC
     assert "getHotRadarBatch(hotTopics, hotBatchIndex)" in SRC
     assert "换一批" in SRC
     assert "热点雷达" in SRC
     assert "大新闻 / 行业 / 本地" in SRC
+    assert "把素材丢进来 ↓" in SRC
+    assert "没思路？从热点开始" in SRC
+    assert "🌐 全网" in SRC
 
 
 def test_hot_radar_card_matches_requested_action_card():

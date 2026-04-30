@@ -20,8 +20,8 @@ const MAKE_V2_STEPS = [
   { id: "preview",  n: 5, label: "预览 + 发布" },
 ];
 
-const HOT_RADAR_BATCH_SIZE = 3;
-const HOT_RADAR_FETCH_LIMIT = 24;
+const HOT_RADAR_BATCH_SIZE = 5;
+const HOT_RADAR_FETCH_LIMIT = 30;
 
 function getHotRadarBatch(topics, batchIndex) {
   if (!Array.isArray(topics) || topics.length === 0) return [];
@@ -261,6 +261,7 @@ function MakeV2StepScript({ script, setScript, onNext, onNav, seedFrom, onDismis
   const [tab1Url, setTab1Url] = React.useState("");
   const [tab2Transcript, setTab2Transcript] = React.useState("");
   const [tab3SelfHot, setTab3SelfHot] = React.useState("");
+  const uploadInputRef = React.useRef(null);
 
   const URL_PATTERN = /https?:\/\/[^\s]+|v\.douyin\.com\/[a-zA-Z0-9]+|xhslink\.com\/[a-zA-Z0-9]+|b23\.tv\/[a-zA-Z0-9]+/;
 
@@ -351,6 +352,105 @@ function MakeV2StepScript({ script, setScript, onNext, onNav, seedFrom, onDismis
     } catch (_) {}
     onNav("baokuan");
   }
+
+  function startFromComposer() {
+    const t = (script || "").trim();
+    if (!t || extracting) return;
+    if (t.match(URL_PATTERN)) {
+      setTab1Url(t);
+      doExtract(t, "wash");
+      return;
+    }
+    setScript(t);
+    onNext();
+  }
+
+  function handleUploadPick(e) {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    setExtractMsg(`已选 ${file.name} · 当前先把转写文字粘进来, 文件直传会接到这里`);
+    e.target.value = "";
+  }
+
+  const composerText = (script || "").trim();
+  const composerReady = composerText.length > 0 && !extracting;
+
+  return (
+    <div style={{ maxWidth: 1100, margin: "0 auto" }}>
+      {seedFrom && (
+        <div style={{
+          marginBottom: 18, padding: "10px 14px", background: "#fff",
+          border: `1px solid ${T.borderSoft}`, borderRadius: 12,
+          display: "flex", alignItems: "center", gap: 10, fontSize: 13,
+          boxShadow: "0 8px 20px rgba(54, 43, 27, 0.035)",
+        }}>
+          <span style={{ fontSize: 16 }}>✨</span>
+          <span style={{ flex: 1 }}>
+            从 <b>{MAKE_V2_SKILL_NAMES[seedFrom.skill] || seedFrom.skill}</b> 带过来的文案已自动填入
+            {seedFrom.title && <span style={{ color: T.muted, marginLeft: 6 }}>· {seedFrom.title}</span>}
+          </span>
+          <button onClick={onDismissSeed}
+            style={{ background: "transparent", border: "none", color: T.muted2, cursor: "pointer", fontSize: 12, fontFamily: "inherit" }}>×</button>
+        </div>
+      )}
+
+      <div style={{ textAlign: "center", margin: "30px 0 18px" }}>
+        <div style={{ fontSize: "clamp(28px, 3vw, 34px)", fontWeight: 900, color: T.text, letterSpacing: 0, lineHeight: 1.2 }}>
+          把素材丢进来 ↓
+        </div>
+        <div style={{ marginTop: 8, fontSize: 14, color: T.muted, fontWeight: 600 }}>
+          链接 · 文案 · 录音 一律识别
+        </div>
+      </div>
+
+      <div style={{
+        background: "#fff", border: `2px solid ${T.brand}`,
+        boxShadow: `0 0 0 7px ${T.brandSoft}`,
+        borderRadius: 20, padding: "28px 32px 20px",
+        marginBottom: 36,
+      }}>
+        <textarea
+          value={script}
+          onChange={e => setScript(e.target.value)}
+          placeholder={"粘抖音 / 小红书 / B 站链接...\n或者把已经写好的文案贴进来\n或者上传一段录音"}
+          rows={10}
+          style={{
+            width: "100%", minHeight: 290, padding: 0, border: "none",
+            fontSize: 18, fontWeight: 600, fontFamily: "inherit", outline: "none",
+            resize: "vertical", lineHeight: 1.7, background: "transparent",
+            color: T.text,
+          }} />
+        <div style={{ borderTop: `1px solid ${T.border}`, paddingTop: 14, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <input ref={uploadInputRef} type="file" accept="audio/*,video/*,.txt,.md" onChange={handleUploadPick} style={{ display: "none" }} />
+          <MakeInputToolButton onClick={() => onNav("voicerewrite")}>🎙 录音</MakeInputToolButton>
+          <MakeInputToolButton onClick={() => uploadInputRef.current && uploadInputRef.current.click()}>📎 上传</MakeInputToolButton>
+          <MakeInputToolButton onClick={() => setExtractMsg("可以直接从下面热点列表点“用”, 或把自己的选题粘进来")}>📚 选题库</MakeInputToolButton>
+          <MakeInputToolButton onClick={() => onNav("materials")}>◻ 我的素材</MakeInputToolButton>
+          {extractMsg && (
+            <span style={{
+              minWidth: 180, fontSize: 12.5, color: extractMsg.startsWith("✓") ? T.brand : extractMsg.startsWith("提取失败") || extractMsg.startsWith("没找到") ? T.red : T.muted,
+              lineHeight: 1.5, flex: "1 1 220px",
+            }}>
+              {extractMsg}
+            </span>
+          )}
+          <button onClick={startFromComposer} disabled={!composerReady} style={{
+            marginLeft: "auto", minWidth: 132, height: 50, padding: "0 28px",
+            borderRadius: 12, border: "none",
+            background: composerReady ? T.brand : T.muted3,
+            color: "#fff", fontSize: 17, fontWeight: 900,
+            fontFamily: "inherit", cursor: composerReady ? "pointer" : "not-allowed",
+          }}>
+            {extracting ? "处理中..." : "开始 →"}
+          </button>
+        </div>
+      </div>
+
+      <HotRankPanel topics={hotTopics} batch={visibleHotTopics} batchIndex={hotBatchIndex}
+        batchCount={hotBatchCount} onTake={takeThisHot} onRefresh={reloadHotTopics}
+        onNextBatch={nextHotTopicBatch} onNight={() => onNav("nightshift")} />
+    </div>
+  );
 
   return (
     <div>
@@ -761,64 +861,107 @@ function MakeV2StepScript({ script, setScript, onNext, onNav, seedFrom, onDismis
   );
 }
 
-function HotRankPanel({ topics, batch, batchIndex, batchCount, onTake, onRefresh, onNextBatch, onNight }) {
-  const ready = Array.isArray(topics);
-  const top = ready ? (batch || []) : [];
-  const topHeat = top[0]?.heat_score || 98;
+function MakeInputToolButton({ children, onClick }) {
   return (
-    <div style={{ margin: "6px 0 20px" }}>
-      <div style={{
-        display: "flex", alignItems: "center", gap: 12, marginBottom: 14,
-        padding: "0 2px", flexWrap: "wrap",
-      }}>
-        <HotRadarFlameBadge heat={topHeat} compact />
-        <div style={{ flex: "1 1 240px", minWidth: 0 }}>
-          <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
-            <span style={{ fontSize: 17, fontWeight: 800, color: T.text }}>热点排行</span>
-            <span style={{ fontSize: 11.5, color: T.muted2 }}>选一条, 直接进入热点文案改写</span>
-          </div>
-          <div style={{ fontSize: 11, color: T.muted2, marginTop: 2 }}>
-            来自热点雷达 · 大新闻 / 行业 / 本地 · 不满意直接换一批 · 第 {batchIndex + 1}/{batchCount} 批
-          </div>
+    <button onClick={onClick} type="button" style={{
+      height: 34, padding: "0 14px", borderRadius: 100,
+      border: `1px solid ${T.border}`, background: "#fffdfa",
+      color: T.muted, fontSize: 13, fontWeight: 800,
+      fontFamily: "inherit", cursor: "pointer",
+      display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6,
+      boxShadow: "0 2px 8px rgba(54, 43, 27, 0.035)",
+    }}>
+      {children}
+    </button>
+  );
+}
+
+function HotRankPanel({ topics, batch, batchIndex, batchCount, onTake, onRefresh, onNextBatch, onNight }) {
+  const [filter, setFilter] = React.useState("all");
+  const ready = Array.isArray(topics);
+  const pool = ready ? topics : [];
+  const filtered = filter === "industry"
+    ? pool.filter(t => t.radar_category === "行业相关" || t.match_persona)
+    : filter === "local"
+      ? pool.filter(t => t.radar_category === "本地热点")
+      : pool;
+  const rows = getHotRadarBatch(filtered.length ? filtered : pool, batchIndex);
+  const tabCounts = {
+    all: HOT_RADAR_BATCH_SIZE,
+    industry: HOT_RADAR_BATCH_SIZE,
+    local: HOT_RADAR_BATCH_SIZE,
+  };
+  return (
+    <div style={{ margin: "0 0 20px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12, flexWrap: "wrap" }}>
+        <div style={{ fontSize: 17, fontWeight: 900, color: T.text, display: "inline-flex", alignItems: "center", gap: 6 }}>
+          <span>🔥</span>
+          <span>没思路？从热点开始</span>
         </div>
-        <button onClick={onNextBatch}
-          style={{
-            padding: "8px 14px", borderRadius: 100, border: "none",
-            background: T.brandSoft, color: T.brand, cursor: "pointer",
-            fontSize: 12, fontWeight: 800, fontFamily: "inherit",
-          }}>
-          换一批
-        </button>
-        <button onClick={onRefresh}
-          style={{
-            padding: "8px 12px", borderRadius: 100, border: `1px solid ${T.borderSoft}`,
-            background: "#fff", color: T.muted, cursor: "pointer",
-            fontSize: 12, fontWeight: 700, fontFamily: "inherit",
-          }}>
-          刷新
+        <div style={{
+          display: "inline-flex", alignItems: "center", gap: 3,
+          padding: 4, borderRadius: 100, background: "#fff",
+          border: `1px solid ${T.borderSoft}`,
+          boxShadow: "0 5px 14px rgba(54, 43, 27, 0.035)",
+        }}>
+          {[
+            { id: "all", label: `🌐 全网 ${tabCounts.all}` },
+            { id: "industry", label: `🎯 行业 ${tabCounts.industry}` },
+            { id: "local", label: `📍 本地 ${tabCounts.local}` },
+          ].map(t => (
+            <button key={t.id} onClick={() => setFilter(t.id)}
+              style={{
+                height: 28, padding: "0 13px", borderRadius: 100,
+                border: "none", background: filter === t.id ? T.amberSoft : "transparent",
+                color: filter === t.id ? T.amber : T.muted,
+                fontSize: 12.5, fontWeight: 900, fontFamily: "inherit", cursor: "pointer",
+              }}>
+              {t.label}
+            </button>
+          ))}
+        </div>
+        <button onClick={onNextBatch} style={{
+          marginLeft: "auto", border: "none", background: "transparent",
+          color: T.muted2, fontSize: 12.5, fontWeight: 800,
+          fontFamily: "inherit", cursor: "pointer",
+        }}>
+          换一批 ↻
         </button>
       </div>
 
       {!ready ? (
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          {[1, 2, 3].map(i => (
+        <div style={{
+          background: "#fff", border: `1px solid ${T.borderSoft}`,
+          borderRadius: 14, overflow: "hidden",
+        }}>
+          {[1, 2, 3, 4, 5].map(i => (
             <div key={i} style={{
-              height: 148, borderRadius: 22, background: "#fff",
-              border: `1px solid ${T.borderSoft}`, opacity: 0.7,
+              height: 64, borderBottom: i < 5 ? `1px solid ${T.borderSoft}` : "none",
+              background: "#fff", opacity: 0.55,
             }} />
           ))}
         </div>
-      ) : top.length === 0 ? (
+      ) : rows.length === 0 ? (
         <NightHotFlywheel compact onTopics={onRefresh} />
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          {top.map((t, idx) => (
-            <HotRadarCard key={t.id || `${t.title}-${idx}`} t={t} idx={idx} onTake={() => onTake(t)} />
+        <div style={{
+          background: "#fff", border: `1px solid ${T.borderSoft}`,
+          borderRadius: 14, overflow: "hidden",
+          boxShadow: "0 10px 24px rgba(54, 43, 27, 0.045)",
+        }}>
+          {rows.map((t, idx) => (
+            <HotRadarListRow
+              key={t.id || `${t.title}-${idx}`}
+              t={t}
+              idx={idx}
+              onTake={() => onTake(t)}
+              isLast={idx === rows.length - 1}
+            />
           ))}
         </div>
       )}
 
-      {ready && top.length > 0 && (
+      {ready && rows.length > 0 && (
         <div style={{ marginTop: 10, display: "flex", justifyContent: "flex-end" }}>
           <button onClick={onNight}
             style={{ background: "transparent", border: "none", color: T.muted2, cursor: "pointer", fontSize: 11.5, fontFamily: "inherit" }}>
@@ -826,6 +969,50 @@ function HotRankPanel({ topics, batch, batchIndex, batchCount, onTake, onRefresh
           </button>
         </div>
       )}
+    </div>
+  );
+}
+
+function HotRadarListRow({ t, idx, onTake, isLast }) {
+  const heat = Math.max(0, Math.min(100, Number(t.heat_score || 0)));
+  const reason = t.match_reason || "适合拆成短视频切入点";
+  return (
+    <div style={{
+      minHeight: 72, padding: "12px 20px", display: "grid",
+      gridTemplateColumns: "54px minmax(0, 1fr) 60px",
+      alignItems: "center", columnGap: 10,
+      borderBottom: isLast ? "none" : `1px solid ${T.borderSoft}`,
+      background: "#fff",
+    }}>
+      <div style={{
+        justifySelf: "start", height: 22, padding: "0 8px",
+        borderRadius: 100, background: T.amberSoft, color: T.amber,
+        fontSize: 12, fontWeight: 900, display: "inline-flex",
+        alignItems: "center", justifyContent: "center", gap: 2,
+      }}>
+        <span>🔥</span><span>{heat}</span>
+      </div>
+      <div style={{ minWidth: 0 }}>
+        <div style={{
+          fontSize: 16, lineHeight: 1.35, fontWeight: 900, color: T.text,
+          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+        }}>
+          {t.title}
+        </div>
+        <div style={{
+          marginTop: 3, fontSize: 13, color: T.muted, lineHeight: 1.45,
+          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+        }}>
+          {reason}
+        </div>
+      </div>
+      <button onClick={onTake} style={{
+        justifySelf: "end", border: "none", background: "transparent",
+        color: T.amber, fontSize: 14, fontWeight: 900,
+        fontFamily: "inherit", cursor: "pointer",
+      }}>
+        用 →
+      </button>
     </div>
   );
 }
