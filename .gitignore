@@ -24,3 +24,22 @@ logs-api.log
 .claude/launch.json
 .pytest_cache/
 data/wechat-cover/
+
+# ─── Phase 1 防腐层补充(2026-04-30 · v0.6 SOW · 收紧策略) ───
+# 整个 data/ 和 vendor/ 永不入 git,通过 rsync 搬到 Mac mini
+# 用 data/* 而不是 data/,这样 !data/.gitkeep 例外才生效(git 规则:父目录被 ignore 时 ! 例外失效)
+data/*
+!data/.gitkeep
+vendor/*
+!vendor/.gitkeep
+
+# Playwright 自动化产物
+.playwright-cli/
+
+# 通用媒体类(防止误 add 到非 data/ 路径)
+*.mp4
+*.mp3
+*.wav
+
+# Phase 3 会建的备份目录(已被 data/ 覆盖,显式列出表明意图)
+data/_backups/
