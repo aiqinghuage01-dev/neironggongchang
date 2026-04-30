@@ -211,7 +211,8 @@ _TOPIC_SYSTEM = (
     "5. 每条评估热度 (1-100), 越高越值得做\n\n"
     "禁忌:\n"
     "- 震惊体 / 标题党 / 空泛大词 (颠覆/革命/最强)\n"
-    "- 蹭明星私事 / 政治敏感\n\n"
+    "- 蹭明星私事 / 政治敏感\n"
+    "- 国家领导人、政府首脑、政治人物相关热点一律不写\n\n"
     "输出 JSON 格式 (顶层 array):\n"
     '[{"title":"...","heat_score":85,"match_reason":"..."}, ...]'
 )
@@ -226,7 +227,7 @@ def content_planner_runner(job: dict[str, Any]) -> dict[str, Any]:
       log             → 5 条 title + heat_score + match_reason
     """
     from shortvideo.ai import get_ai_client
-    from shortvideo.works import insert_hot_topic
+    from shortvideo.works import insert_hot_topic, is_hot_topic_safe_to_show
     import json
     import re as _re
 
@@ -267,6 +268,7 @@ def content_planner_runner(job: dict[str, Any]) -> dict[str, Any]:
         }
 
     inserted_ids: list[dict[str, Any]] = []
+    inserted_topics: list[dict[str, Any]] = []
     log_lines = ["[凌晨抓热点 · AI 出 5 条选题候选]", ""]
     for t in topics[:8]:  # 最多保 8 条
         title = (t.get("title") or "").strip()
@@ -274,6 +276,9 @@ def content_planner_runner(job: dict[str, Any]) -> dict[str, Any]:
             continue
         heat_score = int(t.get("heat_score") or 0)
         match_reason = (t.get("match_reason") or "").strip() or None
+        if not is_hot_topic_safe_to_show(title, match_reason, "ai-generated"):
+            log_lines.append("- 已跳过 1 条不适合展示的新闻选题")
+            continue
         try:
             tid = insert_hot_topic(
                 title=title,
@@ -284,9 +289,10 @@ def content_planner_runner(job: dict[str, Any]) -> dict[str, Any]:
                 fetched_from="night-shift",
             )
             inserted_ids.append({"kind": "hot_topic", "id": tid})
+            inserted_topics.append({"title": title, "heat_score": heat_score})
             log_lines.append(f"- 🔥{heat_score:>3} 《{title}》 — {match_reason or '(无理由)'}")
         except Exception as e:
-            log_lines.append(f"- ⚠️ 写入失败 《{title}》: {e}")
+            log_lines.append(f"- ⚠️ 写入失败: {type(e).__name__}")
 
     if not inserted_ids:
         return {
@@ -296,11 +302,7 @@ def content_planner_runner(job: dict[str, Any]) -> dict[str, Any]:
         }
 
     # 找最高分一条做 summary 引子
-    sorted_topics = sorted(
-        [t for t in topics if t.get("title")],
-        key=lambda t: int(t.get("heat_score") or 0),
-        reverse=True,
-    )
+    sorted_topics = sorted(inserted_topics, key=lambda t: int(t.get("heat_score") or 0), reverse=True)
     top_title = sorted_topics[0].get("title") if sorted_topics else ""
     top_heat = int(sorted_topics[0].get("heat_score") or 0) if sorted_topics else 0
     summary = f"AI 出 {len(inserted_ids)} 条选题 · 最高 🔥{top_heat}: 《{top_title[:18]}》"

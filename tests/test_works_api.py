@@ -91,6 +91,50 @@ def test_hot_topics_list_gives_batch_pool_for_make_page(client, monkeypatch):
     assert "上海五一消费和出行升温" in titles
 
 
+def test_hot_topics_list_blocks_national_leader_news(client, monkeypatch):
+    from shortvideo import works
+    from shortvideo.works import insert_hot_topic
+
+    with pytest.raises(ValueError):
+        insert_hot_topic(
+            title="某国总统发表讲话",
+            platform="weibo",
+            heat_score=99,
+            fetched_from="manual",
+        )
+
+    insert_hot_topic(
+        title="企业用 AI 做经营复盘",
+        platform="zhihu",
+        heat_score=88,
+        match_persona=True,
+        match_reason="适合老板视角",
+        fetched_from="manual",
+    )
+    monkeypatch.setattr(works, "_fetch_hot_radar_live_topics", lambda: [
+        works._RadarRawTopic("百度", "某国总统发表讲话", "900万", 1, "https://example.com/blocked"),
+        works._RadarRawTopic("知乎", "AI 进入企业经营", "600万", 2, "https://example.com/industry"),
+        works._RadarRawTopic("本地", "上海商圈客流升温", "500万", 3, "https://example.com/local"),
+    ])
+
+    r = client.get("/api/hot-topics", params={"limit": 10})
+    assert r.status_code == 200
+    titles = [item["title"] for item in r.json()]
+    assert "某国总统发表讲话" not in titles
+    assert all("总统" not in title for title in titles)
+    assert "AI 进入企业经营" in titles
+
+
+def test_hot_topics_add_rejects_national_leader_news(client):
+    r = client.post("/api/hot-topics", json={
+        "title": "某国总统发表讲话",
+        "platform": "weibo",
+        "heat_score": 90,
+    })
+    assert r.status_code == 400
+    assert "已拦截" in r.json()["detail"]
+
+
 def test_works_detail_reads_work_outside_current_list(client):
     from shortvideo.works import insert_work, upsert_metric
 
@@ -180,6 +224,6 @@ def test_image_existing_outside_media_root_does_not_expose_absolute_path(client,
     body = r.json()
     assert body["thumb_url"] is None
     assert body["local_url"] is None
-    assert body["asset_status"] == "record_only"
+    assert body["asset_status"] == "missing_file"
     assert body["preview_available"] is False
     assert body["download_available"] is False

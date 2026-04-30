@@ -2295,11 +2295,14 @@ def hot_topics_list(limit: int = 50):
 @app.post("/api/hot-topics", tags=["档案部"], summary="新增热点")
 def hot_topics_add(req: HotTopicReq):
     """手动维护或夜班 runner 写入. 素材库 HotTab "🌙 来自夜班 (N)" 过滤靠 fetched_from."""
-    tid = insert_hot_topic(
-        title=req.title, platform=req.platform, heat_score=req.heat_score,
-        match_persona=req.match_persona, match_reason=req.match_reason,
-        source_url=req.source_url, fetched_from=req.fetched_from,
-    )
+    try:
+        tid = insert_hot_topic(
+            title=req.title, platform=req.platform, heat_score=req.heat_score,
+            match_persona=req.match_persona, match_reason=req.match_reason,
+            source_url=req.source_url, fetched_from=req.fetched_from,
+        )
+    except ValueError:
+        raise HTTPException(status_code=400, detail="这条热点不适合展示, 已拦截")
     return {"id": tid, "ok": True}
 
 

@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -24,6 +25,17 @@ def test_wechat_copy_does_not_expose_layout_internals():
     ]
     for text in forbidden:
         assert text not in src
+
+
+def test_frontend_static_copy_does_not_include_national_leader_terms():
+    """网站静态文案不能硬编码国家领导人相关新闻词。动态热点由后端过滤。"""
+    pattern = re.compile(r"国家领导人|国家主席|总书记|国务院总理|总统|副总统|首相|元首|普京|特朗普")
+    hits: list[str] = []
+    for path in sorted((ROOT / "web").glob("*.jsx")):
+        text = path.read_text(encoding="utf-8")
+        if pattern.search(text):
+            hits.append(path.name)
+    assert hits == []
 
 
 def test_voice_copy_does_not_expose_transcription_internals():

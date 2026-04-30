@@ -545,6 +545,32 @@ PDF/zip/dmg/exe 等非素材**永远**不入库.
 
 ---
 
+## 13. 内容安全硬约束 (国家领导人相关信息不展示)
+
+### 13.1 网站展示层禁止国家领导人相关内容
+清华哥拍板: 整个网站不展示国家领导人相关信息, 热点新闻尤其严格。
+
+**必须拦截的入口**:
+- `/api/hot-topics` 实时热榜 / 手动热点 / 夜班抓热点
+- 做视频页热点雷达、热点改写页今日热点、素材库老热点 tab
+- 任何未来新增的新闻 / 热榜 / 舆情 / 选题推荐入口
+
+### 13.2 过滤必须在后端事实源做, 不能只靠前端隐藏
+- 热点库写入走 `shortvideo.works::insert_hot_topic()`, 命中则拒绝写入。
+- 热点库读取走 `list_hot_topics()` / `list_hot_topics_for_radar()`, 对历史脏数据也要过滤后再返回。
+- 夜班/AI 生成候选必须先过滤, 日志和 summary 也不能回显被拦截原标题。
+- 前端只负责展示后端已过滤结果, 不做唯一防线。
+
+### 13.3 单一事实源
+国家领导人相关关键词与判断函数在 `shortvideo/works.py`:
+- `NATIONAL_LEADER_BLOCK_KEYWORDS`
+- `contains_national_leader_reference()`
+- `is_hot_topic_safe_to_show()`
+
+以后加新的外部热榜源, 必须复用这些函数, 不要在页面或 runner 里另写一套。
+
+---
+
 ## 索引: 约束 → D 编号 → 文件
 
 | 约束 | D 编号 | 关键文件 |
@@ -565,3 +591,4 @@ PDF/zip/dmg/exe 等非素材**永远**不入库.
 | **fetch 自动重试 + 120s timeout** | **D-086** | `web/factory-api.jsx::_trace` + `_fetchWithTimeout` |
 | **素材库 schema + 扫描 + 4 层 UI** | **D-087** | `backend/services/materials_service.py` + `web/factory-materials-v2.jsx` |
 | **素材库表名前缀 material_*** | **D-087** | `migrations.py` v2 baseline |
+| **国家领导人相关内容不展示** | **D-127** | `shortvideo/works.py::is_hot_topic_safe_to_show` |

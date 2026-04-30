@@ -196,6 +196,29 @@ def test_content_planner_runner_real_ai_5_topics(tmp_db, monkeypatch):
     assert all(h.match_persona == 1 for h in saved)
 
 
+def test_content_planner_runner_filters_national_leader_topics(tmp_db, monkeypatch):
+    """夜班抓热点不能把国家领导人相关新闻写入热点库, 日志也不回显原标题."""
+    from backend.services import night_runners
+    from shortvideo import ai as ai_module
+
+    fake_response = """[
+        {"title": "某国总统发表讲话", "heat_score": 99, "match_reason": "新闻热度高"},
+        {"title": "AI 帮老板做复盘", "heat_score": 86, "match_reason": "经营场景"}
+    ]"""
+    monkeypatch.setattr(ai_module, "get_ai_client",
+                        lambda route_key=None: _FakeAIClient(fake_response))
+
+    out = night_runners.content_planner_runner({"id": 1, "name": "凌晨抓热点"})
+
+    assert "AI 出 1 条选题" in out["output_summary"]
+    assert "总统" not in out["output_summary"]
+    assert "总统" not in (out["log"] or "")
+
+    from shortvideo.works import list_hot_topics
+    saved = list_hot_topics(limit=10)
+    assert [h.title for h in saved] == ["AI 帮老板做复盘"]
+
+
 def test_content_planner_runner_ai_returns_garbage(tmp_db, monkeypatch):
     """AI 返回非 JSON → 不崩, 写明白错误."""
     from backend.services import night_runners

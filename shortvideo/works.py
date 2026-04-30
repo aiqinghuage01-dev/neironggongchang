@@ -323,9 +323,24 @@ HOT_RADAR_LOCAL_KEYWORDS = (
     "上海", "北京", "深圳", "广州", "杭州", "苏州", "南京", "武汉",
     "成都", "重庆", "本地", "景区", "高铁", "机场", "五一",
 )
+NATIONAL_LEADER_BLOCK_KEYWORDS = (
+    # 机构 / 职务 / 泛政治新闻, 用于热榜入口兜底过滤。
+    "国家领导人", "党和国家领导人", "国家主席", "国家副主席",
+    "中共中央总书记", "总书记", "中央军委主席", "中央政治局",
+    "政治局常委", "国务院总理", "国务委员", "全国人大委员长",
+    "全国政协主席", "外交部长", "国防部长", "总统", "副总统",
+    "首相", "元首", "国王", "女王", "克宫", "白宫", "访华",
+    # 高频人名/译名。这个列表不是政治事实源, 只是展示层安全黑名单。
+    "习近平", "习主席", "李强", "赵乐际", "王沪宁", "蔡奇", "丁薛祥",
+    "李希", "韩正", "特朗普", "拜登", "普京", "泽连斯基", "马克龙",
+    "金正恩", "莫迪", "岸田", "石破茂", "尹锡悦", "苏纳克", "斯塔默",
+    "朔尔茨", "冯德莱恩", "Xi Jinping", "Donald Trump", "Joe Biden",
+    "Vladimir Putin", "Volodymyr Zelenskyy", "Emmanuel Macron",
+    "Kim Jong Un", "Narendra Modi",
+)
 HOT_RADAR_SKIP_KEYWORDS = (
-    "政治局", "国防部", "军机", "导弹", "航母", "伊朗", "军事", "军演",
-    "克宫", "普京", "访华",
+    *NATIONAL_LEADER_BLOCK_KEYWORDS,
+    "国防部", "军机", "导弹", "航母", "伊朗", "军事", "军演",
 )
 
 
@@ -370,11 +385,38 @@ HOT_RADAR_FALLBACK_TOPICS: list[dict[str, Any]] = [
 ]
 
 
+def contains_national_leader_reference(*parts: str | None) -> bool:
+    """用户可见热点内容不得展示国家领导人相关信息。
+
+    这个判断用于网站展示层与热点库入口, 不是政治事实源。关键词宁可多挡一点,
+    也不要让热点新闻把国家领导人相关内容带进前端。
+    """
+    text = " ".join(p or "" for p in parts)
+    compact = re.sub(r"\s+", "", text).lower()
+    if not compact:
+        return False
+    for keyword in NATIONAL_LEADER_BLOCK_KEYWORDS:
+        key = re.sub(r"\s+", "", keyword).lower()
+        if key and key in compact:
+            return True
+    return False
+
+
+def is_hot_topic_safe_to_show(
+    title: str | None,
+    match_reason: str | None = None,
+    platform: str | None = None,
+) -> bool:
+    return not contains_national_leader_reference(title, match_reason, platform)
+
+
 def insert_hot_topic(
     *, title: str, platform: str | None = None, heat_score: int = 0,
     match_persona: bool = False, match_reason: str | None = None,
     source_url: str | None = None, fetched_from: str = "manual",
 ) -> int:
+    if not is_hot_topic_safe_to_show(title, match_reason, platform):
+        raise ValueError("hot topic blocked by content safety policy")
     init_db()
     with closing(_conn()) as c:
         cur = c.execute(
@@ -391,7 +433,7 @@ def list_hot_topics(limit: int = 50) -> list[HotTopic]:
     init_db()
     with closing(_conn()) as c:
         rows = c.execute("SELECT * FROM hot_topics ORDER BY heat_score DESC, created_at DESC LIMIT ?", (limit,)).fetchall()
-        return [HotTopic(
+        topics = [HotTopic(
             id=r["id"], created_at=r["created_at"],
             platform=r["platform"], title=r["title"],
             heat_score=r["heat_score"] or 0,
@@ -401,6 +443,10 @@ def list_hot_topics(limit: int = 50) -> list[HotTopic]:
             fetched_from=r["fetched_from"],
             status=r["status"] or "unused",
         ) for r in rows]
+        return [
+            h for h in topics
+            if is_hot_topic_safe_to_show(h.title, h.match_reason, h.platform)
+        ]
 
 
 def _clean_hot_title(raw: str) -> str:
@@ -494,6 +540,8 @@ def _dedupe_raw_topics(topics: list[_RadarRawTopic]) -> list[_RadarRawTopic]:
     seen: set[str] = set()
     out: list[_RadarRawTopic] = []
     for t in topics:
+        if not is_hot_topic_safe_to_show(t.title, platform=t.platform):
+            continue
         if any(k in t.title for k in HOT_RADAR_SKIP_KEYWORDS):
             continue
         key = _topic_key(t.title)
