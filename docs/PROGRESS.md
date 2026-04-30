@@ -9,6 +9,7 @@
 **版本**: v0.8.16-beta-refresh-60s — 「科技与狠活」作战室和独立研发部面板自动刷新从高频改为 60 秒一次, 页面打开仍立即加载一次状态。
 
 ### 当前进行
+- 本轮同步: 迁移手册已补 v1.3,收紧 Mac mini skill 架构边界:`~/skills-source/` 是真实 skill 仓库,`~/Desktop/skills/团队版` 是 symlink 视图;未来迁移只能 rsync 到 `~/skills-source/`,禁止覆盖 Mac mini 的 `~/Desktop/skills/` 三视图层(团队版/自用版/学员版)。
 - 本轮同步: 迁移手册 `docs/design/MAC_MINI_TEAM_BETA_ARCHITECTURE.md` 已补 v1.2「第二台 Mac mini 复用 runbook」,把本次 Tailscale 实测、GitHub/rsync 同步策略、`SKILL_ROOT` symlink、空库验收、运行时依赖 sanity、loopback 服务与 SSH tunnel 浏览器验收写成未来迁移清单。下一台 Mac mini 可直接按 §0.8.9 执行。
 - 本轮完成: 通过 Tailscale 验证 Mac mini `poju-mini`。`tailscale ping poju-mini` 8ms direct; SSH MagicDNS 可登录; 远端 commit 为最新 `a4c16a7/43c4a6e`; skill symlink 视图可读公众号 skill (`SKILL.md` 13994 字符, 5 refs); 空库 17 张表。验证中发现远端后端缺运行时依赖 `jieba` / `python-multipart`, 已补进 `pyproject.toml` / `requirements.txt` / `uv.lock` 并在 Mac mini `.venv` 安装。远端 backend/web 分别以 127.0.0.1:8000/8001 临时运行; 通过 SSH tunnel Playwright 打开 make/hotrewrite 页面, console error=0, 国家领导人相关词命中 0; 直连 Tailscale IP:8000 被拒绝,符合后端仅 loopback 暴露预期。
 - 本轮完成: 国家领导人相关信息不展示红线已落地。`/api/hot-topics` 实时热榜/手动热点/夜班抓热点均走后端过滤; 做视频热点雷达、热点改写今日热点、素材库老热点 tab 继承过滤结果; 已补 SYSTEM-CONSTRAINTS §13 和回归测试。验证: targeted pytest 7 passed; `tests/test_works_api.py tests/test_night_runners.py tests/test_frontend_copy_static.py` -> 33 passed; curl GET 热点命中 0, POST 禁止样例返回 400; Playwright 打开 make/hotrewrite/materials 页面命中 0、console error=0。
