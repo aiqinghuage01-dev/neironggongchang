@@ -158,6 +158,22 @@ bash scripts/start_agent_dispatcher.sh --status
 
 自动派工器只派 `content` / `media` / `qa` / `review`, 不派 `controller`.
 
+## 自动返修主管
+
+如果老板希望长任务自己循环, 总控必须确认返修主管在跑:
+
+```bash
+bash scripts/start_agent_repair_supervisor.sh --status
+```
+
+返修主管会扫描新增的 QA/Review `blocked` 任务, 在不需要老板决策时自动创建下一轮:
+
+```text
+返修开发任务 -> 返修后 QA -> 返修后 Review
+```
+
+总控仍然负责最终判断和合并。返修主管只负责让队列继续转, 不自动合并、不替老板做业务取舍、不处理历史阻塞。
+
 ## 每次交付
 
 - 今日任务拆分.

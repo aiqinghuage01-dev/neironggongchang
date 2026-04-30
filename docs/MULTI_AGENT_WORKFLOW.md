@@ -379,6 +379,39 @@ bash scripts/start_agent_dispatcher.sh --stop
 ~/Desktop/nrg-agent-queue/prompts/
 ```
 
+## 3.6 自动返修主管
+
+派工器只负责把队列任务派出去; QA/Review 如果 `block`, 仍需要有人把阻塞原因转成下一轮返修任务。为避免“打回后停住”, 开启自动返修主管:
+
+```bash
+bash scripts/start_agent_repair_supervisor.sh
+```
+
+它做 3 件事:
+- 每 60 秒扫描共享队列里的**新增** QA/Review 阻塞。
+- 如果阻塞不需要老板做业务选择, 且能追到上一轮 content/media 开发任务, 自动创建: 返修开发任务 + 返修后 QA + 返修后 Review。
+- 如果 worker 技术退出但忘了 `done/block`, 最多自动重置 3 次; 超过后保留阻塞, 等总控接管。
+
+它不会:
+- 处理启动前已经存在的历史阻塞, 避免把旧任务重新翻出来。
+- 自动合并代码或改 `docs/PROGRESS.md`。
+- 在 `--owner-decision` 阻塞上继续烧 credits 或替老板做业务取舍。
+
+常用命令:
+
+```bash
+# 启动后台返修主管
+bash scripts/start_agent_repair_supervisor.sh
+
+# 看主管状态和最近自动返修事件
+bash scripts/start_agent_repair_supervisor.sh --status
+
+# 停止后台返修主管
+bash scripts/start_agent_repair_supervisor.sh --stop
+```
+
+日常 `打开内容工厂工作台.app` 会一起启动监控器、派工器、返修主管和研发部状态面板。
+
 安全边界:
 - worktree 有未提交改动时, 派工器默认跳过该槽位, 不往脏工作区继续塞新活.
 - `data/`、`vendor/`、`.pytest_cache/` 等本地运行产物不算业务改动, 不会阻塞派工.

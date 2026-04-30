@@ -4,11 +4,14 @@
 
 ---
 
-## 当前状态 (2026-04-30 · T-080 研发部作战室刷新降频)
+## 当前状态 (2026-05-01 · 热点改写实时进度返修 + 自动返修主管)
 
-**版本**: v0.8.16-beta-refresh-60s — 「科技与狠活」作战室和独立研发部面板自动刷新从高频改为 60 秒一次, 页面打开仍立即加载一次状态。
+**版本**: v0.8.17-agent-repair-supervisor — 热点改写“逐版可见”仍在返修中; 多 Agent 队列新增自动返修主管, 后续 QA/Review 新阻塞会自动生成返修开发 + 复测 + 复审链路, 不再停在 blocked 等人工转派。
 
 ### 当前进行
+- T-081 热点改写版本级实时输出第一轮开发已完成, 但 T-082 QA 和 T-083 审查均正确 block: 390px 头部裁切、content-dev 落后 main、partial_result 未接展示清洗、终态 partial 语义不清。T-085 已由内容开发自动领取返修, T-086/T-087 已排队做返修后真实浏览器复测和代码复审; T-084“所有写文案功能举一反三方案”已改为依赖 T-086/T-087 通过后再执行。
+- 老板实测补充验收已写入 T-086/T-087/T-084: 热点改写不能只显示“正在写第 N/4 版”, 必须每完成一版立刻在页面展示可读正文; V4 等长尾步骤不能黑箱长卡, 必须有单版耗时/重试/兜底/失败可解释状态。
+- 自动返修主管已启动: `bash scripts/start_agent_repair_supervisor.sh --status` 显示 LaunchAgent running, 初次启动已忽略 16 条历史阻塞, 后续新增 QA/Review `blocked` 且不需要老板决策时, 会自动生成下一轮返修任务、QA 任务和 Review 任务。回归测试 `python3 -m pytest -q tests/test_agent_repair_supervisor.py tests/test_agent_queue.py` -> 7 passed。
 - 本轮同步: 迁移手册已补 v1.3,收紧 Mac mini skill 架构边界:`~/skills-source/` 是真实 skill 仓库,`~/Desktop/skills/团队版` 是 symlink 视图;未来迁移只能 rsync 到 `~/skills-source/`,禁止覆盖 Mac mini 的 `~/Desktop/skills/` 三视图层(团队版/自用版/学员版)。
 - 本轮同步: 迁移手册 `docs/design/MAC_MINI_TEAM_BETA_ARCHITECTURE.md` 已补 v1.2「第二台 Mac mini 复用 runbook」,把本次 Tailscale 实测、GitHub/rsync 同步策略、`SKILL_ROOT` symlink、空库验收、运行时依赖 sanity、loopback 服务与 SSH tunnel 浏览器验收写成未来迁移清单。下一台 Mac mini 可直接按 §0.8.9 执行。
 - 本轮完成: 通过 Tailscale 验证 Mac mini `poju-mini`。`tailscale ping poju-mini` 8ms direct; SSH MagicDNS 可登录; 远端 commit 为最新 `a4c16a7/43c4a6e`; skill symlink 视图可读公众号 skill (`SKILL.md` 13994 字符, 5 refs); 空库 17 张表。验证中发现远端后端缺运行时依赖 `jieba` / `python-multipart`, 已补进 `pyproject.toml` / `requirements.txt` / `uv.lock` 并在 Mac mini `.venv` 安装。远端 backend/web 分别以 127.0.0.1:8000/8001 临时运行; 通过 SSH tunnel Playwright 打开 make/hotrewrite 页面, console error=0, 国家领导人相关词命中 0; 直连 Tailscale IP:8000 被拒绝,符合后端仅 loopback 暴露预期。

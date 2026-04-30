@@ -8,11 +8,11 @@
 
 | 角色 | 状态 | 工作区 | 当前任务 |
 |---|---|---|---|
-| 总控 Agent | 自动派工已接入 | `~/Desktop/neironggongchang` | T-080 刷新降频已验证, 正在提交收口 |
-| 内容开发 Agent | 空闲 | `~/Desktop/nrg-worktrees/content-dev` | 队列 T-075 作战室开发已交付; 等新内容任务 |
+| 总控 Agent | 自动派工 + 自动返修主管已接入 | `~/Desktop/neironggongchang` | 已排 T-085/T-086/T-087/T-084 热点改写实时进度链路, 正在监控 |
+| 内容开发 Agent | 工作中 | `~/Desktop/nrg-worktrees/content-dev` | T-085 热点改写实时输出返修 |
 | 媒体开发 Agent | 空闲 | `~/Desktop/nrg-worktrees/media-dev` | T-047 已完成并合入 main; 等新媒体任务 |
-| QA 测试 Agent | 待领取 | `~/Desktop/nrg-worktrees/qa`, `~/Desktop/nrg-worktrees/qa-1`, `~/Desktop/nrg-worktrees/qa-2` | T-078 作战室响应式复测通过; 等后续 QA |
-| 审查 Agent | 待领取 | `~/Desktop/nrg-worktrees/review` | T-079 作战室最终审查通过; 等后续审查 |
+| QA 测试 Agent | 待领取 | `~/Desktop/nrg-worktrees/qa`, `~/Desktop/nrg-worktrees/qa-1`, `~/Desktop/nrg-worktrees/qa-2` | T-086 等 T-085 完成后复测 |
+| 审查 Agent | 待领取 | `~/Desktop/nrg-worktrees/review` | T-087 等 T-085 完成后复审 |
 
 ---
 
@@ -81,11 +81,20 @@
 | T-073 | 做视频热点排行白底 emoji 火焰视觉修正 | 总控 Agent | done | `web/factory-make-v2.jsx`, `tests/test_make_hot_radar_static.py` | 热点排行头部和卡片热度区均为白底 + emoji `🔥` badge, 无红橙方块; 换一批正常; 静态测试 + Playwright 截图通过 |
 | T-074 | 页面变更强制 QA 证据流程 | 总控 Agent | done | `docs/MULTI_AGENT_WORKFLOW.md`, `docs/agents/ROLE_CONTROLLER.md` | 用户可见页面/文案/布局/交互/状态展示变更必须有 QA 截图、console、真实操作证据; 没有证据不能说页面完成 |
 | T-075 | 做视频 Step 1 按参考图重构 | 总控 Agent | done | `web/factory-make-v2.jsx`, `shortvideo/works.py`, `tests/test_make_hot_radar_static.py`, `tests/test_works_api.py` | 首屏为“把素材丢进来”大输入框 + 工具按钮 + 开始; 热点为全网/行业/本地各 5 的紧凑列表; curl/pytest/Playwright 真填真点通过 |
+| T-081 | 热点改写版本级实时输出 MVP | 内容开发 Agent | done(不合入) | `backend/services/hotrewrite_pipeline.py`, `backend/services/tasks.py`, `web/factory-hotrewrite-v2.jsx`, `web/factory-task.jsx` | 开发交付后被 T-082/T-083 block, 不能合入 |
+| T-082 | T-081 热点改写实时输出真实浏览器 QA | QA 测试 Agent | blocked | 桌面 + 390px 浏览器复测 | 不通过: 390px 顶部标题/步骤条裁切 |
+| T-083 | T-081 热点改写实时输出代码审查 | 审查 Agent | blocked | 只读 T-081 diff/report | 不通过: 分支落后 main 70 commit, partial_result 绕过热点清洗防线 |
+| T-084 | 写文案功能实时进度举一反三方案 | 内容开发 Agent | queued | 所有写文案功能清单和推广方案 | 等 T-086/T-087 通过后再执行 |
+| T-085 | 返修 T-081 热点改写实时输出阻塞项 | 内容开发 Agent | claimed | 热点改写 pipeline/tasks/frontend/tests | 需实现已完成版本即时展示、partial_result 清洗、慢 V4 可解释、390px header 正常 |
+| T-086 | T-085 热点改写实时输出返修后真实浏览器复测 | QA 测试 Agent | queued | desktop + 390px + mock/no-credit | V1 running 中已可读; V4 不黑箱长卡; final 4 版可见 |
+| T-087 | T-085 热点改写实时输出返修代码复审 | 审查 Agent | queued | 只读 T-085 | 无 P0/P1 才可通过 |
 
 ---
 
 ## 最近证据
 
+- 自动返修主管已启动: `bash scripts/start_agent_repair_supervisor.sh --status` -> LaunchAgent running; 初始化忽略历史阻塞 16 条, 后续新增 QA/Review blocked 会自动创建返修开发 + QA + Review 链路。测试 `python3 -m pytest -q tests/test_agent_repair_supervisor.py tests/test_agent_queue.py` -> 7 passed。报告 `docs/agent-handoff/CONTROLLER_T085_REPAIR_SUPERVISOR_20260501.md`。
+- 热点改写实时输出返修链: T-085 已领取, T-086/T-087 已排队, T-084 已改为依赖返修复测复审通过。老板实测要求已写入验收: 每完成一版必须即时可读, V4 慢步骤必须可解释或兜底。
 - T-080 研发部作战室刷新降频: beta 页和独立 `:8765` 面板均改为 60 秒刷新; 已重启独立面板服务。Playwright 计数显示 beta 页 4.2 秒内 `:8765/api/status` 只请求 1 次, 独立面板 4.2 秒内 `/api/status` 只请求 1 次, console/pageerror=0; 截图 `/tmp/_ui_shots/t080_beta_refresh_60s.png`, `/tmp/_ui_shots/t080_agent_dashboard_refresh_60s.png`; 静态测试 8 passed。报告 `docs/agent-handoff/CONTROLLER_T080_BETA_REFRESH_INTERVAL_20260430.md`。
 - 队列 T-075 科技与狠活作战室: 内容开发完成升级; T-076 QA 首轮 block 窄屏不可读, T-077 审查 block 静态守则/脱敏不足; 总控修复后 T-078 QA 通过、T-079 审查无 P0/P1。Playwright 桌面截图 `/tmp/_ui_shots/t075_beta_warroom.png` 已读, 日志摘要可点且敏感词命中 0; 390x900 截图 `/tmp/_ui_shots/t075_beta_mobile_final.png` 已读, `hasHorizontalScroll=false`, `offRightCount=0`, console/pageerror/requestfailed/http error 均 0。报告 `docs/agent-handoff/CONTROLLER_T075_BETA_WARROOM_FINAL_20260430.md`。
 - T-075 做视频首屏重构: Playwright 截图 `/tmp/nrg_make_t074/t074-make-full-tall-final.png` 已读, 与参考图一致为大输入框 + 紧凑热点列表; 真填文案后“开始”可点, 点击“行业”和“换一批”正常; `/api/hot-topics?limit=30` 返回 15 条且三类各 5; console error=0。
