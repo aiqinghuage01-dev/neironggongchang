@@ -6,14 +6,16 @@
   - 设了:  所有写方法 (POST/PUT/PATCH/DELETE) 必须带 X-Admin-Token,
            不带或不对 → 401.
 
-只读路径白名单 (永远不要 token):
-  - 所有 GET/HEAD/OPTIONS
-  - /api/health
-  - /docs /openapi.json /redoc
-  - /media/*  (Phase 1 已收口成只读白名单)
-  - /skills/dhv5/* (现 StaticFiles, 只读)
+读方法 (GET/HEAD/OPTIONS): 永远不要 token.
+  - GET 是天然只读
+  - HEAD 是 GET 的 headers-only 子集
+  - OPTIONS 是浏览器 CORS preflight, SOP 不让带自定义 header
 
-OPTIONS preflight 不要 token (浏览器 SOP 不让 preflight 带自定义头).
+写方法 (POST/PUT/PATCH/DELETE): 默认都要 token. 没有路径白名单豁免.
+  Phase 3 review (P3-5): 历史 UNPROTECTED_PATH_PREFIXES 对所有方法豁免,
+  当前没写路由所以不是现时漏洞, 但 future footgun: 谁未来在 /media 或
+  /skills 下加 POST 就天然绕过保护. 现在收成 "读方法天然不需要, 写方法
+  默认都要", 不留路径口子.
 """
 from __future__ import annotations
 
@@ -29,15 +31,8 @@ ADMIN_TOKEN_ENV = "ADMIN_TOKEN"
 # 写方法集合 — 这些方法默认都需要 token (启用时)
 WRITE_METHODS: frozenset[str] = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 
-# 始终放过的路径前缀, 不论方法. 前缀比较, 注意不要太宽 (避免误放).
-UNPROTECTED_PATH_PREFIXES: tuple[str, ...] = (
-    "/api/health",       # 健康探针
-    "/docs",             # FastAPI Swagger UI
-    "/openapi.json",     # FastAPI schema
-    "/redoc",            # FastAPI ReDoc
-    "/media/",           # Phase 1 收口的白名单只读
-    "/skills/",          # 历史 mount, 只读
-)
+# 读方法集合 — 永远不要 token
+READ_METHODS: frozenset[str] = frozenset({"GET", "HEAD", "OPTIONS"})
 
 
 def get_admin_token() -> str | None:
@@ -49,23 +44,21 @@ def get_admin_token() -> str | None:
     return raw or None
 
 
-def is_unprotected_path(path: str) -> bool:
-    return any(path.startswith(p) for p in UNPROTECTED_PATH_PREFIXES)
-
-
 def request_needs_admin(method: str, path: str) -> bool:
     """该 (method, path) 是否需要 ADMIN_TOKEN 校验.
 
-    - 只读方法 (GET/HEAD/OPTIONS): 永远 False
-    - 路径在白名单 UNPROTECTED_PATH_PREFIXES: False
-    - 其余写方法: True
+    Phase 3 review (P3-5):
+      - 读方法 (GET/HEAD/OPTIONS): 永远 False (天然只读, 不论路径)
+      - 写方法 (POST/PUT/PATCH/DELETE): 永远 True (不论路径)
+      - 其它方法 (TRACE/CONNECT 等理论上不会到这): False (兜底)
+
+    path 参数保留是为了 logging / 未来加 explicit (method, path) 白名单
+    (如真要把某个 GET-like POST endpoint 公开, 在这里加显式判断).
     """
     m = (method or "").upper()
-    if m not in WRITE_METHODS:
-        return False
-    if is_unprotected_path(path or ""):
-        return False
-    return True
+    if m in WRITE_METHODS:
+        return True
+    return False
 
 
 def verify_admin_token(provided: str | None, configured: str | None) -> bool:

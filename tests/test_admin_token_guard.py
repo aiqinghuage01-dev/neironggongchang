@@ -57,14 +57,31 @@ def test_request_needs_admin_post_method():
     assert request_needs_admin("DELETE", "/api/works/1") is True
 
 
-def test_request_needs_admin_unprotected_paths():
+def test_request_needs_admin_read_methods_always_unprotected():
+    """Phase 3 review (P3-5): GET/HEAD/OPTIONS 无视路径都 False (天然只读)."""
     from backend.services.admin_auth import request_needs_admin
-    # /media/ 是只读 (Phase 1 收口), 写也放过 (实际不存在写路由)
-    assert request_needs_admin("POST", "/media/videos/x.mp4") is False
-    assert request_needs_admin("DELETE", "/api/health") is False
-    assert request_needs_admin("POST", "/docs") is False
-    assert request_needs_admin("POST", "/openapi.json") is False
-    assert request_needs_admin("POST", "/skills/dhv5/outputs/x") is False
+    for path in ("/api/health", "/api/works", "/media/videos/x.mp4",
+                 "/docs", "/openapi.json", "/skills/dhv5/outputs/x",
+                 "/api/settings", "/anything/else"):
+        assert request_needs_admin("GET", path) is False, f"GET {path}"
+        assert request_needs_admin("HEAD", path) is False, f"HEAD {path}"
+        assert request_needs_admin("OPTIONS", path) is False, f"OPTIONS {path}"
+
+
+def test_request_needs_admin_write_methods_always_protected():
+    """Phase 3 review (P3-5): POST/PUT/PATCH/DELETE 无视路径都 True.
+
+    历史 UNPROTECTED_PATH_PREFIXES 让 /media /skills /docs 下的 POST 也绕过 —
+    当前没写路由, 但 future footgun. 现在收死: 写方法默认全要 token.
+    """
+    from backend.services.admin_auth import request_needs_admin
+    for path in ("/media/videos/x.mp4", "/skills/dhv5/outputs/x",
+                 "/docs", "/openapi.json", "/api/health",
+                 "/api/settings", "/api/works/123"):
+        assert request_needs_admin("POST", path) is True, f"POST {path}"
+        assert request_needs_admin("PUT", path) is True, f"PUT {path}"
+        assert request_needs_admin("PATCH", path) is True, f"PATCH {path}"
+        assert request_needs_admin("DELETE", path) is True, f"DELETE {path}"
 
 
 def test_request_needs_admin_lowercase_method():
@@ -166,15 +183,20 @@ def test_e2e_token_set_get_no_token_passes(monkeypatch):
     assert r.status_code == 200
 
 
-def test_e2e_token_set_health_post_passes(monkeypatch):
-    """白名单 /api/health 即使 POST 也不需要 token (虽然现有 health 是 GET, 这里测白名单本身)."""
+def test_e2e_token_set_health_post_now_requires_token(monkeypatch):
+    """Phase 3 review (P3-5): POST /api/health 不再豁免, 401.
+
+    历史: UNPROTECTED_PATH_PREFIXES 让 /api/health 任何方法都不要 token.
+    现在收: GET /api/health 不要 token (test_e2e_token_set_get_no_token_passes
+    覆盖), POST 默认要 (这里覆盖). 防 future footgun.
+    """
     monkeypatch.setenv("ADMIN_TOKEN", "test-secret-token")
     monkeypatch.delenv("APP_ENV", raising=False)
     app = _reload_app(monkeypatch)
     client = TestClient(app)
     r = client.post("/api/health")
-    # 即使 endpoint 不存在也不应该是 401, 应该是 405/404
-    assert r.status_code != 401
+    assert r.status_code == 401
+    assert r.json().get("detail") == "admin token required"
 
 
 def test_e2e_token_set_delete_works_no_token_401(monkeypatch):

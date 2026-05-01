@@ -258,23 +258,36 @@ def test_scan_hard_cap_constant_is_50000():
     assert MATERIALS_SCAN_HARD_MAX_FILES == 50_000
 
 
-def test_scan_root_caps_max_files(monkeypatch, tmp_path):
-    """即使 max_files 传 100w 也只扫 hard cap (50k)."""
+@pytest.fixture
+def fake_home_with_downloads(monkeypatch, tmp_path):
+    """fake home + ~/Downloads 子目录, 让 validate_materials_root(~/Downloads) 通过."""
+    fake_home = tmp_path / "fake_home"
+    downloads = fake_home / "Downloads"
+    downloads.mkdir(parents=True)
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: fake_home))
+    return downloads
+
+
+def test_scan_root_caps_max_files(monkeypatch, fake_home_with_downloads):
+    """即使 max_files 传 100w 也只扫 hard cap (50k).
+
+    P1-2 后 scan_root 会调 validate_materials_root, 所以 root 必须在白名单内.
+    用 fake_home_with_downloads 让 ~/Downloads 合法.
+    """
     from backend.services.path_security import MATERIALS_SCAN_HARD_MAX_FILES
     from backend.services import materials_service as ms
 
+    root = fake_home_with_downloads
     # mock _walk_root 返一个能产 200k 文件的 generator (不真建)
-    fake_files = [tmp_path / f"file_{i}.jpg" for i in range(200_000)]
+    fake_files = [root / f"file_{i}.jpg" for i in range(200_000)]
 
-    def fake_walk(root):
+    def fake_walk(_root):
         yield from fake_files
 
     monkeypatch.setattr(ms, "_walk_root", fake_walk)
     monkeypatch.setattr(ms, "_ensure_schema", lambda: None)
-    monkeypatch.setattr(ms, "get_materials_root", lambda: tmp_path)
-    # mock _upsert_asset 不真做 (避 DB)
+    # 别 mock get_materials_root, 让它真走 settings → fallback ~/Downloads
     monkeypatch.setattr(ms, "_upsert_asset", lambda con, p, root: ("fake-id", False))
-    # mock get_connection 返个能 close 的 fake
     class FakeCon:
         def commit(self): pass
         def close(self): pass
@@ -283,23 +296,23 @@ def test_scan_root_caps_max_files(monkeypatch, tmp_path):
     # 关键: 传 1_000_000 也只能扫 50_000
     result = ms.scan_root(max_files=1_000_000)
     assert result["scanned"] == MATERIALS_SCAN_HARD_MAX_FILES, (
-        f"max_files=1M 应被 cap 到 {MATERIALS_SCAN_HARD_MAX_FILES}, 实际 {result['scanned']}"
+        f"max_files=1M 应被 cap 到 {MATERIALS_SCAN_HARD_MAX_FILES}, 实际 {result}"
     )
 
 
-def test_scan_root_caps_when_no_max_files(monkeypatch, tmp_path):
+def test_scan_root_caps_when_no_max_files(monkeypatch, fake_home_with_downloads):
     """max_files=None 不应"无上限"扫到死, 也用 hard cap."""
     from backend.services.path_security import MATERIALS_SCAN_HARD_MAX_FILES
     from backend.services import materials_service as ms
 
-    fake_files = [tmp_path / f"file_{i}.jpg" for i in range(200_000)]
+    root = fake_home_with_downloads
+    fake_files = [root / f"file_{i}.jpg" for i in range(200_000)]
 
-    def fake_walk(root):
+    def fake_walk(_root):
         yield from fake_files
 
     monkeypatch.setattr(ms, "_walk_root", fake_walk)
     monkeypatch.setattr(ms, "_ensure_schema", lambda: None)
-    monkeypatch.setattr(ms, "get_materials_root", lambda: tmp_path)
     monkeypatch.setattr(ms, "_upsert_asset", lambda con, p, root: ("fake-id", False))
     class FakeCon:
         def commit(self): pass
@@ -309,5 +322,5 @@ def test_scan_root_caps_when_no_max_files(monkeypatch, tmp_path):
     result = ms.scan_root(max_files=None)
     assert result["scanned"] == MATERIALS_SCAN_HARD_MAX_FILES, (
         f"max_files=None 也必须被 cap 到 {MATERIALS_SCAN_HARD_MAX_FILES}, "
-        f"实际扫了 {result['scanned']}"
+        f"实际 {result}"
     )

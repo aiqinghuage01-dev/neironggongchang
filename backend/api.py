@@ -119,18 +119,15 @@ app = FastAPI(
     ),
     openapi_tags=TAGS_METADATA,
 )
-# Phase 2 (security): 不再 allow_origins=["*"].
-# dev 默认放本机前端 (localhost:8001 + 127.0.0.1:8001);
-# prod 必须设 ALLOWED_ORIGIN, 不允许 "*". 详 backend/services/cors_config.py.
-from backend.services.cors_config import compute_allowed_origins as _compute_allowed_origins
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=_compute_allowed_origins(),
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# Phase 2/3 review (P2-3): middleware add 顺序决定 onion 层级.
+# Starlette 行为: 最后 add 的 middleware 是最外层 (request 最先碰到, response
+# 最后离开). 所以 CORSMiddleware 必须最后 add, 才能包住所有自定义 middleware
+# 早返的 response (含 admin 401), 让它们也带 ACAO header.
+#
+# 顺序 (代码自上而下 = add 顺序 = 内层到外层):
+#   1. _admin_token_guard  内层 — 401 直接 return
+#   2. _guest_mode_middleware
+#   3. CORSMiddleware       外层 — 包所有 response (含 401) 的 ACAO
 
 
 # D-070: 访客模式中间件 — 读 X-Guest-Mode header → 写 contextvar.
@@ -163,6 +160,18 @@ async def _admin_token_guard(request, call_next):
         if not _admin_auth.verify_admin_token(provided, configured):
             return JSONResponse({"detail": "admin token required"}, status_code=401)
     return await call_next(request)
+
+
+# CORSMiddleware 最后 add → 最外层. 详上方注释.
+from backend.services.cors_config import compute_allowed_origins as _compute_allowed_origins
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_compute_allowed_origins(),
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # 静态资源 — 让前端拿到本地生成的图/音频/视频.
 # Phase 1 (security): 不再 mount 整个 DATA_DIR.
@@ -465,13 +474,14 @@ async def voice_upload(file: UploadFile = File(...)):
     """上传一个音频文件作为参考样本,供 CosyVoice 克隆使用。
 
     Phase 7 (security): ≤50MB + 音频扩展名白名单 (.wav/.mp3/.m4a/.ogg/.flac/.opus/.webm).
+    Phase 7 review (P2-4): bounded read 防 oversized body 进内存.
     """
     from backend.services.path_security import (
         VOICE_UPLOAD_ALLOWED_EXTS, VOICE_UPLOAD_MAX_BYTES,
-        PathBoundaryError, check_upload_size_and_ext,
+        PathBoundaryError, bounded_upload_read, check_upload_size_and_ext,
     )
-    data = await file.read()
     try:
+        data = await bounded_upload_read(file, VOICE_UPLOAD_MAX_BYTES)
         ext = check_upload_size_and_ext(
             data, file.filename, VOICE_UPLOAD_MAX_BYTES, VOICE_UPLOAD_ALLOWED_EXTS,
         )
@@ -1269,15 +1279,20 @@ async def dreamina_upload_ref(file: UploadFile = File(...)):
     """单张图 → 落盘 data/dreamina/refs/ → 返回本地绝对路径.
     即梦 CLI 的 multimodal2video / image2video 都要本地路径.
     ≤4MB, jpg/png/webp.
+    Phase 7 review (P2-4): bounded read 防 oversized 进内存.
     """
-    data = await file.read()
-    if not data:
-        raise HTTPException(400, "空文件")
-    if len(data) > 4 * 1024 * 1024:
-        raise HTTPException(400, f"图太大 {len(data)//1024} KB · 上限 4096 KB")
-    ext = (Path(file.filename or "ref.jpg").suffix or ".jpg").lower()
-    if ext not in (".jpg", ".jpeg", ".png", ".webp"):
-        raise HTTPException(400, f"只支持 jpg/png/webp · 收到 {ext}")
+    from backend.services.path_security import (
+        DREAMINA_REF_ALLOWED_EXTS, DREAMINA_REF_MAX_BYTES,
+        PathBoundaryError, bounded_upload_read, check_upload_size_and_ext,
+    )
+    try:
+        data = await bounded_upload_read(file, DREAMINA_REF_MAX_BYTES)
+        ext = check_upload_size_and_ext(
+            data, file.filename or "ref.jpg",
+            DREAMINA_REF_MAX_BYTES, DREAMINA_REF_ALLOWED_EXTS,
+        )
+    except PathBoundaryError as e:
+        raise HTTPException(400, str(e))
     fname = f"{int(time.time()*1000)}-{uuid.uuid4().hex[:8]}{ext}"
     fpath = (DREAMINA_REFS_DIR / fname).resolve()
     fpath.write_bytes(data)
@@ -2153,22 +2168,33 @@ def material_lib_asset(asset_id: str):
 
 @app.get("/api/material-lib/thumb/{asset_id}", tags=["档案部"], summary="(D-087) 缩略图 (静态 jpg)")
 def material_lib_thumb(asset_id: str):
+    """Phase 10 review (P1-1): thumb 路径也走 is_safe_material_file 校验,
+    DB 里 thumb_path 仍可能是历史污染."""
     from backend.services import materials_service as ms
+    from backend.services.path_security import is_safe_material_file
     p = ms.thumb_abs_path(asset_id)
     if not p:
         raise HTTPException(status_code=404, detail="缩略图不存在")
-    return FileResponse(str(p), media_type="image/jpeg")
+    safe = is_safe_material_file(str(p), DATA_DIR)
+    if safe is None:
+        raise HTTPException(status_code=404, detail="缩略图越界")
+    return FileResponse(str(safe), media_type="image/jpeg")
 
 
 @app.get("/api/material-lib/file/{asset_id}", tags=["档案部"], summary="(D-087) 素材原文件 (L4 video src)")
 def material_lib_file(asset_id: str):
+    """Phase 10 review (P1-1): abs_path 来自 DB, 可能是历史污染 row
+    (Phase 10 校验加入前在 materials_root='/' 时入库的 /etc/passwd 等).
+    runtime 用 is_safe_material_file 二次校, 不在 DATA_DIR 或 materials_root
+    白名单内 → 404."""
     from backend.services import materials_service as ms
+    from backend.services.path_security import is_safe_material_file
     a = ms.get_asset(asset_id)
     if not a:
         raise HTTPException(status_code=404, detail="素材不存在")
-    p = Path(a["abs_path"])
-    if not p.exists():
-        raise HTTPException(status_code=404, detail="原文件不存在 (可能已删/移走)")
+    p = is_safe_material_file(a["abs_path"], DATA_DIR)
+    if p is None:
+        raise HTTPException(status_code=404, detail="原文件不存在 (可能已删/移走/越界)")
     media = "video/mp4" if a["ext"] in (".mp4", ".mov", ".m4v") else "image/jpeg"
     return FileResponse(str(p), media_type=media)
 
@@ -2996,16 +3022,20 @@ async def wechat_avatar_upload(file: UploadFile = File(...)):
     ~/.wechat-article-config 的 author_avatar_path 字段.
 
     单张 ≤1MB (微信 uploadimg 上限). 立即生效, 下次 push 自动用.
+    Phase 7 review (P2-4): bounded read 防 oversized 进内存.
     """
-    data = await file.read()
-    if len(data) > 1024 * 1024:
-        raise HTTPException(400, f"图太大 {len(data)//1024} KB · 微信 uploadimg 上限 1024 KB")
-    if not data:
-        raise HTTPException(400, "空文件")
-
-    ext = (Path(file.filename or "avatar.jpg").suffix or ".jpg").lower()
-    if ext not in {".jpg", ".jpeg", ".png"}:
-        raise HTTPException(400, f"只支持 jpg/png · 收到 {ext}")
+    from backend.services.path_security import (
+        PathBoundaryError, bounded_upload_read, check_upload_size_and_ext,
+    )
+    AVATAR_MAX = 1024 * 1024
+    AVATAR_EXTS = frozenset({".jpg", ".jpeg", ".png"})
+    try:
+        data = await bounded_upload_read(file, AVATAR_MAX)
+        ext = check_upload_size_and_ext(
+            data, file.filename or "avatar.jpg", AVATAR_MAX, AVATAR_EXTS,
+        )
+    except PathBoundaryError as e:
+        raise HTTPException(400, str(e))
 
     WECHAT_AVATAR_DIR.mkdir(parents=True, exist_ok=True)
     # 用固定名 avatar.<ext>, 覆盖式存储 (不要囤旧版头像)
@@ -3724,16 +3754,21 @@ def image_batch_generate(req: ImageBatchGenReq):
 async def image_upload_ref(file: UploadFile = File(...)):
     """单张图 → 转 base64 data URL. apimart 接 data URL, 不需要本地落盘.
     单张 ≤4MB (apimart 大概率接收, 大了会拒). jpg/png/webp.
+    Phase 7 review (P2-4): bounded read 防 oversized 进内存.
     """
-    data = await file.read()
-    if not data:
-        raise HTTPException(400, "空文件")
-    if len(data) > 4 * 1024 * 1024:
-        raise HTTPException(400, f"图太大 {len(data)//1024} KB · 上限 4096 KB")
-    ext = (Path(file.filename or "ref.jpg").suffix or ".jpg").lower()
+    from backend.services.path_security import (
+        DREAMINA_REF_ALLOWED_EXTS, DREAMINA_REF_MAX_BYTES,
+        PathBoundaryError, bounded_upload_read, check_upload_size_and_ext,
+    )
+    try:
+        data = await bounded_upload_read(file, DREAMINA_REF_MAX_BYTES)
+        ext = check_upload_size_and_ext(
+            data, file.filename or "ref.jpg",
+            DREAMINA_REF_MAX_BYTES, DREAMINA_REF_ALLOWED_EXTS,
+        )
+    except PathBoundaryError as e:
+        raise HTTPException(400, str(e))
     mime_map = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp"}
-    if ext not in mime_map:
-        raise HTTPException(400, f"只支持 jpg/png/webp · 收到 {ext}")
     import base64 as _b64
     b64 = _b64.b64encode(data).decode("ascii")
     data_url = f"data:{mime_map[ext]};base64,{b64}"

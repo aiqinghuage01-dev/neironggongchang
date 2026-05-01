@@ -286,16 +286,49 @@ def _ensure_schema() -> None:
 def get_materials_root() -> Path:
     """从 settings 读 materials_root, 默认 ~/Downloads/.
 
-    未来用户切到 ~/Desktop/清华哥素材库/ 只需改 settings 一行, 代码不动.
+    Phase 10 review (P1-2): 旧 settings.json 可能在 Phase 10 校验加入前已写入
+    "/" 或其他不安全路径. 这里读后必须再过 validate_materials_root,
+    不通过 → 回退默认 ~/Downloads (fail-closed, 不静默扫整盘).
+
+    回退逻辑:
+      - settings 里的值通过 validate → 用它
+      - settings 里的值不通过 validate → 用默认 ~/Downloads, 调用方 (scan_root)
+        看到默认路径不会扫 evil 目录, 但仍能正常工作
+      - 默认 ~/Downloads 也不通过 (极端: 沙箱) → 抛 RuntimeError, 让 caller
+        显式知道环境异常, 不要继续
     """
+    from backend.services.path_security import (
+        PathBoundaryError, validate_materials_root,
+    )
+
+    raw_setting: str | None = None
     try:
         from backend.services import settings as s
         v = (s.get_all() or {}).get("materials_root")
         if v:
-            return Path(v).expanduser()
+            raw_setting = str(v)
     except Exception:
         pass
-    return Path.home() / "Downloads"
+
+    if raw_setting:
+        try:
+            return validate_materials_root(raw_setting)
+        except PathBoundaryError:
+            log.warning(
+                "materials_root in settings.json failed validation (%r), "
+                "falling back to ~/Downloads",
+                raw_setting,
+            )
+
+    # 回退默认
+    fallback = str(Path.home() / "Downloads")
+    try:
+        return validate_materials_root(fallback)
+    except PathBoundaryError as e:
+        # 极端: ~/Downloads 都不存在 (沙箱环境), 让 caller 显式失败
+        raise RuntimeError(
+            f"materials_root 默认 ~/Downloads 都不可用: {e}"
+        )
 
 
 # ─── ID + content_hash + thumbnail ────────────────────
@@ -541,10 +574,23 @@ def scan_root(
 
     on_progress(idx, total, current_path): 进度回调 (10 文件一次, 给 tasks.run_async 推进度).
     """
-    from backend.services.path_security import MATERIALS_SCAN_HARD_MAX_FILES
+    from backend.services.path_security import (
+        MATERIALS_SCAN_HARD_MAX_FILES, PathBoundaryError, validate_materials_root,
+    )
 
     _ensure_schema()
-    root = get_materials_root()
+    # Phase 10 review (P1-2): get_materials_root 已 fail-closed 回退默认, 但
+    # 这里再 double-check 一次. 如果连默认都越界 (理论上 get_materials_root 已
+    # 抛 RuntimeError), 这里 catch 后再次 fail-closed 不扫.
+    try:
+        root = get_materials_root()
+        validate_materials_root(str(root))  # 二次校 (防 race condition)
+    except (PathBoundaryError, RuntimeError) as e:
+        return {
+            "error": f"素材根目录不在白名单, 拒绝扫描: {e}",
+            "scanned": 0, "added": 0, "errors": 0, "skipped": 0,
+            "root": "(rejected)",
+        }
     if not root.exists():
         return {"error": f"素材根目录不存在: {root}", "scanned": 0, "added": 0, "errors": 0, "root": str(root)}
 

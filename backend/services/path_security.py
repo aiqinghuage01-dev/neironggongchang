@@ -191,13 +191,74 @@ def validate_materials_root(raw: str | None) -> Path:
     return resolved
 
 
+def is_safe_material_file(raw: str | None, data_dir: Path) -> Path | None:
+    """Phase 10 review (P1-1): material_lib/file FileResponse 之前的 runtime 校验.
+
+    DB 里 material_assets.abs_path 可能是历史污染的 row (在 materials_root='/'
+    时入库的 /etc/passwd 之类). 必须 runtime check 路径仍合法.
+
+    允许位于以下任一:
+      1. DATA_DIR 子树 (thumb 等本地产物)
+      2. home/<MATERIALS_ROOT_ALLOWED_PREFIXES_REL> 任一 (素材库白名单根)
+
+    返回 None 表示拒绝, 调用方应 404. resolve 后必须存在 + 是文件.
+    """
+    if not raw:
+        return None
+    s = str(raw).strip()
+    if not s or "\x00" in s:
+        return None
+
+    p = Path(s).expanduser()
+    try:
+        resolved = p.resolve()
+    except (OSError, RuntimeError):
+        return None
+    if not resolved.exists() or not resolved.is_file():
+        return None
+
+    # 检查 1: DATA_DIR 子树 (thumb/material_thumbs 等)
+    try:
+        data_root = Path(data_dir).expanduser().resolve()
+        try:
+            resolved.relative_to(data_root)
+            return resolved
+        except ValueError:
+            pass
+    except (OSError, RuntimeError):
+        pass
+
+    # 检查 2: home 下任何 materials_root 白名单 prefix 子树
+    try:
+        home = Path.home().resolve()
+    except (OSError, RuntimeError):
+        return None
+    for rel in MATERIALS_ROOT_ALLOWED_PREFIXES_REL:
+        try:
+            ar = (home / rel).resolve()
+        except (OSError, RuntimeError):
+            continue
+        try:
+            resolved.relative_to(ar)
+            return resolved
+        except ValueError:
+            continue
+
+    return None
+
+
 def check_upload_size_and_ext(
     data: bytes,
     filename: str | None,
     max_bytes: int,
     allowed_exts: frozenset[str],
 ) -> str:
-    """上传 multipart 校验. 返回规范小写扩展名 (含点). 不通过 raise PathBoundaryError."""
+    """上传 multipart 校验 (data 已读完). 返回规范小写扩展名 (含点).
+
+    不通过 raise PathBoundaryError. 注意: 这个函数假设 data 已经全 read 了,
+    无法防 oversized body 进内存. Phase 7 review (P2-4) 后请改用
+    bounded_upload_read + 这个函数的组合.
+    """
     if not data:
         raise PathBoundaryError("空文件")
     if len(data) > max_bytes:
@@ -210,3 +271,29 @@ def check_upload_size_and_ext(
             f"扩展名 {ext or '(空)'} 不在白名单, 允许: {sorted(allowed_exts)}"
         )
     return ext
+
+
+async def bounded_upload_read(file, max_bytes: int) -> bytes:
+    """Phase 7 review (P2-4): 流式读 UploadFile, 累计超 max_bytes 立即拒.
+
+    防 oversized body 进内存 — 之前 await file.read() 一次性读全, 100MB 上传
+    会先 buffer 100MB 到 ram 才能拒.
+
+    现在按 64KB chunk 累加, 累计 > max_bytes+1 立即 raise PathBoundaryError.
+    多读 1 byte 是为了能区分 "正好 max_bytes" (通过) 与 "超出" (拒).
+    """
+    chunk_size = 64 * 1024
+    buf = bytearray()
+    limit = max_bytes + 1
+    while True:
+        chunk = await file.read(chunk_size)
+        if not chunk:
+            break
+        buf.extend(chunk)
+        if len(buf) >= limit:
+            raise PathBoundaryError(
+                f"文件太大: 已读 {len(buf)//1024} KB 仍未结束 · 上限 {max_bytes//1024} KB"
+            )
+    if not buf:
+        raise PathBoundaryError("空文件")
+    return bytes(buf)
