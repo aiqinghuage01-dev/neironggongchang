@@ -462,21 +462,43 @@ def speakers():
 
 @app.post("/api/voice/upload", tags=["短视频"], summary="上传音频参考样本 (供克隆用)")
 async def voice_upload(file: UploadFile = File(...)):
-    """上传一个音频文件作为参考样本,供 CosyVoice 克隆使用。"""
-    ext = Path(file.filename or "sample.wav").suffix or ".wav"
-    out = UPLOAD_DIR / f"upload_{int(time.time())}_{uuid.uuid4().hex[:6]}{ext}"
+    """上传一个音频文件作为参考样本,供 CosyVoice 克隆使用。
+
+    Phase 7 (security): ≤50MB + 音频扩展名白名单 (.wav/.mp3/.m4a/.ogg/.flac/.opus/.webm).
+    """
+    from backend.services.path_security import (
+        VOICE_UPLOAD_ALLOWED_EXTS, VOICE_UPLOAD_MAX_BYTES,
+        PathBoundaryError, check_upload_size_and_ext,
+    )
     data = await file.read()
+    try:
+        ext = check_upload_size_and_ext(
+            data, file.filename, VOICE_UPLOAD_MAX_BYTES, VOICE_UPLOAD_ALLOWED_EXTS,
+        )
+    except PathBoundaryError as e:
+        raise HTTPException(400, str(e))
+    out = UPLOAD_DIR / f"upload_{int(time.time())}_{uuid.uuid4().hex[:6]}{ext}"
     out.write_bytes(data)
     return {"path": str(out), "media_url": media_url(out), "size": len(data), "name": file.filename}
 
 
 @app.post("/api/voice/clone", tags=["短视频"], summary="CosyVoice 克隆 (基于参考样本生成 speaker)")
 def voice_clone(req: VoiceCloneReq):
+    """Phase 7 (security): ref_path 必须落在 data/audio/uploads/ 或 data/audio/samples/ 子树.
+    防 raw ref_path = /etc/passwd / ~/.env / 任意路径被 CosyVoice 读上传."""
+    from backend.services.path_security import (
+        VOICE_CLONE_REF_ROOTS_REL, PathBoundaryError, safe_local_path,
+    )
+    try:
+        ref = safe_local_path(req.ref_path, VOICE_CLONE_REF_ROOTS_REL, DATA_DIR)
+    except PathBoundaryError as e:
+        raise HTTPException(400, f"ref_path 拒绝: {e}")
+
     tts = CosyVoiceLocal()
     if not tts.is_ready():
         raise HTTPException(503, "CosyVoice sidecar 未就绪,先 bash scripts/start_cosyvoice.sh")
     try:
-        res = tts.clone(req.text, reference_wav=req.ref_path, reference_text=req.reference_text)
+        res = tts.clone(req.text, reference_wav=str(ref), reference_text=req.reference_text)
         return {
             "audio_path": str(res.audio_path),
             "media_url": media_url(res.audio_path),
@@ -1299,10 +1321,21 @@ def dreamina_batch_video(req: DreaminaBatchVideoReq):
     prompts = [p.strip() for p in req.prompts if p and p.strip()]
     if not prompts:
         raise HTTPException(400, "prompts 全为空")
-    refs = [p for p in (req.ref_paths or []) if p]
-    for p in refs:
-        if not Path(p).exists():
-            raise HTTPException(400, f"参考图不存在: {p}")
+    # Phase 7 (security): ref_paths 不能是任意本机路径, 必须落在 DATA_DIR 白名单
+    # 子目录 (dreamina/refs / image-gen / wechat-images / ...). 防攻击者塞
+    # /Users/.../.ssh/id_rsa 等被即梦 CLI 上传到字节服务器.
+    from backend.services.path_security import (
+        DREAMINA_REF_ROOTS_REL, PathBoundaryError, safe_local_path,
+    )
+    refs: list[str] = []
+    for p in (req.ref_paths or []):
+        if not p:
+            continue
+        try:
+            resolved = safe_local_path(p, DREAMINA_REF_ROOTS_REL, DATA_DIR)
+        except PathBoundaryError as e:
+            raise HTTPException(400, f"ref_paths 拒绝: {e}")
+        refs.append(str(resolved))
 
     if len(refs) == 0:
         route = "text2video"
