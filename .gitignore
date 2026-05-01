@@ -43,3 +43,6 @@ vendor/*
 
 # Phase 3 会建的备份目录(已被 data/ 覆盖,显式列出表明意图)
 data/_backups/
+
+# Security review 本地证据档案(漏洞细节,不入 public 仓)
+.security-evidence/
