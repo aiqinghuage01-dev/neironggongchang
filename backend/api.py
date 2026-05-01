@@ -139,8 +139,20 @@ async def _guest_mode_middleware(request, call_next):
     finally:
         guest_mode.reset(token)
 
-# 静态资源 — 让前端拿到本地生成的图/音频/视频
-app.mount("/media", StaticFiles(directory=str(DATA_DIR)), name="media")
+# 静态资源 — 让前端拿到本地生成的图/音频/视频.
+# Phase 1 (security): 不再 mount 整个 DATA_DIR.
+# 之前是 app.mount("/media", StaticFiles(directory=DATA_DIR)) — /media/works.db
+# /media/settings.json 直接拖走数据库 + 设置. 现在收成白名单 route.
+from backend.services.media_security import resolve_media_path as _resolve_media_path
+_DATA_DIR_RESOLVED = DATA_DIR.resolve()
+
+
+@app.get("/media/{rel_path:path}", include_in_schema=False)
+def _media_fileserver(rel_path: str):
+    target = _resolve_media_path(rel_path, _DATA_DIR_RESOLVED)
+    if target is None:
+        raise HTTPException(status_code=404, detail="Not Found")
+    return FileResponse(str(target))
 
 # D-059d: 暴露 dhv5 skill outputs 给前端播放渲染产物
 _DHV5_OUTPUTS = Path.home() / "Desktop/skills/digital-human-video-v5/outputs"
