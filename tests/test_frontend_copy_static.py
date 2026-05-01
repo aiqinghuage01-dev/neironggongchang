@@ -208,3 +208,42 @@ def test_no_raw_fetch_to_main_api_in_jsx():
         "发现裸 fetch('/api/...') — 必须改用 factory-api.jsx 的 api.{get,post,patch,del}, "
         "否则 Phase 3 启用 ADMIN_TOKEN 后这些请求会 401:\n  " + "\n  ".join(hits)
     )
+
+
+def test_no_hardcoded_settings_password_in_source():
+    """Phase 4 (security): 老的 SETTINGS_PASSWORD = "qinghua116" 必须从源码消失.
+
+    防止有人重新加回硬编码密码:
+      - 任何字面量 'qinghua116' (注释/字符串/标识符里都不允许)
+      - 任何标识符 SETTINGS_PASSWORD (Phase 4 改成 SETTINGS_REVEAL_KEY)
+      - 任何"密码"语义的 password gate 老命名 (SettingsPasswordGate)
+
+    扫描范围:web/ + backend/ + shortvideo/ 三个 source 目录的所有源码文件.
+    豁免:tests/ 自己 (本测试就要写 'qinghua116' / 'SETTINGS_PASSWORD' 字面量去检测).
+    """
+    forbidden_terms = ("qinghua116", "SETTINGS_PASSWORD", "SettingsPasswordGate")
+    source_dirs = ("web", "backend", "shortvideo")
+    file_globs = ("*.py", "*.jsx", "*.js", "*.ts", "*.tsx", "*.html")
+
+    hits: list[str] = []
+    for src_dir in source_dirs:
+        root_dir = ROOT / src_dir
+        if not root_dir.exists():
+            continue
+        for pattern in file_globs:
+            for path in root_dir.rglob(pattern):
+                # 跳过 _legacy / __pycache__ / .venv 等 (rglob 会进, 但 __pycache__ 是编译产物)
+                if "__pycache__" in path.parts or ".venv" in path.parts:
+                    continue
+                try:
+                    text = path.read_text(encoding="utf-8")
+                except (UnicodeDecodeError, OSError):
+                    continue
+                for term in forbidden_terms:
+                    if term in text:
+                        hits.append(f"{path.relative_to(ROOT)}: contains '{term}'")
+    assert hits == [], (
+        "Phase 4 (security): 源码不允许出现 qinghua116 / SETTINGS_PASSWORD / "
+        "SettingsPasswordGate (老硬编码密码门已删, 改用 ADMIN_TOKEN + 防误触 reveal gate):\n  "
+        + "\n  ".join(hits)
+    )

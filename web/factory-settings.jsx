@@ -1,37 +1,26 @@
 // factory-settings.jsx — 设置页实装:5 个 section(小华偏好/品牌/平台账号/声音/形象)
 
-// D-072: 设置页密码门. 防误触 / 防录视频时凑过来的人乱改 / 保护 API key 等敏感.
-// 密码硬编码 (本地工具, 不联外网). sessionStorage 存解锁状态 — 关浏览器要重输.
-const SETTINGS_PASSWORD = "qinghua116";
-const SETTINGS_UNLOCK_KEY = "settings_unlocked";
+// Phase 4 (security): 老的硬编码密码门已删, 不再保留任何固定密码字符串.
+//
+// 这里是**纯防误触 UI**, 不是认证, 也不是写保护:
+//   - 真正的写保护看 backend 的 ADMIN_TOKEN (Phase 3) — 没 token 任何 POST 都 401.
+//   - 这道收起/展开只是不让录视频时被路过的人一眼把所有 token 看光,
+//     一点就开, 没有密码、没有任何固定字符串.
+//   - sessionStorage 记 "已展开", 关浏览器后重新收起.
+const SETTINGS_REVEAL_KEY = "settings_revealed";
 
-function _isSettingsUnlocked() {
-  try { return sessionStorage.getItem(SETTINGS_UNLOCK_KEY) === "1"; }
+function _isSettingsRevealed() {
+  try { return sessionStorage.getItem(SETTINGS_REVEAL_KEY) === "1"; }
   catch (_) { return false; }
 }
-function _unlockSettings() {
-  try { sessionStorage.setItem(SETTINGS_UNLOCK_KEY, "1"); } catch (_) {}
+function _revealSettings() {
+  try { sessionStorage.setItem(SETTINGS_REVEAL_KEY, "1"); } catch (_) {}
 }
-function _lockSettings() {
-  try { sessionStorage.removeItem(SETTINGS_UNLOCK_KEY); } catch (_) {}
+function _hideSettings() {
+  try { sessionStorage.removeItem(SETTINGS_REVEAL_KEY); } catch (_) {}
 }
 
-function SettingsPasswordGate({ onUnlock }) {
-  const [pwd, setPwd] = React.useState("");
-  const [err, setErr] = React.useState(false);
-  const inputRef = React.useRef(null);
-  React.useEffect(() => { inputRef.current && inputRef.current.focus(); }, []);
-  function submit() {
-    if (pwd === SETTINGS_PASSWORD) {
-      _unlockSettings();
-      onUnlock();
-    } else {
-      setErr(true);
-      setPwd("");
-      setTimeout(() => setErr(false), 1500);
-      inputRef.current && inputRef.current.focus();
-    }
-  }
+function SettingsRevealGate({ onReveal }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", background: T.bg }}>
       <div style={{ padding: "22px 32px", background: "#fff", borderBottom: `1px solid ${T.border}` }}>
@@ -39,45 +28,25 @@ function SettingsPasswordGate({ onUnlock }) {
       </div>
       <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
         <div style={{
-          width: 360, padding: "32px 28px", background: "#fff",
+          width: 380, padding: "32px 28px", background: "#fff",
           border: `1px solid ${T.border}`, borderRadius: 14,
           boxShadow: "0 1px 3px rgba(0,0,0,0.04)", textAlign: "center",
         }}>
-          <div style={{ fontSize: 36, marginBottom: 12 }}>🔒</div>
-          <div style={{ fontSize: 16, fontWeight: 600, color: T.text, marginBottom: 6 }}>设置已锁</div>
-          <div style={{ fontSize: 12.5, color: T.muted, marginBottom: 18, lineHeight: 1.6 }}>
-            输入密码进入设置 · 关浏览器后会重新锁定
+          <div style={{ fontSize: 36, marginBottom: 12 }}>⚙️</div>
+          <div style={{ fontSize: 16, fontWeight: 600, color: T.text, marginBottom: 6 }}>设置已收起</div>
+          <div style={{ fontSize: 12.5, color: T.muted, marginBottom: 18, lineHeight: 1.7 }}>
+            点击展开 · 关浏览器后会重新收起<br/>
+            <span style={{ fontSize: 11, color: T.muted2 }}>这只是防你录视频时手抖,不是登录认证。<br/>真正的写保护看里面的 admin token。</span>
           </div>
-          <input
-            ref={inputRef}
-            type="password"
-            value={pwd}
-            onChange={(e) => setPwd(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") submit(); }}
-            placeholder="密码"
-            style={{
-              width: "100%", boxSizing: "border-box",
-              padding: "10px 14px", fontSize: 14,
-              border: `1.5px solid ${err ? T.red : T.border}`,
-              borderRadius: 8, outline: "none", fontFamily: "inherit",
-              transition: "border-color 0.15s",
-            }}
-          />
-          {err && (
-            <div style={{ fontSize: 11.5, color: T.red, marginTop: 8 }}>密码不对, 再试试</div>
-          )}
           <button
-            onClick={submit}
-            disabled={!pwd}
+            onClick={() => { _revealSettings(); onReveal(); }}
             style={{
-              marginTop: 14, width: "100%",
-              background: pwd ? T.brand : T.muted3, color: "#fff",
+              width: "100%", background: T.brand, color: "#fff",
               border: "none", borderRadius: 8,
               padding: "10px 18px", fontSize: 14, fontWeight: 600,
-              cursor: pwd ? "pointer" : "not-allowed",
-              fontFamily: "inherit",
+              cursor: "pointer", fontFamily: "inherit",
             }}
-          >解锁</button>
+          >展开设置</button>
         </div>
       </div>
     </div>
@@ -85,15 +54,15 @@ function SettingsPasswordGate({ onUnlock }) {
 }
 
 function PageSettings({ onNav }) {
-  // D-072: 密码门 — 没解锁就显密码框, 解锁后渲染真设置
-  const [unlocked, setUnlocked] = React.useState(() => _isSettingsUnlocked());
-  if (!unlocked) {
-    return <SettingsPasswordGate onUnlock={() => setUnlocked(true)} />;
+  // Phase 4: 纯防误触 gate, 没密码. 第一次进显示"展开" 按钮, 点了就 reveal.
+  const [revealed, setRevealed] = React.useState(() => _isSettingsRevealed());
+  if (!revealed) {
+    return <SettingsRevealGate onReveal={() => setRevealed(true)} />;
   }
-  return <PageSettingsInner onNav={onNav} unlocked={unlocked} setUnlocked={setUnlocked} />;
+  return <PageSettingsInner onNav={onNav} revealed={revealed} setRevealed={setRevealed} />;
 }
 
-function PageSettingsInner({ onNav, setUnlocked }) {
+function PageSettingsInner({ onNav, setRevealed }) {
   const [s, setS] = React.useState(null);
   const [saved, setSaved] = React.useState(false);
   const [speakers, setSpeakers] = React.useState([]);
@@ -157,16 +126,20 @@ function PageSettingsInner({ onNav, setUnlocked }) {
         <div style={{ flex: 1 }} />
         {saved && <Tag color="green">✓ 已保存</Tag>}
         <Btn size="sm" onClick={resetAll}>重置默认</Btn>
-        {/* D-072: 一键锁定 — 录视频前点一下, 防有人凑过来乱看/乱改设置 */}
+        {/* Phase 4: 一键收起 — 录视频前点一下, 防路过的人乱看/乱改设置.
+            纯 UI gate, 不是认证 (写保护看 admin token). */}
         <Btn size="sm" onClick={() => {
-          _lockSettings();
-          setUnlocked(false);
+          _hideSettings();
+          setRevealed(false);
           if (onNav) onNav("home");
-        }}>🔒 锁定</Btn>
+        }}>📁 收起</Btn>
       </div>
 
       <div style={{ flex: 1, overflow: "auto", padding: "24px 32px", background: T.bg }}>
         <div style={{ maxWidth: 860, margin: "0 auto", display: "flex", flexDirection: "column", gap: 20 }}>
+
+          {/* Phase 4: 服务端管理 token — 与 backend ADMIN_TOKEN 配对 */}
+          <AdminTokenSection />
 
           {/* AI 引擎 */}
           <SettingsSection icon="🧠" title="AI 引擎 · 小华的大脑" desc="当前全站文案/投流/公众号/朋友圈都走这个引擎">
@@ -367,6 +340,100 @@ function PageSettingsInner({ onNav, setUnlocked }) {
         </div>
       </div>
     </div>
+  );
+}
+
+// Phase 4 (security): 服务端管理 token —— 与 backend ADMIN_TOKEN env 配对.
+// 后端启用 ADMIN_TOKEN 时, 这里没填或填错 → 所有写操作 (POST/PUT/PATCH/DELETE) 401.
+// 只存 localStorage.admin_token, 不在源码硬编码任何 token.
+// 显示用 mask, 不把 token 明文打到 DOM/截图.
+function _maskToken(t) {
+  if (!t) return "";
+  const s = String(t);
+  if (s.length <= 8) return "•".repeat(s.length);
+  return s.slice(0, 3) + "•".repeat(Math.max(4, s.length - 6)) + s.slice(-3);
+}
+
+function AdminTokenSection() {
+  const [stored, setStored] = React.useState(() => {
+    try { return localStorage.getItem("admin_token") || ""; } catch (_) { return ""; }
+  });
+  const [draft, setDraft] = React.useState("");
+  const [reveal, setReveal] = React.useState(false);
+  const [savedAt, setSavedAt] = React.useState(0);
+
+  function save() {
+    const v = (draft || "").trim();
+    if (!v) return;
+    try { localStorage.setItem("admin_token", v); } catch (_) {}
+    setStored(v);
+    setDraft("");
+    setSavedAt(Date.now());
+    setTimeout(() => setSavedAt(0), 1500);
+  }
+  function clear() {
+    if (!confirm("清除本机的 admin token?写操作之后会 401(除非后端没设 ADMIN_TOKEN)")) return;
+    try { localStorage.removeItem("admin_token"); } catch (_) {}
+    setStored("");
+    setDraft("");
+    setReveal(false);
+  }
+
+  const has = !!stored;
+  return (
+    <SettingsSection
+      icon="🔐"
+      title="服务端管理 token"
+      desc="后端 .env 设了 ADMIN_TOKEN 后,这里要填同一个值,所有写接口才会带 X-Admin-Token,否则 401。只存本机 localStorage,不进 git/不进截图。"
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+        <div style={{ width: 100, fontSize: 12.5, color: T.muted }}>当前状态</div>
+        <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 8 }}>
+          {has ? (
+            <>
+              <Tag color="green">✓ 已设置</Tag>
+              <span style={{
+                fontSize: 12, color: T.muted, fontFamily: "SF Mono, Menlo, monospace",
+                userSelect: reveal ? "text" : "none",
+              }}>
+                {reveal ? stored : _maskToken(stored)}
+              </span>
+              <button onClick={() => setReveal(r => !r)} style={{
+                background: "transparent", border: "none", color: T.muted2,
+                cursor: "pointer", fontSize: 11, fontFamily: "inherit",
+              }}>{reveal ? "隐藏" : "👁 显示"}</button>
+            </>
+          ) : (
+            <Tag color="amber">⚠ 未设置</Tag>
+          )}
+          {savedAt > 0 && <Tag color="green">✓ 刚保存</Tag>}
+        </div>
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+        <div style={{ width: 100, fontSize: 12.5, color: T.muted }}>{has ? "替换 token" : "填 token"}</div>
+        <input
+          type="password"
+          value={draft}
+          onChange={e => setDraft(e.target.value)}
+          onKeyDown={e => { if (e.key === "Enter") save(); }}
+          placeholder="粘 .env 里的 ADMIN_TOKEN 同一个值"
+          autoComplete="new-password"
+          style={{
+            flex: 1, padding: "7px 12px", fontSize: 13,
+            border: `1px solid ${T.borderSoft}`, borderRadius: 8,
+            outline: "none", fontFamily: "inherit",
+          }}
+        />
+        <Btn size="sm" variant="primary" onClick={save} disabled={!draft.trim()}>保存</Btn>
+        {has && <Btn size="sm" onClick={clear}>清除</Btn>}
+      </div>
+      <div style={{
+        marginTop: 8, padding: "8px 12px", background: T.bg2,
+        borderRadius: 8, fontSize: 11.5, color: T.muted, lineHeight: 1.6,
+      }}>
+        本地小抄: 在后端机器执行 <code style={{ background: "#fff", padding: "1px 5px", borderRadius: 4, fontFamily: "SF Mono, Menlo, monospace" }}>python -c "import secrets; print(secrets.token_urlsafe(32))"</code> 生一段, 同值写进 .env 的 ADMIN_TOKEN, 浏览器这里也粘进去。
+      </div>
+    </SettingsSection>
   );
 }
 
