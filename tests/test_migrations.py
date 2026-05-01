@@ -334,3 +334,78 @@ def test_apply_migrations_recovers_from_schema_version_drop(tmp_db):
         rows = con.execute("SELECT version FROM schema_version ORDER BY version").fetchall()
     expected_rows = [(i,) for i in range(1, EXPECTED_VERSION + 1)]
     assert rows == expected_rows, f"schema_version 应被重建为 v1..v{EXPECTED_VERSION}, 实际 {rows}"
+
+
+# ─── Phase 5 (security/p5): cache 不能因 NameError 永远失效 ─────
+
+
+def test_cache_still_valid_returns_true_after_apply(tmp_db):
+    """Phase 5 regression: apply 后 _cache_still_valid 必须返 True.
+
+    历史 bug: migrations.py 顶层 import 漏了 current_db_path,
+    _cache_still_valid 调用它撞 NameError, 又被 except Exception 吞掉,
+    永远返 False → apply_migrations 每次都重建. 功能正常, 性能差,
+    且让"cache 真生效"的 P3 边界测试形同虚设.
+
+    修法: 顶层 import current_db_path. 本测试直接调 _cache_still_valid,
+    若它依赖未 import 的符号会立刻被 except 吞 → False → 测试 fail.
+    """
+    from backend.services import migrations
+    from shortvideo.db import current_db_key
+
+    migrations.apply_migrations()
+    db_key = current_db_key()
+    assert migrations._cache_still_valid(db_key) is True, (
+        "apply 后 _cache_still_valid 应返 True. 若返 False, 可能是它依赖了"
+        "顶层未 import 的符号 (历史 NameError bug 复发)."
+    )
+
+
+def test_apply_migrations_second_call_uses_cache_fast_path(monkeypatch, tmp_db):
+    """Phase 5 regression: 同 DB 第二次 apply 必须走 cache, 不进 _apply_lock 重跑.
+
+    辅助 spy: 监控 _split_v1_baseline (重建第一步必调) 调用次数.
+    若 cache 失效 → 第二次会再调一次 → call_count > 0.
+    """
+    from backend.services import migrations
+
+    # 第一次正常跑, 设置 _applied_db_key
+    migrations.apply_migrations()
+
+    # spy _split_v1_baseline
+    call_count = {"n": 0}
+    orig = migrations._split_v1_baseline
+
+    def spy():
+        call_count["n"] += 1
+        return orig()
+
+    monkeypatch.setattr(migrations, "_split_v1_baseline", spy)
+
+    # 第二次 apply: 应 cache 命中走 fast path
+    migrations.apply_migrations()
+    assert call_count["n"] == 0, (
+        "第二次 apply 应走 cache fast path, 不应再调 _split_v1_baseline. "
+        "若调了 → 说明 _cache_still_valid 没正常返 True → cache bug 复发."
+    )
+
+    # 第三次也是
+    migrations.apply_migrations()
+    assert call_count["n"] == 0
+
+
+def test_migrations_module_imports_required_symbols():
+    """Phase 5 regression (静态): migrations 模块必须 import 它真的用的所有符号.
+
+    防御:有人移除/重命名顶层 import 时 _cache_still_valid 等函数的隐性依赖
+    会再次因 except Exception 被吞,这条测试在 import 时就抓.
+    """
+    from backend.services import migrations
+
+    # _cache_still_valid 直接用了 current_db_path → 模块顶层必须有这个名字
+    assert hasattr(migrations, "current_db_path"), (
+        "backend.services.migrations 模块顶层必须 import current_db_path "
+        "(_cache_still_valid 用了它). 否则会被 except Exception 吞成 NameError."
+    )
+    assert hasattr(migrations, "current_db_key")
+    assert hasattr(migrations, "get_connection")

@@ -18,7 +18,7 @@ import sqlite3
 import threading
 from contextlib import closing
 
-from shortvideo.db import current_db_key, get_connection
+from shortvideo.db import current_db_key, current_db_path, get_connection
 
 
 # ============================================================
