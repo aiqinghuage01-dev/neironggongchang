@@ -539,6 +539,12 @@ def apply_migrations() -> int:
         if _applied_db_key == db_key:
             _applied_db_key = None
         with closing(get_connection()) as con:
+            # Phase 6 (security): WAL 是 DB 级设置, 一次性切换, 后续连接都受益.
+            # 放在 apply_migrations 而不是 get_connection: 每个连接都执行 PRAGMA
+            # journal_mode=WAL 会抖动 (尤其热点路径每次 PRAGMA 都加锁).
+            # 切换到 WAL 后写并发更高 (writer 不阻塞 reader), 适合 web + 后台 daemon
+            # 同时跑的本场景.
+            con.execute("PRAGMA journal_mode = WAL")
             table_stmts, index_stmts = _split_v1_baseline()
             # Step 1: CREATE TABLE (老表跳过, 不会撞索引列缺失)
             for stmt in table_stmts:

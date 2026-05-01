@@ -40,12 +40,23 @@ def current_db_path() -> Path:
 def get_connection() -> sqlite3.Connection:
     """单一连接工厂. 用规范化路径连接, 避免 ~/相对路径/symlink 打开错文件.
 
+    Phase 6 (security): 连接级硬化, 每个连接都设:
+      - timeout=15        sqlite3.connect 等待 DB 解锁的秒数 (避免 import-time 死锁)
+      - PRAGMA busy_timeout=5000   query 期间撞锁等 5s 自动 retry, 避 SQLITE_BUSY
+      - PRAGMA foreign_keys=ON     强制 FK 检查, 防孤儿行 (sqlite 默认关)
+
+    journal_mode=WAL 是 DB 级设置 (一次性), 在 backend/services/migrations.py
+    apply_migrations() 初始化路径里设, 不放这里 — 每个连接都执行会抖动.
+
     调用方如需 row_factory (字典式 row 访问), 自己设置:
         conn = get_connection()
         conn.row_factory = sqlite3.Row
     例: shortvideo/works.py 的 _conn() 包装就是这么做的.
     """
-    return sqlite3.connect(str(current_db_path()))
+    con = sqlite3.connect(str(current_db_path()), timeout=15)
+    con.execute("PRAGMA busy_timeout = 5000")
+    con.execute("PRAGMA foreign_keys = ON")
+    return con
 
 
 def current_db_key() -> str:
