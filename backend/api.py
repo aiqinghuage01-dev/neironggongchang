@@ -119,9 +119,15 @@ app = FastAPI(
     ),
     openapi_tags=TAGS_METADATA,
 )
+# Phase 2 (security): 不再 allow_origins=["*"].
+# dev 默认放本机前端 (localhost:8001 + 127.0.0.1:8001);
+# prod 必须设 ALLOWED_ORIGIN, 不允许 "*". 详 backend/services/cors_config.py.
+from backend.services.cors_config import compute_allowed_origins as _compute_allowed_origins
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_compute_allowed_origins(),
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
