@@ -18,9 +18,18 @@ function _isGuestMode() {
   try { return localStorage.getItem("guest_mode") === "1"; }
   catch (_) { return false; }
 }
+// Phase 3 (security): admin token — 写接口需要的 header.
+// 后端启用 ADMIN_TOKEN 时写接口 401, 用户在设置页填一次 token 后存 localStorage.admin_token,
+// 这里自动从 localStorage 读并注入. 不要硬编码 token.
+function _getAdminToken() {
+  try { return localStorage.getItem("admin_token") || ""; }
+  catch (_) { return ""; }
+}
 function _baseHeaders(extra) {
   const h = Object.assign({}, extra || {});
   if (_isGuestMode()) h["X-Guest-Mode"] = "1";
+  const tok = _getAdminToken();
+  if (tok) h["X-Admin-Token"] = tok;
   return h;
 }
 

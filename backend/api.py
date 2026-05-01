@@ -145,6 +145,25 @@ async def _guest_mode_middleware(request, call_next):
     finally:
         guest_mode.reset(token)
 
+
+# Phase 3 (security): ADMIN_TOKEN 写操作保护.
+# - 未设 ADMIN_TOKEN: 保留本地旧行为, 启动 warning, 任何人能写.
+# - 设了:           写方法 (POST/PUT/PATCH/DELETE) 必须带 X-Admin-Token, 否则 401.
+# 详 backend/services/admin_auth.py.
+from backend.services import admin_auth as _admin_auth
+
+_admin_auth.log_startup_state(_admin_auth.get_admin_token())
+
+
+@app.middleware("http")
+async def _admin_token_guard(request, call_next):
+    configured = _admin_auth.get_admin_token()
+    if configured and _admin_auth.request_needs_admin(request.method, request.url.path):
+        provided = request.headers.get(_admin_auth.ADMIN_TOKEN_HEADER, "")
+        if not _admin_auth.verify_admin_token(provided, configured):
+            return JSONResponse({"detail": "admin token required"}, status_code=401)
+    return await call_next(request)
+
 # 静态资源 — 让前端拿到本地生成的图/音频/视频.
 # Phase 1 (security): 不再 mount 整个 DATA_DIR.
 # 之前是 app.mount("/media", StaticFiles(directory=DATA_DIR)) — /media/works.db
