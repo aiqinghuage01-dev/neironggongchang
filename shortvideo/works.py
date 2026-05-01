@@ -273,13 +273,60 @@ def list_works(
         return [_row_to_work(r) for r in rows]
 
 
+def _resolve_data_path(raw: str | Path | None) -> Path | None:
+    """Phase 8: 把 work.local_path 解析成 DATA_DIR 内的安全路径.
+
+    输入可能是:
+      - 相对路径 "videos/a.mp4" → DATA_DIR / "videos" / "a.mp4"
+      - DATA_DIR 内绝对路径 → 通过
+      - DATA_DIR 外绝对路径 → None (静默拒绝)
+      - 含 ".." 跳出 → resolve 后落 DATA_DIR 外 → None
+      - symlink 跳出 DATA_DIR → resolve 解 symlink 后落外 → None
+      - 空 / NUL / 解析失败 → None
+
+    返回 None = 不要删. 调用方对 None 静默, 不要 raise (delete 是 best-effort
+    副作用, DB row 永远删).
+    """
+    if not raw:
+        return None
+    s = str(raw).strip()
+    if not s or "\x00" in s:
+        return None
+
+    from shortvideo.config import DATA_DIR
+    data_root = Path(DATA_DIR).expanduser().resolve()
+
+    p = Path(s).expanduser()
+    if not p.is_absolute():
+        p = data_root / p
+    try:
+        resolved = p.resolve()
+    except (OSError, RuntimeError):
+        return None
+    try:
+        resolved.relative_to(data_root)
+    except ValueError:
+        return None
+    return resolved
+
+
 def delete_work(work_id: int, *, remove_file: bool = False) -> None:
+    """删 works 表中的 row. remove_file=True 时尝试删本地文件.
+
+    Phase 8 (security):
+    - 文件删除必须走 _resolve_data_path 校验
+    - DATA_DIR 外的绝对路径不删 (相对路径才转换成 DATA_DIR 内绝对)
+    - resolve 后跳出 DATA_DIR 不删
+    - 删失败 / 不存在 / 拒绝 都静默, DB row 永远删
+    """
     w = get_work(work_id)
     if w and remove_file and w.local_path:
-        try:
-            Path(w.local_path).unlink(missing_ok=True)
-        except OSError:
-            pass
+        target = _resolve_data_path(w.local_path)
+        if target is not None and target.is_file():
+            try:
+                target.unlink(missing_ok=True)
+            except OSError:
+                pass
     with closing(_conn()) as c:
         c.execute("DELETE FROM works WHERE id=?", (work_id,))
         c.commit()
