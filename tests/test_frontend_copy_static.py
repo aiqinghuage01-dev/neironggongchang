@@ -130,3 +130,49 @@ def test_beta_and_dashboard_refresh_once_per_minute():
     assert "STATUS_REFRESH_MS = 60000" in dashboard_src
     assert "setInterval(tick, STATUS_REFRESH_MS)" in dashboard_src
     assert "setInterval(tick, 3000)" not in dashboard_src
+
+
+def test_write_page_active_task_rules_cover_all_text_tools():
+    src = (ROOT / "web/factory-write.jsx").read_text(encoding="utf-8")
+    for prefix in [
+        'startsWith("touliu.")',
+        'startsWith("hotrewrite.")',
+        'startsWith("voicerewrite.")',
+        'startsWith("baokuan.")',
+        'startsWith("planner.")',
+        'startsWith("compliance.")',
+        'startsWith("wechat.write")',
+    ]:
+        assert prefix in src
+    for storage_key in [
+        'wf:${rule.wf}',
+        'task:${rule.ns}',
+        "writeTaskId",
+        "taskId",
+    ]:
+        assert storage_key in src
+
+
+def test_write_page_active_task_cards_do_not_render_raw_task_fields():
+    src = (ROOT / "web/factory-write.jsx").read_text(encoding="utf-8")
+    forbidden_render_fragments = [
+        "{task.kind",
+        "{task.id",
+        "{task.payload",
+        "task.payload.",
+        "task.kind}",
+        "task.id}",
+    ]
+    for fragment in forbidden_render_fragments:
+        assert fragment not in src
+    for guard in [
+        "safeTaskText",
+        "WRITE_TASK_TEXT_BLOCKERS",
+        "Users|Volumes|Library|Applications|opt|srv|home|root|private|tmp|var",
+        "Bearer|Basic",
+        "authorization|x[-_]?api[-_]?key",
+        "submit_id|task_id",
+        "watcher|daemon",
+        "credits?",
+    ]:
+        assert guard in src

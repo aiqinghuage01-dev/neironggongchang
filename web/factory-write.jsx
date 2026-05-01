@@ -160,6 +160,10 @@ function taskKind(task) {
   return String(task?.kind || "");
 }
 
+function taskStableKey(task) {
+  return String(task?.id || task?.started_ts || task?.updated_ts || taskKind(task));
+}
+
 function getWriteTaskRule(task) {
   return WRITE_TASK_RULES.find(rule => rule.match(task)) || null;
 }
@@ -171,8 +175,9 @@ function getActiveWritingTasks(allTasks) {
       if (!getWriteTaskRule(task)) return false;
       if (task.status === "running" || task.status === "pending") return true;
       if (task.status !== "failed") return false;
-      const ts = task.finished_ts || task.updated_ts || 0;
-      return !ts || now - ts < 3 * 24 * 3600;
+      const ts = task.finished_ts || task.updated_ts;
+      if (!ts) return false;
+      return now - ts < 3 * 24 * 3600;
     })
     .sort((a, b) => {
       const ar = (a.status === "running" || a.status === "pending") ? 0 : 1;
@@ -194,10 +199,22 @@ function latestTimelineItem(task, preferredStatus) {
   return reversed.find(item => item?.text || item?.label) || null;
 }
 
+const WRITE_TASK_TEXT_BLOCKERS = [
+  /(?:~|\/(?:Users|Volumes|Library|Applications|opt|srv|home|root|private|tmp|var))\/[^\s"'<>),，。；;]+/i,
+  /[A-Za-z]:\\[^\s"'<>),，。；;]+/i,
+  /(?:https?:\/\/)?(?:127\.0\.0\.1|localhost):\d+(?:\/[^\s"'<>)]*)?/i,
+  /\b(?:Bearer|Basic)\s+[A-Za-z0-9._~+/=-]+/i,
+  /\b(?:authorization|x[-_]?api[-_]?key|api[-_]?secret|openai[-_]?key|headers?)\s*[:=]?\s*[^\s,，;；]*/i,
+  /\b(?:sk|tok)-[A-Za-z0-9_-]{12,}\b/i,
+  /\b(prompt|tokens?|route|model|provider|submit_id|task_id|api|OpenClaw|DeepSeek|Opus|LLM|watcher|daemon|credits?|headers?|key|secret)\b/i,
+  /\btask\.(?:kind|id|payload)\b/i,
+  /\bstatus\s*[:=]\s*[^\s,，;；]+/i,
+];
+
 function safeTaskText(raw, fallback) {
   const text = String(raw || "").replace(/\s+/g, " ").trim();
   if (!text) return fallback;
-  if (/(prompt|tokens?|route|model|provider|submit_id|api|\/Users|\/private|OpenClaw|DeepSeek|Opus|LLM)/i.test(text)) {
+  if (WRITE_TASK_TEXT_BLOCKERS.some(re => re.test(text))) {
     return fallback;
   }
   return text.length > 42 ? text.slice(0, 42) + "…" : text;
@@ -219,13 +236,18 @@ function taskElapsedLabel(task) {
   return `已等 ${fmtSec(elapsed)}`;
 }
 
-function resumeSnapshotForTask(task, rule) {
-  const snap = { step: rule.step };
+function parseWorkflowSnapshot(raw) {
+  try {
+    const parsed = raw ? JSON.parse(raw) : {};
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) return parsed;
+  } catch (_) {}
+  return {};
+}
+
+function resumeSnapshotForTask(task, rule, prevRaw) {
+  const snap = { ...parseWorkflowSnapshot(prevRaw), step: rule.step };
   if (rule.taskField) snap[rule.taskField] = task.id;
   else snap.taskId = task.id;
-  if (rule.wf === "hotrewrite") snap.versions = [];
-  if (rule.wf === "baokuan") snap.versions = [];
-  if (rule.wf === "voicerewrite") snap.versions = [];
   return snap;
 }
 
@@ -234,7 +256,10 @@ function resumeWritingTask(task, onNav) {
   if (!rule) return;
   try {
     localStorage.setItem(`task:${rule.ns}`, task.id);
-    if (rule.wf) localStorage.setItem(`wf:${rule.wf}`, JSON.stringify(resumeSnapshotForTask(task, rule)));
+    if (rule.wf) {
+      const prevRaw = localStorage.getItem(`wf:${rule.wf}`);
+      localStorage.setItem(`wf:${rule.wf}`, JSON.stringify(resumeSnapshotForTask(task, rule, prevRaw)));
+    }
   } catch (_) {}
   onNav(rule.page);
 }
@@ -258,7 +283,7 @@ function WritingTaskSummary({ tasks, onResume, narrow }) {
         gridTemplateColumns: narrow ? "1fr" : "repeat(2, minmax(0, 1fr))",
         gap: 12,
       }}>
-        {tasks.map(task => <WritingTaskCard key={task.id} task={task} onResume={onResume} />)}
+        {tasks.map(task => <WritingTaskCard key={taskStableKey(task)} task={task} onResume={onResume} />)}
       </div>
     </div>
   );
