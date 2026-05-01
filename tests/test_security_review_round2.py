@@ -242,7 +242,7 @@ def test_p1_endpoint_returns_404_for_data_dir_works_db(monkeypatch, tmp_path):
     """**清华哥 round-3 复现 case**: 污染 row abs_path=<DATA_DIR>/works.db,
     ext='.jpg', 必须 404. 老 is_safe_material_file 因 DATA_DIR 在白名单 → 200,
     现拆分后必拒."""
-    client, db, _, data_dir = _setup_e2e(monkeypatch, tmp_path)
+    client, db, data_dir, _ = _setup_e2e(monkeypatch, tmp_path)
     fake_db = data_dir / "works.db"
     fake_db.write_bytes(b"SQLite format 3\x00FAKE")
     # 故意写 ext='.jpg' 模拟攻击者改 DB
@@ -256,7 +256,7 @@ def test_p1_endpoint_returns_404_for_data_dir_works_db(monkeypatch, tmp_path):
 
 def test_p1_endpoint_returns_404_for_data_dir_settings_json(monkeypatch, tmp_path):
     """同上, abs_path=<DATA_DIR>/settings.json ext='.jpg' 也必须 404."""
-    client, db, _, data_dir = _setup_e2e(monkeypatch, tmp_path)
+    client, db, data_dir, _ = _setup_e2e(monkeypatch, tmp_path)
     fake = data_dir / "settings.json"
     fake.write_text('{"token":"secret"}')
     _insert_asset(db, "data-settings", str(fake), ".jpg")
@@ -269,6 +269,7 @@ def test_p1_endpoint_returns_404_for_data_dir_settings_json(monkeypatch, tmp_pat
 def test_p1_endpoint_returns_200_for_legit_in_materials_root(monkeypatch, tmp_path):
     """合法素材 (在 ~/Downloads 内 + 媒体后缀) 仍能 200."""
     client, db, _, fake_home = _setup_e2e(monkeypatch, tmp_path)
+    # 第 3 / 4 个返回值对应 data_dir / fake_home; 这里只用 fake_home.
     legit = fake_home / "Downloads" / "movie.mp4"
     legit.write_bytes(b"FAKE_MP4_BYTES")
     _insert_asset(db, "legit", str(legit), ".mp4")
