@@ -23,7 +23,14 @@ import pytest
 
 
 # ============================================================
-# P1-1: material-lib/file runtime abs_path validation
+# P1-1 (round 3): 拆 source vs thumb validator.
+# 老 is_safe_material_file 把整个 DATA_DIR 列入白名单, 攻击者 abs_path=
+# <DATA_DIR>/works.db ext='.jpg' 仍能 200 拖走 SQLite. 已删, 拆成两个:
+#   is_safe_material_source  → /api/material-lib/file/{id}
+#     只允许 home/<MATERIALS_ROOT_ALLOWED_PREFIXES>, **不**含 DATA_DIR.
+#     真实后缀必须在 MATERIAL_ASSET_ALLOWED_EXTS.
+#   is_safe_material_thumb   → /api/material-lib/thumb/{id}
+#     只允许 DATA_DIR/material_thumbs/.
 # ============================================================
 
 
@@ -38,82 +45,154 @@ def p1_setup(monkeypatch, tmp_path):
     data_dir.mkdir()
     (data_dir / "material_thumbs").mkdir()
 
-    # 一个合法 thumb 文件 (在 DATA_DIR 内)
+    # thumb 文件 (在 DATA_DIR/material_thumbs 内)
     thumb = data_dir / "material_thumbs" / "ok.jpg"
     thumb.write_bytes(b"JPG_OK")
 
-    # 一个合法素材 (在 ~/Downloads 内)
+    # 合法素材 (在 ~/Downloads 内, 媒体后缀)
     legit_in_root = fake_home / "Downloads" / "movie.mp4"
     legit_in_root.write_bytes(b"MP4_OK")
 
-    # 一个攻击文件 (在 home 外)
+    # 攻击 1: DATA_DIR 内的 SQLite (清华哥 round-3 复现 case)
+    fake_db = data_dir / "works.db"
+    fake_db.write_bytes(b"SQLite format 3\x00FAKE")
+
+    # 攻击 2: DATA_DIR 内但伪装成 .jpg
+    fake_db_jpg = data_dir / "evil.jpg"
+    fake_db_jpg.write_bytes(b"NOT_REALLY_JPG")
+
+    # 攻击 3: home 外
     evil_outside = tmp_path / "secret.dat"
     evil_outside.write_bytes(b"SECRET")
 
     monkeypatch.setattr("shortvideo.config.DATA_DIR", data_dir)
     return {
-        "data_dir": data_dir,
-        "thumb": thumb,
-        "legit_in_root": legit_in_root,
-        "evil_outside": evil_outside,
-        "etc_passwd": Path("/etc/passwd"),
+        "data_dir": data_dir, "thumb": thumb, "legit_in_root": legit_in_root,
+        "fake_db": fake_db, "fake_db_jpg": fake_db_jpg, "evil_outside": evil_outside,
     }
 
 
-def test_p1_1_is_safe_material_file_accepts_legit_in_data_dir(p1_setup):
-    from backend.services.path_security import is_safe_material_file
-    out = is_safe_material_file(str(p1_setup["thumb"]), p1_setup["data_dir"])
-    assert out == p1_setup["thumb"].resolve()
+# ─── is_safe_material_source ──────────────────────────────────
 
 
-def test_p1_1_is_safe_material_file_accepts_legit_in_materials_root(p1_setup):
-    from backend.services.path_security import is_safe_material_file
-    out = is_safe_material_file(str(p1_setup["legit_in_root"]), p1_setup["data_dir"])
+def test_p1_source_accepts_legit_in_materials_root(p1_setup):
+    from backend.services.path_security import is_safe_material_source
+    out = is_safe_material_source(str(p1_setup["legit_in_root"]))
     assert out == p1_setup["legit_in_root"].resolve()
 
 
-def test_p1_1_is_safe_material_file_rejects_etc_passwd(p1_setup):
-    from backend.services.path_security import is_safe_material_file
-    # /etc/passwd 即使 .exists() 也不在 DATA_DIR 不在 fake home/Downloads
-    out = is_safe_material_file("/etc/passwd", p1_setup["data_dir"])
-    assert out is None
+def test_p1_source_rejects_data_dir_works_db(p1_setup):
+    """核心 P1 case: abs_path=<DATA_DIR>/works.db → None (即使 ext '.jpg')."""
+    from backend.services.path_security import is_safe_material_source
+    assert is_safe_material_source(str(p1_setup["fake_db"])) is None
 
 
-def test_p1_1_is_safe_material_file_rejects_outside_path(p1_setup):
-    from backend.services.path_security import is_safe_material_file
-    out = is_safe_material_file(str(p1_setup["evil_outside"]), p1_setup["data_dir"])
-    assert out is None
+def test_p1_source_rejects_data_dir_even_with_jpg_ext(p1_setup):
+    """DATA_DIR 内的真实 .jpg 也拒 — DATA_DIR 不应作素材源."""
+    from backend.services.path_security import is_safe_material_source
+    assert is_safe_material_source(str(p1_setup["fake_db_jpg"])) is None
 
 
-def test_p1_1_is_safe_material_file_rejects_dir(p1_setup):
-    from backend.services.path_security import is_safe_material_file
-    out = is_safe_material_file(str(p1_setup["data_dir"]), p1_setup["data_dir"])
-    assert out is None
+def test_p1_source_rejects_etc_passwd():
+    from backend.services.path_security import is_safe_material_source
+    assert is_safe_material_source("/etc/passwd") is None
 
 
-def test_p1_1_is_safe_material_file_rejects_nonexistent(p1_setup):
-    from backend.services.path_security import is_safe_material_file
-    out = is_safe_material_file(
-        str(p1_setup["data_dir"] / "missing.jpg"), p1_setup["data_dir"]
-    )
-    assert out is None
+def test_p1_source_rejects_outside_path(p1_setup):
+    from backend.services.path_security import is_safe_material_source
+    assert is_safe_material_source(str(p1_setup["evil_outside"])) is None
 
 
-def test_p1_1_is_safe_material_file_rejects_empty_and_nul(p1_setup):
-    from backend.services.path_security import is_safe_material_file
+def test_p1_source_rejects_dir(p1_setup):
+    from backend.services.path_security import is_safe_material_source
+    assert is_safe_material_source(str(p1_setup["data_dir"])) is None
+
+
+def test_p1_source_rejects_nonexistent(p1_setup):
+    from backend.services.path_security import is_safe_material_source
+    assert is_safe_material_source(str(p1_setup["legit_in_root"].parent / "missing.mp4")) is None
+
+
+def test_p1_source_rejects_empty_and_nul(p1_setup):
+    from backend.services.path_security import is_safe_material_source
     for raw in ["", None, "  ", "/etc/passwd\x00.jpg"]:
-        assert is_safe_material_file(raw, p1_setup["data_dir"]) is None
+        assert is_safe_material_source(raw) is None
 
 
-def test_p1_1_endpoint_returns_404_for_polluted_abs_path(monkeypatch, tmp_path):
-    """端到端: 直接插一个 row abs_path=/etc/passwd → /api/material-lib/file/{id} 404."""
+def test_p1_source_rejects_bad_extension(p1_setup):
+    """合法路径但后缀不在媒体白名单 (.db/.json/.txt) → 拒."""
+    from backend.services.path_security import is_safe_material_source
+    bad = p1_setup["legit_in_root"].parent / "ref.txt"
+    bad.write_text("hi")
+    assert is_safe_material_source(str(bad)) is None
+
+
+def test_p1_source_uses_real_suffix_not_db_ext(p1_setup):
+    """关键: 真实后缀来自 resolved.suffix, 不信 DB ext.
+    这里建一个真实 .db 文件在合法 root, 验证它仍被拒 (后缀 .db 不在媒体白名单)."""
+    from backend.services.path_security import is_safe_material_source
+    fake = p1_setup["legit_in_root"].parent / "evil.db"
+    fake.write_bytes(b"SQLite")
+    # 即使有人在 DB ext 写 '.jpg', 函数取 resolved.suffix='.db' → 拒
+    assert is_safe_material_source(str(fake)) is None
+
+
+# ─── is_safe_material_thumb ───────────────────────────────────
+
+
+def test_p1_thumb_accepts_legit_in_material_thumbs(p1_setup):
+    from backend.services.path_security import is_safe_material_thumb
+    out = is_safe_material_thumb(str(p1_setup["thumb"]), p1_setup["data_dir"])
+    assert out == p1_setup["thumb"].resolve()
+
+
+def test_p1_thumb_rejects_data_dir_works_db(p1_setup):
+    """thumb 端只允许 material_thumbs/ 子树, DATA_DIR/works.db 拒."""
+    from backend.services.path_security import is_safe_material_thumb
+    assert is_safe_material_thumb(str(p1_setup["fake_db"]), p1_setup["data_dir"]) is None
+
+
+def test_p1_thumb_rejects_data_dir_other_subdirs(p1_setup):
+    """DATA_DIR/videos/ 等其他子目录的文件也不能当 thumb."""
+    from backend.services.path_security import is_safe_material_thumb
+    (p1_setup["data_dir"] / "videos").mkdir()
+    other = p1_setup["data_dir"] / "videos" / "x.jpg"
+    other.write_bytes(b"X")
+    assert is_safe_material_thumb(str(other), p1_setup["data_dir"]) is None
+
+
+def test_p1_thumb_rejects_outside_data_dir(p1_setup):
+    from backend.services.path_security import is_safe_material_thumb
+    assert is_safe_material_thumb(str(p1_setup["legit_in_root"]), p1_setup["data_dir"]) is None
+    assert is_safe_material_thumb("/etc/passwd", p1_setup["data_dir"]) is None
+
+
+def test_p1_thumb_rejects_empty_and_nul(p1_setup):
+    from backend.services.path_security import is_safe_material_thumb
+    for raw in ["", None, "  ", "/etc/passwd\x00"]:
+        assert is_safe_material_thumb(raw, p1_setup["data_dir"]) is None
+
+
+def test_p1_no_legacy_is_safe_material_file_export():
+    """老 is_safe_material_file 已删, 不能复活 (它把整个 DATA_DIR 当素材源, 不安全)."""
+    from backend.services import path_security
+    assert not hasattr(path_security, "is_safe_material_file"), (
+        "老 is_safe_material_file 应已删, 拆成 is_safe_material_source + "
+        "is_safe_material_thumb. 不要复活老 helper."
+    )
+
+
+# ─── 端到端: /api/material-lib/file/{id} ────────────────────
+
+
+def _setup_e2e(monkeypatch, tmp_path):
+    """通用 e2e fixture 体: fake home + 临时 DATA_DIR + 临时 DB."""
     fake_home = tmp_path / "fake_home"
     (fake_home / "Downloads").mkdir(parents=True)
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: fake_home))
 
     data_dir = tmp_path / "data"
     data_dir.mkdir()
-
     db = tmp_path / "works.db"
     monkeypatch.setattr("shortvideo.config.DB_PATH", db)
     monkeypatch.setattr("shortvideo.config.DATA_DIR", data_dir)
@@ -123,64 +202,80 @@ def test_p1_1_endpoint_returns_404_for_polluted_abs_path(monkeypatch, tmp_path):
     migrations.reset_for_test()
     migrations.apply_migrations()
 
-    # 直接 SQL 插一行污染数据
-    with sqlite3.connect(str(db)) as con:
-        con.execute(
-            "INSERT INTO material_assets (id, abs_path, filename, ext, imported_at) "
-            "VALUES (?, ?, ?, ?, ?)",
-            ("polluted-id", "/etc/passwd", "passwd", "", int(time.time())),
-        )
-        con.commit()
-
     monkeypatch.delenv("ADMIN_TOKEN", raising=False)
     monkeypatch.delenv("APP_ENV", raising=False)
     import backend.api as api_mod
     importlib.reload(api_mod)
     from fastapi.testclient import TestClient
-    client = TestClient(api_mod.app)
-
-    r = client.get("/api/material-lib/file/polluted-id")
-    assert r.status_code == 404, f"应 404 (越界), 实际 {r.status_code} {r.text}"
+    return TestClient(api_mod.app), db, data_dir, fake_home
 
 
-def test_p1_1_endpoint_returns_404_for_outside_tmp_file(monkeypatch, tmp_path):
-    """端到端: row abs_path 指向 tmp_path 外面的一个真文件 → 404."""
-    fake_home = tmp_path / "fake_home"
-    (fake_home / "Downloads").mkdir(parents=True)
-    monkeypatch.setattr(Path, "home", classmethod(lambda cls: fake_home))
+def _insert_asset(db: Path, asset_id: str, abs_path: str, ext: str = ".mp4"):
+    with sqlite3.connect(str(db)) as con:
+        con.execute(
+            "INSERT INTO material_assets (id, abs_path, filename, ext, imported_at) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (asset_id, abs_path, Path(abs_path).name, ext, int(time.time())),
+        )
+        con.commit()
 
-    data_dir = tmp_path / "data"
-    data_dir.mkdir()
 
+def test_p1_endpoint_returns_404_for_polluted_etc_passwd(monkeypatch, tmp_path):
+    """端到端: abs_path=/etc/passwd → 404."""
+    client, db, _, _ = _setup_e2e(monkeypatch, tmp_path)
+    _insert_asset(db, "polluted-etc", "/etc/passwd", "")
+    r = client.get("/api/material-lib/file/polluted-etc")
+    assert r.status_code == 404
+
+
+def test_p1_endpoint_returns_404_for_outside_tmp_file(monkeypatch, tmp_path):
+    """端到端: abs_path 指向 home 外的 .bin → 404."""
+    client, db, _, _ = _setup_e2e(monkeypatch, tmp_path)
     outside = tmp_path / "outside_secret.bin"
     outside.write_bytes(b"X")
-
-    db = tmp_path / "works.db"
-    monkeypatch.setattr("shortvideo.config.DB_PATH", db)
-    monkeypatch.setattr("shortvideo.config.DATA_DIR", data_dir)
-    monkeypatch.setattr("backend.services.settings.SETTINGS_FILE", data_dir / "settings.json")
-
-    from backend.services import migrations
-    migrations.reset_for_test()
-    migrations.apply_migrations()
-
-    with sqlite3.connect(str(db)) as con:
-        con.execute(
-            "INSERT INTO material_assets (id, abs_path, filename, ext, imported_at) "
-            "VALUES (?, ?, ?, ?, ?)",
-            ("outside-id", str(outside), "outside_secret.bin", ".bin", int(time.time())),
-        )
-        con.commit()
-
-    monkeypatch.delenv("ADMIN_TOKEN", raising=False)
-    monkeypatch.delenv("APP_ENV", raising=False)
-    import backend.api as api_mod
-    importlib.reload(api_mod)
-    from fastapi.testclient import TestClient
-    client = TestClient(api_mod.app)
-
+    _insert_asset(db, "outside-id", str(outside), ".bin")
     r = client.get("/api/material-lib/file/outside-id")
-    assert r.status_code == 404, f"应 404 (越界), 实际 {r.status_code}"
+    assert r.status_code == 404
+
+
+def test_p1_endpoint_returns_404_for_data_dir_works_db(monkeypatch, tmp_path):
+    """**清华哥 round-3 复现 case**: 污染 row abs_path=<DATA_DIR>/works.db,
+    ext='.jpg', 必须 404. 老 is_safe_material_file 因 DATA_DIR 在白名单 → 200,
+    现拆分后必拒."""
+    client, db, _, data_dir = _setup_e2e(monkeypatch, tmp_path)
+    fake_db = data_dir / "works.db"
+    fake_db.write_bytes(b"SQLite format 3\x00FAKE")
+    # 故意写 ext='.jpg' 模拟攻击者改 DB
+    _insert_asset(db, "data-db", str(fake_db), ".jpg")
+
+    r = client.get("/api/material-lib/file/data-db")
+    assert r.status_code == 404, f"DATA_DIR/works.db 必须 404, 实际 {r.status_code} {r.text[:80]}"
+    # 进一步: 响应里不能含 SQLite header
+    assert b"SQLite format" not in r.content
+
+
+def test_p1_endpoint_returns_404_for_data_dir_settings_json(monkeypatch, tmp_path):
+    """同上, abs_path=<DATA_DIR>/settings.json ext='.jpg' 也必须 404."""
+    client, db, _, data_dir = _setup_e2e(monkeypatch, tmp_path)
+    fake = data_dir / "settings.json"
+    fake.write_text('{"token":"secret"}')
+    _insert_asset(db, "data-settings", str(fake), ".jpg")
+
+    r = client.get("/api/material-lib/file/data-settings")
+    assert r.status_code == 404
+    assert b"secret" not in r.content
+
+
+def test_p1_endpoint_returns_200_for_legit_in_materials_root(monkeypatch, tmp_path):
+    """合法素材 (在 ~/Downloads 内 + 媒体后缀) 仍能 200."""
+    client, db, _, fake_home = _setup_e2e(monkeypatch, tmp_path)
+    legit = fake_home / "Downloads" / "movie.mp4"
+    legit.write_bytes(b"FAKE_MP4_BYTES")
+    _insert_asset(db, "legit", str(legit), ".mp4")
+
+    r = client.get("/api/material-lib/file/legit")
+    assert r.status_code == 200, f"合法素材应 200, 实际 {r.status_code}"
+    assert r.content == b"FAKE_MP4_BYTES"
 
 
 # ============================================================

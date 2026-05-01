@@ -191,17 +191,41 @@ def validate_materials_root(raw: str | None) -> Path:
     return resolved
 
 
-def is_safe_material_file(raw: str | None, data_dir: Path) -> Path | None:
-    """Phase 10 review (P1-1): material_lib/file FileResponse 之前的 runtime 校验.
+# Phase 10 review round 2 (P1):
+# 拆 material file vs thumb 校验 — 老的 is_safe_material_file 把整个 DATA_DIR
+# 列入白名单, 攻击者塞 abs_path=<DATA_DIR>/works.db ext='.jpg' 就能拖走 SQLite.
+# 关键是: DB 里 ext 字段不可信 (是 scan 时写的, 也可能污染).
+#
+# 现在拆成两个:
+#   is_safe_material_source —— 给 /api/material-lib/file/{id} 用,
+#     只允许 home/<MATERIALS_ROOT_ALLOWED_PREFIXES> 子树, 且**真实文件后缀**
+#     必须在 MATERIAL_ASSET_ALLOWED_EXTS 媒体白名单内. 不含 DATA_DIR.
+#   is_safe_material_thumb  —— 给 /api/material-lib/thumb/{id} 用,
+#     只允许 DATA_DIR/material_thumbs/ 子树.
 
-    DB 里 material_assets.abs_path 可能是历史污染的 row (在 materials_root='/'
-    时入库的 /etc/passwd 之类). 必须 runtime check 路径仍合法.
+# 素材源文件允许的扩展名 (覆盖 _walk_root 真实扫描的媒体类型).
+# DB 里的 ext 字段不可信 (污染时可能写 .jpg 但实际是 .db), 用 resolved.suffix.
+MATERIAL_ASSET_ALLOWED_EXTS: frozenset[str] = frozenset({
+    # 视频
+    ".mp4", ".mov", ".m4v", ".avi", ".mkv", ".webm", ".flv", ".wmv",
+    # 图片
+    ".jpg", ".jpeg", ".png", ".webp", ".gif", ".heic", ".heif", ".bmp",
+    # 音频
+    ".mp3", ".wav", ".m4a", ".ogg", ".flac", ".opus", ".aac",
+})
 
-    允许位于以下任一:
-      1. DATA_DIR 子树 (thumb 等本地产物)
-      2. home/<MATERIALS_ROOT_ALLOWED_PREFIXES_REL> 任一 (素材库白名单根)
 
-    返回 None 表示拒绝, 调用方应 404. resolve 后必须存在 + 是文件.
+def is_safe_material_source(raw: str | None) -> Path | None:
+    """/api/material-lib/file/{id} FileResponse 之前的 runtime 校验.
+
+    只允许:
+      - 真实文件 + 在 home/<MATERIALS_ROOT_ALLOWED_PREFIXES_REL> 任一子树
+      - 真实后缀 (resolved.suffix.lower) 在 MATERIAL_ASSET_ALLOWED_EXTS 内
+
+    **不**允许 DATA_DIR (内有 works.db / settings.json 等敏感文件).
+    DB 里的 ext 字段**不**用 — 污染 row 可写 ext='.jpg' 但 abs_path 指 .db.
+
+    返回 None 表示拒绝, 调用方应 404.
     """
     if not raw:
         return None
@@ -217,18 +241,11 @@ def is_safe_material_file(raw: str | None, data_dir: Path) -> Path | None:
     if not resolved.exists() or not resolved.is_file():
         return None
 
-    # 检查 1: DATA_DIR 子树 (thumb/material_thumbs 等)
-    try:
-        data_root = Path(data_dir).expanduser().resolve()
-        try:
-            resolved.relative_to(data_root)
-            return resolved
-        except ValueError:
-            pass
-    except (OSError, RuntimeError):
-        pass
+    # 真实后缀必须在媒体白名单 (不信 DB ext)
+    if resolved.suffix.lower() not in MATERIAL_ASSET_ALLOWED_EXTS:
+        return None
 
-    # 检查 2: home 下任何 materials_root 白名单 prefix 子树
+    # 必须在 home/<MATERIALS_ROOT_ALLOWED_PREFIXES> 子树
     try:
         home = Path.home().resolve()
     except (OSError, RuntimeError):
@@ -245,6 +262,39 @@ def is_safe_material_file(raw: str | None, data_dir: Path) -> Path | None:
             continue
 
     return None
+
+
+def is_safe_material_thumb(raw: str | None, data_dir: Path) -> Path | None:
+    """/api/material-lib/thumb/{id} FileResponse 之前的 runtime 校验.
+
+    只允许 DATA_DIR/material_thumbs/ 子树. 比 source 严格 — thumb 永远是
+    后端生成的, 不可能落在 DATA_DIR 外, 不需要兼容 materials_root.
+
+    返回 None 表示拒绝, 调用方应 404.
+    """
+    if not raw:
+        return None
+    s = str(raw).strip()
+    if not s or "\x00" in s:
+        return None
+
+    p = Path(s).expanduser()
+    try:
+        resolved = p.resolve()
+    except (OSError, RuntimeError):
+        return None
+    if not resolved.exists() or not resolved.is_file():
+        return None
+
+    try:
+        thumbs_root = (Path(data_dir).expanduser() / "material_thumbs").resolve()
+    except (OSError, RuntimeError):
+        return None
+    try:
+        resolved.relative_to(thumbs_root)
+        return resolved
+    except ValueError:
+        return None
 
 
 def check_upload_size_and_ext(

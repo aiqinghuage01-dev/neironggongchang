@@ -2168,14 +2168,14 @@ def material_lib_asset(asset_id: str):
 
 @app.get("/api/material-lib/thumb/{asset_id}", tags=["档案部"], summary="(D-087) 缩略图 (静态 jpg)")
 def material_lib_thumb(asset_id: str):
-    """Phase 10 review (P1-1): thumb 路径也走 is_safe_material_file 校验,
-    DB 里 thumb_path 仍可能是历史污染."""
+    """Phase 10 review round 2 (P1): 用窄 is_safe_material_thumb,
+    只允许 DATA_DIR/material_thumbs/ 子树, 不再借宽 is_safe_material_file."""
     from backend.services import materials_service as ms
-    from backend.services.path_security import is_safe_material_file
+    from backend.services.path_security import is_safe_material_thumb
     p = ms.thumb_abs_path(asset_id)
     if not p:
         raise HTTPException(status_code=404, detail="缩略图不存在")
-    safe = is_safe_material_file(str(p), DATA_DIR)
+    safe = is_safe_material_thumb(str(p), DATA_DIR)
     if safe is None:
         raise HTTPException(status_code=404, detail="缩略图越界")
     return FileResponse(str(safe), media_type="image/jpeg")
@@ -2183,19 +2183,21 @@ def material_lib_thumb(asset_id: str):
 
 @app.get("/api/material-lib/file/{asset_id}", tags=["档案部"], summary="(D-087) 素材原文件 (L4 video src)")
 def material_lib_file(asset_id: str):
-    """Phase 10 review (P1-1): abs_path 来自 DB, 可能是历史污染 row
-    (Phase 10 校验加入前在 materials_root='/' 时入库的 /etc/passwd 等).
-    runtime 用 is_safe_material_file 二次校, 不在 DATA_DIR 或 materials_root
-    白名单内 → 404."""
+    """Phase 10 review round 2 (P1): 用窄 is_safe_material_source,
+    只允许 home/<MATERIALS_ROOT_ALLOWED_PREFIXES_REL> 子树 + 媒体后缀白名单
+    (从 resolved.suffix 取, 不信 DB ext). 防污染 row abs_path=<DATA_DIR>/works.db
+    ext='.jpg' 拖走 SQLite."""
     from backend.services import materials_service as ms
-    from backend.services.path_security import is_safe_material_file
+    from backend.services.path_security import is_safe_material_source
     a = ms.get_asset(asset_id)
     if not a:
         raise HTTPException(status_code=404, detail="素材不存在")
-    p = is_safe_material_file(a["abs_path"], DATA_DIR)
+    p = is_safe_material_source(a["abs_path"])
     if p is None:
         raise HTTPException(status_code=404, detail="原文件不存在 (可能已删/移走/越界)")
-    media = "video/mp4" if a["ext"] in (".mp4", ".mov", ".m4v") else "image/jpeg"
+    # media type 从真实 suffix 取, 不信 DB ext (DB ext 可能污染)
+    real_ext = p.suffix.lower()
+    media = "video/mp4" if real_ext in (".mp4", ".mov", ".m4v") else "image/jpeg"
     return FileResponse(str(p), media_type=media)
 
 
