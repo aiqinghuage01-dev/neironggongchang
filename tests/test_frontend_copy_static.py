@@ -176,3 +176,35 @@ def test_write_page_active_task_cards_do_not_render_raw_task_fields():
         "credits?",
     ]:
         assert guard in src
+
+
+def test_no_raw_fetch_to_main_api_in_jsx():
+    """Phase 3 (security): web/*.jsx 不允许裸 fetch 打主后端 /api/...
+
+    所有主后端调用必须走 factory-api.jsx 的 api.{get,post,patch,del,upload}
+    才能让 _baseHeaders 注入 X-Admin-Token (Phase 3) + X-Guest-Mode (D-070) +
+    _trace (api status light) + _handleErrorResponse (D-069 错误转译).
+
+    豁免:
+      - factory-api.jsx     —— 客户端本身, _fetchWithTimeout 在这里
+      - factory-beta.jsx    —— 打的是 agent dashboard 独立服务
+                              (${AGENT_DASHBOARD_URL}api/...,不是字面量 /api/),
+                              加进豁免是清华哥点名 + 防御性双保险
+      - _legacy/ 子目录不被 web/*.jsx glob 命中,天然豁免
+    """
+    import re
+    EXEMPT_FILENAMES = {"factory-api.jsx", "factory-beta.jsx"}
+    # 匹配 fetch( + 空白 + 任意引号 + /api/ 字面量
+    PATTERN = re.compile(r"""fetch\s*\(\s*["'`]/api/""")
+    hits: list[str] = []
+    for path in sorted((ROOT / "web").glob("*.jsx")):
+        if path.name in EXEMPT_FILENAMES:
+            continue
+        text = path.read_text(encoding="utf-8")
+        for lineno, line in enumerate(text.splitlines(), start=1):
+            if PATTERN.search(line):
+                hits.append(f"{path.name}:{lineno}: {line.strip()[:120]}")
+    assert hits == [], (
+        "发现裸 fetch('/api/...') — 必须改用 factory-api.jsx 的 api.{get,post,patch,del}, "
+        "否则 Phase 3 启用 ADMIN_TOKEN 后这些请求会 401:\n  " + "\n  ".join(hits)
+    )

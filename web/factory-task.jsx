@@ -723,8 +723,9 @@ function TaskCard({ task, onClick, compact, onCancel }) {
               btn.disabled = true;
               btn.textContent = "查询中...";
               try {
-                const r = await fetch(`/api/dreamina/recover/${sid}`, { method: "POST" });
-                const j = await r.json();
+                // Phase 3 (security): 走 api.post 让 _baseHeaders 注入 X-Admin-Token,
+                // 否则启用 ADMIN_TOKEN 后这条会稳定 401.
+                const j = await api.post(`/api/dreamina/recover/${sid}`, {});
                 if (j.recovered) {
                   alert("✅ 即梦端结果已取回, 已放进作品库");
                 } else if (j.watcher_will_retry) {
