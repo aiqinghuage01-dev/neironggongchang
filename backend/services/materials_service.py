@@ -535,21 +535,29 @@ def scan_root(
 ) -> dict[str, Any]:
     """扫描素材根目录, 入库新增. 返回 {scanned, added, skipped, errors, root}.
 
-    max_files: 上限 (None=全扫, 测试用小值).
+    max_files: 上限 (None=用 SCAN 硬上限).
+    Phase 10 (security): 即使 max_files=None 也强制走 SCAN 硬上限 (50k),
+    防 materials_root 指向被恶改后扫整盘 OOM.
+
     on_progress(idx, total, current_path): 进度回调 (10 文件一次, 给 tasks.run_async 推进度).
     """
+    from backend.services.path_security import MATERIALS_SCAN_HARD_MAX_FILES
+
     _ensure_schema()
     root = get_materials_root()
     if not root.exists():
         return {"error": f"素材根目录不存在: {root}", "scanned": 0, "added": 0, "errors": 0, "root": str(root)}
-    if max_files:
-        files = []
-        for p in _walk_root(root):
-            files.append(p)
-            if len(files) >= max_files:
-                break
-    else:
-        files = list(_walk_root(root))
+
+    # Phase 10: 即使 caller 传 None 也硬封顶, 防扫整盘
+    effective_cap = MATERIALS_SCAN_HARD_MAX_FILES
+    if max_files is not None and max_files > 0:
+        effective_cap = min(max_files, MATERIALS_SCAN_HARD_MAX_FILES)
+
+    files = []
+    for p in _walk_root(root):
+        files.append(p)
+        if len(files) >= effective_cap:
+            break
     total = len(files)
     added = 0
     errors = 0

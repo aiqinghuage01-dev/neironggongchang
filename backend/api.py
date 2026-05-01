@@ -1635,7 +1635,12 @@ class SettingsUpdateReq(BaseModel):
 
 @app.post("/api/settings", tags=["设置"], summary="部分更新设置 (key/value 增量)")
 def settings_update(payload: dict[str, Any]):
-    return settings_service.update(payload or {})
+    # Phase 10 (security): materials_root 白名单校验失败时 settings_service.update
+    # 抛 ValueError, 转 HTTP 400 (FastAPI 默认会变 500).
+    try:
+        return settings_service.update(payload or {})
+    except ValueError as e:
+        raise HTTPException(400, str(e))
 
 
 @app.post("/api/settings/reset", tags=["设置"], summary="重置全部设置为默认")

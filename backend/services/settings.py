@@ -77,10 +77,24 @@ def get_all() -> dict[str, Any]:
 
 
 def update(patch: dict[str, Any]) -> dict[str, Any]:
+    """部分更新 settings. Phase 10 (security): materials_root 必须过白名单校验,
+    否则 raise ValueError. 调用方 (api.py) 应转 HTTP 400.
+    """
     current = _load()
     for k, v in patch.items():
-        if k in DEFAULTS:
-            current[k] = v
+        if k not in DEFAULTS:
+            continue
+        # Phase 10: materials_root 白名单. 防被改成 / ~ 等扫整盘.
+        if k == "materials_root" and v:
+            from backend.services.path_security import (
+                PathBoundaryError, validate_materials_root,
+            )
+            try:
+                validated = validate_materials_root(v)
+                v = str(validated)
+            except PathBoundaryError as e:
+                raise ValueError(f"materials_root 拒绝: {e}")
+        current[k] = v
     _save(current)
     return current
 

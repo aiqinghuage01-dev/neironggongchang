@@ -114,6 +114,83 @@ def safe_local_path(
     return resolved
 
 
+# ─── Phase 10 · materials_root 白名单 ─────────────────────────
+#
+# settings.materials_root 决定素材库扫描根. 没收口前可被设成 / 或 ~,
+# 触发 scan 后暴力扫整盘 → OOM / 把 ~/.ssh/id_rsa 入库 abs_path 暴露.
+
+# 允许的 root 前缀, 相对 ~. 任一 allowed_prefix 子树都允许.
+MATERIALS_ROOT_ALLOWED_PREFIXES_REL: tuple[str, ...] = (
+    "Downloads",                   # 默认源 (DEFAULTS["materials_root"])
+    "Desktop/我的内容库",
+    "Desktop/我的内容库(勿动)",     # 全角括号兼容
+    "Desktop/我的内容库(勿动)",     # 半角括号兼容
+    "Desktop/我的内容库（勿动）",    # 全角括号 alt (memory 实际目录名)
+    "Desktop/素材库",
+    "Desktop/清华哥素材库",
+    "Desktop/清华哥知识库",
+)
+
+# scan_root 单次硬上限. 即使白名单过了, 防 100 万文件入库 OOM.
+MATERIALS_SCAN_HARD_MAX_FILES = 50_000
+
+
+def validate_materials_root(raw: str | None) -> Path:
+    """settings.materials_root 校验.
+
+    返回 resolve 后的 Path, 不通过 raise PathBoundaryError.
+    规则:
+      - 非空, 不能是 "/" 或 "~"
+      - resolve 后必须落在 home/<allowed_prefix> 之一的子树
+      - 必须存在且是目录
+      - 拒绝 NUL
+      - 拒绝 symlink 跳出 (resolve 已解 symlink, relative_to 二次校)
+    """
+    if not raw:
+        raise PathBoundaryError("materials_root 为空")
+    s = str(raw).strip()
+    if not s or "\x00" in s:
+        raise PathBoundaryError("materials_root 非法 (空/NUL)")
+    if s in ("/", "~", "/Users", "/Users/", "/etc", "/var", "/home"):
+        raise PathBoundaryError(f"不能用粗根作 materials_root: {s}")
+
+    home = Path.home().resolve()
+    allowed_roots = []
+    for rel in MATERIALS_ROOT_ALLOWED_PREFIXES_REL:
+        try:
+            allowed_roots.append((home / rel).resolve())
+        except (OSError, RuntimeError):
+            continue
+
+    p = Path(s).expanduser()
+    try:
+        resolved = p.resolve()
+    except (OSError, RuntimeError) as e:
+        raise PathBoundaryError(f"materials_root 解析失败: {e}")
+
+    # 必须等于或落在某 allowed root 子树
+    in_allowed = False
+    for ar in allowed_roots:
+        try:
+            resolved.relative_to(ar)
+            in_allowed = True
+            break
+        except ValueError:
+            continue
+    if not in_allowed:
+        raise PathBoundaryError(
+            f"materials_root 不在白名单: {resolved}. "
+            f"允许的根: {[str(Path('~') / rel) for rel in MATERIALS_ROOT_ALLOWED_PREFIXES_REL]}"
+        )
+
+    if not resolved.exists():
+        raise PathBoundaryError(f"materials_root 不存在: {resolved}")
+    if not resolved.is_dir():
+        raise PathBoundaryError(f"materials_root 不是目录: {resolved}")
+
+    return resolved
+
+
 def check_upload_size_and_ext(
     data: bytes,
     filename: str | None,
