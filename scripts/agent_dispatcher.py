@@ -311,17 +311,37 @@ def build_prompt(slot: AgentSlot, task: dict[str, Any]) -> str:
         stderr=subprocess.DEVNULL,
         check=False,
     ).stdout.strip()
+    main_head = subprocess.run(
+        ["git", "-C", str(REPO_ROOT), "rev-parse", "--short", "HEAD"],
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        check=False,
+    ).stdout.strip()
+    contains_main = False
+    if main_head:
+        contains_main = subprocess.run(
+            ["git", "-C", str(slot.workdir), "merge-base", "--is-ancestor", main_head, "HEAD"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        ).returncode == 0
     return f"""你是内容工厂后台自动派工器启动的 Agent。
 
 你的身份: {slot.agent_name}
 你的角色: {slot.role}
 你的工作区: {slot.workdir}
 当前分支: {branch or "未知"}
+主工作区: {REPO_ROOT}
+主线 HEAD: {main_head or "未知"}
+本工作区包含主线 HEAD: {"是" if contains_main else "否"}
 
 开工规则:
 - 不要等老板复制粘贴上下文; 自己读项目文档、任务报告和代码。
 - 先读 AGENTS.md 或 CLAUDE.md、docs/MULTI_AGENT_WORKFLOW.md、{slot.role_doc}。
 - 严格按角色边界工作; 副 Agent 不改 docs/PROGRESS.md。
+- 如果本工作区不包含主线 HEAD, QA/Review 必须以主工作区和正式端口为事实源; 不要对旧分支下结论。
+- 领取依赖任务后, 先确认依赖 commit/report 在被测代码里存在; 不存在就先读主工作区对应文件或 block, 不要测旧代码。
 - 需要真实验证时自己跑, 不要让老板当 QA。
 - 默认允许最小真烧 credits; 失败后不要重复烧, 记录证据并停止。
 - 只有必须老板做业务选择时, 才用 agent_queue.py block --owner-decision。

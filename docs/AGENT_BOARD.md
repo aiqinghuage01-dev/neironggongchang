@@ -8,11 +8,11 @@
 
 | 角色 | 状态 | 工作区 | 当前任务 |
 |---|---|---|---|
-| 总控 Agent | 自动派工 + 自动返修主管已接入 | `~/Desktop/neironggongchang` | T-088 已接管收口并完成正式端口验证; 等 T-089/T-090 独立复测/复审 |
-| 内容开发 Agent | 空闲/待新任务 | `~/Desktop/nrg-worktrees/content-dev` | T-088 旧 worker 已停止, 避免重复覆盖主线 |
+| 总控 Agent | 自动派工 + 自动返修主管已接入 | `~/Desktop/neironggongchang` | T-112/T-113/T-114 已接管并收口; 当前无 controller 队列任务 |
+| 内容开发 Agent | 空闲/待新任务 | `~/Desktop/nrg-worktrees/content-dev` | T-112 worker 卡在未提交状态, 已由总控按 `worker_stuck` 收口 |
 | 媒体开发 Agent | 空闲 | `~/Desktop/nrg-worktrees/media-dev` | T-047 已完成并合入 main; 等新媒体任务 |
-| QA 测试 Agent | 待领取 | `~/Desktop/nrg-worktrees/qa`, `~/Desktop/nrg-worktrees/qa-1`, `~/Desktop/nrg-worktrees/qa-2` | T-089 等 T-088 完成后复测 |
-| 审查 Agent | 待领取 | `~/Desktop/nrg-worktrees/review` | T-090 等 T-088 完成后复审 |
+| QA 测试 Agent | 待领取 | `~/Desktop/nrg-worktrees/qa`, `~/Desktop/nrg-worktrees/qa-1`, `~/Desktop/nrg-worktrees/qa-2` | T-113 自动 QA worktree 未包含 `f28e339`, 已停止过期验证并由总控接管 |
+| 审查 Agent | 待领取 | `~/Desktop/nrg-worktrees/review` | T-114 自动 Review worktree 未包含 `f28e339`, 已停止过期验证并由总控接管 |
 
 ---
 
@@ -91,11 +91,16 @@
 | T-088 | 返修 T-085: 处理 QA/审查阻塞 | 总控 Agent | done | `backend/services/hotrewrite_pipeline.py`, `backend/services/tasks.py`, `web/factory-hotrewrite-v2.jsx`, `web/factory-task.jsx`, tests/e2e | 已完成: V1/V2/V3 先出先看; 慢 V4 显示重试兜底/已等时间/取消; failed 保留 partial; 正式 8001 Playwright 通过 |
 | T-089 | T-088 返修后真实 QA | QA 测试 Agent | queued | desktop + 390px + mock/no-credit | 验证 T-088 正式端口逐版展示、慢 V4 说明、最终 4 版、console/network 干净 |
 | T-090 | T-088 返修后代码复审 | 审查 Agent | queued | 只读 T-088 diff/report | 无 P0/P1; 关注任务 partial 语义、清洗边界、取消/失败行为、测试覆盖 |
+| T-101 | 写文案首页进行中任务摘要 | 内容开发 Agent / 总控合入 | done | `web/factory-write.jsx`, `scripts/e2e_write_active_tasks.js` | 首页展示正在跑/最近失败写作任务, 可回跳热点/违规审查/爆款/投流; T-110 QA 通过, T-111 审查提出 P2 polish |
+| T-112 | T-101 写文案首页摘要 P2 polish | 内容开发 Agent / 总控接管 | done | `web/factory-write.jsx`, `scripts/e2e_write_active_tasks.js`, `tests/test_frontend_copy_static.py` | 总控接管未提交半成品并合入 `f28e339`: 7 类回跳、旧 `wf:*` 快照保留、内部词脱敏、无时间 failed task 不展示 |
+| T-113 | T-112 写文案首页摘要 polish QA | QA 测试 Agent / 总控接管 | done | no-credit 浏览器 QA | 自动 QA worktree 未包含 `f28e339`; 总控正式 `8000/8001` 验证 5 场景, console/pageerror/requestfailed/http/nonGET 全 0, 390px `maxOverflow=0` |
+| T-114 | T-112 写文案首页摘要 polish 代码审查 | Review Agent / 总控接管 | done | 只读 T-112 diff/report | 自动 Review worktree 未包含 `f28e339`; 总控按 T-111 P2 清单复审, 无 P0/P1/P2 阻塞 |
 
 ---
 
 ## 最近证据
 
+- T-112/T-113/T-114 写文案首页任务摘要 polish: main `f28e339` + `c4156eb`; 正式 `8000/8001` no-credit Playwright 覆盖 7 类回跳、旧 workflow 快照保留、无时间 failed 隐藏、390px; console/pageerror/requestfailed/http error/nonGET API 全 0。截图 `/tmp/_ui_shots/t101_write_active_tasks.png`, `/tmp/_ui_shots/t112_write_active_tasks_more.png`, `/tmp/_ui_shots/t112_resume_wechat.png`, `/tmp/_ui_shots/t101_write_active_tasks_390.png` 已读。报告 `docs/agent-handoff/DEV_CONTENT_T112_WRITE_ACTIVE_POLISH_20260501.md`, `docs/agent-handoff/QA_T113_WRITE_ACTIVE_POLISH_20260501.md`, `docs/agent-handoff/REVIEW_T114_WRITE_ACTIVE_POLISH_20260501.md`。
 - 自动返修主管已启动: `bash scripts/start_agent_repair_supervisor.sh --status` -> LaunchAgent running; 初始化忽略历史阻塞 16 条, 后续新增 QA/Review blocked 会自动创建返修开发 + QA + Review 链路。测试 `python3 -m pytest -q tests/test_agent_repair_supervisor.py tests/test_agent_queue.py` -> 7 passed。报告 `docs/agent-handoff/CONTROLLER_T085_REPAIR_SUPERVISOR_20260501.md`。
 - 热点改写实时输出返修链: T-085 已领取, T-086/T-087 已排队, T-084 已改为依赖返修复测复审通过。老板实测要求已写入验收: 每完成一版必须即时可读, V4 慢步骤必须可解释或兜底。
 - T-080 研发部作战室刷新降频: beta 页和独立 `:8765` 面板均改为 60 秒刷新; 已重启独立面板服务。Playwright 计数显示 beta 页 4.2 秒内 `:8765/api/status` 只请求 1 次, 独立面板 4.2 秒内 `/api/status` 只请求 1 次, console/pageerror=0; 截图 `/tmp/_ui_shots/t080_beta_refresh_60s.png`, `/tmp/_ui_shots/t080_agent_dashboard_refresh_60s.png`; 静态测试 8 passed。报告 `docs/agent-handoff/CONTROLLER_T080_BETA_REFRESH_INTERVAL_20260430.md`。
