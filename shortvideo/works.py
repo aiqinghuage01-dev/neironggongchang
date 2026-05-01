@@ -208,9 +208,43 @@ def insert_work(
         return cur.lastrowid
 
 
+# Phase 9 (security): update_work 字段白名单.
+# 历史 update_work(**fields) 把 fields 直接拼进 UPDATE SQL, 没校验 key.
+# 攻击场景: 未来若有 PATCH /api/works/{id}/{field} 范式接进来,
+# fields["title=?, status"] 这种带空格/=/逗号的 key 会拼成 SQL 注入碎片
+# (虽然 sqlite 用 ? 占位, key 本身仍直接拼字符串).
+# 现在收: 只接受 ALLOWED_WORK_UPDATE_FIELDS 内的字段名, 其余 raise ValueError.
+# id / created_at 是创建态, 不允许 update.
+ALLOWED_WORK_UPDATE_FIELDS: frozenset[str] = frozenset({
+    "title",
+    "source_url",
+    "original_text",
+    "final_text",
+    "avatar_id",
+    "speaker_id",
+    "shiliu_video_id",
+    "local_path",
+    "duration_sec",
+    "status",
+    "error",
+    "tokens_used",
+    "type",
+    "source_skill",
+    "thumb_path",
+    "metadata",
+})
+
+
 def update_work(work_id: int, **fields: Any) -> None:
     if not fields:
         return
+    # Phase 9: 字段白名单 — 任何未知 key 立即 raise (不要静默过, 调用方有 bug)
+    unknown = set(fields) - ALLOWED_WORK_UPDATE_FIELDS
+    if unknown:
+        raise ValueError(
+            f"update_work 不支持的字段: {sorted(unknown)}. "
+            f"允许: {sorted(ALLOWED_WORK_UPDATE_FIELDS)}"
+        )
     # v0.6.3 修订:更新 local_path / thumb_path 前自动 normalize(R2 红线锁)
     if "local_path" in fields:
         fields["local_path"] = _normalize_path_for_db(fields["local_path"])
